@@ -5,7 +5,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 const _id = 1;
 const _hora = 20;
-final _plugin = FlutterLocalNotificationsPlugin();
+final notificaciones = FlutterLocalNotificationsPlugin();
 
 const _detalles = NotificationDetails(
   android: AndroidNotificationDetails(
@@ -22,7 +22,7 @@ Future<void> initRecordatorio() async {
   } catch (_) {
     tz.setLocalLocation(tz.getLocation('America/Caracas'));
   }
-  await _plugin.initialize(
+  await notificaciones.initialize(
     settings: const InitializationSettings(
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
     ),
@@ -31,7 +31,7 @@ Future<void> initRecordatorio() async {
 
 /// Aparte de [initRecordatorio] para no pedir el permiso antes de que se pinte la app.
 Future<void> pedirPermisoNotificaciones() async {
-  await _plugin
+  await notificaciones
       .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
       ?.requestNotificationsPermission();
 }
@@ -42,8 +42,8 @@ Future<void> reprogramarRecordatorio({required bool yaCagoHoy}) async {
   final ahora = tz.TZDateTime.now(tz.local);
   var cuando = tz.TZDateTime(tz.local, ahora.year, ahora.month, ahora.day, _hora);
   if (yaCagoHoy || !cuando.isAfter(ahora)) cuando = cuando.add(const Duration(days: 1));
-  await _plugin.cancel(id: _id);
-  await _plugin.zonedSchedule(
+  await notificaciones.cancel(id: _id);
+  await notificaciones.zonedSchedule(
     id: _id,
     title: 'Hey, ¿has cagado hoy??? 💩',
     body: 'Tus panas te están sacando ventaja en el ranking.',
@@ -53,4 +53,4 @@ Future<void> reprogramarRecordatorio({required bool yaCagoHoy}) async {
   );
 }
 
-Future<void> cancelarRecordatorio() => _plugin.cancel(id: _id);
+Future<void> cancelarRecordatorio() => notificaciones.cancel(id: _id);

@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'calendario.dart';
+import 'push.dart';
 import 'recordatorio.dart';
 import 'tipos.dart';
 
@@ -16,6 +17,7 @@ Future<void> main() async {
   await Supabase.initialize(url: supabaseUrl, publishableKey: supabaseKey);
   try {
     await initRecordatorio();
+    await initPush();
   } catch (_) {
     // Sin notificaciones la app igual sirve.
   }
@@ -186,6 +188,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool('disclaimer_ok') ?? false) {
       await pedirPermisoNotificaciones().catchError((_) {});
+      await registrarTelefono().catchError((_) {});
       return;
     }
     if (!mounted) return;
@@ -205,6 +208,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     await prefs.setBool('disclaimer_ok', true);
     await pedirPermisoNotificaciones().catchError((_) {});
+    await registrarTelefono().catchError((_) {});
   }
 
   Future<void> _load({bool spinner = true}) async {
@@ -315,9 +319,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.logout),
-            onPressed: () {
+            onPressed: () async {
               cancelarRecordatorio().catchError((_) {});
-              db.auth.signOut();
+              await olvidarTelefono().catchError((_) {});
+              await db.auth.signOut();
             },
           ),
         ],
