@@ -257,6 +257,19 @@ class _EditarPerfilState extends State<_EditarPerfil> {
   static const _ajustes = ['lentes_x', 'lentes_y', 'sombrero_x', 'sombrero_y', 'lentes_escala', 'sombrero_escala'];
   static const _vista = 120.0;
   bool _ocupado = false;
+  bool _secreto = false;
+
+  @override
+  void initState() {
+    super.initState();
+    db
+        .from('profiles')
+        .select('placer_desbloqueado')
+        .eq('id', db.auth.currentUser!.id)
+        .maybeSingle()
+        .then((r) => mounted ? setState(() => _secreto = r?['placer_desbloqueado'] == true) : null)
+        .catchError((_) => null);
+  }
 
   int get _total => (widget.perfil['total'] as num?)?.toInt() ?? 0;
 
@@ -418,6 +431,8 @@ class _EditarPerfilState extends State<_EditarPerfil> {
             _ranura('Sombrero', 'sombrero'),
             _ranura('Lentes', 'lentes'),
             _ranura('Mascota', 'mascota'),
+            // Solo para quien ya encontró el secreto de Tips.
+            if (_secreto)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Column(
