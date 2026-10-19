@@ -11,6 +11,7 @@ import 'push.dart';
 import 'recordatorio.dart';
 import 'tema.dart';
 import 'tipos.dart';
+import 'widget.dart';
 
 const supabaseUrl = 'https://TU-PROYECTO.supabase.co';
 const supabaseKey = 'sb_publishable_...';
@@ -21,6 +22,7 @@ Future<void> main() async {
   try {
     await initRecordatorio();
     await initPush();
+    await initWidget();
   } catch (_) {
     // Sin notificaciones la app igual sirve.
   }
@@ -295,6 +297,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _hoy = List<Map<String, dynamic>>.from(hoy);
       });
       reprogramarRecordatorio(yaCagoHoy: _miHoy > 0).catchError((_) {});
+      actualizarWidget(_miHoy).catchError((_) {});
     } catch (e) {
       _toast('Error cargando ranking: $e');
     } finally {
@@ -410,29 +413,14 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: SizedBox(
-                    height: 64,
-                    child: FilledButton.icon(
-                      onPressed: _cague,
-                      icon: const Icon(Icons.add, size: 26),
-                      label: const Text('CAGUÉ 💩', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 64,
-                  height: 64,
-                  child: OutlinedButton(
-                    onPressed: _deshacer,
-                    style: OutlinedButton.styleFrom(padding: EdgeInsets.zero),
-                    child: const Tooltip(message: 'Deshacer la última', child: Icon(Icons.undo)),
-                  ),
-                ),
-              ],
+            const SizedBox(height: 8),
+            Center(child: _BotonCague(onTap: _cague)),
+            Center(
+              child: TextButton.icon(
+                onPressed: _deshacer,
+                icon: const Icon(Icons.undo, size: 18),
+                label: const Text('DESHACER LA ÚLTIMA'),
+              ),
             ),
             const SizedBox(height: 8),
             if (aviso != null) ...[
@@ -531,6 +519,58 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 28),
             Text(disclaimer, style: texto.bodySmall?.copyWith(color: p.textoSuave)),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Círculo negro grande; al apretarlo se encoge un poco y se pone amarillo corona.
+class _BotonCague extends StatefulWidget {
+  const _BotonCague({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  State<_BotonCague> createState() => _BotonCagueState();
+}
+
+class _BotonCagueState extends State<_BotonCague> {
+  bool _apretado = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paleta(context);
+    return Semantics(
+      button: true,
+      label: 'Cagué',
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _apretado = true),
+        onTapUp: (_) => setState(() => _apretado = false),
+        onTapCancel: () => setState(() => _apretado = false),
+        onTap: widget.onTap,
+        child: AnimatedScale(
+          scale: _apretado ? 0.94 : 1,
+          duration: const Duration(milliseconds: 100),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 100),
+            width: 200,
+            height: 200,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: _apretado ? acento : p.primario),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('💩', style: TextStyle(fontSize: 72)),
+                Text('CAGUÉ',
+                    style: TextStyle(
+                      color: _apretado ? acentoTexto : p.sobrePrimario,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 2,
+                    )),
+              ],
+            ),
+          ),
         ),
       ),
     );

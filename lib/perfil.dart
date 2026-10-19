@@ -7,6 +7,7 @@ import 'push.dart';
 import 'recordatorio.dart';
 import 'tema.dart';
 import 'tipos.dart';
+import 'widget.dart';
 
 const _avatares = ['💩', '👑', '🧻', '🚽', '🐻', '🦍', '🐷', '🐸', '🦄', '🤡', '😎', '👻', '🔥', '🌶️', '🍑', '🦖'];
 
@@ -81,6 +82,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
 
   Future<void> _salir() async {
     cancelarRecordatorio().catchError((_) {});
+    limpiarWidget().catchError((_) {});
     await olvidarTelefono().catchError((_) {});
     await db.auth.signOut();
     if (mounted) Navigator.of(context).popUntil((r) => r.isFirst);
