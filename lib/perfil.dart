@@ -11,7 +11,7 @@ import 'tema.dart';
 import 'tipos.dart';
 import 'widget.dart';
 
-const _avatares = ['💩', '👑', '🧻', '🚽', '🐻', '🦍', '🐷', '🐸', '🦄', '🤡', '😎', '👻', '🔥', '🌶️', '🍑', '🦖'];
+const _avatares = ['💩', '👑', '🧻', '🚽', '🐻', '🦍', '🐷', '🐸', '🦄', '🤡', '🙂', '👻', '🔥', '🌶️', '🍑', '🦖'];
 
 String _fecha(DateTime d) => '${d.day}/${d.month}/${d.year}';
 
@@ -77,6 +77,8 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
     final cambio = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      // Sin arrastre de la hoja: arrastrar el avatar mueve lentes y sombrero.
+      enableDrag: false,
       builder: (_) => _EditarPerfil(perfil: _p!),
     );
     if (cambio == true) await _cargar();
@@ -228,8 +230,12 @@ class _EditarPerfilState extends State<_EditarPerfil> {
   late final _usuario = TextEditingController(text: widget.perfil['username']);
   late final _bio = TextEditingController(text: widget.perfil['bio'] ?? '');
   late final Map<String, dynamic> _puesto = {
-    for (final k in ['avatar', 'sombrero', 'lentes', 'mascota']) k: widget.perfil[k],
+    for (final k in ['avatar', 'sombrero', 'lentes', 'mascota', 'lentes_x', 'lentes_y', 'sombrero_x', 'sombrero_y'])
+      k: widget.perfil[k],
   };
+  // Qué se está moviendo con el dedo en la vista previa: 'lentes', 'sombrero' o null.
+  String? _moviendo;
+  static const _vista = 120.0;
   bool _ocupado = false;
 
   int get _total => (widget.perfil['total'] as num?)?.toInt() ?? 0;
@@ -255,22 +261,17 @@ class _EditarPerfilState extends State<_EditarPerfil> {
     }
   }
 
+  void _arrastrar(PointerMoveEvent d) {
+    final r = _moviendo!;
+    final actual = posicion(_puesto, r);
+    setState(() {
+      _puesto['${r}_x'] = (actual.x + d.delta.dx / _vista).clamp(-.5, 1.5);
+      _puesto['${r}_y'] = (actual.y + d.delta.dy / _vista).clamp(-.5, 1.5);
+    });
+  }
+
   /// Fila de opciones de una ranura. Lo bloqueado se ve apagado con las cagadas que pide.
   Widget _ranura(String titulo, String ranura) {
-    final avatar = _puesto['avatar'] as String;
-    if ((ranura == 'lentes' && !usaLentes(avatar)) || (ranura == 'sombrero' && !usaSombrero(avatar))) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Rotulo(titulo),
-            const SizedBox(height: 6),
-            Text('Este avatar no usa ${titulo.toLowerCase()}.', style: Theme.of(context).textTheme.bodySmall),
-          ],
-        ),
-      );
-    }
     final opciones = [
       if (ranura == 'avatar')
         for (final a in _avatares) (emoji: a, minimo: 0)
@@ -305,7 +306,15 @@ class _EditarPerfilState extends State<_EditarPerfil> {
                   onSelected: o.minimo > _total
                       ? (_) => ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text('Se desbloquea a las ${o.minimo} cagadas. Llevas $_total.')))
-                      : (_) => setState(() => _puesto[ranura] = o.emoji),
+                      : (_) => setState(() {
+                          _puesto[ranura] = o.emoji;
+                          // Avatar nuevo: vuelven a la posición calibrada para él.
+                          if (ranura == 'avatar') {
+                            for (final k in ['lentes_x', 'lentes_y', 'sombrero_x', 'sombrero_y']) {
+                              _puesto[k] = null;
+                            }
+                          }
+                        }),
                 ),
             ],
           ),
@@ -319,6 +328,7 @@ class _EditarPerfilState extends State<_EditarPerfil> {
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: SingleChildScrollView(
+        physics: _moviendo == null ? null : const NeverScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -326,9 +336,52 @@ class _EditarPerfilState extends State<_EditarPerfil> {
           children: [
             Text('EDITAR PERFIL', style: Theme.of(context).textTheme.titleLarge),
             Padding(
-              padding: const EdgeInsets.only(top: 40, bottom: 16),
-              child: Center(child: Avatar({..._puesto, 'cagadas': _total}, tamano: 80)),
+              padding: const EdgeInsets.only(top: 48, bottom: 16),
+              child: Center(
+                // Listener y no GestureDetector: no compite con el scroll de la hoja, que se
+                // congela mientras se mueve algo.
+                child: Listener(
+                  onPointerMove: _moviendo == null ? null : _arrastrar,
+                  child: Container(
+                    color: Colors.transparent,
+                    padding: const EdgeInsets.all(_vista * .35),
+                    child: Avatar({..._puesto, 'cagadas': _total}, tamano: _vista),
+                  ),
+                ),
+              ),
             ),
+            if (_puesto['lentes'] != null || _puesto['sombrero'] != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final r in ['lentes', 'sombrero'])
+                      if (_puesto[r] != null)
+                        ChoiceChip(
+                          label: Text('MOVER ${r.toUpperCase()}'),
+                          selected: _moviendo == r,
+                          onSelected: (si) => setState(() => _moviendo = si ? r : null),
+                        ),
+                    TextButton(
+                      onPressed: () => setState(() {
+                        for (final k in ['lentes_x', 'lentes_y', 'sombrero_x', 'sombrero_y']) {
+                          _puesto[k] = null;
+                        }
+                      }),
+                      child: const Text('RESTABLECER'),
+                    ),
+                  ],
+                ),
+              ),
+            if (_moviendo != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Text('Arrastra sobre el avatar para mover los ${_moviendo == 'lentes' ? 'lentes' : 'el sombrero'}.',
+                    textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall),
+              ),
             _ranura('Avatar', 'avatar'),
             _ranura('Sombrero', 'sombrero'),
             _ranura('Lentes', 'lentes'),
@@ -384,7 +437,7 @@ class _PantallaBuscarState extends State<PantallaBuscar> {
     _q = q;
     final yo = db.auth.currentUser!.id;
     try {
-      var consulta = db.from('profiles').select('id, username, avatar, sombrero, lentes, mascota, cagadas').neq('id', yo);
+      var consulta = db.from('profiles').select('id, username, avatar, sombrero, lentes, mascota, cagadas, lentes_x, lentes_y, sombrero_x, sombrero_y').neq('id', yo);
       if (q.trim().isNotEmpty) {
         // % y _ son comodines en ilike: se escapan para buscar el texto tal cual.
         final limpio = q.trim().replaceAll(r'\', r'\\').replaceAll('%', r'\%').replaceAll('_', r'\_');

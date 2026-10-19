@@ -13,6 +13,7 @@ import 'perfil.dart';
 import 'push.dart';
 import 'recordatorio.dart';
 import 'tema.dart';
+import 'secreto.dart';
 import 'tips.dart';
 import 'tipos.dart';
 import 'widget.dart';
@@ -253,6 +254,8 @@ class _PantallaRankingState extends State<PantallaRanking> {
   bool _cargando = true;
   late final VoidCallback _soltar;
   late final AppLifecycleListener _ciclo;
+  // Se decide una vez por apertura de la app: aparece o no, y en qué esquina.
+  final _secreto = Secreto();
 
   String get _yo => db.auth.currentUser!.id;
 
@@ -418,132 +421,137 @@ class _PantallaRankingState extends State<PantallaRanking> {
     final maximo = _filas.isEmpty ? 0 : _filas.first['total'] as int;
 
     return SafeArea(
-      child: RefreshIndicator(
-        onRefresh: _cargar,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-          children: [
-            Row(
+      child: Stack(
+        children: [
+          RefreshIndicator(
+            onRefresh: _cargar,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
               children: [
-                Expanded(child: Text('Rey Cagón', style: texto.headlineSmall)),
-                IconButton.outlined(
-                  icon: const Icon(Icons.person_add_alt_1),
-                  tooltip: 'Buscar amigos',
-                  onPressed: () => _abrir(const PantallaBuscar()),
+                Row(
+                  children: [
+                    Expanded(child: Text('Rey Cagón', style: texto.headlineSmall)),
+                    IconButton.outlined(
+                      icon: const Icon(Icons.person_add_alt_1),
+                      tooltip: 'Buscar amigos',
+                      onPressed: () => _abrir(const PantallaBuscar()),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            const SizedBox(height: 8),
-            Center(child: _BotonCague(onTap: _cague)),
-            Center(
-              child: TextButton.icon(
-                onPressed: _deshacer,
-                icon: const Icon(Icons.undo, size: 18),
-                label: const Text('DESHACER LA ÚLTIMA'),
-              ),
-            ),
-            const SizedBox(height: 8),
-            if (aviso != null) ...[
-              const SizedBox(height: 4),
-              Container(
-                decoration: BoxDecoration(
-                  color: p.tarjeta,
-                  border: Border.all(color: p.borde),
-                ),
-                child: IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Container(width: 4, color: perdiendo ? const Color(0xFFB3261E) : acento),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Rotulo('Hoy · llevas $_miHoy'),
-                              const SizedBox(height: 4),
-                              Text(aviso, style: texto.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
+                const SizedBox(height: 16),
+                const SizedBox(height: 8),
+                Center(child: _BotonCague(onTap: _cague)),
+                Center(
+                  child: TextButton.icon(
+                    onPressed: _deshacer,
+                    icon: const Icon(Icons.undo, size: 18),
+                    label: const Text('DESHACER LA ÚLTIMA'),
                   ),
                 ),
-              ),
-            ],
-            const SizedBox(height: 28),
-            Row(
-              children: [
-                const Rotulo('Ranking'),
-                const Spacer(),
-                FilterChip(
-                  label: const Text('SOLO MIS AMIGOS'),
-                  labelStyle: TextStyle(color: _soloSiguiendo ? acentoTexto : null),
-                  selected: _soloSiguiendo,
-                  visualDensity: VisualDensity.compact,
-                  onSelected: (v) {
-                    setState(() => _soloSiguiendo = v);
+                const SizedBox(height: 8),
+                if (aviso != null) ...[
+                  const SizedBox(height: 4),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: p.tarjeta,
+                      border: Border.all(color: p.borde),
+                    ),
+                    child: IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Container(width: 4, color: perdiendo ? const Color(0xFFB3261E) : acento),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Rotulo('Hoy · llevas $_miHoy'),
+                                  const SizedBox(height: 4),
+                                  Text(aviso, style: texto.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 28),
+                Row(
+                  children: [
+                    const Rotulo('Ranking'),
+                    const Spacer(),
+                    FilterChip(
+                      label: const Text('SOLO MIS AMIGOS'),
+                      labelStyle: TextStyle(color: _soloSiguiendo ? acentoTexto : null),
+                      selected: _soloSiguiendo,
+                      visualDensity: VisualDensity.compact,
+                      onSelected: (v) {
+                        setState(() => _soloSiguiendo = v);
+                        _cargar();
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                SegmentedButton<String>(
+                  segments: [
+                    for (final e in periodos.entries)
+                      ButtonSegment(value: e.key, label: _UnaLinea(e.value.toUpperCase())),
+                  ],
+                  selected: {_periodo},
+                  showSelectedIcon: false,
+                  style: _compacto,
+                  onSelectionChanged: (s) {
+                    setState(() => _periodo = s.first);
                     _cargar();
                   },
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            SegmentedButton<String>(
-              segments: [
-                for (final e in periodos.entries)
-                  ButtonSegment(value: e.key, label: _UnaLinea(e.value.toUpperCase())),
-              ],
-              selected: {_periodo},
-              showSelectedIcon: false,
-              style: _compacto,
-              onSelectionChanged: (s) {
-                setState(() => _periodo = s.first);
-                _cargar();
-              },
-            ),
-            const SizedBox(height: 12),
-            if (_cargando)
-              const Padding(
-                padding: EdgeInsets.all(32),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else ...[
-              _Tabla(
-                filas: _filas,
-                yo: _yo,
-                maximo: maximo,
-                onTap: (id) => _abrir(PantallaPerfil(usuarioId: id)),
-              ),
-              if (_soloSiguiendo && _filas.length <= 1) ...[
                 const SizedBox(height: 12),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const Center(child: Emoji('🚽', tamano: 64)),
-                        const SizedBox(height: 8),
-                        const Text('Estás cagando solo. Sigue a tus amigos para competir.', textAlign: TextAlign.center),
-                        const SizedBox(height: 12),
-                        FilledButton(
-                          onPressed: () => _abrir(const PantallaBuscar()),
-                          child: const Text('BUSCAR AMIGOS'),
-                        ),
-                      ],
-                    ),
+                if (_cargando)
+                  const Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else ...[
+                  _Tabla(
+                    filas: _filas,
+                    yo: _yo,
+                    maximo: maximo,
+                    onTap: (id) => _abrir(PantallaPerfil(usuarioId: id)),
                   ),
-                ),
+                  if (_soloSiguiendo && _filas.length <= 1) ...[
+                    const SizedBox(height: 12),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const Center(child: Emoji('🚽', tamano: 64)),
+                            const SizedBox(height: 8),
+                            const Text('Estás cagando solo. Sigue a tus amigos para competir.', textAlign: TextAlign.center),
+                            const SizedBox(height: 12),
+                            FilledButton(
+                              onPressed: () => _abrir(const PantallaBuscar()),
+                              child: const Text('BUSCAR AMIGOS'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+                const SizedBox(height: 28),
+                Text(disclaimer, style: texto.bodySmall?.copyWith(color: p.textoSuave)),
               ],
-            ],
-            const SizedBox(height: 28),
-            Text(disclaimer, style: texto.bodySmall?.copyWith(color: p.textoSuave)),
-          ],
-        ),
+            ),
+          ),
+          _secreto,
+        ],
       ),
     );
   }

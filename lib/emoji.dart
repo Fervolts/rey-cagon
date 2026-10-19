@@ -26,6 +26,8 @@ const _archivos = {
   '🦄': 'unicorn',
   '🤡': 'clown_face',
   '😎': 'smiling_face_with_sunglasses',
+  '🙂': 'slightly_smiling_face',
+  '🍺': 'beer_mug',
   '👻': 'ghost',
   '🔥': 'fire',
   '🌶️': 'hot_pepper',
