@@ -8,7 +8,7 @@ Rey Cagón es una app Android de chiste: cada vez que vas al baño le das al bot
 
 ## Descargar
 
-[**Bajar la APK para Android**](https://TU-PROYECTO.supabase.co/storage/v1/object/public/releases/rey-cagon.apk)
+[**Bajar la APK para Android**](https://github.com/Fervolts/rey-cagon/releases/latest/download/rey-cagon.apk)
 
 No está en Play Store todavía. Android te va a pedir permiso para instalar apps de fuera de la tienda. Después de la primera vez, la app te avisa sola cuando hay versión nueva.
 
@@ -35,8 +35,8 @@ La app guarda tu correo, tu username y la hora de cada registro. Tus amigos ven 
 
 Necesitas tu propio proyecto de Supabase y de Firebase:
 
-1. Aplica las migraciones de `supabase/migrations/` y despliega `supabase/functions/notificaciones`.
-2. Pon tu `google-services.json` en `android/app/` y tu URL y clave de Supabase en `lib/main.dart`.
+1. Aplica las migraciones de `supabase/migrations/` y despliega `supabase/functions/notificaciones`. En el Vault crea `project_url` (la URL de tu proyecto) y `webhook_secret`.
+2. Copia `lib/config.example.dart` como `lib/config.dart` con tu URL y clave publicable de Supabase, y pon tu `google-services.json` en `android/app/`. Ninguno de los dos se sube al repo.
 3. `flutter run`
 
 ## Créditos

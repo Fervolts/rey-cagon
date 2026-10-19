@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'accesorios.dart';
 import 'actualizar.dart';
 import 'calendario.dart';
+import 'config.dart';
 import 'perfil.dart';
 import 'push.dart';
 import 'recordatorio.dart';
@@ -18,8 +19,7 @@ import 'tips.dart';
 import 'tipos.dart';
 import 'widget.dart';
 
-const supabaseUrl = 'https://TU-PROYECTO.supabase.co';
-const supabaseKey = 'sb_publishable_...';
+export 'config.dart' show supabaseKey, supabaseUrl;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
