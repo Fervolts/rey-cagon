@@ -54,6 +54,49 @@ const efectosAvatar = [
   return null;
 }
 
+/// Dónde van lentes y sombrero en cada avatar, en fracciones del cuadro: centro (x, y) y
+/// ancho del accesorio. null = ese avatar no lo usa (😎 ya trae lentes, 👑 ya es sombrero).
+/// Calibrado a mano sobre los PNG de Fluent: y de lentes es la línea de los ojos, y de
+/// sombrero es donde se apoya en la cabeza.
+typedef _Punto = ({double x, double y, double ancho});
+typedef _Encaje = ({_Punto? lentes, _Punto? sombrero});
+
+const Map<String, _Encaje> _encajes = {
+  '💩': (lentes: (x: 0.5, y: 0.6, ancho: 0.7), sombrero: (x: 0.55, y: 0.25, ancho: 0.42)),
+  '👑': (lentes: null, sombrero: null),
+  '🧻': (lentes: null, sombrero: (x: 0.5, y: 0.17, ancho: 0.5)),
+  '🚽': (lentes: null, sombrero: (x: 0.75, y: 0.1, ancho: 0.4)),
+  '🐻': (lentes: (x: 0.49, y: 0.51, ancho: 0.52), sombrero: (x: 0.5, y: 0.22, ancho: 0.5)),
+  '🦍': (lentes: (x: 0.17, y: 0.19, ancho: 0.26), sombrero: (x: 0.19, y: 0.09, ancho: 0.24)),
+  '🐷': (lentes: (x: 0.5, y: 0.51, ancho: 0.56), sombrero: (x: 0.5, y: 0.18, ancho: 0.5)),
+  '🐸': (lentes: (x: 0.5, y: 0.3, ancho: 0.82), sombrero: (x: 0.5, y: 0.15, ancho: 0.42)),
+  '🦄': (lentes: (x: 0.33, y: 0.44, ancho: 0.32), sombrero: (x: 0.55, y: 0.2, ancho: 0.36)),
+  '🤡': (lentes: (x: 0.51, y: 0.37, ancho: 0.72), sombrero: (x: 0.5, y: 0.11, ancho: 0.5)),
+  '😎': (lentes: null, sombrero: (x: 0.5, y: 0.09, ancho: 0.55)),
+  '👻': (lentes: (x: 0.45, y: 0.27, ancho: 0.52), sombrero: (x: 0.5, y: 0.09, ancho: 0.42)),
+  '🔥': (lentes: null, sombrero: (x: 0.45, y: 0.15, ancho: 0.38)),
+  '🌶️': (lentes: null, sombrero: (x: 0.6, y: 0.12, ancho: 0.42)),
+  '🍑': (lentes: null, sombrero: (x: 0.5, y: 0.12, ancho: 0.45)),
+  '🦖': (lentes: (x: 0.29, y: 0.18, ancho: 0.28), sombrero: (x: 0.27, y: 0.17, ancho: 0.32)),
+  '👽': (lentes: (x: 0.54, y: 0.49, ancho: 0.86), sombrero: (x: 0.5, y: 0.09, ancho: 0.55)),
+  '🤖': (lentes: (x: 0.5, y: 0.42, ancho: 0.66), sombrero: (x: 0.5, y: 0.16, ancho: 0.5)),
+  '🐲': (lentes: (x: 0.45, y: 0.45, ancho: 0.35), sombrero: (x: 0.37, y: 0.27, ancho: 0.35)),
+  '💎': (lentes: null, sombrero: (x: 0.5, y: 0.27, ancho: 0.45)),
+  '🏆': (lentes: null, sombrero: (x: 0.5, y: 0.13, ancho: 0.45)),
+};
+
+_Encaje _encaje(String avatar) => _encajes[avatar] ?? _encajes[avatar.replaceAll('\u{FE0F}', '')] ?? _encajes['💩']!;
+
+bool usaLentes(String avatar) => _encaje(avatar).lentes != null;
+bool usaSombrero(String avatar) => _encaje(avatar).sombrero != null;
+
+// El dibujo de cada accesorio ocupa ~87,5% del ancho de su PNG.
+const _relleno = .875;
+// Altura (fracción del PNG) de la línea de los ojos en cada lente.
+const _centroLentes = {'👓': .49, '🕶️': .49, '🕶': .49, '🥽': .62};
+// Altura (fracción del PNG) por donde cada sombrero se apoya en la cabeza.
+const _asiento = {'🧢': .70, '👒': .80, '🎓': .62, '🎩': .90, '🪖': .58};
+
 /// Avatar con sus accesorios encima. Lee avatar, sombrero, lentes, mascota y cagadas de
 /// [perfil] (una fila de profiles, leaderboard o perfil). Ocupa [tamano]; los accesorios y
 /// la mascota se salen del cuadro.
@@ -112,7 +155,9 @@ class _AvatarState extends State<Avatar> with SingleTickerProviderStateMixin {
     final sombrero = widget.perfil['sombrero'] as String?;
     final lentes = widget.perfil['lentes'] as String?;
     final mascota = _mascota;
-    final base = Emoji(widget.perfil['avatar'] ?? '💩', tamano: t);
+    final avatar = widget.perfil['avatar'] as String? ?? '💩';
+    final encaje = _encaje(avatar);
+    final base = Emoji(avatar, tamano: t);
     return SizedBox(
       width: t,
       height: t,
@@ -124,8 +169,8 @@ class _AvatarState extends State<Avatar> with SingleTickerProviderStateMixin {
             clipBehavior: Clip.none,
             children: [
               _conEfecto(base, _nivel, segundos),
-              if (lentes != null) Positioned(left: t * .2, top: t * .38, child: Emoji(lentes, tamano: t * .6)),
-              if (sombrero != null) Positioned(left: t * .2, top: -t * .22, child: Emoji(sombrero, tamano: t * .6)),
+              if (lentes != null && encaje.lentes != null) _ponerLentes(lentes, encaje.lentes!, t),
+              if (sombrero != null && encaje.sombrero != null) _ponerSombrero(sombrero, encaje.sombrero!, t),
               if (mascota != null)
                 if (_pasea)
                   _paseo(mascota, t, segundos)
@@ -137,6 +182,24 @@ class _AvatarState extends State<Avatar> with SingleTickerProviderStateMixin {
       ),
     );
   }
+}
+
+Widget _ponerLentes(String lentes, _Punto p, double t) {
+  final tam = p.ancho / _relleno * t;
+  return Positioned(
+    left: p.x * t - tam / 2,
+    top: p.y * t - (_centroLentes[lentes] ?? .5) * tam,
+    child: Emoji(lentes, tamano: tam),
+  );
+}
+
+Widget _ponerSombrero(String sombrero, _Punto p, double t) {
+  final tam = p.ancho / _relleno * t;
+  return Positioned(
+    left: p.x * t - tam / 2,
+    top: p.y * t - (_asiento[sombrero] ?? .85) * tam,
+    child: Emoji(sombrero, tamano: tam),
+  );
 }
 
 /// Posición de la mascota en unidades del avatar (0..1 es el cuadro; se sale por los lados).

@@ -257,6 +257,20 @@ class _EditarPerfilState extends State<_EditarPerfil> {
 
   /// Fila de opciones de una ranura. Lo bloqueado se ve apagado con las cagadas que pide.
   Widget _ranura(String titulo, String ranura) {
+    final avatar = _puesto['avatar'] as String;
+    if ((ranura == 'lentes' && !usaLentes(avatar)) || (ranura == 'sombrero' && !usaSombrero(avatar))) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Rotulo(titulo),
+            const SizedBox(height: 6),
+            Text('Este avatar no usa ${titulo.toLowerCase()}.', style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ),
+      );
+    }
     final opciones = [
       if (ranura == 'avatar')
         for (final a in _avatares) (emoji: a, minimo: 0)
