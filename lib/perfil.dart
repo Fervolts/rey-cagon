@@ -181,7 +181,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                 if (_esMio) ...[
                   ListTile(
                     leading: const Icon(Icons.open_in_new),
-                    title: const Text('Hecho por Ahí Mismito Studios C.A.'),
+                    title: const Text('Hecho por ahimismito Studios C.A'),
                     subtitle: const Text('ahimismito.com'),
                     onTap: () => launchUrl(Uri.parse('https://ahimismito.com'), mode: LaunchMode.externalApplication),
                   ),
@@ -195,7 +195,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                         context: context,
                         applicationName: 'Rey Cagón',
                         applicationVersion: info.version,
-                        applicationLegalese: '© 2026 Ahí Mismito Studios C.A.\nahimismito.com',
+                        applicationLegalese: '© 2026 ahimismito Studios C.A\nahimismito.com',
                       );
                     },
                   ),

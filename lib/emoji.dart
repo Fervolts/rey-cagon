@@ -28,6 +28,7 @@ const _archivos = {
   '😎': 'smiling_face_with_sunglasses',
   '🙂': 'slightly_smiling_face',
   '🍺': 'beer_mug',
+  '🚿': 'shower',
   '👻': 'ghost',
   '🔥': 'fire',
   '🌶️': 'hot_pepper',
