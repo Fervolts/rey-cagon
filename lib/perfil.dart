@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'emoji.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'accesorios.dart';
 import 'calendario.dart';
 import 'main.dart' show db, escucharCagadas;
 import 'push.dart';
@@ -106,7 +107,10 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                Center(child: Emoji(p['avatar'], tamano: 96)),
+                Padding(
+                  padding: const EdgeInsets.only(top: 36, bottom: 8),
+                  child: Center(child: Avatar(p, tamano: 96)),
+                ),
                 Text(p['username'],
                     textAlign: TextAlign.center,
                     maxLines: 2,
@@ -158,6 +162,18 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                   title: const Text('Especialidad de la casa'),
                   subtitle: Text(tipos[p['tipo_favorito']]?.$2 ?? 'Todavía no se sabe'),
                 ),
+                if (_esMio)
+                  Builder(builder: (context) {
+                    final total = (p['total'] as num).toInt();
+                    final d = siguienteDesbloqueo(total);
+                    return ListTile(
+                      leading: d == null ? const Emoji('🏆', tamano: 36) : Opacity(opacity: .4, child: Emoji(d.emoji, tamano: 36)),
+                      title: Text(d == null ? 'Lo desbloqueaste todo' : 'Próximo: ${d.nombre}'),
+                      subtitle: d == null ? null : Text('Te faltan ${d.minimo - total} cagadas'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: _editar,
+                    );
+                  }),
                 if (_esMio)
                   ListTile(
                     leading: const Icon(Icons.info_outline),
@@ -211,8 +227,12 @@ class _EditarPerfil extends StatefulWidget {
 class _EditarPerfilState extends State<_EditarPerfil> {
   late final _usuario = TextEditingController(text: widget.perfil['username']);
   late final _bio = TextEditingController(text: widget.perfil['bio'] ?? '');
-  late String _avatar = widget.perfil['avatar'];
+  late final Map<String, dynamic> _puesto = {
+    for (final k in ['avatar', 'sombrero', 'lentes', 'mascota']) k: widget.perfil[k],
+  };
   bool _ocupado = false;
+
+  int get _total => (widget.perfil['total'] as num?)?.toInt() ?? 0;
 
   Future<void> _guardar() async {
     setState(() => _ocupado = true);
@@ -220,7 +240,7 @@ class _EditarPerfilState extends State<_EditarPerfil> {
       await db.from('profiles').update({
         'username': _usuario.text.trim(),
         'bio': _bio.text.trim().isEmpty ? null : _bio.text.trim(),
-        'avatar': _avatar,
+        ..._puesto,
       }).eq('id', db.auth.currentUser!.id);
       if (mounted) Navigator.pop(context, true);
     } on PostgrestException catch (e) {
@@ -235,43 +255,85 @@ class _EditarPerfilState extends State<_EditarPerfil> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
+  /// Fila de opciones de una ranura. Lo bloqueado se ve apagado con las cagadas que pide.
+  Widget _ranura(String titulo, String ranura) {
+    final opciones = [
+      if (ranura == 'avatar')
+        for (final a in _avatares) (emoji: a, minimo: 0)
+      else
+        (emoji: null, minimo: 0),
+      for (final d in desbloqueos.where((d) => d.ranura == ranura)) (emoji: d.emoji, minimo: d.minimo),
+    ];
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.viewInsetsOf(context).bottom),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('EDITAR PERFIL', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 12),
+          Rotulo(titulo),
+          const SizedBox(height: 6),
           Wrap(
             spacing: 4,
             runSpacing: 4,
             children: [
-              for (final a in _avatares)
+              for (final o in opciones)
                 ChoiceChip(
-                  label: Emoji(a, tamano: 28),
-                  selected: a == _avatar,
+                  label: o.emoji == null
+                      ? const SizedBox.square(dimension: 28, child: Icon(Icons.block, size: 22))
+                      : o.minimo > _total
+                          ? Row(mainAxisSize: MainAxisSize.min, children: [
+                              Opacity(opacity: .3, child: Emoji(o.emoji!, tamano: 28)),
+                              const SizedBox(width: 4),
+                              Text('${o.minimo}', style: numeros(context, tamano: 12, color: paleta(context).textoSuave)),
+                            ])
+                          : Emoji(o.emoji!, tamano: 28),
+                  selected: _puesto[ranura] == o.emoji,
                   showCheckmark: false,
-                  onSelected: (_) => setState(() => _avatar = a),
+                  onSelected: o.minimo > _total
+                      ? (_) => ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Se desbloquea a las ${o.minimo} cagadas. Llevas $_total.')))
+                      : (_) => setState(() => _puesto[ranura] = o.emoji),
                 ),
             ],
           ),
-          TextField(
-            controller: _usuario,
-            maxLength: 24,
-            decoration: const InputDecoration(labelText: 'Username'),
-          ),
-          TextField(
-            controller: _bio,
-            maxLength: 140,
-            maxLines: 2,
-            decoration: const InputDecoration(labelText: 'Bio'),
-          ),
-          const SizedBox(height: 8),
-          FilledButton(onPressed: _ocupado ? null : _guardar, child: const Text('GUARDAR')),
         ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('EDITAR PERFIL', style: Theme.of(context).textTheme.titleLarge),
+            Padding(
+              padding: const EdgeInsets.only(top: 40, bottom: 16),
+              child: Center(child: Avatar(_puesto, tamano: 80)),
+            ),
+            _ranura('Avatar', 'avatar'),
+            _ranura('Sombrero', 'sombrero'),
+            _ranura('Lentes', 'lentes'),
+            _ranura('Mascota', 'mascota'),
+            TextField(
+              controller: _usuario,
+              maxLength: 24,
+              decoration: const InputDecoration(labelText: 'Username'),
+            ),
+            TextField(
+              controller: _bio,
+              maxLength: 140,
+              maxLines: 2,
+              decoration: const InputDecoration(labelText: 'Bio'),
+            ),
+            const SizedBox(height: 8),
+            FilledButton(onPressed: _ocupado ? null : _guardar, child: const Text('GUARDAR')),
+          ],
+        ),
       ),
     );
   }
@@ -300,7 +362,7 @@ class _PantallaBuscarState extends State<PantallaBuscar> {
     _q = q;
     final yo = db.auth.currentUser!.id;
     try {
-      var consulta = db.from('profiles').select('id, username, avatar').neq('id', yo);
+      var consulta = db.from('profiles').select('id, username, avatar, sombrero, lentes, mascota').neq('id', yo);
       if (q.trim().isNotEmpty) {
         // % y _ son comodines en ilike: se escapan para buscar el texto tal cual.
         final limpio = q.trim().replaceAll(r'\', r'\\').replaceAll('%', r'\%').replaceAll('_', r'\_');
@@ -358,7 +420,7 @@ class _PantallaBuscarState extends State<PantallaBuscar> {
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Row(
                   children: [
-                    Emoji(g['avatar'], tamano: 36),
+                    Avatar(g, tamano: 36),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(

@@ -6,12 +6,14 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'accesorios.dart';
 import 'actualizar.dart';
 import 'calendario.dart';
 import 'perfil.dart';
 import 'push.dart';
 import 'recordatorio.dart';
 import 'tema.dart';
+import 'tips.dart';
 import 'tipos.dart';
 import 'widget.dart';
 
@@ -58,6 +60,13 @@ VoidCallback escucharCagadas(String nombre, VoidCallback onCambio) {
         event: PostgresChangeEvent.all,
         schema: 'public',
         table: 'follows',
+        callback: (_) => avisar(),
+      )
+      // Cambios de avatar, accesorios o username.
+      .onPostgresChanges(
+        event: PostgresChangeEvent.update,
+        schema: 'public',
+        table: 'profiles',
         callback: (_) => avisar(),
       )
       .subscribe();
@@ -201,6 +210,7 @@ class _PantallaInicioState extends State<PantallaInicio> {
         children: [
           const PantallaRanking(),
           PantallaCalendario(usuarioId: yo, nombre: 'mí'),
+          const PantallaTips(),
           PantallaPerfil(usuarioId: yo),
         ],
       ),
@@ -212,6 +222,7 @@ class _PantallaInicioState extends State<PantallaInicio> {
         destinations: const [
           NavigationDestination(icon: Icon(Icons.emoji_events_outlined), selectedIcon: Icon(Icons.emoji_events), label: 'RANKING'),
           NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: 'CALENDARIO'),
+          NavigationDestination(icon: Icon(Icons.lightbulb_outline), selectedIcon: Icon(Icons.lightbulb), label: 'TIPS'),
           NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'PERFIL'),
         ],
         ),
@@ -699,7 +710,7 @@ class _FilaTabla extends StatelessWidget {
                     style: numeros(context, tamano: 13, weight: FontWeight.w800, color: lider ? acentoTexto : p.textoSuave)),
               ),
               const SizedBox(width: 12),
-              Emoji(fila['avatar'], tamano: 28),
+              Avatar(fila, tamano: 28),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(

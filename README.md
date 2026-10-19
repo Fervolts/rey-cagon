@@ -18,6 +18,8 @@ No está en Play Store todavía. Android te va a pedir permiso para instalar app
 - **Ranking** entre tus amigos o entre todos, por semana, mes, trimestre y año.
 - **Notificaciones** cuando un amigo caga ("Fulanito cagó 3 veces hoy… vas perdiendo"), cuando alguien te sigue y un recordatorio a las 8 p. m. si no has registrado nada.
 - **Perfiles** con estadísticas, calendario y tu "especialidad de la casa".
+- **Accesorios** para tu avatar (sombreros, lentes, mascotas) que se desbloquean mientras más cagas.
+- **Tips** para cagar mejor. No son consejo médico.
 - **Widgets** para la pantalla de inicio: el botón para registrar sin abrir la app y tu puesto en el ranking.
 - Una por hora como máximo. Sin trampas.
 
