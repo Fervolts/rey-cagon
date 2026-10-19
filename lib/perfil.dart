@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'emoji.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'calendario.dart';
@@ -105,8 +106,12 @@ class _PerfilScreenState extends State<PerfilScreen> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                Center(child: Text(p['avatar'], style: const TextStyle(fontSize: 72))),
-                Center(child: Text(p['username'], style: texto.headlineSmall)),
+                Center(child: Emoji(p['avatar'], size: 96)),
+                Text(p['username'],
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: texto.headlineSmall),
                 if ((p['bio'] ?? '').isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
@@ -149,10 +154,16 @@ class _PerfilScreenState extends State<PerfilScreen> {
                   ),
                 ),
                 ListTile(
-                  leading: Text(tipoEmoji(p['tipo_favorito']), style: const TextStyle(fontSize: 28)),
+                  leading: Emoji(tipoEmoji(p['tipo_favorito']), size: 36),
                   title: const Text('Especialidad de la casa'),
                   subtitle: Text(tipos[p['tipo_favorito']]?.$2 ?? 'Todavía no se sabe'),
                 ),
+                if (_esMio)
+                  ListTile(
+                    leading: const Icon(Icons.info_outline),
+                    title: const Text('Créditos y licencias'),
+                    onTap: () => showLicensePage(context: context, applicationName: 'Rey Cagón'),
+                  ),
                 ListTile(
                   leading: const Icon(Icons.calendar_month),
                   title: const Text('Ver calendario'),
@@ -240,7 +251,7 @@ class _EditarPerfilState extends State<_EditarPerfil> {
             children: [
               for (final a in _avatares)
                 ChoiceChip(
-                  label: Text(a, style: const TextStyle(fontSize: 20)),
+                  label: Emoji(a, size: 28),
                   selected: a == _avatar,
                   showCheckmark: false,
                   onSelected: (_) => setState(() => _avatar = a),
@@ -338,16 +349,45 @@ class _BuscarScreenState extends State<BuscarScreen> {
           const SizedBox(height: 8),
           if (_gente.isEmpty) const Padding(padding: EdgeInsets.all(24), child: Text('Nadie por aquí 🫥', textAlign: TextAlign.center)),
           for (final g in _gente)
-            ListTile(
-              leading: Text(g['avatar'], style: const TextStyle(fontSize: 28)),
-              title: Text(g['username']),
+            InkWell(
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => PerfilScreen(userId: g['id'])),
               ).then((_) => _buscar(_q)),
-              trailing: _sigo.contains(g['id'])
-                  ? OutlinedButton(onPressed: () => _toggle(g['id']), child: const Text('SIGUIENDO'))
-                  : FilledButton(onPressed: () => _toggle(g['id']), child: const Text('SEGUIR')),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  children: [
+                    Emoji(g['avatar'], size: 36),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        g['username'],
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Ancho fijo: el botón no se encoge ni empuja el nombre.
+                    SizedBox(
+                      width: 116,
+                      height: 40,
+                      child: _sigo.contains(g['id'])
+                          ? OutlinedButton(
+                              onPressed: () => _toggle(g['id']),
+                              style: OutlinedButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
+                              child: const Text('SIGUIENDO'),
+                            )
+                          : FilledButton(
+                              onPressed: () => _toggle(g['id']),
+                              style: FilledButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
+                              child: const Text('SEGUIR'),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
             ),
         ],
       ),

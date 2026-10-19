@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="widget_descripcion">Botón de CAGUÉ: registra sin abrir la app</string>
+    <string name="widget_ranking_descripcion">Tu puesto en el ranking de la semana y quién va cerca</string>
 </resources>

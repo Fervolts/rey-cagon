@@ -4,6 +4,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'main.dart' show db;
 import 'recordatorio.dart' show notificaciones;
+import 'widget.dart' show clienteDeFondo, refrescarRanking;
 
 // Mismo id que manda la Edge Function notificar-cagada en android.notification.channel_id.
 const _canal = AndroidNotificationChannel(
@@ -13,8 +14,18 @@ const _canal = AndroidNotificationChannel(
   importance: Importance.high,
 );
 
+/// Push con la app cerrada o en segundo plano: si alguien cagó, se refresca el widget de ranking.
+@pragma('vm:entry-point')
+Future<void> _alFondo(RemoteMessage m) async {
+  if (m.data['tipo'] != 'cagada') return;
+  try {
+    await refrescarRanking(await clienteDeFondo());
+  } catch (_) {}
+}
+
 Future<void> initPush() async {
   await Firebase.initializeApp();
+  FirebaseMessaging.onBackgroundMessage(_alFondo);
   await notificaciones
       .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
       ?.createNotificationChannel(_canal);

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/widgets.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -5,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'main.dart' show supabaseKey, supabaseUrl;
 
 const _proveedor = 'com.ahimismito.rey_cagon.ReyCagonWidget';
+const _proveedorRanking = 'com.ahimismito.rey_cagon.ReyCagonRankingWidget';
 
 // Mismo día que usa leaderboard(): Venezuela, UTC-4 fijo.
 String _hoyCaracas() => DateTime.now().toUtc().subtract(const Duration(hours: 4)).toIso8601String().substring(0, 10);
@@ -30,12 +33,33 @@ Future<int> _contarHoy(SupabaseClient db) async {
   return (yo?['total'] ?? 0) as int;
 }
 
-/// Toque en el círculo del widget. Corre en un motor de Flutter aparte, sin la app abierta:
-/// inicializa Supabase con la sesión guardada en el teléfono y registra la cagada.
-@pragma('vm:entry-point')
-Future<void> widgetCague(Uri? uri) async {
+/// Widget de ranking: tu puesto en la semana (entre los que sigues) y los vecinos de arriba y abajo.
+Future<void> refrescarRanking(SupabaseClient db) async {
+  final me = db.auth.currentUser?.id;
+  if (me == null) return;
+  final filas = List<Map<String, dynamic>>.from(
+    await db.rpc('leaderboard', params: {'period': 'week', 'solo_siguiendo': true}),
+  );
+  final i = filas.indexWhere((f) => f['user_id'] == me);
+  if (i < 0) return;
+  // Si vas primero muestra 1-2-3; si no, el de arriba, tú y el de abajo.
+  final desde = (i == 0 ? 0 : i - 1).clamp(0, (filas.length - 3).clamp(0, filas.length));
+  final vecinos = [
+    for (var k = desde; k < filas.length && k < desde + 3; k++)
+      {'p': k + 1, 'n': filas[k]['username'], 't': filas[k]['total'], 'yo': filas[k]['user_id'] == me},
+  ];
+  final ahora = DateTime.now();
+  await HomeWidget.saveWidgetData<String>('rk', jsonEncode(vecinos));
+  await HomeWidget.saveWidgetData<String>(
+    'rk_hora',
+    '${ahora.hour.toString().padLeft(2, '0')}:${ahora.minute.toString().padLeft(2, '0')}',
+  );
+  await HomeWidget.updateWidget(qualifiedAndroidName: _proveedorRanking);
+}
+
+/// Supabase para código que corre sin la app abierta (widget, push en segundo plano).
+Future<SupabaseClient> clienteDeFondo() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await _pintar(estado: '...');
   try {
     await Supabase.initialize(
       url: supabaseUrl,
@@ -46,7 +70,16 @@ Future<void> widgetCague(Uri? uri) async {
   } catch (_) {
     // Ya estaba inicializado en este motor.
   }
-  final db = Supabase.instance.client;
+  return Supabase.instance.client;
+}
+
+/// Toque en el círculo del widget. Corre en un motor de Flutter aparte, sin la app abierta:
+/// inicializa Supabase con la sesión guardada en el teléfono y registra la cagada.
+@pragma('vm:entry-point')
+Future<void> widgetCague(Uri? uri) async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await _pintar(estado: '...');
+  final db = await clienteDeFondo();
   if (db.auth.currentSession == null) return _pintar(estado: 'ABRE LA APP');
 
   String? aviso;
@@ -65,6 +98,7 @@ Future<void> widgetCague(Uri? uri) async {
     hoy = await _contarHoy(db);
   } catch (_) {}
   await _pintar(hoy: hoy, estado: aviso);
+  await refrescarRanking(db).catchError((_) {});
   // El aviso dura un rato y vuelve al contador.
   await Future<void>.delayed(const Duration(seconds: 4));
   await _pintar(estado: null);

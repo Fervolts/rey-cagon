@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Publica una versión para el actualizador dentro de la app.
 #   scripts/publicar.sh "Notas de la versión"
+#   SIN_LINK=1 scripts/publicar.sh "…"   # no toca el link fijo
 # Sube build/…/app-release.apk y version.json al bucket público `releases` de Supabase.
 # Antes: subir `version:` en pubspec.yaml (el número después del + es el que compara la app).
 set -euo pipefail
@@ -33,7 +34,9 @@ subir() { # $1 archivo local, $2 nombre en el bucket, $3 tipo
 }
 
 subir "$APK" "$NOMBRE" application/vnd.android.package-archive
-subir "$APK" rey-cagon.apk application/vnd.android.package-archive   # link fijo para instalar por primera vez
+# Link fijo para instalar por primera vez. SIN_LINK=1 lo deja en la versión anterior
+# (sirve para probar el aviso: se instala la vieja desde el link y la app ofrece esta).
+[ "${SIN_LINK:-}" = 1 ] || subir "$APK" rey-cagon.apk application/vnd.android.package-archive
 
 TMP=$(mktemp)
 python3 - "$VERSION" "$BUILD" "$NOMBRE" "$SHA" "$NOTAS" > "$TMP" <<'PY'
@@ -46,7 +49,7 @@ print(json.dumps({
 PY
 subir "$TMP" version.json application/json
 rm -f "$TMP"
-cp "$APK" ~/Desktop/rey-cagon.apk
+[ "${SIN_LINK:-}" = 1 ] || cp "$APK" ~/Desktop/rey-cagon.apk
 
 echo "Publicada $VERSION+$BUILD"
 echo "Link fijo: https://$REF.supabase.co/storage/v1/object/public/releases/rey-cagon.apk"

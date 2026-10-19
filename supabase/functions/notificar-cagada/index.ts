@@ -54,11 +54,48 @@ async function accessToken(): Promise<string> {
   return cache.token;
 }
 
+async function enviar(token: string, title: string, body: string, data: Record<string, string> = {}) {
+  const bearer = await accessToken();
+  return fetch(`https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${bearer}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message: { token, notification: { title, body }, data, android: { notification: { channel_id: "cagadas" } } },
+    }),
+  });
+}
+
+// Trigger follows_avisar: "X te empezó a seguir", a todos los teléfonos del seguido.
+async function avisarFollow(follower: string, followed: string) {
+  const [{ data: perfil }, { data: tokens }, { data: devuelta }] = await Promise.all([
+    db.from("profiles").select("username").eq("id", follower).single(),
+    db.from("push_tokens").select("token").eq("user_id", followed),
+    db.from("follows").select("follower").eq("follower", followed).eq("followed", follower).maybeSingle(),
+  ]);
+  if (!perfil || !tokens?.length) return Response.json({ enviados: 0 });
+  const body = devuelta
+    ? "Ya lo sigues. Que empiece la guerra 💩"
+    : "Síguelo de vuelta para saber cuánto caga 💩";
+  const muertos: string[] = [];
+  await Promise.all(tokens.map(async (t) => {
+    const res = await enviar(t.token, `👀 ${perfil.username} te empezó a seguir`, body, { tipo: "follow", user_id: follower });
+    if (!res.ok) {
+      const err = await res.text();
+      if (res.status === 404 || err.includes("UNREGISTERED")) muertos.push(t.token);
+      else console.error("FCM", res.status, err);
+    }
+  }));
+  if (muertos.length) await db.from("push_tokens").delete().in("token", muertos);
+  return Response.json({ enviados: tokens.length - muertos.length });
+}
+
 Deno.serve(async (req) => {
   if (req.headers.get("x-webhook-secret") !== Deno.env.get("WEBHOOK_SECRET")) {
     return new Response("no", { status: 401 });
   }
-  const { user_id } = await req.json();
+  const cuerpo = await req.json();
+  if (cuerpo.tipo === "follow") return avisarFollow(cuerpo.follower, cuerpo.followed);
+  const { user_id } = cuerpo;
 
   const { data: seguidores } = await db.from("follows").select("follower").eq("followed", user_id);
   if (!seguidores?.length) return Response.json({ enviados: 0 });
@@ -87,6 +124,7 @@ Deno.serve(async (req) => {
         message: {
           token: t.token,
           notification: { title: `💩 ${perfil.username} cagó`, body: `${perfil.username} cagó ${n} ${veces} hoy... ${cola}` },
+          data: { tipo: "cagada", user_id },
           android: { notification: { channel_id: "cagadas" } },
         },
       }),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'emoji.dart';
 import 'main.dart' show db, escucharCagadas;
 import 'tema.dart';
 import 'tipos.dart';
@@ -99,7 +100,7 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
           ),
           for (final e in entradas)
             ListTile(
-              leading: Text(tipoEmoji(e['tipo']), style: const TextStyle(fontSize: 24)),
+              leading: Emoji(tipoEmoji(e['tipo']), size: 32),
               title: Text(TimeOfDay.fromDateTime(DateTime.parse(e['created_at']).toLocal())
                   .format(context)),
               subtitle: Text(tipos[e['tipo']]?.$2 ?? 'Sin tipo'),
@@ -209,7 +210,13 @@ class _Dia extends StatelessWidget {
           children: [
             Text('$dia', style: numeros(context, size: 12, color: cuantas > 0 ? acentoTexto : null)),
             if (cuantas > 0)
-              Text(cuantas == 1 ? '💩' : '💩$cuantas', style: numeros(context, size: 11, color: acentoTexto)),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Emoji('💩', size: 14),
+                  if (cuantas > 1) Text('$cuantas', style: numeros(context, size: 11, color: acentoTexto)),
+                ],
+              ),
           ],
         ),
       ),

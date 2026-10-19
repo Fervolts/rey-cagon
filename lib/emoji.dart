@@ -1,0 +1,75 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+// Fluent Emoji 3D de Microsoft (MIT, assets/emoji/LICENSE). Van como imágenes para que se vean
+// igual en todos los teléfonos en vez de con los emojis de Samsung/Google/etc.
+const _archivos = {
+  '💩': 'pile_of_poo',
+  '👑': 'crown',
+  '🥈': '2nd_place_medal',
+  '🥉': '3rd_place_medal',
+  '🫥': 'dotted_line_face',
+  '🚽': 'toilet',
+  '🪨': 'rock',
+  '🧱': 'brick',
+  '🌽': 'ear_of_corn',
+  '🐍': 'snake',
+  '🍦': 'soft_ice_cream',
+  '🌋': 'volcano',
+  '💧': 'droplet',
+  '🧻': 'roll_of_paper',
+  '🐻': 'bear',
+  '🦍': 'gorilla',
+  '🐷': 'pig_face',
+  '🐸': 'frog',
+  '🦄': 'unicorn',
+  '🤡': 'clown_face',
+  '😎': 'smiling_face_with_sunglasses',
+  '👻': 'ghost',
+  '🔥': 'fire',
+  '🌶️': 'hot_pepper',
+  '🌶': 'hot_pepper',
+  '🍑': 'peach',
+  '🦖': 't-rex',
+};
+
+/// Emoji como imagen de [size] px. Si no está en el set (p. ej. un avatar viejo), cae al del sistema.
+class Emoji extends StatelessWidget {
+  const Emoji(this.emoji, {super.key, this.size = 24});
+
+  final String emoji;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final archivo = _archivos[emoji];
+    if (archivo == null) {
+      return SizedBox(
+        width: size,
+        height: size,
+        child: FittedBox(child: Text(emoji)),
+      );
+    }
+    return Image.asset(
+      'assets/emoji/$archivo.png',
+      width: size,
+      height: size,
+      filterQuality: FilterQuality.medium,
+      semanticLabel: emoji,
+    );
+  }
+}
+
+void registrarLicencias() {
+  LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks(
+      ['Fluent Emoji (Microsoft)'],
+      await rootBundle.loadString('assets/emoji/LICENSE'),
+    );
+    yield const LicenseEntryWithLineBreaks(
+      ['Noto Emoji (Google), ícono de la app'],
+      'Noto Emoji © Google LLC. Licencia Apache 2.0 / CC BY 4.0.\nhttps://github.com/googlefonts/noto-emoji',
+    );
+  });
+}

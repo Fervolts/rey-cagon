@@ -44,10 +44,19 @@ Future<void> _revisar(BuildContext context) async {
   final actualizar = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      title: Text('Versión ${remota['version']} disponible'),
-      content: Text((remota['notas'] as String?)?.trim().isNotEmpty == true
-          ? remota['notas']
-          : 'Hay una versión nueva de Rey Cagón.'),
+      title: const Text('Actualízame, mojón 💩'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Versión ${remota['version']} disponible',
+              style: const TextStyle(fontWeight: FontWeight.w700)),
+          if ((remota['notas'] as String?)?.trim().isNotEmpty == true) ...[
+            const SizedBox(height: 8),
+            Text(remota['notas']),
+          ],
+        ],
+      ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('DESPUÉS')),
         FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('ACTUALIZAR')),

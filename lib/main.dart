@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'emoji.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,6 +20,7 @@ const supabaseKey = 'sb_publishable_...';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  registrarLicencias();
   await Supabase.initialize(url: supabaseUrl, publishableKey: supabaseKey);
   try {
     await initRecordatorio();
@@ -134,7 +136,7 @@ class _AuthScreenState extends State<AuthScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(24, 48, 24, 32),
           children: [
-            const Text('💩', style: TextStyle(fontSize: 64)),
+            const Emoji('💩', size: 76),
             const SizedBox(height: 16),
             Text('REY\nCAGÓN', style: texto.headlineLarge?.copyWith(fontSize: 52, height: 0.95)),
             const SizedBox(height: 12),
@@ -305,6 +307,7 @@ class _HomeScreenState extends State<HomeScreen> {
       });
       reprogramarRecordatorio(yaCagoHoy: _miHoy > 0).catchError((_) {});
       actualizarWidget(_miHoy).catchError((_) {});
+      refrescarRanking(db).catchError((_) {});
     } catch (e) {
       _toast('Error cargando ranking: $e');
     } finally {
@@ -467,6 +470,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 const Spacer(),
                 FilterChip(
                   label: const Text('SOLO MIS AMIGOS'),
+                  labelStyle: TextStyle(color: _soloSiguiendo ? acentoTexto : null),
                   selected: _soloSiguiendo,
                   visualDensity: VisualDensity.compact,
                   onSelected: (v) {
@@ -511,7 +515,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const Text('Estás cagando solo. Sigue a tus amigos para competir.'),
+                        const Center(child: Emoji('🚽', size: 64)),
+                        const SizedBox(height: 8),
+                        const Text('Estás cagando solo. Sigue a tus amigos para competir.', textAlign: TextAlign.center),
                         const SizedBox(height: 12),
                         FilledButton(
                           onPressed: () => _abrir(const BuscarScreen()),
@@ -563,11 +569,15 @@ class _BotonCagueState extends State<_BotonCague> {
             duration: const Duration(milliseconds: 100),
             width: 200,
             height: 200,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: _apretado ? acento : p.primario),
+            // Al apretar se invierte: en claro negro → amarillo, en oscuro amarillo → blanco.
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _apretado ? (p.primario == acento ? p.texto : acento) : p.primario,
+            ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text('💩', style: TextStyle(fontSize: 72)),
+                const Emoji('💩', size: 88),
                 Text('CAGUÉ',
                     style: TextStyle(
                       color: _apretado ? acentoTexto : p.sobrePrimario,
@@ -607,7 +617,7 @@ class _Opcion extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(emoji, style: const TextStyle(fontSize: 30)),
+              Emoji(emoji, size: 38),
               const SizedBox(height: 4),
               Text(texto,
                   textAlign: TextAlign.center,
@@ -689,17 +699,24 @@ class _FilaTabla extends StatelessWidget {
                     style: numeros(context, size: 13, weight: FontWeight.w800, color: lider ? acentoTexto : p.textoSuave)),
               ),
               const SizedBox(width: 12),
-              Text(fila['avatar'], style: const TextStyle(fontSize: 22)),
+              Emoji(fila['avatar'], size: 28),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '${fila['username']}${lider ? '  👑' : ''}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 15, fontWeight: esMio ? FontWeight.w800 : FontWeight.w600, color: p.texto),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            fila['username'],
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 15, fontWeight: esMio ? FontWeight.w800 : FontWeight.w600, color: p.texto),
+                          ),
+                        ),
+                        if (lider) ...[const SizedBox(width: 6), const Emoji('👑', size: 18)],
+                      ],
                     ),
                     const SizedBox(height: 6),
                     LayoutBuilder(

@@ -33,18 +33,19 @@ class Paleta {
     sobrePrimario: Color(0xFFFFFFFF),
   );
 
+  // En oscuro el amarillo pasa a ser el color principal (botones, selección); el blanco sobre negro
+  // se veía plano.
   static const oscuro = Paleta(
-    fondo: Color(0xFF121110),
-    tarjeta: Color(0xFF1A1917),
-    suave: Color(0xFF242220),
-    texto: Color(0xFFF1EFEB),
-    textoSuave: Color(0xFFB0AAA2),
-    borde: Color(0xFF34312D),
-    bordeFuerte: Color(0xFF6F6962),
-    primario: Color(0xFFF1EFEB),
-    sobrePrimario: Color(0xFF121110),
-  );
-}
+    fondo: Color(0xFF0E0E0D),
+    tarjeta: Color(0xFF181816),
+    suave: Color(0xFF23221F),
+    texto: Color(0xFFF2F0EC),
+    textoSuave: Color(0xFFA8A39B),
+    borde: Color(0xFF2E2C29),
+    bordeFuerte: Color(0xFF5E5953),
+    primario: acento,
+    sobrePrimario: acentoTexto,
+  );}
 
 Paleta paleta(BuildContext context) =>
     Theme.of(context).brightness == Brightness.dark ? Paleta.oscuro : Paleta.claro;
