@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'calendario.dart';
+import 'perfil.dart';
 import 'push.dart';
 import 'recordatorio.dart';
 import 'tipos.dart';
@@ -26,7 +26,9 @@ Future<void> main() async {
 
 final db = Supabase.instance.client;
 
-/// Llama [onCambio] (agrupado en 400ms) cuando alguien registra o borra una cagada,
+var _canales = 0;
+
+/// Llama [onCambio] (agrupado en 400ms) cuando alguien registra o borra una cagada o un follow,
 /// y cuando la app vuelve a primer plano. Devuelve con qué soltarlo en dispose().
 VoidCallback escucharCagadas(String nombre, VoidCallback onCambio) {
   Timer? espera;
@@ -36,11 +38,18 @@ VoidCallback escucharCagadas(String nombre, VoidCallback onCambio) {
   }
 
   final canal = db
-      .channel(nombre)
+      // Nombre único: puede haber dos pantallas iguales apiladas (perfil → buscar → perfil).
+      .channel('$nombre-${_canales++}')
       .onPostgresChanges(
         event: PostgresChangeEvent.all,
         schema: 'public',
         table: 'cagadas',
+        callback: (_) => avisar(),
+      )
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'follows',
         callback: (_) => avisar(),
       )
       .subscribe();
@@ -163,6 +172,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   String _period = 'week';
+  bool _soloSiguiendo = true;
   List<Map<String, dynamic>> _rows = [];
   List<Map<String, dynamic>> _hoy = [];
   bool _loading = true;
@@ -216,8 +226,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (spinner) setState(() => _loading = true);
     try {
       final (data, hoy) = await (
-        db.rpc('leaderboard', params: {'period': _period}),
-        db.rpc('leaderboard', params: {'period': 'day'}),
+        db.rpc('leaderboard', params: {'period': _period, 'solo_siguiendo': _soloSiguiendo}),
+        // El aviso del día compara solo contra la gente que sigues.
+        db.rpc('leaderboard', params: {'period': 'day', 'solo_siguiendo': true}),
       ).wait;
       if (!mounted) return;
       setState(() {
@@ -292,17 +303,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final lider = _hoy.first;
     final mio = _hoy.firstWhere((r) => r['user_id'] == _me, orElse: () => {'total': 0})['total'];
     final n = lider['total'] as int;
+    if (_hoy.length == 1) return 'Sigue a tus panas con 🔍 para competir';
     if (n == 0) return 'Nadie ha cagado hoy. Sé el primero 💩';
     if (lider['user_id'] == _me || mio == n) return 'Vas ganando hoy 👑 ($mio)';
     return '${lider['username']} cagó $n ${n == 1 ? 'vez' : 'veces'} hoy... vas perdiendo';
   }
 
-  void _verCalendario(String userId, String username) => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => CalendarioScreen(userId: userId, username: username),
-        ),
-      ).then((_) => _load());
+  void _abrir(Widget pantalla) =>
+      Navigator.push(context, MaterialPageRoute(builder: (_) => pantalla)).then((_) => _load(spinner: false));
 
   @override
   Widget build(BuildContext context) {
@@ -313,17 +321,14 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('Rey Cagón 👑💩'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.calendar_month),
-            tooltip: 'Mi calendario',
-            onPressed: () => _verCalendario(me, 'mí'),
+            icon: const Icon(Icons.search),
+            tooltip: 'Buscar panas',
+            onPressed: () => _abrir(const BuscarScreen()),
           ),
           IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              cancelarRecordatorio().catchError((_) {});
-              await olvidarTelefono().catchError((_) {});
-              await db.auth.signOut();
-            },
+            icon: const Icon(Icons.account_circle),
+            tooltip: 'Mi perfil',
+            onPressed: () => _abrir(PerfilScreen(userId: me)),
           ),
         ],
       ),
@@ -349,12 +354,27 @@ class _HomeScreenState extends State<HomeScreen> {
             SegmentedButton<String>(
               segments: [
                 for (final p in periods.entries)
-                  ButtonSegment(value: p.key, label: Text(p.value)),
+                  ButtonSegment(value: p.key, label: _UnaLinea(p.value)),
               ],
               selected: {_period},
               showSelectedIcon: false,
+              style: _compacto,
               onSelectionChanged: (s) {
                 setState(() => _period = s.first);
+                _load();
+              },
+            ),
+            const SizedBox(height: 8),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: true, label: _UnaLinea('Siguiendo')),
+                ButtonSegment(value: false, label: _UnaLinea('Todos')),
+              ],
+              selected: {_soloSiguiendo},
+              showSelectedIcon: false,
+              style: _compacto,
+              onSelectionChanged: (s) {
+                setState(() => _soloSiguiendo = s.first);
                 _load();
               },
             ),
@@ -367,15 +387,21 @@ class _HomeScreenState extends State<HomeScreen> {
             else
               for (final (i, r) in _rows.indexed)
                 ListTile(
-                  leading: Text(i == 0 ? '👑' : '${i + 1}', style: const TextStyle(fontSize: 20)),
+                  leading: SizedBox(
+                    width: 32,
+                    child: Text(i == 0 ? '👑' : '${i + 1}',
+                        textAlign: TextAlign.center, style: const TextStyle(fontSize: 20)),
+                  ),
                   title: Text(
-                    r['username'],
+                    '${r['avatar']} ${r['username']}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontWeight: r['user_id'] == me ? FontWeight.bold : FontWeight.normal,
                     ),
                   ),
                   trailing: Text('${r['total']}', style: const TextStyle(fontSize: 20)),
-                  onTap: () => _verCalendario(r['user_id'], r['username']),
+                  onTap: () => _abrir(PerfilScreen(userId: r['user_id'])),
                 ),
             const SizedBox(height: 24),
             const Text(disclaimer, textAlign: TextAlign.center, style: TextStyle(fontSize: 11)),
@@ -384,4 +410,22 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+}
+
+final _compacto = SegmentedButton.styleFrom(
+  visualDensity: VisualDensity.compact,
+  padding: const EdgeInsets.symmetric(horizontal: 4),
+);
+
+/// Etiqueta que nunca parte en dos líneas: si no cabe (pantallas angostas o letra grande) se encoge.
+class _UnaLinea extends StatelessWidget {
+  const _UnaLinea(this.texto);
+
+  final String texto;
+
+  @override
+  Widget build(BuildContext context) => FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(texto, maxLines: 1, softWrap: false),
+      );
 }

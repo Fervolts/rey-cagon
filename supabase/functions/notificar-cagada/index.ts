@@ -1,5 +1,5 @@
 // Llamada por el trigger cagadas_avisar (pg_net) en cada cagada nueva.
-// Manda un push FCM a todos los demás: "Fulanito cagó N veces hoy... vas perdiendo".
+// Manda un push FCM a los seguidores de quien cagó: "Fulanito cagó N veces hoy... vas perdiendo".
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const sa = JSON.parse(Deno.env.get("FCM_SERVICE_ACCOUNT")!);
@@ -60,10 +60,13 @@ Deno.serve(async (req) => {
   }
   const { user_id } = await req.json();
 
+  const { data: seguidores } = await db.from("follows").select("follower").eq("followed", user_id);
+  if (!seguidores?.length) return Response.json({ enviados: 0 });
+
   const [{ data: perfil }, { data: hoy }, { data: tokens }] = await Promise.all([
     db.from("profiles").select("username").eq("id", user_id).single(),
     db.from("cagadas").select("user_id").gte("created_at", inicioDelDia()),
-    db.from("push_tokens").select("token, user_id").neq("user_id", user_id),
+    db.from("push_tokens").select("token, user_id").in("user_id", seguidores.map((s) => s.follower)),
   ]);
   if (!perfil || !tokens?.length) return Response.json({ enviados: 0 });
 
