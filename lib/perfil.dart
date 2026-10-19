@@ -5,6 +5,7 @@ import 'calendario.dart';
 import 'main.dart' show db, escucharCagadas;
 import 'push.dart';
 import 'recordatorio.dart';
+import 'tema.dart';
 import 'tipos.dart';
 
 const _avatares = ['💩', '👑', '🧻', '🚽', '🐻', '🦍', '🐷', '🐸', '🦄', '🤡', '😎', '👻', '🔥', '🌶️', '🍑', '🦖'];
@@ -91,7 +92,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
     final texto = Theme.of(context).textTheme;
     return Scaffold(
       appBar: AppBar(
-        title: Text(_esMio ? 'Mi perfil' : 'Perfil'),
+        title: Text(_esMio ? 'MI PERFIL' : 'PERFIL'),
         actions: [
           if (_esMio && p != null) IconButton(icon: const Icon(Icons.edit), tooltip: 'Editar', onPressed: _editar),
           if (_esMio) IconButton(icon: const Icon(Icons.logout), tooltip: 'Cerrar sesión', onPressed: _salir),
@@ -125,8 +126,8 @@ class _PerfilScreenState extends State<PerfilScreen> {
                 if (!_esMio)
                   Center(
                     child: p['lo_sigo'] == true
-                        ? OutlinedButton(onPressed: _ocupado ? null : _seguir, child: const Text('Dejar de seguir'))
-                        : FilledButton(onPressed: _ocupado ? null : _seguir, child: const Text('Seguir')),
+                        ? OutlinedButton(onPressed: _ocupado ? null : _seguir, child: const Text('DEJAR DE SEGUIR'))
+                        : FilledButton(onPressed: _ocupado ? null : _seguir, child: const Text('SEGUIR')),
                   ),
                 const SizedBox(height: 16),
                 Card(
@@ -179,7 +180,7 @@ class _Numero extends StatelessWidget {
         child: Column(
           children: [
             Text('$valor', style: Theme.of(context).textTheme.titleLarge),
-            Text(texto, maxLines: 1, softWrap: false, style: Theme.of(context).textTheme.bodySmall),
+            Rotulo(texto),
           ],
         ),
       );
@@ -229,7 +230,7 @@ class _EditarPerfilState extends State<_EditarPerfil> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Editar perfil', style: Theme.of(context).textTheme.titleLarge),
+          Text('EDITAR PERFIL', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 12),
           Wrap(
             spacing: 4,
@@ -256,7 +257,7 @@ class _EditarPerfilState extends State<_EditarPerfil> {
             decoration: const InputDecoration(labelText: 'Bio'),
           ),
           const SizedBox(height: 8),
-          FilledButton(onPressed: _ocupado ? null : _guardar, child: const Text('Guardar')),
+          FilledButton(onPressed: _ocupado ? null : _guardar, child: const Text('GUARDAR')),
         ],
       ),
     );
@@ -323,7 +324,7 @@ class _BuscarScreenState extends State<BuscarScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Buscar panas')),
+      appBar: AppBar(title: const Text('BUSCAR PANAS')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -343,8 +344,8 @@ class _BuscarScreenState extends State<BuscarScreen> {
                 MaterialPageRoute(builder: (_) => PerfilScreen(userId: g['id'])),
               ).then((_) => _buscar(_q)),
               trailing: _sigo.contains(g['id'])
-                  ? OutlinedButton(onPressed: () => _toggle(g['id']), child: const Text('Siguiendo'))
-                  : FilledButton(onPressed: () => _toggle(g['id']), child: const Text('Seguir')),
+                  ? OutlinedButton(onPressed: () => _toggle(g['id']), child: const Text('SIGUIENDO'))
+                  : FilledButton(onPressed: () => _toggle(g['id']), child: const Text('SEGUIR')),
             ),
         ],
       ),

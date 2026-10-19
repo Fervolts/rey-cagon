@@ -125,57 +125,51 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     final texto = Theme.of(context).textTheme;
-    final scheme = Theme.of(context).colorScheme;
+    final p = paleta(context);
     return Scaffold(
       body: SafeArea(
-        child: Center(
-          child: ListView(
-            shrinkWrap: true,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-            children: [
-              const Center(child: Text('💩', style: TextStyle(fontSize: 88))),
-              const SizedBox(height: 8),
-              Text('Rey Cagón',
-                  textAlign: TextAlign.center,
-                  style: texto.headlineLarge?.copyWith(fontWeight: FontWeight.w900)),
-              Text('Compite con tus panas por la corona 👑',
-                  textAlign: TextAlign.center,
-                  style: texto.bodyLarge?.copyWith(color: scheme.onSurfaceVariant)),
-              const SizedBox(height: 32),
-              if (_signUp) ...[
-                TextField(
-                  controller: _username,
-                  decoration: const InputDecoration(hintText: 'Username', prefixIcon: Icon(Icons.alternate_email)),
-                ),
-                const SizedBox(height: 12),
-              ],
-              TextField(
-                controller: _email,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(hintText: 'Email', prefixIcon: Icon(Icons.mail_outline)),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _password,
-                obscureText: true,
-                decoration: const InputDecoration(hintText: 'Contraseña', prefixIcon: Icon(Icons.lock_outline)),
-              ),
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: _busy ? null : _submit,
-                child: Text(_signUp ? 'Crear cuenta' : 'Entrar'),
-              ),
-              const SizedBox(height: 4),
-              TextButton(
-                onPressed: () => setState(() => _signUp = !_signUp),
-                child: Text(_signUp ? 'Ya tengo cuenta' : '¿Nuevo? Crea tu cuenta'),
-              ),
-              const SizedBox(height: 24),
-              Text(disclaimer,
-                  textAlign: TextAlign.center,
-                  style: texto.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(24, 48, 24, 32),
+          children: [
+            const Text('💩', style: TextStyle(fontSize: 64)),
+            const SizedBox(height: 16),
+            Text('REY\nCAGÓN', style: texto.headlineLarge?.copyWith(fontSize: 52, height: 0.95)),
+            const SizedBox(height: 12),
+            Align(alignment: Alignment.centerLeft, child: Container(height: 4, width: 56, color: acento)),
+            const SizedBox(height: 12),
+            Text('Compite con tus panas por la corona.', style: texto.bodyLarge?.copyWith(color: p.textoSuave)),
+            const SizedBox(height: 36),
+            if (_signUp) ...[
+              const Rotulo('Username'),
+              const SizedBox(height: 6),
+              TextField(controller: _username),
+              const SizedBox(height: 16),
             ],
-          ),
+            const Rotulo('Email'),
+            const SizedBox(height: 6),
+            TextField(controller: _email, keyboardType: TextInputType.emailAddress),
+            const SizedBox(height: 16),
+            const Rotulo('Contraseña'),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _password,
+              obscureText: true,
+              textInputAction: TextInputAction.go,
+              onSubmitted: (_) => _busy ? null : _submit(),
+            ),
+            const SizedBox(height: 24),
+            FilledButton(
+              onPressed: _busy ? null : _submit,
+              child: Text(_signUp ? 'CREAR CUENTA' : 'ENTRAR'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: () => setState(() => _signUp = !_signUp),
+              child: Text(_signUp ? 'YA TENGO CUENTA' : 'CREAR CUENTA NUEVA'),
+            ),
+            const SizedBox(height: 32),
+            Text(disclaimer, style: texto.bodySmall?.copyWith(color: p.textoSuave)),
+          ],
         ),
       ),
     );
@@ -205,14 +199,17 @@ class _InicioState extends State<Inicio> {
           PerfilScreen(userId: me),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: DecoratedBox(
+        decoration: BoxDecoration(border: Border(top: BorderSide(color: paleta(context).borde))),
+        child: NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() => _tab = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.emoji_events_outlined), selectedIcon: Icon(Icons.emoji_events), label: 'Ranking'),
-          NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: 'Calendario'),
-          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Perfil'),
+          NavigationDestination(icon: Icon(Icons.emoji_events_outlined), selectedIcon: Icon(Icons.emoji_events), label: 'RANKING'),
+          NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: 'CALENDARIO'),
+          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'PERFIL'),
         ],
+        ),
       ),
     );
   }
@@ -320,16 +317,14 @@ class _HomeScreenState extends State<HomeScreen> {
           shrinkWrap: true,
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           children: [
-            Text('¿Qué salió?',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+            Text('¿QUÉ SALIÓ?', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
             GridView.count(
               crossAxisCount: 4,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 8,
-              crossAxisSpacing: 8,
+              mainAxisSpacing: 6,
+              crossAxisSpacing: 6,
               childAspectRatio: 0.85,
               children: [
                 for (final t in tipos.entries)
@@ -393,63 +388,76 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final texto = Theme.of(context).textTheme;
-    final scheme = Theme.of(context).colorScheme;
-    final yo = _rows.where((r) => r['user_id'] == _me).firstOrNull;
+    final p = paleta(context);
     final aviso = _avisoDelDia;
+    final perdiendo = aviso?.endsWith('vas perdiendo') ?? false;
     final maximo = _rows.isEmpty ? 0 : _rows.first['total'] as int;
 
     return SafeArea(
       child: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           children: [
             Row(
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(yo == null ? 'Rey Cagón' : 'Hola, ${yo['username']} ${yo['avatar']}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: texto.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
-                      if (aviso != null)
-                        Text(aviso, style: texto.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
-                    ],
-                  ),
-                ),
-                IconButton.filledTonal(
+                Expanded(child: Text('REY CAGÓN', style: texto.headlineSmall)),
+                IconButton.outlined(
                   icon: const Icon(Icons.person_add_alt_1),
                   tooltip: 'Buscar panas',
                   onPressed: () => _abrir(const BuscarScreen()),
                 ),
               ],
             ),
-            const SizedBox(height: 28),
-            Center(child: _BotonCague(onTap: _cague)),
-            const SizedBox(height: 12),
-            Center(
-              child: Text(
-                _miHoy == 0 ? 'Hoy no has cagado' : 'Hoy llevas $_miHoy 💩',
-                style: texto.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-              ),
-            ),
-            Center(
+            const SizedBox(height: 16),
+            _BotonCague(onTap: _cague, hoy: _miHoy),
+            Align(
+              alignment: Alignment.centerLeft,
               child: TextButton.icon(
                 onPressed: _deshacer,
-                icon: const Icon(Icons.undo, size: 18),
-                label: const Text('Deshacer la última'),
+                icon: const Icon(Icons.undo, size: 16),
+                label: const Text('DESHACER LA ÚLTIMA'),
               ),
             ),
-            const SizedBox(height: 20),
+            if (aviso != null) ...[
+              const SizedBox(height: 4),
+              Container(
+                decoration: BoxDecoration(
+                  color: p.tarjeta,
+                  border: Border.all(color: p.borde),
+                ),
+                child: IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(width: 4, color: perdiendo ? const Color(0xFFB3261E) : acento),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Rotulo('Hoy'),
+                              const SizedBox(height: 4),
+                              Text(aviso, style: texto.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 28),
             Row(
               children: [
-                Text('Ranking', style: texto.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
+                const Rotulo('Ranking'),
                 const Spacer(),
                 FilterChip(
-                  label: const Text('Solo mis panas'),
+                  label: const Text('SOLO MIS PANAS'),
                   selected: _soloSiguiendo,
+                  visualDensity: VisualDensity.compact,
                   onSelected: (v) {
                     setState(() => _soloSiguiendo = v);
                     _load();
@@ -457,11 +465,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             SegmentedButton<String>(
               segments: [
-                for (final p in periods.entries)
-                  ButtonSegment(value: p.key, label: _UnaLinea(p.value)),
+                for (final e in periods.entries)
+                  ButtonSegment(value: e.key, label: _UnaLinea(e.value.toUpperCase())),
               ],
               selected: {_period},
               showSelectedIcon: false,
@@ -471,49 +479,41 @@ class _HomeScreenState extends State<HomeScreen> {
                 _load();
               },
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 12),
             if (_loading)
               const Padding(
                 padding: EdgeInsets.all(32),
                 child: Center(child: CircularProgressIndicator()),
               )
             else ...[
-              if (_rows.isNotEmpty) _Podio(top: _rows.take(3).toList(), me: _me, onTap: (id) => _abrir(PerfilScreen(userId: id))),
-              const SizedBox(height: 12),
-              for (final (i, r) in _rows.indexed.skip(3))
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: _Fila(
-                    puesto: i + 1,
-                    fila: r,
-                    maximo: maximo,
-                    esMio: r['user_id'] == _me,
-                    onTap: () => _abrir(PerfilScreen(userId: r['user_id'])),
-                  ),
-                ),
-              if (_soloSiguiendo && _rows.length <= 1)
+              _Tabla(
+                filas: _rows,
+                me: _me,
+                maximo: maximo,
+                onTap: (id) => _abrir(PerfilScreen(userId: id)),
+              ),
+              if (_soloSiguiendo && _rows.length <= 1) ...[
+                const SizedBox(height: 12),
                 Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(16),
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const Text('🚽', style: TextStyle(fontSize: 40)),
-                        const SizedBox(height: 8),
-                        const Text('Estás cagando solo. Sigue a tus panas para competir.', textAlign: TextAlign.center),
+                        const Text('Estás cagando solo. Sigue a tus panas para competir.'),
                         const SizedBox(height: 12),
-                        FilledButton.tonal(
+                        FilledButton(
                           onPressed: () => _abrir(const BuscarScreen()),
-                          child: const Text('Buscar panas'),
+                          child: const Text('BUSCAR PANAS'),
                         ),
                       ],
                     ),
                   ),
                 ),
+              ],
             ],
             const SizedBox(height: 28),
-            Text(disclaimer,
-                textAlign: TextAlign.center,
-                style: texto.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+            Text(disclaimer, style: texto.bodySmall?.copyWith(color: p.textoSuave)),
           ],
         ),
       ),
@@ -521,11 +521,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-/// Botón redondo grande con rebote al tocarlo.
+/// Bloque negro de ancho completo; al apretarlo se invierte a amarillo.
 class _BotonCague extends StatefulWidget {
-  const _BotonCague({required this.onTap});
+  const _BotonCague({required this.onTap, required this.hoy});
 
   final VoidCallback onTap;
+  final int hoy;
 
   @override
   State<_BotonCague> createState() => _BotonCagueState();
@@ -536,50 +537,43 @@ class _BotonCagueState extends State<_BotonCague> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _apretado = true),
-      onTapUp: (_) => setState(() => _apretado = false),
-      onTapCancel: () => setState(() => _apretado = false),
-      onTap: widget.onTap,
-      child: AnimatedScale(
-        scale: _apretado ? 0.92 : 1,
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOut,
-        child: Semantics(
-          button: true,
-          label: 'Cagué',
-          child: Container(
-            width: 190,
-            height: 190,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFFA0673F), Color(0xFF5E3519)],
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: scheme.primary.withValues(alpha: 0.35),
-                  blurRadius: 28,
-                  offset: const Offset(0, 12),
+    final p = paleta(context);
+    final fondo = _apretado ? acento : p.primario;
+    final tinta = _apretado ? acentoTexto : p.sobrePrimario;
+    return Semantics(
+      button: true,
+      label: 'Cagué',
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _apretado = true),
+        onTapUp: (_) => setState(() => _apretado = false),
+        onTapCancel: () => setState(() => _apretado = false),
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 90),
+          height: 156,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(color: fondo, borderRadius: BorderRadius.circular(radio)),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('HOY ${widget.hoy.toString().padLeft(2, '0')}',
+                        style: mono(context, size: 13, weight: FontWeight.w700, color: _apretado ? acentoTexto : acento)
+                            .copyWith(letterSpacing: 1.6)),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text('CAGUÉ',
+                          style: mono(context, size: 54, weight: FontWeight.w800, color: tinta).copyWith(height: 1)),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            child: const Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text('💩', style: TextStyle(fontSize: 72)),
-                Text('CAGUÉ',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 2,
-                    )),
-              ],
-            ),
+              ),
+              const Text('💩', style: TextStyle(fontSize: 76)),
+            ],
           ),
         ),
       ),
@@ -595,142 +589,131 @@ class _Opcion extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Material(
-        color: Theme.of(context).colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(6),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(emoji, style: const TextStyle(fontSize: 30)),
-                const SizedBox(height: 4),
-                Text(texto,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelSmall),
-              ],
-            ),
+  Widget build(BuildContext context) {
+    final p = paleta(context);
+    return Material(
+      color: p.tarjeta,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(radio),
+        side: BorderSide(color: p.borde),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(emoji, style: const TextStyle(fontSize: 30)),
+              const SizedBox(height: 4),
+              Text(texto,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall),
+            ],
           ),
         ),
-      );
-}
-
-/// Los 3 primeros en escalones: 2º, 1º, 3º.
-class _Podio extends StatelessWidget {
-  const _Podio({required this.top, required this.me, required this.onTap});
-
-  final List<Map<String, dynamic>> top;
-  final String me;
-  final void Function(String userId) onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    const alturas = [110.0, 80.0, 60.0];
-    const colores = [oro, plata, bronce];
-    const medallas = ['👑', '🥈', '🥉'];
-    final orden = [1, 0, 2].where((i) => i < top.length);
-    final texto = Theme.of(context).textTheme;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        for (final i in orden)
-          Expanded(
-            child: GestureDetector(
-              onTap: () => onTap(top[i]['user_id']),
-              child: Column(
-                children: [
-                  Text(medallas[i], style: TextStyle(fontSize: i == 0 ? 30 : 22)),
-                  CircleAvatar(
-                    radius: i == 0 ? 34 : 28,
-                    backgroundColor: colores[i].withValues(alpha: 0.25),
-                    child: Text(top[i]['avatar'], style: TextStyle(fontSize: i == 0 ? 34 : 26)),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    top[i]['username'],
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: texto.titleSmall?.copyWith(
-                      fontWeight: top[i]['user_id'] == me ? FontWeight.w900 : FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Container(
-                    height: alturas[i],
-                    margin: const EdgeInsets.symmetric(horizontal: 6),
-                    decoration: BoxDecoration(
-                      color: colores[i].withValues(alpha: 0.85),
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text('${top[i]['total']}',
-                        style: texto.headlineSmall?.copyWith(fontWeight: FontWeight.w900, color: Colors.black87)),
-                  ),
-                ],
-              ),
-            ),
-          ),
-      ],
+      ),
     );
   }
 }
 
-class _Fila extends StatelessWidget {
-  const _Fila({required this.puesto, required this.fila, required this.maximo, required this.esMio, required this.onTap});
+/// Ranking como tabla: puesto en mono, el líder con fondo amarillo y una barra fina contra el líder.
+class _Tabla extends StatelessWidget {
+  const _Tabla({required this.filas, required this.me, required this.maximo, required this.onTap});
+
+  final List<Map<String, dynamic>> filas;
+  final String me;
+  final int maximo;
+  final void Function(String userId) onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paleta(context);
+    return Container(
+      decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: p.borde)),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: const [
+                SizedBox(width: 44, child: Rotulo('#')),
+                Expanded(child: Rotulo('Pana')),
+                Rotulo('Total'),
+              ],
+            ),
+          ),
+          for (final (i, f) in filas.indexed) ...[
+            Divider(color: i == 0 ? p.bordeFuerte : p.borde),
+            _FilaTabla(puesto: i + 1, fila: f, esMio: f['user_id'] == me, maximo: maximo, onTap: () => onTap(f['user_id'])),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _FilaTabla extends StatelessWidget {
+  const _FilaTabla({required this.puesto, required this.fila, required this.esMio, required this.maximo, required this.onTap});
 
   final int puesto;
   final Map<String, dynamic> fila;
-  final int maximo;
   final bool esMio;
+  final int maximo;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final texto = Theme.of(context).textTheme;
+    final p = paleta(context);
     final total = fila['total'] as int;
-    return Card(
-      color: esMio ? scheme.primaryContainer : null,
-      clipBehavior: Clip.antiAlias,
+    final lider = puesto == 1 && total > 0;
+    return Material(
+      color: esMio ? p.suave : Colors.transparent,
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
             children: [
-              SizedBox(
-                width: 28,
-                child: Text('$puesto', style: texto.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              Container(
+                width: 32,
+                height: 32,
+                alignment: Alignment.center,
+                color: lider ? acento : null,
+                child: Text(puesto.toString().padLeft(2, '0'),
+                    style: mono(context, size: 13, weight: FontWeight.w800, color: lider ? acentoTexto : p.textoSuave)),
               ),
-              Text(fila['avatar'], style: const TextStyle(fontSize: 26)),
               const SizedBox(width: 12),
+              Text(fila['avatar'], style: const TextStyle(fontSize: 22)),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(fila['username'],
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: texto.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                    Text(
+                      '${fila['username']}${lider ? '  👑' : ''}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 15, fontWeight: esMio ? FontWeight.w800 : FontWeight.w600, color: p.texto),
+                    ),
                     const SizedBox(height: 6),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: maximo == 0 ? 0 : total / maximo,
-                        minHeight: 6,
-                        backgroundColor: scheme.surfaceContainerHighest,
+                    LayoutBuilder(
+                      builder: (context, c) => Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          height: 3,
+                          width: maximo == 0 ? 0 : c.maxWidth * total / maximo,
+                          color: lider ? acento : p.texto,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 12),
-              Text('$total', style: texto.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
+              Text('$total', style: mono(context, size: 20, weight: FontWeight.w800)),
             ],
           ),
         ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'main.dart' show db, escucharCagadas;
+import 'tema.dart';
 import 'tipos.dart';
 
 const _meses = [
@@ -126,7 +127,7 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     final esteMes = _mes.year == hoy.year && _mes.month == hoy.month;
 
     return Scaffold(
-      appBar: AppBar(title: Text(_esMio ? 'Mi calendario' : 'Calendario de ${widget.username}')),
+      appBar: AppBar(title: Text(_esMio ? 'MI CALENDARIO' : 'CALENDARIO DE ${widget.username.toUpperCase()}')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -134,9 +135,9 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
             children: [
               IconButton(icon: const Icon(Icons.chevron_left), onPressed: () => _moverMes(-1)),
               Expanded(
-                child: Text('${_meses[_mes.month - 1]} ${_mes.year}',
+                child: Text('${_meses[_mes.month - 1]} ${_mes.year}'.toUpperCase(),
                     textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.titleMedium),
+                    style: mono(context, size: 15, weight: FontWeight.w800).copyWith(letterSpacing: 1.2)),
               ),
               IconButton(
                 icon: const Icon(Icons.chevron_right),
@@ -147,7 +148,7 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
           Row(
             children: [
               for (final d in ['L', 'M', 'M', 'J', 'V', 'S', 'D'])
-                Expanded(child: Text(d, textAlign: TextAlign.center)),
+                Expanded(child: Center(child: Rotulo(d))),
             ],
           ),
           const SizedBox(height: 4),
@@ -173,7 +174,8 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
               ],
             ),
           const SizedBox(height: 12),
-          Text('Total del mes: $total 💩', textAlign: TextAlign.center),
+          Text('TOTAL DEL MES: ${total.toString().padLeft(2, '0')}',
+              textAlign: TextAlign.center, style: mono(context, size: 13, weight: FontWeight.w700)),
         ],
       ),
     );
@@ -197,14 +199,17 @@ class _Dia extends StatelessWidget {
         margin: const EdgeInsets.all(2),
         decoration: BoxDecoration(
           color: cuantas > 0 ? scheme.primaryContainer : null,
-          border: esHoy ? Border.all(color: scheme.primary, width: 2) : null,
-          borderRadius: BorderRadius.circular(8),
+          border: esHoy
+              ? Border.all(color: scheme.primary, width: 2)
+              : Border.all(color: paleta(context).borde),
+          borderRadius: BorderRadius.circular(radio),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text('$dia', style: const TextStyle(fontSize: 12)),
-            if (cuantas > 0) Text(cuantas == 1 ? '💩' : '💩$cuantas', style: const TextStyle(fontSize: 11)),
+            Text('$dia', style: mono(context, size: 12, color: cuantas > 0 ? acentoTexto : null)),
+            if (cuantas > 0)
+              Text(cuantas == 1 ? '💩' : '💩$cuantas', style: mono(context, size: 11, color: acentoTexto)),
           ],
         ),
       ),
