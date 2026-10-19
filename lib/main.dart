@@ -253,6 +253,9 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
       if (tipo != null) await db.from('cagadas').update({'tipo': tipo}).eq('id', nueva['id']);
+    } on PostgrestException catch (e) {
+      // El trigger limitar_cagadas manda el texto listo para mostrar ("solo una por hora...").
+      _toast(e.hint == 'limite_hora' ? e.message : 'Error: ${e.message}');
     } catch (e) {
       _toast('Error: $e');
     }
