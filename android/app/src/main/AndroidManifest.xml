@@ -27,6 +27,9 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Icono y color de los push de FCM cuando la app está cerrada (silueta blanca del 💩). -->
+        <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_stat_poop" />
+        <meta-data android:name="com.google.firebase.messaging.default_notification_color" android:resource="@color/notificacion" />
         <!-- Recordatorio diario (flutter_local_notifications): disparo programado y reprogramación al reiniciar. -->
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
