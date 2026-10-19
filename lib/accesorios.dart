@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'emoji.dart';
@@ -29,41 +31,235 @@ const desbloqueos = <Desbloqueo>[
   (ranura: 'avatar', emoji: '🏆', nombre: 'Un año cagando', minimo: 365),
 ];
 
-/// Lo próximo que se desbloquea con [total] cagadas, o null si ya tiene todo.
-Desbloqueo? siguienteDesbloqueo(int total) {
-  for (final d in desbloqueos) {
+/// Desde estas cagadas la mascota pasea alrededor del avatar.
+const mascotaSeMueve = 50;
+
+/// Efectos del avatar según el total histórico. Se aplica el más alto alcanzado.
+const efectosAvatar = [
+  (nombre: 'Avatar cromado', minimo: 100),
+  (nombre: 'Avatar dorado', minimo: 200),
+  (nombre: 'Avatar arcoíris', minimo: 300),
+];
+
+/// Lo próximo que se desbloquea con [total] cagadas (accesorio o efecto), o null si ya tiene todo.
+({String emoji, String nombre, int minimo})? siguienteDesbloqueo(int total) {
+  final todo = [
+    for (final d in desbloqueos) (emoji: d.emoji, nombre: d.nombre, minimo: d.minimo),
+    (emoji: '🪰', nombre: 'Mascota que pasea', minimo: mascotaSeMueve),
+    for (final e in efectosAvatar) (emoji: '💩', nombre: e.nombre, minimo: e.minimo),
+  ]..sort((a, b) => a.minimo.compareTo(b.minimo));
+  for (final d in todo) {
     if (d.minimo > total) return d;
   }
   return null;
 }
 
-/// Avatar con sus accesorios encima. Lee avatar, sombrero, lentes y mascota de [perfil]
-/// (una fila de profiles, leaderboard o perfil). Ocupa [tamano]; los accesorios se salen
-/// un poco del cuadro, como un sombrero.
-class Avatar extends StatelessWidget {
+/// Avatar con sus accesorios encima. Lee avatar, sombrero, lentes, mascota y cagadas de
+/// [perfil] (una fila de profiles, leaderboard o perfil). Ocupa [tamano]; los accesorios y
+/// la mascota se salen del cuadro.
+class Avatar extends StatefulWidget {
   const Avatar(this.perfil, {super.key, this.tamano = 28});
 
   final Map<String, dynamic> perfil;
   final double tamano;
 
   @override
+  State<Avatar> createState() => _AvatarState();
+}
+
+class _AvatarState extends State<Avatar> with SingleTickerProviderStateMixin {
+  // Un minuto en bucle: todas las trayectorias tienen periodos que dividen 60 s.
+  late final _reloj = AnimationController(vsync: this, duration: const Duration(seconds: 60));
+
+  int get _cagadas => (widget.perfil['cagadas'] as num?)?.toInt() ?? 0;
+  String? get _mascota => widget.perfil['mascota'] as String?;
+  bool get _pasea => _mascota != null && _cagadas >= mascotaSeMueve;
+  // 0 sin efecto, 1 cromado, 2 dorado, 3 arcoíris.
+  int get _nivel => efectosAvatar.where((e) => _cagadas >= e.minimo).length;
+
+  @override
+  void initState() {
+    super.initState();
+    _ajustarReloj();
+  }
+
+  @override
+  void didUpdateWidget(Avatar viejo) {
+    super.didUpdateWidget(viejo);
+    _ajustarReloj();
+  }
+
+  void _ajustarReloj() {
+    final animado = _pasea || _nivel > 0;
+    if (animado && !_reloj.isAnimating) {
+      // Cada usuario arranca en otro punto para que el ranking no se mueva sincronizado.
+      _reloj.value = ((widget.perfil['username'] ?? '').hashCode % 600) / 600;
+      _reloj.repeat();
+    } else if (!animado && _reloj.isAnimating) {
+      _reloj.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _reloj.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final t = tamano;
-    final sombrero = perfil['sombrero'] as String?;
-    final lentes = perfil['lentes'] as String?;
-    final mascota = perfil['mascota'] as String?;
+    final t = widget.tamano;
+    final sombrero = widget.perfil['sombrero'] as String?;
+    final lentes = widget.perfil['lentes'] as String?;
+    final mascota = _mascota;
+    final base = Emoji(widget.perfil['avatar'] ?? '💩', tamano: t);
     return SizedBox(
       width: t,
       height: t,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Emoji(perfil['avatar'] ?? '💩', tamano: t),
-          if (lentes != null) Positioned(left: t * .2, top: t * .38, child: Emoji(lentes, tamano: t * .6)),
-          if (sombrero != null) Positioned(left: t * .2, top: -t * .22, child: Emoji(sombrero, tamano: t * .6)),
-          if (mascota != null) Positioned(right: -t * .22, bottom: -t * .06, child: Emoji(mascota, tamano: t * .42)),
-        ],
+      child: AnimatedBuilder(
+        animation: _reloj,
+        builder: (context, _) {
+          final segundos = _reloj.value * 60;
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              _conEfecto(base, _nivel, segundos),
+              if (lentes != null) Positioned(left: t * .2, top: t * .38, child: Emoji(lentes, tamano: t * .6)),
+              if (sombrero != null) Positioned(left: t * .2, top: -t * .22, child: Emoji(sombrero, tamano: t * .6)),
+              if (mascota != null)
+                if (_pasea)
+                  _paseo(mascota, t, segundos)
+                else
+                  Positioned(right: -t * .22, bottom: -t * .06, child: Emoji(mascota, tamano: t * .42)),
+            ],
+          );
+        },
       ),
     );
   }
 }
+
+/// Posición de la mascota en unidades del avatar (0..1 es el cuadro; se sale por los lados).
+/// [mira] es 1 si camina hacia la derecha (el emoji se voltea), [giro] en radianes.
+typedef _Pose = ({double x, double y, double giro, double mira});
+
+const _suelo = .62;
+double _lerp(double a, double b, double u) => a + (b - a) * u;
+double _suave(double u) => u * u * (3 - 2 * u);
+
+// Número pseudoaleatorio estable en [0, 1) para el paso [k].
+double _azar(int k) => ((k * 2654435761) & 0xFFFFFF) / 0x1000000;
+
+_Pose _pose(String mascota, double s) {
+  switch (mascota) {
+    case '🐛':
+      // Oruga: se arrastra lenta de derecha a izquierda, a tirones, y vuelve a entrar.
+      final u = (s % 20) / 20;
+      final tiron = math.sin(u * 2 * math.pi * 30);
+      return (x: _lerp(1.3, -.75, u + .01 * tiron), y: _suelo - .03 * tiron.abs(), giro: 0, mira: 0);
+    case '🪰':
+      // Mosca: vuela rápido en ocho de lado a lado, con zumbido.
+      final u = (s % 3) / 3;
+      final a = 2 * math.pi * u;
+      return (
+        x: .3 + .95 * math.sin(a) + .02 * math.sin(s * 60),
+        y: .05 + .4 * math.sin(2 * a) + .02 * math.cos(s * 55),
+        giro: .5 * math.cos(a),
+        mira: 0,
+      );
+    case '🐀':
+      // Rata: corre por el suelo, sale del cuadro, vuelve y se queda olfateando.
+      final u = (s % 6) / 6;
+      if (u < .3) return (x: _lerp(1.0, -.9, _suave(u / .3)), y: _suelo, giro: 0, mira: 0);
+      if (u < .45) return (x: -.9, y: _suelo, giro: 0, mira: 0);
+      if (u < .75) return (x: _lerp(-.9, 1.0, _suave((u - .45) / .3)), y: _suelo, giro: 0, mira: 1);
+      return (x: 1.0, y: _suelo - .02 * math.sin(s * 40).abs(), giro: 0, mira: 1);
+    case '🪳':
+      // Cucaracha: salta entre esquinas a lo loco, se esconde fuera del cuadro y reaparece.
+      const puntos = [(-.35, -.3), (1.0, -.3), (-.35, .8), (1.0, .8), (1.6, .3), (-.9, .4), (.35, 1.1)];
+      final k = (s / .7).floor();
+      final u = (s / .7) - k;
+      final (x0, y0) = puntos[(_azar(k - 1) * puntos.length).floor()];
+      final (x1, y1) = puntos[(_azar(k) * puntos.length).floor()];
+      final v = _suave((u / .35).clamp(0, 1));
+      final giro = math.atan2(y1 - y0, x1 - x0) + math.pi / 2;
+      final temblor = u > .35 ? .04 * math.sin(s * 70) : 0;
+      return (x: _lerp(x0, x1, v), y: _lerp(y0, y1, v), giro: giro + temblor, mira: 0);
+    case '🦨':
+      // Mapurite: camina lento de un lado a otro con pausas.
+      final u = (s % 15) / 15;
+      final paso = .02 * math.sin(s * 9).abs();
+      if (u < .45) return (x: _lerp(1.2, -.6, u / .45), y: _suelo - paso, giro: 0, mira: 0);
+      if (u < .5) return (x: -.6, y: _suelo, giro: 0, mira: 0);
+      if (u < .95) return (x: _lerp(-.6, 1.2, (u - .5) / .45), y: _suelo - paso, giro: 0, mira: 1);
+      return (x: 1.2, y: _suelo, giro: 0, mira: 1);
+    default:
+      // Pato y cualquier otro: va y viene contoneándose.
+      final u = (s % 6) / 6;
+      final a = 2 * math.pi * u;
+      return (
+        x: .3 + .9 * math.sin(a),
+        y: _suelo - .03 * math.sin(s * 14).abs(),
+        giro: .18 * math.sin(s * 14),
+        mira: math.cos(a) > 0 ? 1 : 0,
+      );
+  }
+}
+
+Widget _paseo(String mascota, double t, double segundos) {
+  final p = _pose(mascota, segundos);
+  final tam = t * .42;
+  Widget emoji = Emoji(mascota, tamano: tam);
+  if (p.mira == 1) emoji = Transform.flip(flipX: true, child: emoji);
+  return Positioned(
+    left: p.x * t,
+    top: p.y * t,
+    child: Transform.rotate(angle: p.giro, child: emoji),
+  );
+}
+
+/// Cromado y dorado: el emoji en gris con un brillo que lo cruza. Arcoíris: degradado
+/// semitransparente que gira y solo pinta donde hay emoji.
+Widget _conEfecto(Widget hijo, int nivel, double segundos) {
+  final fase = (segundos % 3) / 3;
+  switch (nivel) {
+    case 0:
+      return hijo;
+    case 3:
+      return ShaderMask(
+        blendMode: BlendMode.srcATop,
+        shaderCallback: (r) => SweepGradient(
+          colors: [
+            for (final c in const [Colors.red, Colors.orange, Colors.yellow, Colors.green, Colors.blue, Colors.purple, Colors.red])
+              c.withValues(alpha: .55),
+          ],
+          transform: GradientRotation(fase * 2 * math.pi),
+        ).createShader(r),
+        child: hijo,
+      );
+    default:
+      final dorado = nivel == 2;
+      final base = dorado ? const Color(0xFFF2C94C) : const Color(0xFFC9CED6);
+      final gris = ColorFiltered(colorFilter: const ColorFilter.matrix(_escalaDeGris), child: hijo);
+      return ShaderMask(
+        blendMode: BlendMode.modulate,
+        shaderCallback: (r) => LinearGradient(
+          begin: Alignment(fase * 4 - 2, -1),
+          end: Alignment(fase * 4 - 1, 1),
+          colors: [base, Colors.white, base],
+          stops: const [.3, .5, .7],
+        ).createShader(r),
+        child: dorado
+            ? ColorFiltered(colorFilter: const ColorFilter.mode(Color(0xFFFFD34D), BlendMode.modulate), child: gris)
+            : gris,
+      );
+  }
+}
+
+// Escala de grises aclarada: el café del 💩 en gris puro queda casi negro.
+const _escalaDeGris = <double>[
+  .32, 1.07, .11, 0, 60,
+  .32, 1.07, .11, 0, 60,
+  .32, 1.07, .11, 0, 60,
+  0, 0, 0, 1, 0,
+];

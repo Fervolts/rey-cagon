@@ -164,7 +164,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                 ),
                 if (_esMio)
                   Builder(builder: (context) {
-                    final total = (p['total'] as num).toInt();
+                    final total = (p['cagadas'] as num?)?.toInt() ?? (p['total'] as num).toInt();
                     final d = siguienteDesbloqueo(total);
                     return ListTile(
                       leading: d == null ? const Emoji('🏆', tamano: 36) : Opacity(opacity: .4, child: Emoji(d.emoji, tamano: 36)),
@@ -313,12 +313,20 @@ class _EditarPerfilState extends State<_EditarPerfil> {
             Text('EDITAR PERFIL', style: Theme.of(context).textTheme.titleLarge),
             Padding(
               padding: const EdgeInsets.only(top: 40, bottom: 16),
-              child: Center(child: Avatar(_puesto, tamano: 80)),
+              child: Center(child: Avatar({..._puesto, 'cagadas': _total}, tamano: 80)),
             ),
             _ranura('Avatar', 'avatar'),
             _ranura('Sombrero', 'sombrero'),
             _ranura('Lentes', 'lentes'),
             _ranura('Mascota', 'mascota'),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                'Tu mascota sale a pasear a las $mascotaSeMueve cagadas. Tu avatar se vuelve '
+                '${efectosAvatar.map((e) => '${e.nombre.replaceFirst('Avatar ', '')} a las ${e.minimo}').join(', ')}.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
             TextField(
               controller: _usuario,
               maxLength: 24,
@@ -362,7 +370,7 @@ class _PantallaBuscarState extends State<PantallaBuscar> {
     _q = q;
     final yo = db.auth.currentUser!.id;
     try {
-      var consulta = db.from('profiles').select('id, username, avatar, sombrero, lentes, mascota').neq('id', yo);
+      var consulta = db.from('profiles').select('id, username, avatar, sombrero, lentes, mascota, cagadas').neq('id', yo);
       if (q.trim().isNotEmpty) {
         // % y _ son comodines en ilike: se escapan para buscar el texto tal cual.
         final limpio = q.trim().replaceAll(r'\', r'\\').replaceAll('%', r'\%').replaceAll('_', r'\_');

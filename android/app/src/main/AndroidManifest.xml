@@ -30,6 +30,9 @@
             </intent-filter>
         </activity>
         <!-- Ícono y color de las notificaciones de FCM con la app cerrada. -->
+        <!-- OpenGL en vez de Vulkan: las GPU PowerVR de los teléfonos baratos (Helio P35/G36,
+             Redmi A) fallan con Vulkan y la app no abre. -->
+        <meta-data android:name="io.flutter.embedding.android.ImpellerBackend" android:value="opengles" />
         <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_stat_poop" />
         <meta-data android:name="com.google.firebase.messaging.default_notification_color" android:resource="@color/notificacion" />
         <!-- Recordatorio diario (flutter_local_notifications): disparo programado y reprogramación al reiniciar. -->
