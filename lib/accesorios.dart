@@ -87,6 +87,9 @@ const Map<String, _Encaje> _encajes = {
 
 _Encaje _encaje(String avatar) => _encajes[avatar] ?? _encajes[avatar.replaceAll('\u{FE0F}', '')] ?? _encajes['💩']!;
 
+/// Tamaño de los lentes o del sombrero ([ranura]) elegido por el usuario; 1 = el calibrado.
+double escala(Map<String, dynamic> perfil, String ranura) => (perfil['${ranura}_escala'] as num?)?.toDouble() ?? 1;
+
 /// Centro de los lentes o del sombrero ([ranura]) para [perfil]: el que eligió el usuario
 /// o, si no movió nada, el calibrado para su avatar.
 ({double x, double y}) posicion(Map<String, dynamic> perfil, String ranura) {
@@ -177,8 +180,8 @@ class _AvatarState extends State<Avatar> with SingleTickerProviderStateMixin {
             clipBehavior: Clip.none,
             children: [
               _conEfecto(base, _nivel, segundos),
-              if (lentes != null) _ponerLentes(lentes, encaje.lentes, posicion(widget.perfil, 'lentes'), t),
-              if (sombrero != null) _ponerSombrero(sombrero, encaje.sombrero, posicion(widget.perfil, 'sombrero'), t),
+              if (lentes != null) _ponerLentes(lentes, encaje.lentes, posicion(widget.perfil, 'lentes'), escala(widget.perfil, 'lentes'), t),
+              if (sombrero != null) _ponerSombrero(sombrero, encaje.sombrero, posicion(widget.perfil, 'sombrero'), escala(widget.perfil, 'sombrero'), t),
               if (mascota != null)
                 if (_pasea)
                   _paseo(mascota, t, segundos)
@@ -192,8 +195,8 @@ class _AvatarState extends State<Avatar> with SingleTickerProviderStateMixin {
   }
 }
 
-Widget _ponerLentes(String lentes, _Punto p, ({double x, double y}) en, double t) {
-  final tam = p.ancho / _relleno * t;
+Widget _ponerLentes(String lentes, _Punto p, ({double x, double y}) en, double escala, double t) {
+  final tam = p.ancho / _relleno * t * escala;
   return Positioned(
     left: en.x * t - tam / 2,
     top: en.y * t - (_centroLentes[lentes] ?? .5) * tam,
@@ -201,8 +204,8 @@ Widget _ponerLentes(String lentes, _Punto p, ({double x, double y}) en, double t
   );
 }
 
-Widget _ponerSombrero(String sombrero, _Punto p, ({double x, double y}) en, double t) {
-  final tam = p.ancho / _relleno * t;
+Widget _ponerSombrero(String sombrero, _Punto p, ({double x, double y}) en, double escala, double t) {
+  final tam = p.ancho / _relleno * t * escala;
   return Positioned(
     left: en.x * t - tam / 2,
     top: en.y * t - (_asiento[sombrero] ?? .85) * tam,

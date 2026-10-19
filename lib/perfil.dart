@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'emoji.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -176,12 +178,28 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                       onTap: _editar,
                     );
                   }),
-                if (_esMio)
+                if (_esMio) ...[
+                  ListTile(
+                    leading: const Icon(Icons.open_in_new),
+                    title: const Text('Hecho por Ahí Mismito Studios C.A.'),
+                    subtitle: const Text('ahimismito.com'),
+                    onTap: () => launchUrl(Uri.parse('https://ahimismito.com'), mode: LaunchMode.externalApplication),
+                  ),
                   ListTile(
                     leading: const Icon(Icons.info_outline),
                     title: const Text('Créditos y licencias'),
-                    onTap: () => showLicensePage(context: context, applicationName: 'Rey Cagón'),
+                    onTap: () async {
+                      final info = await PackageInfo.fromPlatform();
+                      if (!context.mounted) return;
+                      showLicensePage(
+                        context: context,
+                        applicationName: 'Rey Cagón',
+                        applicationVersion: info.version,
+                        applicationLegalese: '© 2026 Ahí Mismito Studios C.A.\nahimismito.com',
+                      );
+                    },
                   ),
+                ],
                 ListTile(
                   leading: const Icon(Icons.calendar_month),
                   title: const Text('Ver calendario'),
@@ -230,11 +248,12 @@ class _EditarPerfilState extends State<_EditarPerfil> {
   late final _usuario = TextEditingController(text: widget.perfil['username']);
   late final _bio = TextEditingController(text: widget.perfil['bio'] ?? '');
   late final Map<String, dynamic> _puesto = {
-    for (final k in ['avatar', 'sombrero', 'lentes', 'mascota', 'lentes_x', 'lentes_y', 'sombrero_x', 'sombrero_y'])
+    for (final k in ['avatar', 'sombrero', 'lentes', 'mascota', ..._ajustes])
       k: widget.perfil[k],
   };
   // Qué se está moviendo con el dedo en la vista previa: 'lentes', 'sombrero' o null.
   String? _moviendo;
+  static const _ajustes = ['lentes_x', 'lentes_y', 'sombrero_x', 'sombrero_y', 'lentes_escala', 'sombrero_escala'];
   static const _vista = 120.0;
   bool _ocupado = false;
 
@@ -310,7 +329,7 @@ class _EditarPerfilState extends State<_EditarPerfil> {
                           _puesto[ranura] = o.emoji;
                           // Avatar nuevo: vuelven a la posición calibrada para él.
                           if (ranura == 'avatar') {
-                            for (final k in ['lentes_x', 'lentes_y', 'sombrero_x', 'sombrero_y']) {
+                            for (final k in _ajustes) {
                               _puesto[k] = null;
                             }
                           }
@@ -367,7 +386,7 @@ class _EditarPerfilState extends State<_EditarPerfil> {
                         ),
                     TextButton(
                       onPressed: () => setState(() {
-                        for (final k in ['lentes_x', 'lentes_y', 'sombrero_x', 'sombrero_y']) {
+                        for (final k in _ajustes) {
                           _puesto[k] = null;
                         }
                       }),
@@ -376,12 +395,24 @@ class _EditarPerfilState extends State<_EditarPerfil> {
                   ],
                 ),
               ),
-            if (_moviendo != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: Text('Arrastra sobre el avatar para mover los ${_moviendo == 'lentes' ? 'lentes' : 'el sombrero'}.',
-                    textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall),
+            if (_moviendo != null) ...[
+              Text('Arrastra sobre el avatar para mover ${_moviendo == 'lentes' ? 'los lentes' : 'el sombrero'}.',
+                  textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall),
+              Row(
+                children: [
+                  const Rotulo('Tamaño'),
+                  Expanded(
+                    child: Slider(
+                      min: .4,
+                      max: 2.5,
+                      value: escala(_puesto, _moviendo!).clamp(.4, 2.5),
+                      onChanged: (v) => setState(() => _puesto['${_moviendo}_escala'] = v),
+                    ),
+                  ),
+                ],
               ),
+              const SizedBox(height: 8),
+            ],
             _ranura('Avatar', 'avatar'),
             _ranura('Sombrero', 'sombrero'),
             _ranura('Lentes', 'lentes'),
@@ -437,7 +468,7 @@ class _PantallaBuscarState extends State<PantallaBuscar> {
     _q = q;
     final yo = db.auth.currentUser!.id;
     try {
-      var consulta = db.from('profiles').select('id, username, avatar, sombrero, lentes, mascota, cagadas, lentes_x, lentes_y, sombrero_x, sombrero_y').neq('id', yo);
+      var consulta = db.from('profiles').select('id, username, avatar, sombrero, lentes, mascota, cagadas, lentes_x, lentes_y, sombrero_x, sombrero_y, lentes_escala, sombrero_escala').neq('id', yo);
       if (q.trim().isNotEmpty) {
         // % y _ son comodines en ilike: se escapan para buscar el texto tal cual.
         final limpio = q.trim().replaceAll(r'\', r'\\').replaceAll('%', r'\%').replaceAll('_', r'\_');
