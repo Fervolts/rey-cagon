@@ -423,7 +423,10 @@ class _Conteo extends StatelessWidget {
 /// Esquina doblada al final de Tips. Al arrastrarla hacia arriba se pasa la página y aparece
 /// el mojón que desbloquea el ranking secreto.
 class HojaSecreta extends StatefulWidget {
-  const HojaSecreta({super.key});
+  const HojaSecreta({super.key, this.onDescubierta});
+
+  /// Se llama al cerrar las felicidades: la hoja ya no tiene que volver a salir.
+  final VoidCallback? onDescubierta;
 
   @override
   State<HojaSecreta> createState() => _HojaSecretaState();
@@ -460,6 +463,7 @@ class _HojaSecretaState extends State<HojaSecreta> with SingleTickerProviderStat
     ));
     final yo = db.auth.currentUser?.id;
     if (yo != null) await db.from('profiles').update({'placer_desbloqueado': true}).eq('id', yo).catchError((_) => null);
+    widget.onDescubierta?.call();
     if (!mounted) return;
     _vuelta.reset();
     setState(() => _doblez = _minima);

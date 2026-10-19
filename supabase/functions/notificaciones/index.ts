@@ -2,6 +2,8 @@
 //   - trigger cagadas_avisar: cagada nueva → aviso a los seguidores de quien cagó.
 //   - trigger follows_avisar: { tipo: "follow" } → aviso al seguido.
 //   - scripts/publicar.sh:   { tipo: "version" } → aviso de versión nueva.
+//   - trigger cagadas_calificar: { tipo: "placer" } → aviso del secreto, solo a seguidores
+//     que también lo desbloquearon y solo para las cagadas que valen la pena contar.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const sa = JSON.parse(Deno.env.get("FCM_SERVICE_ACCOUNT")!);
@@ -114,6 +116,49 @@ async function avisarVersion(version: string, build: number) {
   return Response.json({ enviados: tokens.length - muertos.length });
 }
 
+const malas = ["dolorosa", "sangrante", "ardiente"];
+const buenas = ["virtuosa", "placentera", "liberadora"];
+
+// Texto del aviso según cómo le fue. null = nada que contar (las del medio no avisan).
+function chisme(u: string, placer: number | null, etiquetas: string[]): [string, string] | null {
+  const todas = (l: string[]) => l.every((e) => etiquetas.includes(e));
+  if (placer === 7 && todas(buenas)) return [`👑 ${u} tiró la cagada PERFECTA`, "7 de 7, virtuosa, placentera y liberadora. Brilla como el oro."];
+  if (todas(malas)) return [`😈 ${u} invocó al demonio`, "Dolorosa, sangrante y ardiente. Mándale fuerzas (y una vela)."];
+  if (placer === 1) return [`💀 ${u} quedó carbonizado`, "Cagada destructiva, 1 de 7. Que alguien le lleve agua."];
+  if (placer === 7) return [`😇 ${u} tocó el cielo`, "Cagada celestial, 7 de 7. Hay gente con suerte."];
+  if (todas(buenas)) return [`✨ ${u} brilla como el oro`, "Virtuosa, placentera y liberadora. Qué envidia."];
+  if (etiquetas.includes("sangrante")) return [`🩸 ${u} sangró en el intento`, "Fue una cagada sangrante. Si sigue así, que vaya al médico."];
+  if (etiquetas.includes("ardiente")) return [`🔥 ${u} tiene el ano en llamas`, "Cagada ardiente. Nada de picante por hoy."];
+  if (etiquetas.includes("liberadora")) return [`🕊️ ${u} se liberó`, "Cagada liberadora. Salió flotando del baño."];
+  return null;
+}
+
+// Aviso del secreto a los seguidores que ya encontraron el easter egg.
+async function avisarPlacer(id: string) {
+  const { data: c } = await db.from("cagadas").select("user_id, placer, etiquetas").eq("id", id).single();
+  if (!c) return Response.json({ enviados: 0 });
+  const { data: perfil } = await db.from("profiles").select("username").eq("id", c.user_id).single();
+  const texto = perfil && chisme(perfil.username, c.placer, c.etiquetas ?? []);
+  if (!texto) return Response.json({ enviados: 0 });
+  const { data: seguidores } = await db.from("follows").select("follower").eq("followed", c.user_id);
+  const { data: abiertos } = await db.from("profiles").select("id").eq("placer_desbloqueado", true)
+    .in("id", (seguidores ?? []).map((s) => s.follower));
+  if (!abiertos?.length) return Response.json({ enviados: 0 });
+  const { data: tokens } = await db.from("push_tokens").select("token").in("user_id", abiertos.map((a) => a.id));
+  if (!tokens?.length) return Response.json({ enviados: 0 });
+  const muertos: string[] = [];
+  await Promise.all(tokens.map(async (t) => {
+    const res = await enviar(t.token, texto[0], texto[1], { tipo: "placer", user_id: c.user_id });
+    if (!res.ok) {
+      const err = await res.text();
+      if (res.status === 404 || err.includes("UNREGISTERED")) muertos.push(t.token);
+      else console.error("FCM", res.status, err);
+    }
+  }));
+  if (muertos.length) await db.from("push_tokens").delete().in("token", muertos);
+  return Response.json({ enviados: tokens.length - muertos.length });
+}
+
 Deno.serve(async (req) => {
   if (req.headers.get("x-webhook-secret") !== Deno.env.get("WEBHOOK_SECRET")) {
     return new Response("no", { status: 401 });
@@ -121,6 +166,7 @@ Deno.serve(async (req) => {
   const cuerpo = await req.json();
   if (cuerpo.tipo === "follow") return avisarFollow(cuerpo.follower, cuerpo.followed);
   if (cuerpo.tipo === "version") return avisarVersion(cuerpo.version, cuerpo.build);
+  if (cuerpo.tipo === "placer") return avisarPlacer(cuerpo.id);
   const { user_id } = cuerpo;
 
   const { data: seguidores } = await db.from("follows").select("follower").eq("followed", user_id);

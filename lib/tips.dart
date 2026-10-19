@@ -146,16 +146,33 @@ class _PantallaTipsState extends State<PantallaTips> {
   }
 }
 
-/// La hoja secreta aparece desde [minimoSecreto] cagadas en total.
-class _HojaSiToca extends StatelessWidget {
+/// La hoja secreta aparece desde [minimoSecreto] cagadas y desaparece cuando ya se encontró.
+class _HojaSiToca extends StatefulWidget {
   const _HojaSiToca();
 
   @override
-  Widget build(BuildContext context) {
-    if (minimoSecreto == 0) return const HojaSecreta();
-    return FutureBuilder(
-      future: db.from('profiles').select('cagadas').eq('id', db.auth.currentUser!.id).maybeSingle(),
-      builder: (context, s) => ((s.data?['cagadas'] as int?) ?? 0) >= minimoSecreto ? const HojaSecreta() : const SizedBox.shrink(),
-    );
+  State<_HojaSiToca> createState() => _HojaSiTocaState();
+}
+
+class _HojaSiTocaState extends State<_HojaSiToca> {
+  bool _toca = false;
+
+  @override
+  void initState() {
+    super.initState();
+    db
+        .from('profiles')
+        .select('cagadas, placer_desbloqueado')
+        .eq('id', db.auth.currentUser!.id)
+        .maybeSingle()
+        .then((r) {
+          final toca = r != null && r['placer_desbloqueado'] != true && ((r['cagadas'] as int?) ?? 0) >= minimoSecreto;
+          if (mounted) setState(() => _toca = toca);
+        })
+        .catchError((_) => null);
   }
+
+  @override
+  Widget build(BuildContext context) =>
+      _toca ? HojaSecreta(onDescubierta: () => setState(() => _toca = false)) : const SizedBox.shrink();
 }
