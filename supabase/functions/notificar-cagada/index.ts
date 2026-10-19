@@ -89,12 +89,36 @@ async function avisarFollow(follower: string, followed: string) {
   return Response.json({ enviados: tokens.length - muertos.length });
 }
 
+// scripts/publicar.sh: "hay versión nueva" a los teléfonos con un build menor que ya saben actualizarse
+// (app_build lo reporta la app desde 1.8.2; null = más vieja, sin push).
+async function avisarVersion(version: string, build: number) {
+  const { data: tokens } = await db.from("push_tokens").select("token").lt("app_build", build);
+  if (!tokens?.length) return Response.json({ enviados: 0 });
+  const muertos: string[] = [];
+  await Promise.all(tokens.map(async (t) => {
+    const res = await enviar(
+      t.token,
+      "Actualízame, mojón 💩",
+      `La versión ${version} ya está lista. Toca para instalarla.`,
+      { tipo: "version", version },
+    );
+    if (!res.ok) {
+      const err = await res.text();
+      if (res.status === 404 || err.includes("UNREGISTERED")) muertos.push(t.token);
+      else console.error("FCM", res.status, err);
+    }
+  }));
+  if (muertos.length) await db.from("push_tokens").delete().in("token", muertos);
+  return Response.json({ enviados: tokens.length - muertos.length });
+}
+
 Deno.serve(async (req) => {
   if (req.headers.get("x-webhook-secret") !== Deno.env.get("WEBHOOK_SECRET")) {
     return new Response("no", { status: 401 });
   }
   const cuerpo = await req.json();
   if (cuerpo.tipo === "follow") return avisarFollow(cuerpo.follower, cuerpo.followed);
+  if (cuerpo.tipo === "version") return avisarVersion(cuerpo.version, cuerpo.build);
   const { user_id } = cuerpo;
 
   const { data: seguidores } = await db.from("follows").select("follower").eq("followed", user_id);

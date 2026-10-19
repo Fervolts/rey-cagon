@@ -1,6 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import 'main.dart' show db;
 import 'recordatorio.dart' show notificaciones;
@@ -52,9 +53,11 @@ Future<void> initPush() async {
 Future<void> _guardar(String token) async {
   final uid = db.auth.currentUser?.id;
   if (uid == null) return;
+  final build = int.tryParse((await PackageInfo.fromPlatform()).buildNumber);
   await db.from('push_tokens').upsert({
     'token': token,
     'user_id': uid,
+    'app_build': build,
     'updated_at': DateTime.now().toUtc().toIso8601String(),
   });
 }

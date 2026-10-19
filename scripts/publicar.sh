@@ -51,5 +51,14 @@ subir "$TMP" version.json application/json
 rm -f "$TMP"
 [ "${SIN_LINK:-}" = 1 ] || cp "$APK" ~/Desktop/rey-cagon.apk
 
+# Push "Actualízame, mojón" a los teléfonos con un build menor (ver avisarVersion en la Edge Function).
+W=$(curl -s -X POST -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+  -d "{\"query\":\"select decrypted_secret s from vault.decrypted_secrets where name='webhook_secret'\"}" \
+  "https://api.supabase.com/v1/projects/$REF/database/query" | python3 -c "import json,sys;print(json.load(sys.stdin)[0]['s'])")
+ENVIADOS=$(curl -s -X POST -H "x-webhook-secret: $W" -H 'Content-Type: application/json' \
+  -d "{\"tipo\":\"version\",\"version\":\"$VERSION\",\"build\":$BUILD}" \
+  "https://$REF.supabase.co/functions/v1/notificar-cagada")
+echo "Push de actualización: $ENVIADOS"
+
 echo "Publicada $VERSION+$BUILD"
 echo "Link fijo: https://$REF.supabase.co/storage/v1/object/public/releases/rey-cagon.apk"
