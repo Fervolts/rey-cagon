@@ -33,7 +33,8 @@ Future<int> _contarHoy(SupabaseClient db) async {
   return (yo?['total'] ?? 0) as int;
 }
 
-/// Widget de ranking: tu puesto en la semana (entre los que sigues) y los vecinos de arriba y abajo.
+/// Widget de ranking: tu puesto en la semana (entre los que sigues), cuánto te falta para pasar
+/// al de arriba y los vecinos.
 Future<void> refrescarRanking(SupabaseClient db) async {
   final me = db.auth.currentUser?.id;
   if (me == null) return;
@@ -42,18 +43,34 @@ Future<void> refrescarRanking(SupabaseClient db) async {
   );
   final i = filas.indexWhere((f) => f['user_id'] == me);
   if (i < 0) return;
+  final mio = filas[i]['total'] as int;
+  final rey = i == 0 && mio > 0;
+
+  String frase;
+  if (filas.length == 1) {
+    frase = 'Estás cagando solo. Sigue a tus amigos';
+  } else if (filas.first['total'] == 0) {
+    frase = 'Nadie ha cagado esta semana. Estrena el trono';
+  } else if (rey) {
+    final segundo = filas[1]['total'] as int;
+    frase = mio == segundo ? 'Rey empatado. Una más y es tuyo' : 'Eres el rey. Le llevas ${mio - segundo} al segundo';
+  } else {
+    final arriba = filas[i - 1];
+    final falta = (arriba['total'] as int) - mio + 1;
+    frase = falta == 1 ? 'Una más y pasas a ${arriba['username']}' : 'Te faltan $falta para pasar a ${arriba['username']}';
+  }
+
   // Si vas primero muestra 1-2-3; si no, el de arriba, tú y el de abajo.
   final desde = (i == 0 ? 0 : i - 1).clamp(0, (filas.length - 3).clamp(0, filas.length));
   final vecinos = [
     for (var k = desde; k < filas.length && k < desde + 3; k++)
       {'p': k + 1, 'n': filas[k]['username'], 't': filas[k]['total'], 'yo': filas[k]['user_id'] == me},
   ];
-  final ahora = DateTime.now();
   await HomeWidget.saveWidgetData<String>('rk', jsonEncode(vecinos));
-  await HomeWidget.saveWidgetData<String>(
-    'rk_hora',
-    '${ahora.hour.toString().padLeft(2, '0')}:${ahora.minute.toString().padLeft(2, '0')}',
-  );
+  await HomeWidget.saveWidgetData<String>('rk_puesto', (i + 1).toString().padLeft(2, '0'));
+  await HomeWidget.saveWidgetData<String>('rk_de', 'DE ${filas.length} · SEMANA');
+  await HomeWidget.saveWidgetData<String>('rk_frase', frase);
+  await HomeWidget.saveWidgetData<bool>('rk_rey', rey);
   await HomeWidget.updateWidget(qualifiedAndroidName: _proveedorRanking);
 }
 

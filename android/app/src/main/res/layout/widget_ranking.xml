@@ -1,156 +1,208 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Mismo lenguaje que el botón CAGUÉ: bloque negro, puesto gigante en amarillo corona. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/rk_raiz"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_fondo"
-    android:orientation="vertical"
-    android:padding="10dp">
-
-    <TextView
-        android:id="@+id/rk_titulo"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:letterSpacing="0.1"
-        android:text="RANKING · SEMANA"
-        android:textColor="#5C5751"
-        android:textSize="11sp"
-        android:textStyle="bold" />
-
-    <TextView
-        android:id="@+id/rk_vacio"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:gravity="center"
-        android:text="Abre Rey Cagón para cargar el ranking"
-        android:textColor="#171513"
-        android:textSize="13sp" />
+    android:background="@drawable/widget_fondo_negro"
+    android:orientation="horizontal"
+    android:padding="12dp">
 
     <LinearLayout
-        android:id="@+id/rk_fila0"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:layout_marginTop="4dp"
-        android:background="@drawable/widget_fila"
+        android:layout_width="96dp"
+        android:layout_height="match_parent"
         android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="8dp"
-        android:visibility="gone">
+        android:orientation="vertical">
 
         <TextView
-            android:id="@+id/rk_pos0"
-            android:layout_width="28dp"
+            android:id="@+id/rk_titulo"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:fontFeatureSettings="tnum"
-            android:textColor="#171513"
-            android:textSize="13sp"
+            android:letterSpacing="0.12"
+            android:text="PUESTO"
+            android:textColor="#8C867E"
+            android:textSize="10sp"
             android:textStyle="bold" />
 
         <TextView
-            android:id="@+id/rk_nombre0"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:textColor="#171513"
-            android:textSize="14sp" />
-
-        <TextView
-            android:id="@+id/rk_total0"
+            android:id="@+id/rk_puesto"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
             android:fontFeatureSettings="tnum"
-            android:textColor="#171513"
-            android:textSize="16sp"
+            android:includeFontPadding="false"
+            android:letterSpacing="-0.04"
+            android:text="--"
+            android:textColor="#FFD60A"
+            android:textSize="60sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/rk_de"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:letterSpacing="0.12"
+            android:text="SEMANA"
+            android:textColor="#F2F0EC"
+            android:textSize="10sp"
             android:textStyle="bold" />
     </LinearLayout>
 
-    <LinearLayout
-        android:id="@+id/rk_fila1"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:layout_marginTop="4dp"
-        android:background="@drawable/widget_fila"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="8dp"
-        android:visibility="gone">
-
-        <TextView
-            android:id="@+id/rk_pos1"
-            android:layout_width="28dp"
-            android:layout_height="wrap_content"
-            android:fontFeatureSettings="tnum"
-            android:textColor="#171513"
-            android:textSize="13sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/rk_nombre1"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:textColor="#171513"
-            android:textSize="14sp" />
-
-        <TextView
-            android:id="@+id/rk_total1"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:fontFeatureSettings="tnum"
-            android:textColor="#171513"
-            android:textSize="16sp"
-            android:textStyle="bold" />
-    </LinearLayout>
+    <FrameLayout
+        android:layout_width="1dp"
+        android:layout_height="match_parent"
+        android:layout_marginHorizontal="10dp"
+        android:background="#3A3733" />
 
     <LinearLayout
-        android:id="@+id/rk_fila2"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
         android:layout_weight="1"
-        android:layout_marginTop="4dp"
-        android:background="@drawable/widget_fila"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="8dp"
-        android:visibility="gone">
+        android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/rk_pos2"
-            android:layout_width="28dp"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:fontFeatureSettings="tnum"
-            android:textColor="#171513"
-            android:textSize="13sp"
-            android:textStyle="bold" />
+            android:orientation="horizontal">
 
-        <TextView
-            android:id="@+id/rk_nombre2"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:textColor="#171513"
-            android:textSize="14sp" />
+            <TextView
+                android:id="@+id/rk_frase"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="3"
+                android:text="Abre Rey Cagón para cargar el ranking"
+                android:textColor="#FFFFFF"
+                android:textSize="17sp"
+                android:textStyle="bold" />
 
-        <TextView
-            android:id="@+id/rk_total2"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:fontFeatureSettings="tnum"
-            android:textColor="#171513"
-            android:textSize="16sp"
-            android:textStyle="bold" />
+            <ImageView
+                android:id="@+id/rk_icono"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_marginStart="6dp"
+                android:contentDescription="Cagué"
+                android:src="@drawable/widget_poop" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+            <LinearLayout
+                android:id="@+id/rk_fila0"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/rk_pos0"
+                    android:layout_width="24dp"
+                    android:layout_height="wrap_content"
+                    android:fontFeatureSettings="tnum"
+                    android:textColor="#8C867E"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/rk_nombre0"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="#F2F0EC"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/rk_total0"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:fontFeatureSettings="tnum"
+                    android:textColor="#F2F0EC"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/rk_fila1"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/rk_pos1"
+                    android:layout_width="24dp"
+                    android:layout_height="wrap_content"
+                    android:fontFeatureSettings="tnum"
+                    android:textColor="#8C867E"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/rk_nombre1"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="#F2F0EC"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/rk_total1"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:fontFeatureSettings="tnum"
+                    android:textColor="#F2F0EC"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/rk_fila2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/rk_pos2"
+                    android:layout_width="24dp"
+                    android:layout_height="wrap_content"
+                    android:fontFeatureSettings="tnum"
+                    android:textColor="#8C867E"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/rk_nombre2"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="#F2F0EC"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/rk_total2"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:fontFeatureSettings="tnum"
+                    android:textColor="#F2F0EC"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
     </LinearLayout>
-
 </LinearLayout>
