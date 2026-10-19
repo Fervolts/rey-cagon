@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'actualizar.dart';
 import 'calendario.dart';
 import 'perfil.dart';
 import 'push.dart';
@@ -238,6 +239,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Map<String, dynamic>> _hoy = [];
   bool _loading = true;
   late final VoidCallback _soltar;
+  late final AppLifecycleListener _ciclo;
 
   String get _me => db.auth.currentUser!.id;
 
@@ -246,11 +248,14 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _load();
     _soltar = escucharCagadas('home', () => _load(spinner: false));
+    // Al volver de Ajustes (permiso de instalar) o de otra app, se vuelve a ofrecer la actualización.
+    _ciclo = AppLifecycleListener(onResume: () => revisarActualizacion(context));
     _avisoPrimeraVez();
   }
 
   @override
   void dispose() {
+    _ciclo.dispose();
     _soltar();
     super.dispose();
   }
@@ -260,6 +265,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (prefs.getBool('disclaimer_ok') ?? false) {
       await pedirPermisoNotificaciones().catchError((_) {});
       await registrarTelefono().catchError((_) {});
+      if (mounted) await revisarActualizacion(context);
       return;
     }
     if (!mounted) return;
@@ -280,6 +286,7 @@ class _HomeScreenState extends State<HomeScreen> {
     await prefs.setBool('disclaimer_ok', true);
     await pedirPermisoNotificaciones().catchError((_) {});
     await registrarTelefono().catchError((_) {});
+    if (mounted) await revisarActualizacion(context);
   }
 
   Future<void> _load({bool spinner = true}) async {

@@ -1,0 +1,94 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:ota_update/ota_update.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+
+import 'main.dart' show supabaseUrl;
+
+// Lo escribe scripts/publicar.sh junto con la APK.
+const _manifiesto = '$supabaseUrl/storage/v1/object/public/releases/version.json';
+
+var _abierto = false;
+int? _pospuesta;
+
+/// Al abrir la app y al volver a ella: si hay una versión con build mayor que la instalada,
+/// ofrece bajarla e instalarla. "Después" la calla hasta el próximo arranque.
+Future<void> revisarActualizacion(BuildContext context) async {
+  if (_abierto) return;
+  _abierto = true;
+  try {
+    await _revisar(context);
+  } finally {
+    _abierto = false;
+  }
+}
+
+Future<void> _revisar(BuildContext context) async {
+  final Map<String, dynamic> remota;
+  try {
+    final cliente = HttpClient()..connectionTimeout = const Duration(seconds: 8);
+    final req = await cliente.getUrl(Uri.parse('$_manifiesto?t=${DateTime.now().millisecondsSinceEpoch}'));
+    final res = await req.close();
+    if (res.statusCode != 200) return;
+    remota = jsonDecode(await res.transform(utf8.decoder).join()) as Map<String, dynamic>;
+    cliente.close();
+  } catch (_) {
+    return; // Sin internet o sin manifiesto: se revisa la próxima vez.
+  }
+  final local = int.tryParse((await PackageInfo.fromPlatform()).buildNumber) ?? 0;
+  final build = remota['build'] as int? ?? 0;
+  if (build <= local || build == _pospuesta || !context.mounted) return;
+
+  final actualizar = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text('Versión ${remota['version']} disponible'),
+      content: Text((remota['notas'] as String?)?.trim().isNotEmpty == true
+          ? remota['notas']
+          : 'Hay una versión nueva de Rey Cagón.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('DESPUÉS')),
+        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('ACTUALIZAR')),
+      ],
+    ),
+  );
+  if (actualizar != true) _pospuesta = build;
+  if (actualizar != true || !context.mounted) return;
+
+  final eventos = OtaUpdate().execute(
+    remota['url'],
+    destinationFilename: 'rey-cagon.apk',
+    // La APK se verifica contra el hash del manifiesto antes de abrir el instalador.
+    sha256checksum: remota['sha256'],
+  );
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => StreamBuilder<OtaEvent>(
+      stream: eventos,
+      builder: (context, snap) {
+        final e = snap.data;
+        final bajando = e == null || e.status == OtaStatus.DOWNLOADING;
+        final pct = double.tryParse(e?.value ?? '');
+        final error = e != null && !bajando && e.status != OtaStatus.INSTALLING && e.status != OtaStatus.INSTALLATION_DONE;
+        if (e?.status == OtaStatus.INSTALLING) {
+          // El instalador de Android toma el control; cerramos el diálogo.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (Navigator.canPop(context)) Navigator.pop(context);
+          });
+        }
+        return AlertDialog(
+          title: Text(error ? 'No se pudo actualizar' : 'Bajando actualización'),
+          content: error
+              ? Text('${e.status.name}: ${e.value ?? ''}')
+              : LinearProgressIndicator(value: pct == null ? null : pct / 100),
+          actions: [
+            if (error) TextButton(onPressed: () => Navigator.pop(context), child: const Text('CERRAR')),
+          ],
+        );
+      },
+    ),
+  );
+}
