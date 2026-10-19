@@ -12,9 +12,8 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 /**
- * Widget de pantalla de inicio: solo el botón redondo de CAGUÉ y el contador del día.
- * Tocar el círculo registra en segundo plano (callback Dart `widgetCague` en lib/widget.dart);
- * tocar el contador abre la app. Los datos los escribe Dart con HomeWidget.saveWidgetData.
+ * Widget con el botón de registrar y el contador del día.
+ * El botón llama al callback Dart `widgetCague` (lib/widget.dart); el contador abre la app.
  */
 class ReyCagonWidget : HomeWidgetProvider() {
     override fun onUpdate(

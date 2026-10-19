@@ -23,9 +23,9 @@ Future<void> main() async {
   registrarLicencias();
   await Supabase.initialize(url: supabaseUrl, publishableKey: supabaseKey);
   try {
-    await initRecordatorio();
-    await initPush();
-    await initWidget();
+    await iniciarRecordatorio();
+    await iniciarPush();
+    await iniciarWidget();
   } catch (_) {
     // Sin notificaciones la app igual sirve.
   }
@@ -82,50 +82,50 @@ class ReyCagonApp extends StatelessWidget {
       home: StreamBuilder<AuthState>(
         stream: db.auth.onAuthStateChange,
         builder: (context, _) =>
-            db.auth.currentSession == null ? const AuthScreen() : const Inicio(),
+            db.auth.currentSession == null ? const PantallaEntrar() : const PantallaInicio(),
       ),
     );
   }
 }
 
-class AuthScreen extends StatefulWidget {
-  const AuthScreen({super.key});
+class PantallaEntrar extends StatefulWidget {
+  const PantallaEntrar({super.key});
 
   @override
-  State<AuthScreen> createState() => _AuthScreenState();
+  State<PantallaEntrar> createState() => _PantallaEntrarState();
 }
 
-class _AuthScreenState extends State<AuthScreen> {
-  final _email = TextEditingController();
-  final _password = TextEditingController();
-  final _username = TextEditingController();
-  bool _signUp = false;
-  bool _busy = false;
+class _PantallaEntrarState extends State<PantallaEntrar> {
+  final _correo = TextEditingController();
+  final _clave = TextEditingController();
+  final _usuario = TextEditingController();
+  bool _esRegistro = false;
+  bool _ocupado = false;
 
-  Future<void> _submit() async {
-    setState(() => _busy = true);
+  Future<void> _enviar() async {
+    setState(() => _ocupado = true);
     try {
-      if (_signUp) {
+      if (_esRegistro) {
         await db.auth.signUp(
-          email: _email.text.trim(),
-          password: _password.text,
-          data: {'username': _username.text.trim()},
+          email: _correo.text.trim(),
+          password: _clave.text,
+          data: {'username': _usuario.text.trim()},
         );
       } else {
         await db.auth.signInWithPassword(
-          email: _email.text.trim(),
-          password: _password.text,
+          email: _correo.text.trim(),
+          password: _clave.text,
         );
       }
     } on AuthException catch (e) {
-      _toast(e.message);
+      _mensaje(e.message);
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) setState(() => _ocupado = false);
     }
   }
 
-  void _toast(String msg) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  void _mensaje(String texto) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(texto)));
 
   @override
   Widget build(BuildContext context) {
@@ -136,7 +136,7 @@ class _AuthScreenState extends State<AuthScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(24, 48, 24, 32),
           children: [
-            const Emoji('💩', size: 76),
+            const Emoji('💩', tamano: 76),
             const SizedBox(height: 16),
             Text('REY\nCAGÓN', style: texto.headlineLarge?.copyWith(fontSize: 52, height: 0.95)),
             const SizedBox(height: 12),
@@ -144,33 +144,33 @@ class _AuthScreenState extends State<AuthScreen> {
             const SizedBox(height: 12),
             Text('Compite con tus amigos por la corona.', style: texto.bodyLarge?.copyWith(color: p.textoSuave)),
             const SizedBox(height: 36),
-            if (_signUp) ...[
+            if (_esRegistro) ...[
               const Rotulo('Username'),
               const SizedBox(height: 6),
-              TextField(controller: _username),
+              TextField(controller: _usuario),
               const SizedBox(height: 16),
             ],
             const Rotulo('Email'),
             const SizedBox(height: 6),
-            TextField(controller: _email, keyboardType: TextInputType.emailAddress),
+            TextField(controller: _correo, keyboardType: TextInputType.emailAddress),
             const SizedBox(height: 16),
             const Rotulo('Contraseña'),
             const SizedBox(height: 6),
             TextField(
-              controller: _password,
+              controller: _clave,
               obscureText: true,
               textInputAction: TextInputAction.go,
-              onSubmitted: (_) => _busy ? null : _submit(),
+              onSubmitted: (_) => _ocupado ? null : _enviar(),
             ),
             const SizedBox(height: 24),
             FilledButton(
-              onPressed: _busy ? null : _submit,
-              child: Text(_signUp ? 'CREAR CUENTA' : 'ENTRAR'),
+              onPressed: _ocupado ? null : _enviar,
+              child: Text(_esRegistro ? 'CREAR CUENTA' : 'ENTRAR'),
             ),
             const SizedBox(height: 8),
             OutlinedButton(
-              onPressed: () => setState(() => _signUp = !_signUp),
-              child: Text(_signUp ? 'YA TENGO CUENTA' : 'CREAR CUENTA NUEVA'),
+              onPressed: () => setState(() => _esRegistro = !_esRegistro),
+              child: Text(_esRegistro ? 'YA TENGO CUENTA' : 'CREAR CUENTA NUEVA'),
             ),
             const SizedBox(height: 32),
             Text(disclaimer, style: texto.bodySmall?.copyWith(color: p.textoSuave)),
@@ -182,26 +182,26 @@ class _AuthScreenState extends State<AuthScreen> {
 }
 
 /// Pestañas de abajo: ranking, mi calendario, mi perfil.
-class Inicio extends StatefulWidget {
-  const Inicio({super.key});
+class PantallaInicio extends StatefulWidget {
+  const PantallaInicio({super.key});
 
   @override
-  State<Inicio> createState() => _InicioState();
+  State<PantallaInicio> createState() => _PantallaInicioState();
 }
 
-class _InicioState extends State<Inicio> {
+class _PantallaInicioState extends State<PantallaInicio> {
   int _tab = 0;
 
   @override
   Widget build(BuildContext context) {
-    final me = db.auth.currentUser!.id;
+    final yo = db.auth.currentUser!.id;
     return Scaffold(
       body: IndexedStack(
         index: _tab,
         children: [
-          const HomeScreen(),
-          CalendarioScreen(userId: me, username: 'mí'),
-          PerfilScreen(userId: me),
+          const PantallaRanking(),
+          PantallaCalendario(usuarioId: yo, nombre: 'mí'),
+          PantallaPerfil(usuarioId: yo),
         ],
       ),
       bottomNavigationBar: DecoratedBox(
@@ -220,36 +220,36 @@ class _InicioState extends State<Inicio> {
   }
 }
 
-const periods = {
+const periodos = {
   'week': 'Semana',
   'month': 'Mes',
   'quarter': 'Trimestre',
   'year': 'Año',
 };
 
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+class PantallaRanking extends StatefulWidget {
+  const PantallaRanking({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<PantallaRanking> createState() => _PantallaRankingState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  String _period = 'week';
+class _PantallaRankingState extends State<PantallaRanking> {
+  String _periodo = 'week';
   bool _soloSiguiendo = true;
-  List<Map<String, dynamic>> _rows = [];
+  List<Map<String, dynamic>> _filas = [];
   List<Map<String, dynamic>> _hoy = [];
-  bool _loading = true;
+  bool _cargando = true;
   late final VoidCallback _soltar;
   late final AppLifecycleListener _ciclo;
 
-  String get _me => db.auth.currentUser!.id;
+  String get _yo => db.auth.currentUser!.id;
 
   @override
   void initState() {
     super.initState();
-    _load();
-    _soltar = escucharCagadas('home', () => _load(spinner: false));
+    _cargar();
+    _soltar = escucharCagadas('home', () => _cargar(spinner: false));
     // Al volver de Ajustes (permiso de instalar) o de otra app, se vuelve a ofrecer la actualización.
     _ciclo = AppLifecycleListener(onResume: () => revisarActualizacion(context));
     _avisoPrimeraVez();
@@ -291,38 +291,38 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) await revisarActualizacion(context);
   }
 
-  Future<void> _load({bool spinner = true}) async {
+  Future<void> _cargar({bool spinner = true}) async {
     if (!mounted) return;
-    if (spinner) setState(() => _loading = true);
+    if (spinner) setState(() => _cargando = true);
     try {
       final (data, hoy) = await (
-        db.rpc('leaderboard', params: {'period': _period, 'solo_siguiendo': _soloSiguiendo}),
+        db.rpc('leaderboard', params: {'period': _periodo, 'solo_siguiendo': _soloSiguiendo}),
         // El aviso del día compara solo contra la gente que sigues.
         db.rpc('leaderboard', params: {'period': 'day', 'solo_siguiendo': true}),
       ).wait;
       if (!mounted) return;
       setState(() {
-        _rows = List<Map<String, dynamic>>.from(data);
+        _filas = List<Map<String, dynamic>>.from(data);
         _hoy = List<Map<String, dynamic>>.from(hoy);
       });
       reprogramarRecordatorio(yaCagoHoy: _miHoy > 0).catchError((_) {});
       actualizarWidget(_miHoy).catchError((_) {});
       refrescarRanking(db).catchError((_) {});
     } catch (e) {
-      _toast('Error cargando ranking: $e');
+      _mensaje('Error cargando ranking: $e');
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _cargando = false);
     }
   }
 
-  int get _miHoy => (_hoy.where((r) => r['user_id'] == _me).firstOrNull?['total'] ?? 0) as int;
+  int get _miHoy => (_hoy.where((r) => r['user_id'] == _yo).firstOrNull?['total'] ?? 0) as int;
 
   Future<void> _cague() async {
     HapticFeedback.mediumImpact();
     try {
       final nueva = await db.from('cagadas').insert({}).select('id').single();
-      _toast('Registrado 💩');
-      await _load(spinner: false);
+      _mensaje('Registrado 💩');
+      await _cargar(spinner: false);
       if (!mounted) return;
       final tipo = await showModalBottomSheet<int>(
         context: context,
@@ -351,39 +351,39 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       if (tipo != null) await db.from('cagadas').update({'tipo': tipo}).eq('id', nueva['id']);
     } on PostgrestException catch (e) {
-      // El trigger limitar_cagadas manda el texto listo para mostrar ("solo una por hora...").
-      _toast(e.hint == 'limite_hora' ? e.message : 'Error: ${e.message}');
+      // El trigger limitar_cagadas devuelve el mensaje listo para mostrar.
+      _mensaje(e.hint == 'limite_hora' ? e.message : 'Error: ${e.message}');
     } catch (e) {
-      _toast('Error: $e');
+      _mensaje('Error: $e');
     }
   }
 
   Future<void> _deshacer() async {
     try {
-      final last = await db
+      final ultima = await db
           .from('cagadas')
           .select('id')
-          .eq('user_id', _me)
+          .eq('user_id', _yo)
           .order('created_at', ascending: false)
           .limit(1)
           .maybeSingle();
-      if (last == null) return _toast('No hay nada que deshacer');
-      await db.from('cagadas').delete().eq('id', last['id']);
-      _toast('Deshecho');
-      await _load(spinner: false);
+      if (ultima == null) return _mensaje('No hay nada que deshacer');
+      await db.from('cagadas').delete().eq('id', ultima['id']);
+      _mensaje('Deshecho');
+      await _cargar(spinner: false);
     } catch (e) {
-      _toast('Error: $e');
+      _mensaje('Error: $e');
     }
   }
 
-  void _toast(String msg) {
+  void _mensaje(String texto) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(msg)));
+      ..showSnackBar(SnackBar(content: Text(texto)));
   }
 
-  /// "Fulanito cagó 3 veces hoy... vas perdiendo"
+  /// Texto del aviso del día comparado con la gente que sigues.
   String? get _avisoDelDia {
     if (_hoy.isEmpty) return null;
     final lider = _hoy.first;
@@ -391,12 +391,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final n = lider['total'] as int;
     if (_hoy.length == 1) return 'Sigue a tus amigos para competir';
     if (n == 0) return 'Nadie ha cagado hoy. Sé el primero 💩';
-    if (lider['user_id'] == _me || mio == n) return 'Vas ganando hoy 👑';
+    if (lider['user_id'] == _yo || mio == n) return 'Vas ganando hoy 👑';
     return '${lider['username']} cagó $n ${n == 1 ? 'vez' : 'veces'} hoy... vas perdiendo';
   }
 
   void _abrir(Widget pantalla) =>
-      Navigator.push(context, MaterialPageRoute(builder: (_) => pantalla)).then((_) => _load(spinner: false));
+      Navigator.push(context, MaterialPageRoute(builder: (_) => pantalla)).then((_) => _cargar(spinner: false));
 
   @override
   Widget build(BuildContext context) {
@@ -404,11 +404,11 @@ class _HomeScreenState extends State<HomeScreen> {
     final p = paleta(context);
     final aviso = _avisoDelDia;
     final perdiendo = aviso?.endsWith('vas perdiendo') ?? false;
-    final maximo = _rows.isEmpty ? 0 : _rows.first['total'] as int;
+    final maximo = _filas.isEmpty ? 0 : _filas.first['total'] as int;
 
     return SafeArea(
       child: RefreshIndicator(
-        onRefresh: _load,
+        onRefresh: _cargar,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           children: [
@@ -418,7 +418,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 IconButton.outlined(
                   icon: const Icon(Icons.person_add_alt_1),
                   tooltip: 'Buscar amigos',
-                  onPressed: () => _abrir(const BuscarScreen()),
+                  onPressed: () => _abrir(const PantallaBuscar()),
                 ),
               ],
             ),
@@ -475,7 +475,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   visualDensity: VisualDensity.compact,
                   onSelected: (v) {
                     setState(() => _soloSiguiendo = v);
-                    _load();
+                    _cargar();
                   },
                 ),
               ],
@@ -483,31 +483,31 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 8),
             SegmentedButton<String>(
               segments: [
-                for (final e in periods.entries)
+                for (final e in periodos.entries)
                   ButtonSegment(value: e.key, label: _UnaLinea(e.value.toUpperCase())),
               ],
-              selected: {_period},
+              selected: {_periodo},
               showSelectedIcon: false,
               style: _compacto,
               onSelectionChanged: (s) {
-                setState(() => _period = s.first);
-                _load();
+                setState(() => _periodo = s.first);
+                _cargar();
               },
             ),
             const SizedBox(height: 12),
-            if (_loading)
+            if (_cargando)
               const Padding(
                 padding: EdgeInsets.all(32),
                 child: Center(child: CircularProgressIndicator()),
               )
             else ...[
               _Tabla(
-                filas: _rows,
-                me: _me,
+                filas: _filas,
+                yo: _yo,
                 maximo: maximo,
-                onTap: (id) => _abrir(PerfilScreen(userId: id)),
+                onTap: (id) => _abrir(PantallaPerfil(usuarioId: id)),
               ),
-              if (_soloSiguiendo && _rows.length <= 1) ...[
+              if (_soloSiguiendo && _filas.length <= 1) ...[
                 const SizedBox(height: 12),
                 Card(
                   child: Padding(
@@ -515,12 +515,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const Center(child: Emoji('🚽', size: 64)),
+                        const Center(child: Emoji('🚽', tamano: 64)),
                         const SizedBox(height: 8),
                         const Text('Estás cagando solo. Sigue a tus amigos para competir.', textAlign: TextAlign.center),
                         const SizedBox(height: 12),
                         FilledButton(
-                          onPressed: () => _abrir(const BuscarScreen()),
+                          onPressed: () => _abrir(const PantallaBuscar()),
                           child: const Text('BUSCAR AMIGOS'),
                         ),
                       ],
@@ -538,7 +538,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-/// Círculo negro grande; al apretarlo se encoge un poco y se pone amarillo corona.
+/// Botón redondo principal; al apretarlo se encoge y cambia de color.
 class _BotonCague extends StatefulWidget {
   const _BotonCague({required this.onTap});
 
@@ -569,7 +569,7 @@ class _BotonCagueState extends State<_BotonCague> {
             duration: const Duration(milliseconds: 100),
             width: 200,
             height: 200,
-            // Al apretar se invierte: en claro negro → amarillo, en oscuro amarillo → blanco.
+            // Al apretar: en claro pasa de negro a amarillo; en oscuro, de amarillo a blanco.
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: _apretado ? (p.primario == acento ? p.texto : acento) : p.primario,
@@ -577,7 +577,7 @@ class _BotonCagueState extends State<_BotonCague> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Emoji('💩', size: 88),
+                const Emoji('💩', tamano: 88),
                 Text('CAGUÉ',
                     style: TextStyle(
                       color: _apretado ? acentoTexto : p.sobrePrimario,
@@ -617,7 +617,7 @@ class _Opcion extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Emoji(emoji, size: 38),
+              Emoji(emoji, tamano: 38),
               const SizedBox(height: 4),
               Text(texto,
                   textAlign: TextAlign.center,
@@ -632,14 +632,14 @@ class _Opcion extends StatelessWidget {
   }
 }
 
-/// Ranking como tabla: puesto en mono, el líder con fondo amarillo y una barra fina contra el líder.
+/// Ranking como tabla. El líder va resaltado y cada fila tiene una barra relativa al líder.
 class _Tabla extends StatelessWidget {
-  const _Tabla({required this.filas, required this.me, required this.maximo, required this.onTap});
+  const _Tabla({required this.filas, required this.yo, required this.maximo, required this.onTap});
 
   final List<Map<String, dynamic>> filas;
-  final String me;
+  final String yo;
   final int maximo;
-  final void Function(String userId) onTap;
+  final void Function(String usuarioId) onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -660,7 +660,7 @@ class _Tabla extends StatelessWidget {
           ),
           for (final (i, f) in filas.indexed) ...[
             Divider(color: i == 0 ? p.bordeFuerte : p.borde),
-            _FilaTabla(puesto: i + 1, fila: f, esMio: f['user_id'] == me, maximo: maximo, onTap: () => onTap(f['user_id'])),
+            _FilaTabla(puesto: i + 1, fila: f, esMio: f['user_id'] == yo, maximo: maximo, onTap: () => onTap(f['user_id'])),
           ],
         ],
       ),
@@ -696,10 +696,10 @@ class _FilaTabla extends StatelessWidget {
                 alignment: Alignment.center,
                 color: lider ? acento : null,
                 child: Text(puesto.toString().padLeft(2, '0'),
-                    style: numeros(context, size: 13, weight: FontWeight.w800, color: lider ? acentoTexto : p.textoSuave)),
+                    style: numeros(context, tamano: 13, weight: FontWeight.w800, color: lider ? acentoTexto : p.textoSuave)),
               ),
               const SizedBox(width: 12),
-              Emoji(fila['avatar'], size: 28),
+              Emoji(fila['avatar'], tamano: 28),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -715,7 +715,7 @@ class _FilaTabla extends StatelessWidget {
                             style: TextStyle(fontSize: 15, fontWeight: esMio ? FontWeight.w800 : FontWeight.w600, color: p.texto),
                           ),
                         ),
-                        if (lider) ...[const SizedBox(width: 6), const Emoji('👑', size: 18)],
+                        if (lider) ...[const SizedBox(width: 6), const Emoji('👑', tamano: 18)],
                       ],
                     ),
                     const SizedBox(height: 6),
@@ -733,7 +733,7 @@ class _FilaTabla extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              Text('$total', style: numeros(context, size: 20, weight: FontWeight.w800)),
+              Text('$total', style: numeros(context, tamano: 20, weight: FontWeight.w800)),
             ],
           ),
         ),
@@ -747,7 +747,7 @@ final _compacto = SegmentedButton.styleFrom(
   padding: const EdgeInsets.symmetric(horizontal: 4),
 );
 
-/// Etiqueta que nunca parte en dos líneas: si no cabe (pantallas angostas o letra grande) se encoge.
+/// Etiqueta de una sola línea que se encoge si no cabe.
 class _UnaLinea extends StatelessWidget {
   const _UnaLinea(this.texto);
 

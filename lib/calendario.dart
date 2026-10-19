@@ -11,29 +11,29 @@ const _meses = [
 ];
 
 /// Mes de cagadas de un usuario. Solo el dueño puede borrar (RLS igual lo impide).
-class CalendarioScreen extends StatefulWidget {
-  const CalendarioScreen({super.key, required this.userId, required this.username});
+class PantallaCalendario extends StatefulWidget {
+  const PantallaCalendario({super.key, required this.usuarioId, required this.nombre});
 
-  final String userId;
-  final String username;
+  final String usuarioId;
+  final String nombre;
 
   @override
-  State<CalendarioScreen> createState() => _CalendarioScreenState();
+  State<PantallaCalendario> createState() => _PantallaCalendarioState();
 }
 
-class _CalendarioScreenState extends State<CalendarioScreen> {
+class _PantallaCalendarioState extends State<PantallaCalendario> {
   late DateTime _mes = DateTime(DateTime.now().year, DateTime.now().month);
   Map<int, List<Map<String, dynamic>>> _porDia = {};
-  bool _loading = true;
+  bool _cargando = true;
   late final VoidCallback _soltar;
 
-  bool get _esMio => widget.userId == db.auth.currentUser!.id;
+  bool get _esMio => widget.usuarioId == db.auth.currentUser!.id;
 
   @override
   void initState() {
     super.initState();
-    _load();
-    _soltar = escucharCagadas('calendario', () => _load(spinner: false));
+    _cargar();
+    _soltar = escucharCagadas('calendario', () => _cargar(spinner: false));
   }
 
   @override
@@ -42,14 +42,14 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     super.dispose();
   }
 
-  Future<void> _load({bool spinner = true}) async {
+  Future<void> _cargar({bool spinner = true}) async {
     if (!mounted) return;
-    if (spinner) setState(() => _loading = true);
+    if (spinner) setState(() => _cargando = true);
     try {
       final rows = await db
           .from('cagadas')
           .select('id, created_at, tipo')
-          .eq('user_id', widget.userId)
+          .eq('user_id', widget.usuarioId)
           .gte('created_at', _mes.toUtc().toIso8601String())
           .lt('created_at', DateTime(_mes.year, _mes.month + 1).toUtc().toIso8601String())
           .order('created_at');
@@ -60,27 +60,27 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
       }
       if (mounted) setState(() => _porDia = porDia);
     } catch (e) {
-      _toast('Error cargando calendario: $e');
+      _mensaje('Error cargando calendario: $e');
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _cargando = false);
     }
   }
 
-  void _toast(String msg) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  void _mensaje(String texto) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(texto)));
 
   void _moverMes(int delta) {
     setState(() => _mes = DateTime(_mes.year, _mes.month + delta));
-    _load();
+    _cargar();
   }
 
   Future<void> _borrar(int id) async {
     try {
       await db.from('cagadas').delete().eq('id', id);
-      _toast('Borrada');
-      await _load();
+      _mensaje('Borrada');
+      await _cargar();
     } catch (e) {
-      _toast('Error: $e');
+      _mensaje('Error: $e');
     }
   }
 
@@ -100,7 +100,7 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
           ),
           for (final e in entradas)
             ListTile(
-              leading: Emoji(tipoEmoji(e['tipo']), size: 32),
+              leading: Emoji(tipoEmoji(e['tipo']), tamano: 32),
               title: Text(TimeOfDay.fromDateTime(DateTime.parse(e['created_at']).toLocal())
                   .format(context)),
               subtitle: Text(tipos[e['tipo']]?.$2 ?? 'Sin tipo'),
@@ -128,7 +128,7 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     final esteMes = _mes.year == hoy.year && _mes.month == hoy.month;
 
     return Scaffold(
-      appBar: AppBar(title: Text(_esMio ? 'MI CALENDARIO' : 'CALENDARIO DE ${widget.username.toUpperCase()}')),
+      appBar: AppBar(title: Text(_esMio ? 'MI CALENDARIO' : 'CALENDARIO DE ${widget.nombre.toUpperCase()}')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -138,7 +138,7 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
               Expanded(
                 child: Text('${_meses[_mes.month - 1]} ${_mes.year}'.toUpperCase(),
                     textAlign: TextAlign.center,
-                    style: numeros(context, size: 15, weight: FontWeight.w800).copyWith(letterSpacing: 1.2)),
+                    style: numeros(context, tamano: 15, weight: FontWeight.w800).copyWith(letterSpacing: 1.2)),
               ),
               IconButton(
                 icon: const Icon(Icons.chevron_right),
@@ -153,7 +153,7 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
             ],
           ),
           const SizedBox(height: 4),
-          if (_loading)
+          if (_cargando)
             const Padding(
               padding: EdgeInsets.all(24),
               child: Center(child: CircularProgressIndicator()),
@@ -176,7 +176,7 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
             ),
           const SizedBox(height: 12),
           Text('TOTAL DEL MES: ${total.toString().padLeft(2, '0')}',
-              textAlign: TextAlign.center, style: numeros(context, size: 13, weight: FontWeight.w700)),
+              textAlign: TextAlign.center, style: numeros(context, tamano: 13, weight: FontWeight.w700)),
         ],
       ),
     );
@@ -208,13 +208,13 @@ class _Dia extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text('$dia', style: numeros(context, size: 12, color: cuantas > 0 ? acentoTexto : null)),
+            Text('$dia', style: numeros(context, tamano: 12, color: cuantas > 0 ? acentoTexto : null)),
             if (cuantas > 0)
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Emoji('💩', size: 14),
-                  if (cuantas > 1) Text('$cuantas', style: numeros(context, size: 11, color: acentoTexto)),
+                  const Emoji('💩', tamano: 14),
+                  if (cuantas > 1) Text('$cuantas', style: numeros(context, tamano: 11, color: acentoTexto)),
                 ],
               ),
           ],

@@ -1,11 +1,13 @@
-// Llamada por el trigger cagadas_avisar (pg_net) en cada cagada nueva.
-// Manda un push FCM a los seguidores de quien cagó: "Fulanito cagó N veces hoy... vas perdiendo".
+// Notificaciones push (FCM HTTP v1). La llaman, con el header x-webhook-secret:
+//   - trigger cagadas_avisar: cagada nueva → aviso a los seguidores de quien cagó.
+//   - trigger follows_avisar: { tipo: "follow" } → aviso al seguido.
+//   - scripts/publicar.sh:   { tipo: "version" } → aviso de versión nueva.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const sa = JSON.parse(Deno.env.get("FCM_SERVICE_ACCOUNT")!);
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-// Venezuela no tiene horario de verano: el día arranca a las 04:00 UTC (igual que leaderboard()).
+// Inicio del día en Venezuela (UTC-4 fijo), igual que leaderboard().
 function inicioDelDia(): string {
   const offset = 4 * 3600_000;
   const local = new Date(Date.now() - offset);
@@ -19,7 +21,7 @@ const b64url = (data: ArrayBuffer | string) =>
 
 let cache: { token: string; exp: number } | null = null;
 
-// OAuth2 de la cuenta de servicio (JWT RS256 firmado aquí mismo, sin librerías de Google).
+// Token OAuth2 de la cuenta de servicio (JWT RS256 firmado con Web Crypto).
 async function accessToken(): Promise<string> {
   if (cache && cache.exp > Date.now() + 60_000) return cache.token;
   const now = Math.floor(Date.now() / 1000);
@@ -65,7 +67,7 @@ async function enviar(token: string, title: string, body: string, data: Record<s
   });
 }
 
-// Trigger follows_avisar: "X te empezó a seguir", a todos los teléfonos del seguido.
+// Aviso de nuevo seguidor a todos los teléfonos del seguido.
 async function avisarFollow(follower: string, followed: string) {
   const [{ data: perfil }, { data: tokens }, { data: devuelta }] = await Promise.all([
     db.from("profiles").select("username").eq("id", follower).single(),
@@ -89,8 +91,8 @@ async function avisarFollow(follower: string, followed: string) {
   return Response.json({ enviados: tokens.length - muertos.length });
 }
 
-// scripts/publicar.sh: "hay versión nueva" a los teléfonos con un build menor que ya saben actualizarse
-// (app_build lo reporta la app desde 1.8.2; null = más vieja, sin push).
+// Aviso de versión nueva a los teléfonos con un build menor. app_build lo reporta la app
+// desde la 1.8.2; las versiones anteriores (null) no saben actualizarse y se omiten.
 async function avisarVersion(version: string, build: number) {
   const { data: tokens } = await db.from("push_tokens").select("token").lt("app_build", build);
   if (!tokens?.length) return Response.json({ enviados: 0 });
@@ -155,7 +157,7 @@ Deno.serve(async (req) => {
     });
     if (!res.ok) {
       const err = await res.text();
-      // Token de una app desinstalada o reinstalada: se borra para no seguir intentando.
+      // Token de una app desinstalada: se borra.
       if (res.status === 404 || err.includes("UNREGISTERED")) muertos.push(t.token);
       else console.error("FCM", res.status, err);
     }

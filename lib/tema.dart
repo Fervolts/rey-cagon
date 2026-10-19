@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-// Mismo lenguaje que Ahí Guardaito: esquinas de 2px, bordes de 1px, sin sombras ni degradados,
-// letra del sistema con cifras tabulares y un solo acento fuerte (allá lima, aquí amarillo corona).
+// Estilo: esquinas de 2px, bordes de 1px, sin sombras ni degradados, letra del sistema
+// con cifras tabulares y un solo color de acento.
 const radio = 2.0;
 const acento = Color(0xFFFFD60A);
 const acentoTexto = Color(0xFF111111);
@@ -33,8 +33,7 @@ class Paleta {
     sobrePrimario: Color(0xFFFFFFFF),
   );
 
-  // En oscuro el amarillo pasa a ser el color principal (botones, selección); el blanco sobre negro
-  // se veía plano.
+  // En oscuro el acento amarillo es el color principal (botones y selección).
   static const oscuro = Paleta(
     fondo: Color(0xFF0E0E0D),
     tarjeta: Color(0xFF181816),
@@ -53,9 +52,9 @@ Paleta paleta(BuildContext context) =>
 const _tabular = [FontFeature.tabularFigures()];
 
 /// Números: letra del sistema con cifras tabulares para que las columnas cuadren.
-TextStyle numeros(BuildContext context, {double size = 14, FontWeight weight = FontWeight.w600, Color? color}) =>
+TextStyle numeros(BuildContext context, {double tamano = 14, FontWeight weight = FontWeight.w600, Color? color}) =>
     TextStyle(
-      fontSize: size,
+      fontSize: tamano,
       fontWeight: weight,
       color: color ?? paleta(context).texto,
       fontFeatures: _tabular,
@@ -70,7 +69,7 @@ class Rotulo extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
         texto.toUpperCase(),
-        style: numeros(context, size: 11, weight: FontWeight.w700, color: paleta(context).textoSuave)
+        style: numeros(context, tamano: 11, weight: FontWeight.w700, color: paleta(context).textoSuave)
             .copyWith(letterSpacing: 1.2),
       );
 }
@@ -109,8 +108,8 @@ ThemeData tema(Brightness brillo) {
   );
   final base = ThemeData(colorScheme: scheme, useMaterial3: true, splashFactory: InkRipple.splashFactory);
   final titulo = TextStyle(fontWeight: FontWeight.w800, color: p.texto, fontFeatures: _tabular);
-  TextStyle boton(double size, {double espacio = 0.6, Color? color}) =>
-      TextStyle(fontSize: size, fontWeight: FontWeight.w700, letterSpacing: espacio, color: color);
+  TextStyle boton(double tamano, {double espacio = 0.6, Color? color}) =>
+      TextStyle(fontSize: tamano, fontWeight: FontWeight.w700, letterSpacing: espacio, color: color);
 
   return base.copyWith(
     textTheme: base.textTheme.copyWith(

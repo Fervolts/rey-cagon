@@ -29,7 +29,7 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <!-- Icono y color de los push de FCM cuando la app está cerrada (silueta blanca del 💩). -->
+        <!-- Ícono y color de las notificaciones de FCM con la app cerrada. -->
         <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_stat_poop" />
         <meta-data android:name="com.google.firebase.messaging.default_notification_color" android:resource="@color/notificacion" />
         <!-- Recordatorio diario (flutter_local_notifications): disparo programado y reprogramación al reiniciar. -->
@@ -42,7 +42,7 @@
                 <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
             </intent-filter>
         </receiver>
-        <!-- Widget de pantalla de inicio (home_widget): el botón registra en segundo plano. -->
+        <!-- Widgets de pantalla de inicio (home_widget). -->
         <receiver android:name=".ReyCagonWidget" android:exported="false" android:label="Rey Cagón">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

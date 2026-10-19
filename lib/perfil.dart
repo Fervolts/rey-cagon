@@ -14,27 +14,27 @@ const _avatares = ['💩', '👑', '🧻', '🚽', '🐻', '🦍', '🐷', '🐸
 
 String _fecha(DateTime d) => '${d.day}/${d.month}/${d.year}';
 
-class PerfilScreen extends StatefulWidget {
-  const PerfilScreen({super.key, required this.userId});
+class PantallaPerfil extends StatefulWidget {
+  const PantallaPerfil({super.key, required this.usuarioId});
 
-  final String userId;
+  final String usuarioId;
 
   @override
-  State<PerfilScreen> createState() => _PerfilScreenState();
+  State<PantallaPerfil> createState() => _PantallaPerfilState();
 }
 
-class _PerfilScreenState extends State<PerfilScreen> {
+class _PantallaPerfilState extends State<PantallaPerfil> {
   Map<String, dynamic>? _p;
   bool _ocupado = false;
   late final VoidCallback _soltar;
 
-  bool get _esMio => widget.userId == db.auth.currentUser!.id;
+  bool get _esMio => widget.usuarioId == db.auth.currentUser!.id;
 
   @override
   void initState() {
     super.initState();
-    _load();
-    _soltar = escucharCagadas('perfil', _load);
+    _cargar();
+    _soltar = escucharCagadas('perfil', _cargar);
   }
 
   @override
@@ -43,30 +43,30 @@ class _PerfilScreenState extends State<PerfilScreen> {
     super.dispose();
   }
 
-  Future<void> _load() async {
+  Future<void> _cargar() async {
     try {
-      final rows = await db.rpc('perfil', params: {'uid': widget.userId});
+      final rows = await db.rpc('perfil', params: {'uid': widget.usuarioId});
       if (mounted) setState(() => _p = (rows as List).firstOrNull);
     } catch (e) {
-      _toast('Error cargando perfil: $e');
+      _mensaje('Error cargando perfil: $e');
     }
   }
 
-  void _toast(String msg) {
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  void _mensaje(String texto) {
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(texto)));
   }
 
   Future<void> _seguir() async {
     setState(() => _ocupado = true);
     try {
       if (_p!['lo_sigo'] == true) {
-        await db.from('follows').delete().eq('follower', db.auth.currentUser!.id).eq('followed', widget.userId);
+        await db.from('follows').delete().eq('follower', db.auth.currentUser!.id).eq('followed', widget.usuarioId);
       } else {
-        await db.from('follows').insert({'followed': widget.userId});
+        await db.from('follows').insert({'followed': widget.usuarioId});
       }
-      await _load();
+      await _cargar();
     } catch (e) {
-      _toast('Error: $e');
+      _mensaje('Error: $e');
     } finally {
       if (mounted) setState(() => _ocupado = false);
     }
@@ -78,7 +78,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
       isScrollControlled: true,
       builder: (_) => _EditarPerfil(perfil: _p!),
     );
-    if (cambio == true) await _load();
+    if (cambio == true) await _cargar();
   }
 
   Future<void> _salir() async {
@@ -106,7 +106,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                Center(child: Emoji(p['avatar'], size: 96)),
+                Center(child: Emoji(p['avatar'], tamano: 96)),
                 Text(p['username'],
                     textAlign: TextAlign.center,
                     maxLines: 2,
@@ -154,7 +154,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                   ),
                 ),
                 ListTile(
-                  leading: Emoji(tipoEmoji(p['tipo_favorito']), size: 36),
+                  leading: Emoji(tipoEmoji(p['tipo_favorito']), tamano: 36),
                   title: const Text('Especialidad de la casa'),
                   subtitle: Text(tipos[p['tipo_favorito']]?.$2 ?? 'Todavía no se sabe'),
                 ),
@@ -171,7 +171,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => CalendarioScreen(userId: widget.userId, username: p['username']),
+                      builder: (_) => PantallaCalendario(usuarioId: widget.usuarioId, nombre: p['username']),
                     ),
                   ),
                 ),
@@ -209,7 +209,7 @@ class _EditarPerfil extends StatefulWidget {
 }
 
 class _EditarPerfilState extends State<_EditarPerfil> {
-  late final _username = TextEditingController(text: widget.perfil['username']);
+  late final _usuario = TextEditingController(text: widget.perfil['username']);
   late final _bio = TextEditingController(text: widget.perfil['bio'] ?? '');
   late String _avatar = widget.perfil['avatar'];
   bool _ocupado = false;
@@ -218,18 +218,18 @@ class _EditarPerfilState extends State<_EditarPerfil> {
     setState(() => _ocupado = true);
     try {
       await db.from('profiles').update({
-        'username': _username.text.trim(),
+        'username': _usuario.text.trim(),
         'bio': _bio.text.trim().isEmpty ? null : _bio.text.trim(),
         'avatar': _avatar,
       }).eq('id', db.auth.currentUser!.id);
       if (mounted) Navigator.pop(context, true);
     } on PostgrestException catch (e) {
-      final msg = e.code == '23505'
+      final texto = e.code == '23505'
           ? 'Ese username ya existe'
           : e.code == '23514'
               ? 'Username de 2 a 24 letras, bio de máximo 140'
               : e.message;
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(texto)));
     } finally {
       if (mounted) setState(() => _ocupado = false);
     }
@@ -251,7 +251,7 @@ class _EditarPerfilState extends State<_EditarPerfil> {
             children: [
               for (final a in _avatares)
                 ChoiceChip(
-                  label: Emoji(a, size: 28),
+                  label: Emoji(a, tamano: 28),
                   selected: a == _avatar,
                   showCheckmark: false,
                   onSelected: (_) => setState(() => _avatar = a),
@@ -259,7 +259,7 @@ class _EditarPerfilState extends State<_EditarPerfil> {
             ],
           ),
           TextField(
-            controller: _username,
+            controller: _usuario,
             maxLength: 24,
             decoration: const InputDecoration(labelText: 'Username'),
           ),
@@ -278,14 +278,14 @@ class _EditarPerfilState extends State<_EditarPerfil> {
 }
 
 /// Buscar gente por username para seguirla.
-class BuscarScreen extends StatefulWidget {
-  const BuscarScreen({super.key});
+class PantallaBuscar extends StatefulWidget {
+  const PantallaBuscar({super.key});
 
   @override
-  State<BuscarScreen> createState() => _BuscarScreenState();
+  State<PantallaBuscar> createState() => _PantallaBuscarState();
 }
 
-class _BuscarScreenState extends State<BuscarScreen> {
+class _PantallaBuscarState extends State<PantallaBuscar> {
   List<Map<String, dynamic>> _gente = [];
   Set<String> _sigo = {};
   String _q = '';
@@ -298,9 +298,9 @@ class _BuscarScreenState extends State<BuscarScreen> {
 
   Future<void> _buscar(String q) async {
     _q = q;
-    final me = db.auth.currentUser!.id;
+    final yo = db.auth.currentUser!.id;
     try {
-      var consulta = db.from('profiles').select('id, username, avatar').neq('id', me);
+      var consulta = db.from('profiles').select('id, username, avatar').neq('id', yo);
       if (q.trim().isNotEmpty) {
         // % y _ son comodines en ilike: se escapan para buscar el texto tal cual.
         final limpio = q.trim().replaceAll(r'\', r'\\').replaceAll('%', r'\%').replaceAll('_', r'\_');
@@ -308,7 +308,7 @@ class _BuscarScreenState extends State<BuscarScreen> {
       }
       final (gente, sigo) = await (
         consulta.order('username').limit(50),
-        db.from('follows').select('followed').eq('follower', me),
+        db.from('follows').select('followed').eq('follower', yo),
       ).wait;
       if (!mounted || q != _q) return;
       setState(() {
@@ -321,10 +321,10 @@ class _BuscarScreenState extends State<BuscarScreen> {
   }
 
   Future<void> _toggle(String id) async {
-    final me = db.auth.currentUser!.id;
+    final yo = db.auth.currentUser!.id;
     try {
       if (_sigo.contains(id)) {
-        await db.from('follows').delete().eq('follower', me).eq('followed', id);
+        await db.from('follows').delete().eq('follower', yo).eq('followed', id);
       } else {
         await db.from('follows').insert({'followed': id});
       }
@@ -352,13 +352,13 @@ class _BuscarScreenState extends State<BuscarScreen> {
             InkWell(
               onTap: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => PerfilScreen(userId: g['id'])),
+                MaterialPageRoute(builder: (_) => PantallaPerfil(usuarioId: g['id'])),
               ).then((_) => _buscar(_q)),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Row(
                   children: [
-                    Emoji(g['avatar'], size: 36),
+                    Emoji(g['avatar'], tamano: 36),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(

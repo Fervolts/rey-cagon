@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Mismo botón que en la app: círculo negro que se pone amarillo corona al apretarlo. -->
+<!-- Botón del widget: negro, amarillo al apretarlo. -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_pressed="true">
         <shape android:shape="oval"><solid android:color="#FFD60A" /></shape>

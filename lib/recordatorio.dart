@@ -15,7 +15,7 @@ const _detalles = NotificationDetails(
   ),
 );
 
-Future<void> initRecordatorio() async {
+Future<void> iniciarRecordatorio() async {
   tzdata.initializeTimeZones();
   try {
     tz.setLocalLocation(tz.getLocation((await FlutterTimezone.getLocalTimezone()).identifier));
@@ -29,7 +29,7 @@ Future<void> initRecordatorio() async {
   );
 }
 
-/// Aparte de [initRecordatorio] para no pedir el permiso antes de que se pinte la app.
+/// Aparte de [iniciarRecordatorio] para no pedir el permiso antes de que se pinte la app.
 Future<void> pedirPermisoNotificaciones() async {
   await notificaciones
       .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()

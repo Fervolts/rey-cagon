@@ -2,8 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-// Fluent Emoji 3D de Microsoft (MIT, assets/emoji/LICENSE). Van como imágenes para que se vean
-// igual en todos los teléfonos en vez de con los emojis de Samsung/Google/etc.
+// Fluent Emoji 3D de Microsoft (MIT, assets/emoji/LICENSE). Se usan como imágenes para que
+// se vean igual en todos los teléfonos.
 const _archivos = {
   '💩': 'pile_of_poo',
   '👑': 'crown',
@@ -34,27 +34,27 @@ const _archivos = {
   '🦖': 't-rex',
 };
 
-/// Emoji como imagen de [size] px. Si no está en el set (p. ej. un avatar viejo), cae al del sistema.
+/// Emoji como imagen de [tamano] px. Si no está en el set, usa el emoji del sistema.
 class Emoji extends StatelessWidget {
-  const Emoji(this.emoji, {super.key, this.size = 24});
+  const Emoji(this.emoji, {super.key, this.tamano = 24});
 
   final String emoji;
-  final double size;
+  final double tamano;
 
   @override
   Widget build(BuildContext context) {
     final archivo = _archivos[emoji];
     if (archivo == null) {
       return SizedBox(
-        width: size,
-        height: size,
+        width: tamano,
+        height: tamano,
         child: FittedBox(child: Text(emoji)),
       );
     }
     return Image.asset(
       'assets/emoji/$archivo.png',
-      width: size,
-      height: size,
+      width: tamano,
+      height: tamano,
       filterQuality: FilterQuality.medium,
       semanticLabel: emoji,
     );

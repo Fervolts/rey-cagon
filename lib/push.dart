@@ -7,7 +7,7 @@ import 'main.dart' show db;
 import 'recordatorio.dart' show notificaciones;
 import 'widget.dart' show clienteDeFondo, refrescarRanking;
 
-// Mismo id que manda la Edge Function notificar-cagada en android.notification.channel_id.
+// Mismo id que usa la Edge Function notificaciones en android.notification.channel_id.
 const _canal = AndroidNotificationChannel(
   'cagadas',
   'Cagadas de tus amigos',
@@ -24,7 +24,7 @@ Future<void> _alFondo(RemoteMessage m) async {
   } catch (_) {}
 }
 
-Future<void> initPush() async {
+Future<void> iniciarPush() async {
   await Firebase.initializeApp();
   FirebaseMessaging.onBackgroundMessage(_alFondo);
   await notificaciones

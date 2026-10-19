@@ -12,15 +12,18 @@ import es.antonborri.home_widget.HomeWidgetProvider
 import org.json.JSONArray
 
 /**
- * Widget de ranking de la semana (entre los que sigues): puesto gigante, una frase de cuánto te falta
- * y los vecinos. Dart escribe `rk`, `rk_puesto`, `rk_de`, `rk_frase`, `rk_rey` en lib/widget.dart.
- * El 💩 de la esquina registra una cagada sin abrir la app (mismo callback que el widget del botón).
+ * Widget de ranking semanal (entre los que sigues): puesto, cuánto falta para subir y vecinos.
+ * Los datos (`rk`, `rk_puesto`, `rk_de`, `rk_frase`, `rk_rey`) los escribe lib/widget.dart.
+ * El ícono de la esquina registra una cagada sin abrir la app.
  */
 class ReyCagonRankingWidget : HomeWidgetProvider() {
     private val filas = listOf(
         listOf(R.id.rk_fila0, R.id.rk_pos0, R.id.rk_nombre0, R.id.rk_total0),
         listOf(R.id.rk_fila1, R.id.rk_pos1, R.id.rk_nombre1, R.id.rk_total1),
         listOf(R.id.rk_fila2, R.id.rk_pos2, R.id.rk_nombre2, R.id.rk_total2),
+        listOf(R.id.rk_fila3, R.id.rk_pos3, R.id.rk_nombre3, R.id.rk_total3),
+        listOf(R.id.rk_fila4, R.id.rk_pos4, R.id.rk_nombre4, R.id.rk_total4),
+        listOf(R.id.rk_fila5, R.id.rk_pos5, R.id.rk_nombre5, R.id.rk_total5),
     )
 
     override fun onUpdate(

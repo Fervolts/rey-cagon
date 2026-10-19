@@ -36,12 +36,12 @@ Future<int> _contarHoy(SupabaseClient db) async {
 /// Widget de ranking: tu puesto en la semana (entre los que sigues), cuánto te falta para pasar
 /// al de arriba y los vecinos.
 Future<void> refrescarRanking(SupabaseClient db) async {
-  final me = db.auth.currentUser?.id;
-  if (me == null) return;
+  final yo = db.auth.currentUser?.id;
+  if (yo == null) return;
   final filas = List<Map<String, dynamic>>.from(
     await db.rpc('leaderboard', params: {'period': 'week', 'solo_siguiendo': true}),
   );
-  final i = filas.indexWhere((f) => f['user_id'] == me);
+  final i = filas.indexWhere((f) => f['user_id'] == yo);
   if (i < 0) return;
   final mio = filas[i]['total'] as int;
   final rey = i == 0 && mio > 0;
@@ -60,11 +60,12 @@ Future<void> refrescarRanking(SupabaseClient db) async {
     frase = falta == 1 ? 'Una más y pasas a ${arriba['username']}' : 'Te faltan $falta para pasar a ${arriba['username']}';
   }
 
-  // Si vas primero muestra 1-2-3; si no, el de arriba, tú y el de abajo.
-  final desde = (i == 0 ? 0 : i - 1).clamp(0, (filas.length - 3).clamp(0, filas.length));
+  // Ventana de hasta 6 filas que siempre te incluye, con más gente arriba que abajo.
+  const maxFilas = 6;
+  final desde = (i - 3).clamp(0, (filas.length - maxFilas).clamp(0, filas.length));
   final vecinos = [
-    for (var k = desde; k < filas.length && k < desde + 3; k++)
-      {'p': k + 1, 'n': filas[k]['username'], 't': filas[k]['total'], 'yo': filas[k]['user_id'] == me},
+    for (var k = desde; k < filas.length && k < desde + maxFilas; k++)
+      {'p': k + 1, 'n': filas[k]['username'], 't': filas[k]['total'], 'yo': filas[k]['user_id'] == yo},
   ];
   await HomeWidget.saveWidgetData<String>('rk', jsonEncode(vecinos));
   await HomeWidget.saveWidgetData<String>('rk_puesto', (i + 1).toString().padLeft(2, '0'));
@@ -90,8 +91,8 @@ Future<SupabaseClient> clienteDeFondo() async {
   return Supabase.instance.client;
 }
 
-/// Toque en el círculo del widget. Corre en un motor de Flutter aparte, sin la app abierta:
-/// inicializa Supabase con la sesión guardada en el teléfono y registra la cagada.
+/// Toque en el botón del widget. Corre en un motor de Flutter aparte, sin la app abierta,
+/// usando la sesión guardada en el teléfono.
 @pragma('vm:entry-point')
 Future<void> widgetCague(Uri? uri) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -104,7 +105,7 @@ Future<void> widgetCague(Uri? uri) async {
     await db.from('cagadas').insert({});
     aviso = '+1 💩';
   } on PostgrestException catch (e) {
-    // El trigger limitar_cagadas dice cuánto falta ("Espera N min más.").
+    // El trigger limitar_cagadas indica los minutos que faltan.
     final min = RegExp(r'Espera (\d+) min').firstMatch(e.message)?.group(1);
     aviso = min == null ? 'ERROR' : 'ESPERA $min MIN';
   } catch (_) {
@@ -121,4 +122,4 @@ Future<void> widgetCague(Uri? uri) async {
   await _pintar(estado: null);
 }
 
-Future<void> initWidget() => HomeWidget.registerInteractivityCallback(widgetCague);
+Future<void> iniciarWidget() => HomeWidget.registerInteractivityCallback(widgetCague);
