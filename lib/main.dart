@@ -11,6 +11,7 @@ import 'actualizar.dart';
 import 'calendario.dart';
 import 'config.dart';
 import 'perfil.dart';
+import 'placer.dart';
 import 'push.dart';
 import 'recordatorio.dart';
 import 'tema.dart';
@@ -252,6 +253,14 @@ class _PantallaRankingState extends State<PantallaRanking> {
   List<Map<String, dynamic>> _filas = [];
   List<Map<String, dynamic>> _hoy = [];
   bool _cargando = true;
+  // Ranking secreto: si ya encontró la hoja de Tips, si lo está viendo y si ya aprendió a deslizar.
+  bool _secretoAbierto = false;
+  bool _yaDeslizo = true;
+  // Con el secreto abierto la pantalla es un PageView: 0 normal, 1 el lado secreto.
+  final _paginas = PageController();
+  bool _asomado = false;
+  // Sube con cada recarga para que el ranking secreto también se refresque.
+  int _version = 0;
   late final VoidCallback _soltar;
   late final AppLifecycleListener _ciclo;
   // Se decide una vez por apertura de la app: aparece o no, y en qué esquina.
@@ -271,6 +280,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
 
   @override
   void dispose() {
+    _paginas.dispose();
     _ciclo.dispose();
     _soltar();
     super.dispose();
@@ -309,16 +319,22 @@ class _PantallaRankingState extends State<PantallaRanking> {
     if (!mounted) return;
     if (spinner) setState(() => _cargando = true);
     try {
-      final (data, hoy) = await (
+      final (data, hoy, yo, prefs) = await (
         db.rpc('leaderboard', params: {'period': _periodo, 'solo_siguiendo': _soloSiguiendo}),
         // El aviso del día compara solo contra la gente que sigues.
         db.rpc('leaderboard', params: {'period': 'day', 'solo_siguiendo': true}),
+        db.from('profiles').select('placer_desbloqueado').eq('id', _yo).maybeSingle(),
+        SharedPreferences.getInstance(),
       ).wait;
       if (!mounted) return;
       setState(() {
         _filas = List<Map<String, dynamic>>.from(data);
         _hoy = List<Map<String, dynamic>>.from(hoy);
+        _secretoAbierto = yo?['placer_desbloqueado'] == true;
+        _yaDeslizo = prefs.getBool('placer_deslizo') ?? false;
+        _version++;
       });
+      _asomar();
       reprogramarRecordatorio(yaCagoHoy: _miHoy > 0).catchError((_) {});
       actualizarWidget(_miHoy).catchError((_) {});
       refrescarRanking(db).catchError((_) {});
@@ -364,6 +380,11 @@ class _PantallaRankingState extends State<PantallaRanking> {
         ),
       );
       if (tipo != null) await db.from('cagadas').update({'tipo': tipo}).eq('id', nueva['id']);
+      if (!_secretoAbierto || !mounted) return;
+      final nota = await preguntarPlacer(context);
+      if (nota != null) {
+        await db.from('cagadas').update({'placer': nota.placer, 'etiquetas': nota.etiquetas.toList()}).eq('id', nueva['id']);
+      }
     } on PostgrestException catch (e) {
       // El trigger limitar_cagadas devuelve el mensaje listo para mostrar.
       _mensaje(e.hint == 'limite_hora' ? e.message : 'Error: ${e.message}');
@@ -420,27 +441,206 @@ class _PantallaRankingState extends State<PantallaRanking> {
     final perdiendo = aviso?.endsWith('vas perdiendo') ?? false;
     final maximo = _filas.isEmpty ? 0 : _filas.first['total'] as int;
 
-    return SafeArea(
-      child: Stack(
+    final normal = RefreshIndicator(
+      onRefresh: _cargar,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
-          RefreshIndicator(
-            onRefresh: _cargar,
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-              children: [
-                Row(
+          Row(
+            children: [
+              Expanded(child: Text('Rey Cagón', style: texto.headlineSmall)),
+              IconButton.outlined(
+                icon: const Icon(Icons.person_add_alt_1),
+                tooltip: 'Buscar amigos',
+                onPressed: () => _abrir(const PantallaBuscar()),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const SizedBox(height: 8),
+          Center(child: _BotonCague(onTap: _cague)),
+          Center(
+            child: TextButton.icon(
+              onPressed: _deshacer,
+              icon: const Icon(Icons.undo, size: 18),
+              label: const Text('DESHACER LA ÚLTIMA'),
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (aviso != null) ...[
+            const SizedBox(height: 4),
+            Container(
+              decoration: BoxDecoration(
+                color: p.tarjeta,
+                border: Border.all(color: p.borde),
+              ),
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(child: Text('Rey Cagón', style: texto.headlineSmall)),
-                    IconButton.outlined(
-                      icon: const Icon(Icons.person_add_alt_1),
-                      tooltip: 'Buscar amigos',
-                      onPressed: () => _abrir(const PantallaBuscar()),
+                    Container(width: 4, color: perdiendo ? const Color(0xFFB3261E) : acento),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Rotulo('Hoy · llevas $_miHoy'),
+                            const SizedBox(height: 4),
+                            Text(aviso, style: texto.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
-                const SizedBox(height: 8),
-                Center(child: _BotonCague(onTap: _cague)),
+              ),
+            ),
+          ],
+          const SizedBox(height: 28),
+          if (_secretoAbierto && !_yaDeslizo) ...[
+            const PistaSecreta(),
+            const SizedBox(height: 12),
+          ],
+          Row(
+            children: [
+              const Rotulo('Ranking'),
+              const Spacer(),
+              FilterChip(
+                label: const Text('SOLO MIS AMIGOS'),
+                labelStyle: TextStyle(color: _soloSiguiendo ? acentoTexto : null),
+                selected: _soloSiguiendo,
+                visualDensity: VisualDensity.compact,
+                onSelected: (v) {
+                  setState(() => _soloSiguiendo = v);
+                  _cargar();
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SegmentedButton<String>(
+            segments: [
+              for (final e in periodos.entries)
+                ButtonSegment(value: e.key, label: _UnaLinea(e.value.toUpperCase())),
+            ],
+            selected: {_periodo},
+            showSelectedIcon: false,
+            style: _compacto,
+            onSelectionChanged: (s) {
+              setState(() => _periodo = s.first);
+              _cargar();
+            },
+          ),
+          const SizedBox(height: 12),
+          if (_cargando)
+            const Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else ...[
+            _Tabla(
+              filas: _filas,
+              yo: _yo,
+              maximo: maximo,
+              onTap: (id) => _abrir(PantallaPerfil(usuarioId: id)),
+            ),
+            if (_soloSiguiendo && _filas.length <= 1) ...[
+              const SizedBox(height: 12),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Center(child: Emoji('🚽', tamano: 64)),
+                      const SizedBox(height: 8),
+                      const Text('Estás cagando solo. Sigue a tus amigos para competir.', textAlign: TextAlign.center),
+                      const SizedBox(height: 12),
+                      FilledButton(
+                        onPressed: () => _abrir(const PantallaBuscar()),
+                        child: const Text('BUSCAR AMIGOS'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
+          const SizedBox(height: 28),
+          Text(disclaimer, style: texto.bodySmall?.copyWith(color: p.textoSuave)),
+        ],
+      ),
+    );
+
+    return SafeArea(
+      child: Stack(
+        children: [
+          if (_secretoAbierto)
+            PageView(
+              controller: _paginas,
+              onPageChanged: _alCambiarPagina,
+              children: [normal, _ladoSecreto()],
+            )
+          else
+            normal,
+          _secreto,
+          if (_secretoAbierto)
+            Positioned(
+              top: 4,
+              left: 0,
+              right: 0,
+              child: IgnorePointer(child: _Puntos(paginas: _paginas)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _alCambiarPagina(int pagina) async {
+    if (pagina == 1 && !_yaDeslizo) {
+      setState(() => _yaDeslizo = true);
+      (await SharedPreferences.getInstance()).setBool('placer_deslizo', true);
+    }
+  }
+
+  /// La primera vez que se abre con el secreto desbloqueado, la página se asoma un poco
+  /// hacia la izquierda para que se note que hay algo al lado.
+  Future<void> _asomar() async {
+    if (_asomado || _yaDeslizo || !_secretoAbierto) return;
+    _asomado = true;
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    if (!mounted || !_paginas.hasClients) return;
+    await _paginas.animateTo(90, duration: const Duration(milliseconds: 450), curve: Curves.easeOut);
+    if (!mounted || !_paginas.hasClients) return;
+    await _paginas.animateTo(0, duration: const Duration(milliseconds: 600), curve: Curves.bounceOut);
+  }
+
+  /// El lado secreto: otra pantalla, en oscuro y dorado, con su propio botón y el ranking
+  /// de placenteras contra destructivas.
+  Widget _ladoSecreto() => Theme(
+        data: tema(Brightness.dark),
+        child: Builder(builder: (context) {
+          final texto = Theme.of(context).textTheme;
+          final p = paleta(context);
+          return ColoredBox(
+            color: p.fondo,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 48),
+              children: [
+                // Mismas medidas que el lado normal: fila de 48, botón, deshacer y una tarjeta.
+                SizedBox(
+                  height: 48,
+                  child: Row(
+                    children: [
+                      const Icon(Icons.lock_open, color: acento),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text('El lado secreto', style: texto.headlineSmall)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Center(child: _BotonCague(onTap: _cague, secreto: true)),
                 Center(
                   child: TextButton.icon(
                     onPressed: _deshacer,
@@ -448,41 +648,36 @@ class _PantallaRankingState extends State<PantallaRanking> {
                     label: const Text('DESHACER LA ÚLTIMA'),
                   ),
                 ),
-                const SizedBox(height: 8),
-                if (aviso != null) ...[
-                  const SizedBox(height: 4),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: p.tarjeta,
-                      border: Border.all(color: p.borde),
-                    ),
-                    child: IntrinsicHeight(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Container(width: 4, color: perdiendo ? const Color(0xFFB3261E) : acento),
-                          Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Rotulo('Hoy · llevas $_miHoy'),
-                                  const SizedBox(height: 4),
-                                  Text(aviso, style: texto.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
-                                ],
-                              ),
+                const SizedBox(height: 12),
+                Container(
+                  decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: p.borde)),
+                  child: IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Container(width: 4, color: acento),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Rotulo('Solo para los que saben'),
+                                const SizedBox(height: 4),
+                                Text('Aquí cada cagada se califica',
+                                    style: texto.bodyLarge?.copyWith(fontWeight: FontWeight.w600, color: p.texto)),
+                              ],
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
+                ),
                 const SizedBox(height: 28),
                 Row(
                   children: [
-                    const Rotulo('Ranking'),
+                    const Rotulo('Ranking secreto'),
                     const Spacer(),
                     FilterChip(
                       label: const Text('SOLO MIS AMIGOS'),
@@ -511,57 +706,53 @@ class _PantallaRankingState extends State<PantallaRanking> {
                   },
                 ),
                 const SizedBox(height: 12),
-                if (_cargando)
-                  const Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                else ...[
-                  _Tabla(
-                    filas: _filas,
-                    yo: _yo,
-                    maximo: maximo,
-                    onTap: (id) => _abrir(PantallaPerfil(usuarioId: id)),
-                  ),
-                  if (_soloSiguiendo && _filas.length <= 1) ...[
-                    const SizedBox(height: 12),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            const Center(child: Emoji('🚽', tamano: 64)),
-                            const SizedBox(height: 8),
-                            const Text('Estás cagando solo. Sigue a tus amigos para competir.', textAlign: TextAlign.center),
-                            const SizedBox(height: 12),
-                            FilledButton(
-                              onPressed: () => _abrir(const PantallaBuscar()),
-                              child: const Text('BUSCAR AMIGOS'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-                const SizedBox(height: 28),
-                Text(disclaimer, style: texto.bodySmall?.copyWith(color: p.textoSuave)),
+                TablaPlacer(
+                  version: _version,
+                  periodo: _periodo,
+                  soloSiguiendo: _soloSiguiendo,
+                  onTap: (id) => _abrir(PantallaPerfil(usuarioId: id)),
+                ),
               ],
             ),
-          ),
-          _secreto,
-        ],
-      ),
-    );
-  }
+          );
+        }),
+      );
+}
+
+/// Dos cuadritos arriba que siguen el dedo entre la página normal y la secreta.
+class _Puntos extends StatelessWidget {
+  const _Puntos({required this.paginas});
+
+  final PageController paginas;
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: paginas,
+        builder: (context, _) {
+          final pos = paginas.hasClients && paginas.position.haveDimensions ? (paginas.page ?? 0) : 0.0;
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              for (var i = 0; i < 2; i++)
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  width: 8 + 14 * (1 - (pos - i).abs()).clamp(0.0, 1.0),
+                  height: 8,
+                  color: i == 1 ? acento : paleta(context).texto,
+                ),
+            ],
+          );
+        },
+      );
 }
 
 /// Botón redondo principal; al apretarlo se encoge y cambia de color.
 class _BotonCague extends StatefulWidget {
-  const _BotonCague({required this.onTap});
+  const _BotonCague({required this.onTap, this.secreto = false});
 
   final VoidCallback onTap;
+  // En el lado secreto: negro con aro dorado que brilla y el mojón con alas.
+  final bool secreto;
 
   @override
   State<_BotonCague> createState() => _BotonCagueState();
@@ -589,17 +780,27 @@ class _BotonCagueState extends State<_BotonCague> {
             width: 200,
             height: 200,
             // Al apretar: en claro pasa de negro a amarillo; en oscuro, de amarillo a blanco.
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _apretado ? (p.primario == acento ? p.texto : acento) : p.primario,
-            ),
+            decoration: widget.secreto
+                ? BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _apretado ? acento : const Color(0xFF1B1407),
+                    border: Border.all(color: acento, width: 4),
+                    boxShadow: [BoxShadow(color: acento.withValues(alpha: _apretado ? .9 : .5), blurRadius: 36, spreadRadius: 2)],
+                  )
+                : BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _apretado ? (p.primario == acento ? p.texto : acento) : p.primario,
+                  ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Emoji('💩', tamano: 88),
+                if (widget.secreto)
+                  Image.asset('assets/img/mojon_angel.png', width: 104, height: 104)
+                else
+                  const Emoji('💩', tamano: 88),
                 Text('CAGUÉ',
                     style: TextStyle(
-                      color: _apretado ? acentoTexto : p.sobrePrimario,
+                      color: _apretado ? acentoTexto : (widget.secreto ? acento : p.sobrePrimario),
                       fontSize: 24,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 2,

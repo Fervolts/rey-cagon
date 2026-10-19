@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'accesorios.dart';
 import 'calendario.dart';
+import 'placer.dart';
 import 'main.dart' show db, escucharCagadas;
 import 'push.dart';
 import 'recordatorio.dart';
@@ -417,6 +418,29 @@ class _EditarPerfilState extends State<_EditarPerfil> {
             _ranura('Sombrero', 'sombrero'),
             _ranura('Lentes', 'lentes'),
             _ranura('Mascota', 'mascota'),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Rotulo('Secretos · coming soon'),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      for (final v in [1, 7])
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Opacity(opacity: .3, child: iconoPlacer(v, tamano: 44)),
+                        ),
+                      Expanded(
+                        child: Text('Accesorios que salen de tus cagadas placenteras y destructivas.',
+                            style: Theme.of(context).textTheme.bodySmall),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Text(

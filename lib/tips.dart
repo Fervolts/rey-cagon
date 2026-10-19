@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'emoji.dart';
+import 'main.dart' show db;
+import 'placer.dart';
 import 'tema.dart';
 
 const _tips = [
@@ -24,8 +26,32 @@ const _alarmas = [
   'Bajar de peso sin estar intentándolo',
 ];
 
-class PantallaTips extends StatelessWidget {
+class PantallaTips extends StatefulWidget {
   const PantallaTips({super.key});
+
+  @override
+  State<PantallaTips> createState() => _PantallaTipsState();
+}
+
+class _PantallaTipsState extends State<PantallaTips> {
+  // La hoja secreta solo se asoma cuando llegas al final de la lista.
+  final _scroll = ScrollController();
+  bool _alFinal = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(() {
+      final fin = _scroll.position.pixels >= _scroll.position.maxScrollExtent - 24;
+      if (fin != _alFinal) setState(() => _alFinal = fin);
+    });
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,71 +59,103 @@ class PantallaTips extends StatelessWidget {
     final texto = Theme.of(context).textTheme;
     return Scaffold(
       appBar: AppBar(title: const Text('TIPS PARA CAGAR MEJOR')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: Stack(
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: p.suave,
-              border: Border(left: BorderSide(color: acento, width: 4)),
-            ),
-            child: const Text(
-              'Esto es entretenimiento, no consejo médico. Son tips generales: si algo te preocupa, habla con un médico.',
-            ),
-          ),
-          const SizedBox(height: 16),
-          for (final (i, (emoji, titulo, cuerpo)) in _tips.indexed)
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              decoration: BoxDecoration(border: Border(bottom: BorderSide(color: p.borde))),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: 28,
-                    child: Text((i + 1).toString().padLeft(2, '0'),
-                        style: numeros(context, tamano: 13, weight: FontWeight.w800, color: p.textoSuave)),
-                  ),
-                  Emoji(emoji, tamano: 32),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(titulo, style: texto.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 2),
-                        Text(cuerpo, style: texto.bodyMedium?.copyWith(color: p.textoSuave)),
-                      ],
-                    ),
-                  ),
-                ],
+          ListView(
+            controller: _scroll,
+            padding: const EdgeInsets.all(16),
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: p.suave,
+                  border: Border(left: BorderSide(color: acento, width: 4)),
+                ),
+                child: const Text(
+                  'Esto es entretenimiento, no consejo médico. Son tips generales: si algo te preocupa, habla con un médico.',
+                ),
               ),
-            ),
-          const SizedBox(height: 24),
-          Card(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(radio),
-              side: const BorderSide(color: Color(0xFFB3261E)),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Rotulo('Ve al médico si tienes'),
-                  const SizedBox(height: 8),
-                  for (final a in _alarmas)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 3),
-                      child: Text('• $a'),
-                    ),
-                ],
+              const SizedBox(height: 16),
+              for (final (i, (emoji, titulo, cuerpo)) in _tips.indexed)
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(border: Border(bottom: BorderSide(color: p.borde))),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 28,
+                        child: Text((i + 1).toString().padLeft(2, '0'),
+                            style: numeros(context, tamano: 13, weight: FontWeight.w800, color: p.textoSuave)),
+                      ),
+                      Emoji(emoji, tamano: 32),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(titulo, style: texto.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 2),
+                            Text(cuerpo, style: texto.bodyMedium?.copyWith(color: p.textoSuave)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 24),
+              Card(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(radio),
+                  side: const BorderSide(color: Color(0xFFB3261E)),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Rotulo('Ve al médico si tienes'),
+                      const SizedBox(height: 8),
+                      for (final a in _alarmas)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 3),
+                          child: Text('• $a'),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          // Esquina de la pantalla, encima de todo: la hoja que se pasa.
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: IgnorePointer(
+              ignoring: !_alFinal,
+              child: AnimatedOpacity(
+                opacity: _alFinal ? 1 : 0,
+                duration: const Duration(milliseconds: 400),
+                child: const _HojaSiToca(),
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// La hoja secreta aparece desde [minimoSecreto] cagadas en total.
+class _HojaSiToca extends StatelessWidget {
+  const _HojaSiToca();
+
+  @override
+  Widget build(BuildContext context) {
+    if (minimoSecreto == 0) return const HojaSecreta();
+    return FutureBuilder(
+      future: db.from('profiles').select('cagadas').eq('id', db.auth.currentUser!.id).maybeSingle(),
+      builder: (context, s) => ((s.data?['cagadas'] as int?) ?? 0) >= minimoSecreto ? const HojaSecreta() : const SizedBox.shrink(),
     );
   }
 }

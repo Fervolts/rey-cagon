@@ -179,7 +179,7 @@ class _AvatarState extends State<Avatar> with SingleTickerProviderStateMixin {
           return Stack(
             clipBehavior: Clip.none,
             children: [
-              _conEfecto(base, _nivel, segundos),
+              efectoAvatar(base, _nivel, segundos),
               if (lentes != null) _ponerLentes(lentes, encaje.lentes, posicion(widget.perfil, 'lentes'), escala(widget.perfil, 'lentes'), t),
               if (sombrero != null) _ponerSombrero(sombrero, encaje.sombrero, posicion(widget.perfil, 'sombrero'), escala(widget.perfil, 'sombrero'), t),
               if (mascota != null)
@@ -294,7 +294,8 @@ Widget _paseo(String mascota, double t, double segundos) {
 
 /// Cromado y dorado: el emoji en gris con un brillo que lo cruza. Arcoíris: degradado
 /// semitransparente que gira y solo pinta donde hay emoji.
-Widget _conEfecto(Widget hijo, int nivel, double segundos) {
+/// Efecto del avatar sobre [hijo]: 1 cromado, 2 dorado, 3 arcoíris; [segundos] mueve el brillo.
+Widget efectoAvatar(Widget hijo, int nivel, double segundos) {
   final fase = (segundos % 3) / 3;
   switch (nivel) {
     case 0:
