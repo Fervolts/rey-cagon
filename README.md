@@ -1,67 +1,45 @@
-# Rey Cagón
+# Rey Cagón 👑💩
 
-App Android para competir con tus amigos por quién caga más en la semana, el mes, el trimestre y el año.
+¿Quién de tus amigos caga más esta semana? Ahora hay ranking.
 
-**Es solo entretenimiento.** Nada de lo que se registra es información de salud ni consejo médico.
+Rey Cagón es una app Android de chiste: cada vez que vas al baño le das al botón, y compites con tus amigos por la corona de la semana, el mes, el trimestre y el año.
 
-## Qué hace
+> Es solo entretenimiento. No es una app de salud ni da consejos médicos.
 
-- Botón para registrar (máximo una por hora) con tipo opcional.
-- Ranking por semana, mes, trimestre y año, entre tus amigos o entre todos.
-- Seguir a otros usuarios, perfil con estadísticas y calendario.
-- Notificaciones push cuando alguien que sigues registra, cuando alguien te sigue y cuando hay versión nueva.
-- Recordatorio diario a las 8 p. m. si no has registrado nada.
-- Dos widgets de pantalla de inicio: botón para registrar y ranking semanal.
-- Actualizaciones dentro de la app (APK firmada, verificada por SHA-256).
+## Descargar
 
-## Stack
+[**Bajar la APK para Android**](https://TU-PROYECTO.supabase.co/storage/v1/object/public/releases/rey-cagon.apk)
 
-| Parte | Tecnología |
-|---|---|
-| App | Flutter (Android) |
-| Base de datos y auth | Supabase (Postgres con RLS, Realtime, Storage) |
-| Push | Firebase Cloud Messaging, enviado desde una Edge Function de Supabase |
-| Widgets | `home_widget` + `RemoteViews` en Kotlin |
+No está en Play Store todavía. Android te va a pedir permiso para instalar apps de fuera de la tienda. Después de la primera vez, la app te avisa sola cuando hay versión nueva.
 
-## Estructura
+## Qué trae
 
-```
-lib/                       App Flutter
-android/app/src/main/      Widgets en Kotlin, layouts y manifiesto
-supabase/migrations/       Esquema de la base (tablas, RLS, triggers, funciones)
-supabase/functions/        Edge Function `notificaciones` (FCM)
-scripts/publicar.sh        Compila y publica una versión para el actualizador
-```
+- **Un botón:** cagaste, lo tocas. Opcionalmente eliges qué tipo salió (Anaconda, Volcán, Piedritas de conejo…).
+- **Ranking** entre tus amigos o entre todos, por semana, mes, trimestre y año.
+- **Notificaciones** cuando un amigo caga ("Fulanito cagó 3 veces hoy… vas perdiendo"), cuando alguien te sigue y un recordatorio a las 8 p. m. si no has registrado nada.
+- **Perfiles** con estadísticas, calendario y tu "especialidad de la casa".
+- **Widgets** para la pantalla de inicio: el botón para registrar sin abrir la app y tu puesto en el ranking.
+- Una por hora como máximo. Sin trampas.
 
-## Seguridad
+## Hecho con
 
-- No hay secretos en el repo. La clave de Supabase en `lib/main.dart` es la *publishable key*, pública por diseño; el acceso a los datos lo controlan las políticas RLS de `supabase/migrations/`.
-- Cada usuario solo puede crear, editar y borrar sus propios registros, follows y tokens de notificación. El límite de una por hora y la fecha de cada registro los impone la base, no la app.
-- La cuenta de servicio de Firebase y el secreto del webhook viven como secretos de Supabase (Edge Functions y Vault), nunca en el código.
-- `android/app/google-services.json` no es secreto; su clave está restringida a las APIs de FCM.
-- La llave de firma (`android/key.properties`, `*.jks`) está fuera del repo.
+Flutter, Supabase (base de datos, login, tiempo real) y Firebase Cloud Messaging para las notificaciones. Los widgets son nativos en Kotlin.
 
-## Correrlo con tu propio proyecto
+## Tus datos
 
-1. Crea un proyecto de Supabase y aplica `supabase/migrations/` en orden.
-2. Crea un proyecto de Firebase, registra la app `com.ahimismito.rey_cagon` y reemplaza `android/app/google-services.json`.
-3. En Supabase, define los secretos de Edge Functions `FCM_SERVICE_ACCOUNT` (JSON de la cuenta de servicio) y `WEBHOOK_SECRET`, guarda el mismo valor en Vault como `webhook_secret` y despliega `supabase/functions/notificaciones` con `verify_jwt` desactivado.
-4. Cambia `supabaseUrl` y `supabaseKey` en `lib/main.dart` y la URL de las funciones en las migraciones.
-5. `flutter run`
+La app guarda tu correo, tu username y la hora de cada registro. Tus amigos ven tu username, tus totales y tu calendario. Nada más.
 
-Para firmar en release, crea `android/key.properties` con `storePassword`, `keyPassword`, `keyAlias` y `storeFile`.
+## Correrlo tú mismo
 
-## Publicar una versión
+Necesitas tu propio proyecto de Supabase y de Firebase:
 
-```
-# Subir version: en pubspec.yaml (el número después del + es el que compara la app)
-SUPABASE_ACCESS_TOKEN=sbp_... scripts/publicar.sh "Notas de la versión"
-```
+1. Aplica las migraciones de `supabase/migrations/` y despliega `supabase/functions/notificaciones`.
+2. Pon tu `google-services.json` en `android/app/` y tu URL y clave de Supabase en `lib/main.dart`.
+3. `flutter run`
 
 ## Créditos
 
-- Emojis: [Fluent Emoji](https://github.com/microsoft/fluentui-emoji) de Microsoft (MIT).
-- Ícono: [Noto Emoji](https://github.com/googlefonts/noto-emoji) de Google.
+Emojis de [Fluent Emoji](https://github.com/microsoft/fluentui-emoji) (Microsoft) e ícono de [Noto Emoji](https://github.com/googlefonts/noto-emoji) (Google).
 
 ## Licencia
 
