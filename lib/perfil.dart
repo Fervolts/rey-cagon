@@ -14,7 +14,7 @@ import 'tema.dart';
 import 'tipos.dart';
 import 'widget.dart';
 
-const _avatares = ['💩', '👑', '🧻', '🚽', '🐻', '🦍', '🐷', '🐸', '🦄', '🤡', '🙂', '👻', '🔥', '🌶️', '🍑', '🦖'];
+const avataresGratis = ['💩', '👑', '🧻', '🚽', '🐻', '🦍', '🐷', '🐸', '🦄', '🤡', '🙂', '👻', '🔥', '🌶️', '🍑', '🦖'];
 
 String _fecha(DateTime d) => '${d.day}/${d.month}/${d.year}';
 
@@ -307,7 +307,7 @@ class _EditarPerfilState extends State<_EditarPerfil> {
   Widget _ranura(String titulo, String ranura) {
     final opciones = [
       if (ranura == 'avatar')
-        for (final a in _avatares) (emoji: a, minimo: 0)
+        for (final a in avataresGratis) (emoji: a, minimo: 0)
       else
         (emoji: null, minimo: 0),
       for (final d in desbloqueos.where((d) => d.ranura == ranura)) (emoji: d.emoji, minimo: d.minimo),

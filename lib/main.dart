@@ -10,6 +10,7 @@ import 'accesorios.dart';
 import 'actualizar.dart';
 import 'calendario.dart';
 import 'config.dart';
+import 'onboarding.dart';
 import 'perfil.dart';
 import 'placer.dart';
 import 'push.dart';
@@ -294,21 +295,31 @@ class _PantallaRankingState extends State<PantallaRanking> {
       if (mounted) await revisarActualizacion(context);
       return;
     }
+    // Cuenta nueva (sin cagadas): bienvenida completa. Si ya cagaba (reinstaló), solo el aviso.
+    final yo = await db.from('profiles').select('cagadas').eq('id', _yo).maybeSingle().catchError((_) => null);
     if (!mounted) return;
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Antes de empezar 👑'),
-        content: const Text(disclaimer),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Entendido, a cagar'),
-          ),
-        ],
-      ),
-    );
+    if (((yo?['cagadas'] as int?) ?? 0) == 0) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(fullscreenDialog: true, builder: (_) => const PantallaBienvenida()),
+      );
+      _cargar(spinner: false);
+    } else {
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Text('Antes de empezar 👑'),
+          content: const Text(disclaimer),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Entendido, a cagar'),
+            ),
+          ],
+        ),
+      );
+    }
     await prefs.setBool('disclaimer_ok', true);
     await pedirPermisoNotificaciones().catchError((_) {});
     await registrarTelefono().catchError((_) {});
