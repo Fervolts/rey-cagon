@@ -137,7 +137,7 @@ class _AuthScreenState extends State<AuthScreen> {
             const SizedBox(height: 12),
             Align(alignment: Alignment.centerLeft, child: Container(height: 4, width: 56, color: acento)),
             const SizedBox(height: 12),
-            Text('Compite con tus panas por la corona.', style: texto.bodyLarge?.copyWith(color: p.textoSuave)),
+            Text('Compite con tus amigos por la corona.', style: texto.bodyLarge?.copyWith(color: p.textoSuave)),
             const SizedBox(height: 36),
             if (_signUp) ...[
               const Rotulo('Username'),
@@ -376,7 +376,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final lider = _hoy.first;
     final mio = _miHoy;
     final n = lider['total'] as int;
-    if (_hoy.length == 1) return 'Sigue a tus panas para competir';
+    if (_hoy.length == 1) return 'Sigue a tus amigos para competir';
     if (n == 0) return 'Nadie ha cagado hoy. Sé el primero 💩';
     if (lider['user_id'] == _me || mio == n) return 'Vas ganando hoy 👑';
     return '${lider['username']} cagó $n ${n == 1 ? 'vez' : 'veces'} hoy... vas perdiendo';
@@ -401,24 +401,40 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Row(
               children: [
-                Expanded(child: Text('REY CAGÓN', style: texto.headlineSmall)),
+                Expanded(child: Text('Rey Cagón', style: texto.headlineSmall)),
                 IconButton.outlined(
                   icon: const Icon(Icons.person_add_alt_1),
-                  tooltip: 'Buscar panas',
+                  tooltip: 'Buscar amigos',
                   onPressed: () => _abrir(const BuscarScreen()),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            _BotonCague(onTap: _cague, hoy: _miHoy),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: _deshacer,
-                icon: const Icon(Icons.undo, size: 16),
-                label: const Text('DESHACER LA ÚLTIMA'),
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 64,
+                    child: FilledButton.icon(
+                      onPressed: _cague,
+                      icon: const Icon(Icons.add, size: 26),
+                      label: const Text('CAGUÉ 💩', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 64,
+                  height: 64,
+                  child: OutlinedButton(
+                    onPressed: _deshacer,
+                    style: OutlinedButton.styleFrom(padding: EdgeInsets.zero),
+                    child: const Tooltip(message: 'Deshacer la última', child: Icon(Icons.undo)),
+                  ),
+                ),
+              ],
             ),
+            const SizedBox(height: 8),
             if (aviso != null) ...[
               const SizedBox(height: 4),
               Container(
@@ -437,7 +453,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Rotulo('Hoy'),
+                              Rotulo('Hoy · llevas $_miHoy'),
                               const SizedBox(height: 4),
                               Text(aviso, style: texto.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
                             ],
@@ -455,7 +471,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 const Rotulo('Ranking'),
                 const Spacer(),
                 FilterChip(
-                  label: const Text('SOLO MIS PANAS'),
+                  label: const Text('SOLO MIS AMIGOS'),
                   selected: _soloSiguiendo,
                   visualDensity: VisualDensity.compact,
                   onSelected: (v) {
@@ -500,11 +516,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const Text('Estás cagando solo. Sigue a tus panas para competir.'),
+                        const Text('Estás cagando solo. Sigue a tus amigos para competir.'),
                         const SizedBox(height: 12),
                         FilledButton(
                           onPressed: () => _abrir(const BuscarScreen()),
-                          child: const Text('BUSCAR PANAS'),
+                          child: const Text('BUSCAR AMIGOS'),
                         ),
                       ],
                     ),
@@ -515,66 +531,6 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 28),
             Text(disclaimer, style: texto.bodySmall?.copyWith(color: p.textoSuave)),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Bloque negro de ancho completo; al apretarlo se invierte a amarillo.
-class _BotonCague extends StatefulWidget {
-  const _BotonCague({required this.onTap, required this.hoy});
-
-  final VoidCallback onTap;
-  final int hoy;
-
-  @override
-  State<_BotonCague> createState() => _BotonCagueState();
-}
-
-class _BotonCagueState extends State<_BotonCague> {
-  bool _apretado = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = paleta(context);
-    final fondo = _apretado ? acento : p.primario;
-    final tinta = _apretado ? acentoTexto : p.sobrePrimario;
-    return Semantics(
-      button: true,
-      label: 'Cagué',
-      child: GestureDetector(
-        onTapDown: (_) => setState(() => _apretado = true),
-        onTapUp: (_) => setState(() => _apretado = false),
-        onTapCancel: () => setState(() => _apretado = false),
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 90),
-          height: 156,
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(color: fondo, borderRadius: BorderRadius.circular(radio)),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('HOY ${widget.hoy.toString().padLeft(2, '0')}',
-                        style: mono(context, size: 13, weight: FontWeight.w700, color: _apretado ? acentoTexto : acento)
-                            .copyWith(letterSpacing: 1.6)),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text('CAGUÉ',
-                          style: mono(context, size: 54, weight: FontWeight.w800, color: tinta).copyWith(height: 1)),
-                    ),
-                  ],
-                ),
-              ),
-              const Text('💩', style: TextStyle(fontSize: 76)),
-            ],
-          ),
         ),
       ),
     );
@@ -640,7 +596,7 @@ class _Tabla extends StatelessWidget {
             child: Row(
               children: const [
                 SizedBox(width: 44, child: Rotulo('#')),
-                Expanded(child: Rotulo('Pana')),
+                Expanded(child: Rotulo('Amigo')),
                 Rotulo('Total'),
               ],
             ),
@@ -683,7 +639,7 @@ class _FilaTabla extends StatelessWidget {
                 alignment: Alignment.center,
                 color: lider ? acento : null,
                 child: Text(puesto.toString().padLeft(2, '0'),
-                    style: mono(context, size: 13, weight: FontWeight.w800, color: lider ? acentoTexto : p.textoSuave)),
+                    style: numeros(context, size: 13, weight: FontWeight.w800, color: lider ? acentoTexto : p.textoSuave)),
               ),
               const SizedBox(width: 12),
               Text(fila['avatar'], style: const TextStyle(fontSize: 22)),
@@ -713,7 +669,7 @@ class _FilaTabla extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              Text('$total', style: mono(context, size: 20, weight: FontWeight.w800)),
+              Text('$total', style: numeros(context, size: 20, weight: FontWeight.w800)),
             ],
           ),
         ),

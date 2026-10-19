@@ -46,7 +46,7 @@ Future<void> reprogramarRecordatorio({required bool yaCagoHoy}) async {
   await notificaciones.zonedSchedule(
     id: _id,
     title: 'Hey, ¿has cagado hoy??? 💩',
-    body: 'Tus panas te están sacando ventaja en el ranking.',
+    body: 'Tus amigos te están sacando ventaja en el ranking.',
     scheduledDate: cuando,
     notificationDetails: _detalles,
     androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,

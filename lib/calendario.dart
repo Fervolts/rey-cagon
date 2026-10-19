@@ -137,7 +137,7 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
               Expanded(
                 child: Text('${_meses[_mes.month - 1]} ${_mes.year}'.toUpperCase(),
                     textAlign: TextAlign.center,
-                    style: mono(context, size: 15, weight: FontWeight.w800).copyWith(letterSpacing: 1.2)),
+                    style: numeros(context, size: 15, weight: FontWeight.w800).copyWith(letterSpacing: 1.2)),
               ),
               IconButton(
                 icon: const Icon(Icons.chevron_right),
@@ -175,7 +175,7 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
             ),
           const SizedBox(height: 12),
           Text('TOTAL DEL MES: ${total.toString().padLeft(2, '0')}',
-              textAlign: TextAlign.center, style: mono(context, size: 13, weight: FontWeight.w700)),
+              textAlign: TextAlign.center, style: numeros(context, size: 13, weight: FontWeight.w700)),
         ],
       ),
     );
@@ -207,9 +207,9 @@ class _Dia extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text('$dia', style: mono(context, size: 12, color: cuantas > 0 ? acentoTexto : null)),
+            Text('$dia', style: numeros(context, size: 12, color: cuantas > 0 ? acentoTexto : null)),
             if (cuantas > 0)
-              Text(cuantas == 1 ? '💩' : '💩$cuantas', style: mono(context, size: 11, color: acentoTexto)),
+              Text(cuantas == 1 ? '💩' : '💩$cuantas', style: numeros(context, size: 11, color: acentoTexto)),
           ],
         ),
       ),

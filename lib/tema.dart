@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 // Mismo lenguaje que Ahí Guardaito: esquinas de 2px, bordes de 1px, sin sombras ni degradados,
-// números en mono y un solo acento fuerte (allá lima, aquí amarillo corona).
+// letra del sistema con cifras tabulares y un solo acento fuerte (allá lima, aquí amarillo corona).
 const radio = 2.0;
 const acento = Color(0xFFFFD60A);
 const acentoTexto = Color(0xFF111111);
@@ -50,16 +49,18 @@ class Paleta {
 Paleta paleta(BuildContext context) =>
     Theme.of(context).brightness == Brightness.dark ? Paleta.oscuro : Paleta.claro;
 
-/// Números y etiquetas: mono con cifras tabulares.
-TextStyle mono(BuildContext context, {double size = 14, FontWeight weight = FontWeight.w600, Color? color}) =>
-    GoogleFonts.jetBrainsMono(
+const _tabular = [FontFeature.tabularFigures()];
+
+/// Números: letra del sistema con cifras tabulares para que las columnas cuadren.
+TextStyle numeros(BuildContext context, {double size = 14, FontWeight weight = FontWeight.w600, Color? color}) =>
+    TextStyle(
       fontSize: size,
       fontWeight: weight,
       color: color ?? paleta(context).texto,
-      fontFeatures: const [FontFeature.tabularFigures()],
+      fontFeatures: _tabular,
     );
 
-/// Rótulo de sección: MAYÚSCULAS, mono, espaciado.
+/// Rótulo de sección: MAYÚSCULAS, chico y espaciado.
 class Rotulo extends StatelessWidget {
   const Rotulo(this.texto, {super.key});
 
@@ -68,8 +69,8 @@ class Rotulo extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
         texto.toUpperCase(),
-        style: mono(context, size: 11, weight: FontWeight.w700, color: paleta(context).textoSuave)
-            .copyWith(letterSpacing: 1.6),
+        style: numeros(context, size: 11, weight: FontWeight.w700, color: paleta(context).textoSuave)
+            .copyWith(letterSpacing: 1.2),
       );
 }
 
@@ -106,14 +107,15 @@ ThemeData tema(Brightness brillo) {
     side: BorderSide(color: p.borde),
   );
   final base = ThemeData(colorScheme: scheme, useMaterial3: true, splashFactory: InkRipple.splashFactory);
-  final titulo = GoogleFonts.jetBrainsMono(fontWeight: FontWeight.w800, color: p.texto);
+  final titulo = TextStyle(fontWeight: FontWeight.w800, color: p.texto, fontFeatures: _tabular);
+  TextStyle boton(double size, {double espacio = 0.6, Color? color}) =>
+      TextStyle(fontSize: size, fontWeight: FontWeight.w700, letterSpacing: espacio, color: color);
 
   return base.copyWith(
-    // Texto corrido con la letra del sistema; títulos en mono.
     textTheme: base.textTheme.copyWith(
-      headlineLarge: titulo.copyWith(fontSize: 32, letterSpacing: -0.5),
-      headlineSmall: titulo.copyWith(fontSize: 22, letterSpacing: -0.3),
-      titleLarge: titulo.copyWith(fontSize: 18),
+      headlineLarge: titulo.copyWith(fontSize: 32, letterSpacing: -1),
+      headlineSmall: titulo.copyWith(fontSize: 22, letterSpacing: -0.5),
+      titleLarge: titulo.copyWith(fontSize: 18, letterSpacing: -0.2),
     ),
     scaffoldBackgroundColor: p.fondo,
     dividerTheme: DividerThemeData(color: p.borde, thickness: 1, space: 1),
@@ -123,7 +125,7 @@ ThemeData tema(Brightness brillo) {
       scrolledUnderElevation: 0,
       centerTitle: false,
       shape: Border(bottom: BorderSide(color: p.borde)),
-      titleTextStyle: titulo.copyWith(fontSize: 16, letterSpacing: 1.2),
+      titleTextStyle: titulo.copyWith(fontSize: 17, letterSpacing: 0.4),
     ),
     cardTheme: CardThemeData(elevation: 0, color: p.tarjeta, shape: conBorde, margin: EdgeInsets.zero),
     listTileTheme: ListTileThemeData(shape: cuadrado),
@@ -139,7 +141,7 @@ ThemeData tema(Brightness brillo) {
       style: FilledButton.styleFrom(
         shape: cuadrado,
         minimumSize: const Size(64, 52),
-        textStyle: GoogleFonts.jetBrainsMono(fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 1.2),
+        textStyle: boton(15),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
@@ -148,14 +150,14 @@ ThemeData tema(Brightness brillo) {
         side: BorderSide(color: p.bordeFuerte),
         foregroundColor: p.texto,
         minimumSize: const Size(64, 44),
-        textStyle: GoogleFonts.jetBrainsMono(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 1),
+        textStyle: boton(14),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         shape: cuadrado,
         foregroundColor: p.texto,
-        textStyle: GoogleFonts.jetBrainsMono(fontSize: 13, fontWeight: FontWeight.w600),
+        textStyle: boton(14, espacio: 0.3),
       ),
     ),
     iconButtonTheme: IconButtonThemeData(style: IconButton.styleFrom(shape: cuadrado)),
@@ -165,7 +167,7 @@ ThemeData tema(Brightness brillo) {
         side: WidgetStatePropertyAll(BorderSide(color: p.bordeFuerte)),
         backgroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? p.primario : p.tarjeta),
         foregroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? p.sobrePrimario : p.texto),
-        textStyle: WidgetStatePropertyAll(GoogleFonts.jetBrainsMono(fontSize: 12, fontWeight: FontWeight.w700)),
+        textStyle: WidgetStatePropertyAll(boton(12, espacio: 0.8)),
       ),
     ),
     chipTheme: base.chipTheme.copyWith(
@@ -173,8 +175,8 @@ ThemeData tema(Brightness brillo) {
       side: BorderSide(color: p.bordeFuerte),
       backgroundColor: p.tarjeta,
       selectedColor: acento,
-      labelStyle: GoogleFonts.jetBrainsMono(fontSize: 12, fontWeight: FontWeight.w700, color: p.texto),
-      secondaryLabelStyle: GoogleFonts.jetBrainsMono(fontSize: 12, fontWeight: FontWeight.w700, color: acentoTexto),
+      labelStyle: boton(12, espacio: 0.8, color: p.texto),
+      secondaryLabelStyle: boton(12, espacio: 0.8, color: acentoTexto),
       checkmarkColor: acentoTexto,
     ),
     dialogTheme: DialogThemeData(shape: conBorde, backgroundColor: p.tarjeta),
@@ -186,7 +188,7 @@ ThemeData tema(Brightness brillo) {
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
       backgroundColor: p.texto,
-      contentTextStyle: GoogleFonts.jetBrainsMono(fontSize: 13, color: p.fondo),
+      contentTextStyle: TextStyle(fontSize: 14, color: p.fondo),
       shape: cuadrado,
     ),
     progressIndicatorTheme: ProgressIndicatorThemeData(color: p.texto, linearTrackColor: p.suave),
@@ -196,7 +198,7 @@ ThemeData tema(Brightness brillo) {
       indicatorColor: acento,
       indicatorShape: cuadrado,
       height: 68,
-      labelTextStyle: WidgetStatePropertyAll(GoogleFonts.jetBrainsMono(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
+      labelTextStyle: WidgetStatePropertyAll(boton(11, espacio: 0.8)),
       iconTheme: WidgetStateProperty.resolveWith(
         (s) => IconThemeData(color: s.contains(WidgetState.selected) ? acentoTexto : p.texto),
       ),

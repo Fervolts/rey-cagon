@@ -324,7 +324,7 @@ class _BuscarScreenState extends State<BuscarScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('BUSCAR PANAS')),
+      appBar: AppBar(title: const Text('BUSCAR AMIGOS')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

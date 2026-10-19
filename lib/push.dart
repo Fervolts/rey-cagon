@@ -8,7 +8,7 @@ import 'recordatorio.dart' show notificaciones;
 // Mismo id que manda la Edge Function notificar-cagada en android.notification.channel_id.
 const _canal = AndroidNotificationChannel(
   'cagadas',
-  'Cagadas de tus panas',
+  'Cagadas de tus amigos',
   description: 'Avisa cuando alguien registra una cagada',
   importance: Importance.high,
 );
