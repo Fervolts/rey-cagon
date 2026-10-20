@@ -14,6 +14,7 @@ import 'onboarding.dart';
 import 'perfil.dart';
 import 'placer.dart';
 import 'push.dart';
+import 'recuperar.dart';
 import 'recordatorio.dart';
 import 'tema.dart';
 import 'secreto.dart';
@@ -184,6 +185,12 @@ class _PantallaEntrarState extends State<PantallaEntrar> {
               onPressed: () => setState(() => _esRegistro = !_esRegistro),
               child: Text(_esRegistro ? 'YA TENGO CUENTA' : 'CREAR CUENTA NUEVA'),
             ),
+            if (!_esRegistro)
+              TextButton(
+                onPressed: () => Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => PantallaRecuperar(correo: _correo.text.trim()))),
+                child: const Text('¿OLVIDASTE TU CONTRASEÑA?'),
+              ),
             const SizedBox(height: 32),
             Text(disclaimer, style: texto.bodySmall?.copyWith(color: p.textoSuave)),
           ],
