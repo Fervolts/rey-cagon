@@ -30,6 +30,7 @@ class PantallaPerfil extends StatefulWidget {
 class _PantallaPerfilState extends State<PantallaPerfil> {
   Map<String, dynamic>? _p;
   bool _ocupado = false;
+  bool _bloqueado = false;
   late final VoidCallback _soltar;
 
   bool get _esMio => widget.usuarioId == db.auth.currentUser!.id;
@@ -49,8 +50,16 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
 
   Future<void> _cargar() async {
     try {
-      final rows = await db.rpc('perfil', params: {'uid': widget.usuarioId});
-      if (mounted) setState(() => _p = (rows as List).firstOrNull);
+      final (rows, bloqueo) = await (
+        db.rpc('perfil', params: {'uid': widget.usuarioId}),
+        db.from('bloqueos').select('bloqueado').eq('bloqueado', widget.usuarioId).maybeSingle(),
+      ).wait;
+      if (mounted) {
+        setState(() {
+          _p = (rows as List).firstOrNull;
+          _bloqueado = bloqueo != null;
+        });
+      }
     } catch (e) {
       _mensaje('Error cargando perfil: $e');
     }
@@ -58,6 +67,43 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
 
   void _mensaje(String texto) {
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(texto)));
+  }
+
+  /// Bloquear: deja de verlo en los rankings y se cortan los follows en los dos sentidos.
+  Future<void> _alternarBloqueo() async {
+    try {
+      if (_bloqueado) {
+        await db.from('bloqueos').delete().eq('bloqueador', db.auth.currentUser!.id).eq('bloqueado', widget.usuarioId);
+        _mensaje('Desbloqueado');
+      } else {
+        await db.from('bloqueos').insert({'bloqueado': widget.usuarioId});
+        _mensaje('Bloqueado. Ya no lo verás en tus rankings.');
+      }
+      await _cargar();
+    } catch (e) {
+      _mensaje('Error: $e');
+    }
+  }
+
+  static const _motivos = ['Username o bio ofensivos', 'Acoso', 'Spam o trampas', 'Otro'];
+
+  Future<void> _reportar() async {
+    final motivo = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('¿Por qué lo reportas?'),
+        children: [
+          for (final m in _motivos) SimpleDialogOption(onPressed: () => Navigator.pop(context, m), child: Text(m)),
+        ],
+      ),
+    );
+    if (motivo == null) return;
+    try {
+      await db.from('reportes').insert({'reportado': widget.usuarioId, 'motivo': motivo});
+      _mensaje('Gracias. Lo vamos a revisar.');
+    } catch (e) {
+      _mensaje('Error: $e');
+    }
   }
 
   Future<void> _seguir() async {
@@ -134,6 +180,15 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
         actions: [
           if (_esMio && p != null) IconButton(icon: const Icon(Icons.edit), tooltip: 'Editar', onPressed: _editar),
           if (_esMio) IconButton(icon: const Icon(Icons.logout), tooltip: 'Cerrar sesión', onPressed: _salir),
+          if (!_esMio && p != null)
+            PopupMenuButton<String>(
+              tooltip: 'Más opciones',
+              onSelected: (o) => o == 'reportar' ? _reportar() : _alternarBloqueo(),
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'reportar', child: Text('Reportar')),
+                PopupMenuItem(value: 'bloquear', child: Text(_bloqueado ? 'Desbloquear' : 'Bloquear')),
+              ],
+            ),
         ],
       ),
       body: p == null
@@ -168,7 +223,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                if (!_esMio)
+                if (!_esMio && !_bloqueado)
                   Center(
                     child: p['lo_sigo'] == true
                         ? OutlinedButton(onPressed: _ocupado ? null : _seguir, child: const Text('DEJAR DE SEGUIR'))
@@ -548,13 +603,15 @@ class _PantallaBuscarState extends State<PantallaBuscar> {
         final limpio = q.trim().replaceAll(r'\', r'\\').replaceAll('%', r'\%').replaceAll('_', r'\_');
         consulta = consulta.ilike('username', '%$limpio%');
       }
-      final (gente, sigo) = await (
+      final (gente, sigo, bloqueados) = await (
         consulta.order('username').limit(50),
         db.from('follows').select('followed').eq('follower', yo),
+        db.from('bloqueos').select('bloqueado'),
       ).wait;
       if (!mounted || q != _q) return;
+      final fuera = {for (final b in bloqueados) b['bloqueado'] as String};
       setState(() {
-        _gente = List<Map<String, dynamic>>.from(gente);
+        _gente = List<Map<String, dynamic>>.from(gente).where((g) => !fuera.contains(g['id'])).toList();
         _sigo = {for (final f in sigo) f['followed'] as String};
       });
     } catch (e) {
