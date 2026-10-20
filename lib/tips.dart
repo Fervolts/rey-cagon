@@ -162,11 +162,14 @@ class _HojaSiTocaState extends State<_HojaSiToca> {
     super.initState();
     db
         .from('profiles')
-        .select('cagadas, placer_desbloqueado')
+        .select('cagadas, placer_desbloqueado, created_at')
         .eq('id', db.auth.currentUser!.id)
         .maybeSingle()
         .then((r) {
-          final toca = r != null && r['placer_desbloqueado'] != true && ((r['cagadas'] as int?) ?? 0) >= minimoSecreto;
+          final earlyBird = r != null && DateTime.parse(r['created_at']).isBefore(finEarlyBirds);
+          final toca = r != null &&
+              r['placer_desbloqueado'] != true &&
+              (earlyBird || ((r['cagadas'] as int?) ?? 0) >= minimoSecreto);
           if (mounted) setState(() => _toca = toca);
         })
         .catchError((_) => null);

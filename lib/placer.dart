@@ -7,9 +7,12 @@ import 'emoji.dart';
 import 'main.dart' show db;
 import 'tema.dart';
 
-/// Cagadas que pide la hoja secreta de Tips. Early birds: por ahora 0 (todos la ven);
-/// después sube a 10.
-const minimoSecreto = 0;
+/// Cagadas que pide la hoja secreta de Tips.
+const minimoSecreto = 10;
+
+/// Las cuentas creadas antes de esto son early birds: ven la hoja sin el mínimo.
+/// El servidor aplica la misma regla (trigger validar_secreto).
+final finEarlyBirds = DateTime.parse('2026-10-20T00:00:00-04:00');
 
 const _etiquetas = {
   1: 'Destructiva',
