@@ -13,9 +13,13 @@ const _manifiesto = '$supabaseUrl/storage/v1/object/public/releases/version.json
 var _abierto = false;
 int? _pospuesta;
 
+/// La versión de Play se compila con --dart-define=CANAL=play: ahí las actualizaciones llegan por la tienda.
+const esDePlay = String.fromEnvironment('CANAL') == 'play';
+
 /// Al abrir la app y al volver a ella: si hay una versión con build mayor que la instalada,
 /// ofrece bajarla e instalarla. "Después" la calla hasta el próximo arranque.
 Future<void> revisarActualizacion(BuildContext context) async {
+  if (esDePlay) return;
   if (_abierto) return;
   _abierto = true;
   try {

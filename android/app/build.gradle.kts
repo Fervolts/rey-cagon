@@ -35,6 +35,14 @@ android {
         versionName = flutter.versionName
     }
 
+    // directo: la APK del link fijo, con actualizador propio. play: la de Google Play, sin él
+    // (src/play/AndroidManifest.xml le quita los permisos de instalar).
+    flavorDimensions += "canal"
+    productFlavors {
+        create("directo") { dimension = "canal" }
+        create("play") { dimension = "canal" }
+    }
+
     signingConfigs {
         create("release") {
             keyAlias = keystoreProperties["keyAlias"] as String?

@@ -95,6 +95,35 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
     if (mounted) Navigator.of(context).popUntil((r) => r.isFirst);
   }
 
+  /// Borra la cuenta y todo lo suyo (cagadas, follows, teléfonos) después de confirmar.
+  Future<void> _borrarCuenta() async {
+    final seguro = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('¿Borrar tu cuenta?'),
+        content: const Text('Se borran tu perfil, todas tus cagadas y tus seguidores. No se puede deshacer.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('CANCELAR')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFB3261E), foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('BORRAR'),
+          ),
+        ],
+      ),
+    );
+    if (seguro != true) return;
+    try {
+      cancelarRecordatorio().catchError((_) {});
+      limpiarWidget().catchError((_) {});
+      await db.rpc('borrar_mi_cuenta');
+      await db.auth.signOut().catchError((_) {});
+      if (mounted) Navigator.of(context).popUntil((r) => r.isFirst);
+    } catch (e) {
+      _mensaje('No se pudo borrar la cuenta: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = _p;
@@ -212,6 +241,12 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                     ),
                   ),
                 ),
+                if (_esMio)
+                  ListTile(
+                    leading: const Icon(Icons.delete_forever, color: Color(0xFFB3261E)),
+                    title: const Text('Borrar mi cuenta', style: TextStyle(color: Color(0xFFB3261E))),
+                    onTap: _borrarCuenta,
+                  ),
               ],
             ),
     );

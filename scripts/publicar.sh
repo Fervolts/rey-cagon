@@ -14,8 +14,8 @@ LINEA=$(grep -E '^version:' pubspec.yaml | awk '{print $2}')
 VERSION=${LINEA%+*}
 BUILD=${LINEA#*+}
 
-flutter build apk --release --target-platform android-arm,android-arm64
-APK=build/app/outputs/flutter-apk/app-release.apk
+flutter build apk --release --flavor directo --target-platform android-arm,android-arm64
+APK=build/app/outputs/flutter-apk/app-directo-release.apk
 SHA=$(shasum -a 256 "$APK" | awk '{print $1}')
 NOMBRE="rey-cagon-$VERSION+$BUILD.apk"
 
