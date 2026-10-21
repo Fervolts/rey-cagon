@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -17,8 +18,45 @@ import 'tipos.dart';
 // Mismos números que public.hitos() en supabase/migrations/…_chat.sql.
 const hitos = [10, 30, 50, 100, 200, 300, 500, 1000];
 
-/// Nombre de la sala: "La Poceta" en Venezuela, "El Baño" en el resto.
-final nombreSala = Platform.localeName.endsWith('VE') ? 'La Poceta' : 'El Baño';
+/// Nombre de la sala: cambia cada vez que abres la app, nunca el mismo dos veces seguidas.
+/// (nombre completo para títulos, corto para la barra de abajo).
+const _nombres = [
+  ('La Poceta', 'POCETA'),
+  ('El Inodoro', 'INODORO'),
+  ('La Taza', 'TAZA'),
+  ('El Sanitario', 'SANITARIO'),
+  ('El Excusado', 'EXCUSADO'),
+  ('El WC', 'WC'),
+  ('El Váter', 'VÁTER'),
+  ('El Trono', 'TRONO'),
+  ('El Cagadero', 'CAGADERO'),
+  ('La Letrina', 'LETRINA'),
+  ('El Retrete', 'RETRETE'),
+  ('El Baño', 'BAÑO'),
+  ('The Loo 🇬🇧', 'LOO'),
+  ('The John 🇺🇸', 'JOHN'),
+  ('Das Klo 🇩🇪', 'KLO'),
+  ('Le Petit Coin 🇫🇷', 'PETIT COIN'),
+  ('Il Gabinetto 🇮🇹', 'GABINETTO'),
+  ('A Privada 🇧🇷', 'PRIVADA'),
+  ('Benjo 🇯🇵', 'BENJO'),
+];
+
+var nombreSala = 'El Baño';
+var nombreCorto = 'BAÑO';
+
+Future<void> elegirNombreSala() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final antes = prefs.getInt('nombre_sala');
+    // Sorteo entre todos menos el de la vez pasada.
+    var i = Random().nextInt(antes == null ? _nombres.length : _nombres.length - 1);
+    if (antes != null && i >= antes) i++;
+    await prefs.setInt('nombre_sala', i);
+    nombreSala = _nombres[i].$1;
+    nombreCorto = _nombres[i].$2;
+  } catch (_) {}
+}
 
 const _columnasPerfil =
     'id, username, avatar, sombrero, lentes, mascota, cagadas, lentes_x, lentes_y, sombrero_x, sombrero_y, lentes_escala, sombrero_escala';
@@ -77,7 +115,7 @@ Future<void> ofrecerPresumir(BuildContext context, int total) async {
     context: context,
     builder: (context) => AlertDialog(
       title: Text(esHito ? '¡$total cagadas! 👑' : '¡Desbloqueaste ${desbloqueo!.nombre}!'),
-      content: Text('¿Lo presumes en ${nombreSala.toLowerCase()}?'),
+      content: Text('¿Lo presumes en $nombreSala?'),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('NO')),
         FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('PRESUMIR')),
@@ -90,7 +128,7 @@ Future<void> ofrecerPresumir(BuildContext context, int total) async {
       'sala': 'global',
       'tarjeta': esHito ? {'tipo': 'hito', 'n': total} : {'tipo': 'desbloqueo', 'emoji': desbloqueo!.emoji},
     });
-    if (context.mounted) _aviso(context, 'Publicado en ${nombreSala.toLowerCase()} 🚽');
+    if (context.mounted) _aviso(context, 'Publicado en $nombreSala 🚽');
   } catch (e) {
     if (context.mounted) _aviso(context, _error(e));
   }
@@ -100,7 +138,7 @@ void _aviso(BuildContext context, String texto) => ScaffoldMessenger.of(context)
   ..hideCurrentSnackBar()
   ..showSnackBar(SnackBar(content: Text(texto)));
 
-/// Pestaña del medio (El Baño / La Poceta): la sala global y el soporte con los admins.
+/// Pestaña del medio (nombre al azar): la sala global y el soporte con los admins.
 class PantallaChat extends StatefulWidget {
   const PantallaChat({super.key});
 
@@ -278,6 +316,11 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
     super.dispose();
   }
 
+  bool _mencionaA(String? texto) {
+    final yo = _perfiles[_yo]?['username'] as String?;
+    return yo != null && texto != null && texto.toLowerCase().contains('@${yo.toLowerCase()}');
+  }
+
   // Los perfiles se piden de a tandas, solo los que faltan.
   void _pedirPerfiles(Iterable<String> ids) {
     final faltan = ids.where((id) => !_perfiles.containsKey(id) && !_pidiendo.contains(id)).toSet();
@@ -399,6 +442,8 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
       context: context,
       builder: (context) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
+          if (!suyo && !_esSoporte && _perfiles[m['user_id']] != null)
+            ListTile(leading: const Icon(Icons.alternate_email), title: const Text('Mencionar'), onTap: () => Navigator.pop(context, 'mencionar')),
           if (!suyo && !_esSoporte)
             ListTile(leading: const Icon(Icons.flag_outlined), title: const Text('Reportar mensaje'), onTap: () => Navigator.pop(context, 'reportar')),
           if (!suyo && !_esSoporte && !_admins.contains(m['user_id']))
@@ -417,6 +462,10 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
     if (accion == null || !mounted) return;
     try {
       switch (accion) {
+        case 'mencionar':
+          final arroba = '@${_perfiles[m['user_id']]!['username']} ';
+          _texto.text = '$arroba${_texto.text}';
+          _texto.selection = TextSelection.collapsed(offset: _texto.text.length);
         case 'reportar':
           final motivo = await showModalBottomSheet<String>(
             context: context,
@@ -466,10 +515,10 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
               if (snap.hasError) return Center(child: Text('No se pudo cargar el chat'));
               final lista = snap.data;
               if (lista == null) return const Center(child: CircularProgressIndicator());
-              _pedirPerfiles(lista.map((m) => m['user_id'] as String));
+              _pedirPerfiles([_yo, ...lista.map((m) => m['user_id'] as String)]);
               if (lista.isEmpty) {
                 return Center(
-                  child: Text(_esSoporte ? 'Todavía no hay mensajes' : 'Nadie ha dicho nada. Estrena ${nombreSala.toLowerCase()} 🚽',
+                  child: Text(_esSoporte ? 'Todavía no hay mensajes' : 'Nadie ha dicho nada. Estrena $nombreSala 🚽',
                       style: TextStyle(color: p.textoSuave)),
                 );
               }
@@ -486,6 +535,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
                       perfil: _perfiles[m['user_id']],
                       mio: m['user_id'] == _yo,
                       admin: _admins.contains(m['user_id']),
+                      meMencionan: _mencionaA(m['texto'] as String?),
                     ),
                   );
                 },
@@ -509,7 +559,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
                   maxLines: 5,
                   maxLength: 1000,
                   textCapitalization: TextCapitalization.sentences,
-                  decoration: const InputDecoration(hintText: 'Escribe algo…', counterText: '', isDense: true),
+                  decoration: InputDecoration(hintText: _esSoporte ? 'Escribe algo…' : 'Escribe algo… (@usuario para mencionar)', counterText: '', isDense: true),
                 ),
               ),
               const SizedBox(width: 6),
@@ -523,12 +573,13 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
 }
 
 class _Burbuja extends StatelessWidget {
-  const _Burbuja({required this.mensaje, required this.perfil, required this.mio, required this.admin});
+  const _Burbuja({required this.mensaje, required this.perfil, required this.mio, required this.admin, this.meMencionan = false});
 
   final Map<String, dynamic> mensaje;
   final Map<String, dynamic>? perfil;
   final bool mio;
   final bool admin;
+  final bool meMencionan;
 
   @override
   Widget build(BuildContext context) {
@@ -557,7 +608,10 @@ class _Burbuja extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: mio ? p.suave : p.tarjeta,
                   borderRadius: BorderRadius.circular(radio),
-                  border: Border.all(color: mensaje['es_bug'] == true ? const Color(0xFFB3261E) : p.borde),
+                  border: Border.all(
+                    color: mensaje['es_bug'] == true ? const Color(0xFFB3261E) : meMencionan ? acento : p.borde,
+                    width: meMencionan ? 2 : 1,
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

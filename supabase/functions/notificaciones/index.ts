@@ -6,6 +6,7 @@
 //     que también lo desbloquearon y solo para las cagadas que valen la pena contar.
 //   - trigger mensajes_avisar_soporte: { tipo: "soporte" } → mensaje de soporte al otro lado del hilo.
 //   - trigger mensaje_reportes_contar: { tipo: "reporte_chat" } → aviso a los admins.
+//   - trigger mensajes_avisar_mencion: { tipo: "mencion" } → aviso a quien mencionaron con @.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const sa = JSON.parse(Deno.env.get("FCM_SERVICE_ACCOUNT")!);
@@ -218,6 +219,14 @@ async function avisarReporteChat(mensajeId: number, motivo: string) {
   );
 }
 
+// "@username" en la sala global: aviso a los mencionados.
+async function avisarMencion(id: number, para: string[]) {
+  const { data: m } = await db.from("mensajes").select("user_id, texto").eq("id", id).single();
+  if (!m) return Response.json({ enviados: 0 });
+  const { data: perfil } = await db.from("profiles").select("username").eq("id", m.user_id).single();
+  return avisarA(para, `📣 ${perfil?.username ?? "Alguien"} te mencionó`, recortar(m.texto), { tipo: "mencion" });
+}
+
 Deno.serve(async (req) => {
   if (req.headers.get("x-webhook-secret") !== Deno.env.get("WEBHOOK_SECRET")) {
     return new Response("no", { status: 401 });
@@ -227,6 +236,7 @@ Deno.serve(async (req) => {
   if (cuerpo.tipo === "version") return avisarVersion(cuerpo.version, cuerpo.build);
   if (cuerpo.tipo === "placer") return avisarPlacer(cuerpo.id);
   if (cuerpo.tipo === "soporte") return avisarSoporte(cuerpo.id);
+  if (cuerpo.tipo === "mencion") return avisarMencion(cuerpo.id, cuerpo.para);
   if (cuerpo.tipo === "reporte_chat") return avisarReporteChat(cuerpo.mensaje_id, cuerpo.motivo);
   const { user_id } = cuerpo;
 

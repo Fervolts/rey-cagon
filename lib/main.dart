@@ -37,6 +37,7 @@ Future<void> main() async {
   } catch (_) {
     // Sin notificaciones la app igual sirve.
   }
+  await elegirNombreSala();
   runApp(const ReyCagonApp());
 }
 
@@ -211,11 +212,76 @@ class PantallaInicio extends StatefulWidget {
 }
 
 class _PantallaInicioState extends State<PantallaInicio> {
+  static const _tabBano = 2;
   int _tab = 0;
+
+  // Puntito en la pestaña del baño: hay mensajes de otros desde la última vez que entraste.
+  final _subs = <StreamSubscription>[];
+  int _ultimoBano = 0, _vistoBano = 0, _ultimoSoporte = 0, _vistoSoporte = 0;
+
+  String get _yo => db.auth.currentUser!.id;
+  bool get _hayNuevo => _ultimoBano > _vistoBano || _ultimoSoporte > _vistoSoporte;
+
+  @override
+  void initState() {
+    super.initState();
+    SharedPreferences.getInstance().then((prefs) {
+      if (!mounted) return;
+      setState(() {
+        _vistoBano = prefs.getInt('bano_visto') ?? 0;
+        _vistoSoporte = prefs.getInt('soporte_visto') ?? 0;
+      });
+      _subs
+        ..add(_escucharUltimo('sala', 'global', (id) => _ultimoBano = id))
+        ..add(_escucharUltimo('hilo', _yo, (id) => _ultimoSoporte = id));
+    });
+  }
+
+  // El último mensaje de otra persona en esa sala; los propios cuentan como vistos.
+  StreamSubscription _escucharUltimo(String columna, String valor, void Function(int) poner) => db
+      .from('mensajes')
+      .stream(primaryKey: ['id'])
+      .eq(columna, valor)
+      .order('id')
+      .limit(1)
+      .listen((filas) {
+        if (filas.isEmpty || !mounted) return;
+        final m = filas.first;
+        setState(() => poner(m['id'] as int));
+        if (m['user_id'] == _yo || _tab == _tabBano) _marcarVisto();
+      }, onError: (_) {});
+
+  Future<void> _marcarVisto() async {
+    setState(() {
+      _vistoBano = _ultimoBano;
+      _vistoSoporte = _ultimoSoporte;
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('bano_visto', _vistoBano);
+    await prefs.setInt('soporte_visto', _vistoSoporte);
+  }
+
+  @override
+  void dispose() {
+    for (final s in _subs) {
+      s.cancel();
+    }
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final yo = db.auth.currentUser!.id;
+    final yo = _yo;
+    final mq = MediaQuery.of(context);
+    // Cinco pestañas en cualquier ancho: la letra se achica para que "CALENDARIO" no salte de línea,
+    // y la barra ignora el tamaño de letra del sistema por encima de 1.0.
+    final tam = ((mq.size.width / 5 - 10) / 7.2).clamp(8.0, 11.0);
+    Widget icono(IconData i) => Badge(
+          isLabelVisible: _hayNuevo,
+          smallSize: 9,
+          backgroundColor: const Color(0xFFE5484D),
+          child: Icon(i),
+        );
     return Scaffold(
       body: IndexedStack(
         index: _tab,
@@ -229,16 +295,29 @@ class _PantallaInicioState extends State<PantallaInicio> {
       ),
       bottomNavigationBar: DecoratedBox(
         decoration: BoxDecoration(border: Border(top: BorderSide(color: paleta(context).borde))),
-        child: NavigationBar(
-        selectedIndex: _tab,
-        onDestinationSelected: (i) => setState(() => _tab = i),
-        destinations: [
-          const NavigationDestination(icon: Icon(Icons.emoji_events_outlined), selectedIcon: Icon(Icons.emoji_events), label: 'RANKING'),
-          const NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: 'CALENDARIO'),
-          NavigationDestination(icon: const Icon(Icons.wc_outlined), selectedIcon: const Icon(Icons.wc), label: nombreSala.toUpperCase()),
-          const NavigationDestination(icon: Icon(Icons.lightbulb_outline), selectedIcon: Icon(Icons.lightbulb), label: 'TIPS'),
-          const NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'PERFIL'),
-        ],
+        child: MediaQuery(
+          data: mq.copyWith(textScaler: mq.textScaler.clamp(maxScaleFactor: 1.0)),
+          child: NavigationBarTheme(
+            data: NavigationBarTheme.of(context).copyWith(
+              labelTextStyle: WidgetStatePropertyAll(
+                TextStyle(fontSize: tam, fontWeight: FontWeight.w700, letterSpacing: tam < 10 ? 0.2 : 0.6),
+              ),
+            ),
+            child: NavigationBar(
+              selectedIndex: _tab,
+              onDestinationSelected: (i) {
+                setState(() => _tab = i);
+                if (i == _tabBano) _marcarVisto();
+              },
+              destinations: [
+                const NavigationDestination(icon: Icon(Icons.emoji_events_outlined), selectedIcon: Icon(Icons.emoji_events), label: 'RANKING'),
+                const NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: 'CALENDARIO'),
+                NavigationDestination(icon: icono(Icons.wc_outlined), selectedIcon: const Icon(Icons.wc), label: nombreCorto),
+                const NavigationDestination(icon: Icon(Icons.lightbulb_outline), selectedIcon: Icon(Icons.lightbulb), label: 'TIPS'),
+                const NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'PERFIL'),
+              ],
+            ),
+          ),
         ),
       ),
     );

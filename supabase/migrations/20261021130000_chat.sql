@@ -1,4 +1,4 @@
--- Chat: sala global ("El Baño", "La Poceta" en Venezuela) y soporte (un hilo por usuario con los admins).
+-- Chat: sala global (en la app con un nombre al azar: El Trono, La Poceta, El Váter…) y soporte (un hilo por usuario con los admins).
 -- Solo texto y tarjetas para presumir; sin imágenes. Los links pasan por un filtro.
 
 create table public.admins (
