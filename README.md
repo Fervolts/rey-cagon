@@ -8,9 +8,25 @@ Rey Cagón es una app Android de chiste: cada vez que vas al baño le das al bot
 
 ## Descargar
 
+### Prueba en Play Store
+
+Estamos en prueba cerrada antes de salir en Play Store. Para entrar:
+
+1. Únete al grupo de testers: [groups.google.com/g/rey-cagon-testers](https://groups.google.com/g/rey-cagon-testers) (botón "Unirse al grupo").
+2. Acepta la prueba: [play.google.com/apps/testing/com.ahimismito.rey_cagon](https://play.google.com/apps/testing/com.ahimismito.rey_cagon).
+3. Instala desde Play: [play.google.com/store/apps/details?id=com.ahimismito.rey_cagon](https://play.google.com/store/apps/details?id=com.ahimismito.rey_cagon).
+
+Usa la misma cuenta de Google que tienes en el teléfono. El link de instalar da error hasta que hagas los pasos 1 y 2, y puede tardar unos minutos en activarse.
+
+Si ya tenías la APK instalada, desinstálala primero: la versión de Play no se instala encima. Tu cuenta y tus cagadas no se pierden, están en la nube.
+
+Déjala instalada al menos 14 días: Google pide eso para publicarla para todos.
+
+### APK directa
+
 [**Bajar la APK para Android**](https://github.com/Fervolts/rey-cagon/releases/latest/download/rey-cagon.apk)
 
-No está en Play Store todavía. Android te va a pedir permiso para instalar apps de fuera de la tienda. Después de la primera vez, la app te avisa sola cuando hay versión nueva.
+Android te va a pedir permiso para instalar apps de fuera de la tienda. Después de la primera vez, la app te avisa sola cuando hay versión nueva.
 
 ## Qué trae
 
