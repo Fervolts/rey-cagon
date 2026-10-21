@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'emoji.dart';
-import 'main.dart' show db, escucharCagadas;
+import 'main.dart' show conReintento, db, escucharCagadas, esDeRed, textoError;
 import 'tema.dart';
 import 'tipos.dart';
 
@@ -46,13 +46,13 @@ class _PantallaCalendarioState extends State<PantallaCalendario> {
     if (!mounted) return;
     if (spinner) setState(() => _cargando = true);
     try {
-      final rows = await db
+      final rows = await conReintento(() => db
           .from('cagadas')
           .select('id, created_at, tipo')
           .eq('user_id', widget.usuarioId)
           .gte('created_at', _mes.toUtc().toIso8601String())
           .lt('created_at', DateTime(_mes.year, _mes.month + 1).toUtc().toIso8601String())
-          .order('created_at');
+          .order('created_at'));
       final porDia = <int, List<Map<String, dynamic>>>{};
       for (final r in rows) {
         final dia = DateTime.parse(r['created_at']).toLocal().day;
@@ -60,7 +60,7 @@ class _PantallaCalendarioState extends State<PantallaCalendario> {
       }
       if (mounted) setState(() => _porDia = porDia);
     } catch (e) {
-      _mensaje('Error cargando calendario: $e');
+      if (spinner || !esDeRed(e)) _mensaje(textoError(e));
     } finally {
       if (mounted) setState(() => _cargando = false);
     }
@@ -80,7 +80,7 @@ class _PantallaCalendarioState extends State<PantallaCalendario> {
       _mensaje('Borrada');
       await _cargar();
     } catch (e) {
-      _mensaje('Error: $e');
+      _mensaje(textoError(e));
     }
   }
 

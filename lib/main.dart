@@ -48,6 +48,49 @@ var _canales = 0;
 
 /// Llama [onCambio] (agrupado en 400ms) cuando alguien registra o borra una cagada o un follow,
 /// y cuando la app vuelve a primer plano. Devuelve con qué soltarlo en dispose().
+/// Errores de red: el teléfono cortó la conexión (pantalla apagada, app en segundo plano, cambio
+/// de wifi a datos). No son fallas de verdad: se reintenta y no se le muestra nada feo a nadie.
+bool esDeRed(Object e) {
+  if (e is ParallelWaitError) {
+    final errores = e.errors;
+    if (errores is Iterable) return errores.whereType<Object>().any((x) => esDeRed(x is AsyncError ? x.error : x));
+  }
+  final t = e.toString();
+  return e is TimeoutException ||
+      t.contains('ClientException') ||
+      t.contains('SocketException') ||
+      t.contains('connection abort') ||
+      t.contains('Connection reset') ||
+      t.contains('Connection closed') ||
+      t.contains('Failed host lookup');
+}
+
+/// Mensaje para la gente: nada de trazas técnicas.
+String textoError(Object e) {
+  if (esDeRed(e)) return 'Sin conexión. Revisa tu internet e intenta de nuevo.';
+  if (e is PostgrestException) return e.message;
+  if (e is ParallelWaitError) {
+    final errores = e.errors;
+    if (errores is Iterable) {
+      final pg = errores.whereType<Object>().map((x) => x is AsyncError ? x.error : x).whereType<PostgrestException>().firstOrNull;
+      if (pg != null) return pg.message;
+    }
+  }
+  return 'Algo falló. Intenta de nuevo.';
+}
+
+/// Corre la consulta y, si la red se cayó un momento, la repite hasta 2 veces.
+Future<T> conReintento<T>(Future<T> Function() consulta) async {
+  for (var intento = 0;; intento++) {
+    try {
+      return await consulta();
+    } catch (e) {
+      if (!esDeRed(e) || intento >= 2) rethrow;
+      await Future<void>.delayed(Duration(milliseconds: 700 * (intento + 1)));
+    }
+  }
+}
+
 VoidCallback escucharCagadas(String nombre, VoidCallback onCambio) {
   Timer? espera;
   void avisar() {
@@ -366,7 +409,11 @@ class _PantallaRankingState extends State<PantallaRanking> {
     _cargar();
     _soltar = escucharCagadas('home', () => _cargar(spinner: false));
     // Al volver de Ajustes (permiso de instalar) o de otra app, se vuelve a ofrecer la actualización.
-    _ciclo = AppLifecycleListener(onResume: () => revisarActualizacion(context));
+    _ciclo = AppLifecycleListener(onResume: () {
+      revisarActualizacion(context);
+      // La conexión pudo morir en segundo plano: se recarga en silencio.
+      Future<void>.delayed(const Duration(milliseconds: 600), () => _cargar(spinner: false));
+    });
     _avisoPrimeraVez();
   }
 
@@ -422,13 +469,13 @@ class _PantallaRankingState extends State<PantallaRanking> {
     if (!mounted) return;
     if (spinner) setState(() => _cargando = true);
     try {
-      final (data, hoy, yo, prefs) = await (
-        db.rpc('leaderboard', params: {'period': _periodo, 'solo_siguiendo': _soloSiguiendo}),
-        // El aviso del día compara solo contra la gente que sigues.
-        db.rpc('leaderboard', params: {'period': 'day', 'solo_siguiendo': true}),
-        db.from('profiles').select('placer_desbloqueado').eq('id', _yo).maybeSingle(),
-        SharedPreferences.getInstance(),
-      ).wait;
+      final (data, hoy, yo, prefs) = await conReintento(() => (
+            db.rpc('leaderboard', params: {'period': _periodo, 'solo_siguiendo': _soloSiguiendo}),
+            // El aviso del día compara solo contra la gente que sigues.
+            db.rpc('leaderboard', params: {'period': 'day', 'solo_siguiendo': true}),
+            db.from('profiles').select('placer_desbloqueado').eq('id', _yo).maybeSingle(),
+            SharedPreferences.getInstance(),
+          ).wait);
       if (!mounted) return;
       setState(() {
         _filas = List<Map<String, dynamic>>.from(data);
@@ -442,7 +489,8 @@ class _PantallaRankingState extends State<PantallaRanking> {
       actualizarWidget(_miHoy).catchError((_) {});
       refrescarRanking(db).catchError((_) {});
     } catch (e) {
-      _mensaje('Error cargando ranking: $e');
+      // Si fue la red, se queda lo que ya había y se recarga al volver a la app.
+      if (spinner || !esDeRed(e)) _mensaje(textoError(e));
     } finally {
       if (mounted) setState(() => _cargando = false);
     }
@@ -496,7 +544,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
       // El trigger limitar_cagadas devuelve el mensaje listo para mostrar.
       _mensaje(e.hint == 'limite_hora' ? e.message : 'Error: ${e.message}');
     } catch (e) {
-      _mensaje('Error: $e');
+      _mensaje(textoError(e));
     }
   }
 
@@ -514,7 +562,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
       _mensaje('Deshecho');
       await _cargar(spinner: false);
     } catch (e) {
-      _mensaje('Error: $e');
+      _mensaje(textoError(e));
     }
   }
 

@@ -9,7 +9,7 @@ import 'cagadon.dart';
 import 'calendario.dart';
 import 'chat.dart' show abrirReporteDeError;
 import 'placer.dart';
-import 'main.dart' show db, escucharCagadas;
+import 'main.dart' show conReintento, db, escucharCagadas, esDeRed, textoError;
 import 'push.dart';
 import 'recordatorio.dart';
 import 'tema.dart';
@@ -52,10 +52,10 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
 
   Future<void> _cargar() async {
     try {
-      final (rows, bloqueo) = await (
-        db.rpc('perfil', params: {'uid': widget.usuarioId}),
-        db.from('bloqueos').select('bloqueado').eq('bloqueado', widget.usuarioId).maybeSingle(),
-      ).wait;
+      final (rows, bloqueo) = await conReintento(() => (
+            db.rpc('perfil', params: {'uid': widget.usuarioId}),
+            db.from('bloqueos').select('bloqueado').eq('bloqueado', widget.usuarioId).maybeSingle(),
+          ).wait);
       if (mounted) {
         setState(() {
           _p = (rows as List).firstOrNull;
@@ -63,7 +63,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
         });
       }
     } catch (e) {
-      _mensaje('Error cargando perfil: $e');
+      if (_p == null || !esDeRed(e)) _mensaje(textoError(e));
     }
   }
 
@@ -83,7 +83,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
       }
       await _cargar();
     } catch (e) {
-      _mensaje('Error: $e');
+      _mensaje(textoError(e));
     }
   }
 
@@ -104,7 +104,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
       await db.from('reportes').insert({'reportado': widget.usuarioId, 'motivo': motivo});
       _mensaje('Gracias. Lo vamos a revisar.');
     } catch (e) {
-      _mensaje('Error: $e');
+      _mensaje(textoError(e));
     }
   }
 
@@ -118,7 +118,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
       }
       await _cargar();
     } catch (e) {
-      _mensaje('Error: $e');
+      _mensaje(textoError(e));
     } finally {
       if (mounted) setState(() => _ocupado = false);
     }
@@ -643,7 +643,7 @@ class _PantallaBuscarState extends State<PantallaBuscar> {
         _sigo = {for (final f in sigo) f['followed'] as String};
       });
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(textoError(e))));
     }
   }
 
@@ -657,7 +657,7 @@ class _PantallaBuscarState extends State<PantallaBuscar> {
       }
       await _buscar(_q);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(textoError(e))));
     }
   }
 
