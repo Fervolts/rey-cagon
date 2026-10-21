@@ -280,7 +280,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                     return ListTile(
                       leading: d == null ? const Emoji('🏆', tamano: 36) : Opacity(opacity: .4, child: Emoji(d.emoji, tamano: 36)),
                       title: Text(d == null ? 'Lo desbloqueaste todo' : 'Próximo: ${d.nombre}'),
-                      subtitle: d == null ? null : Text('Te faltan ${d.minimo - total} cagadas'),
+                      subtitle: d == null ? null : Text(d.minimo - total == 1 ? 'Te falta 1 cagada' : 'Te faltan ${d.minimo - total} cagadas'),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: _editar,
                     );
@@ -373,6 +373,9 @@ class _EditarPerfilState extends State<_EditarPerfil> {
   };
   // Qué se está moviendo con el dedo en la vista previa: 'lentes', 'sombrero' o null.
   String? _moviendo;
+  // El scroll se congela solo mientras el dedo está sobre el avatar, no todo el rato que dura
+  // MOVER: si no, en pantallas chicas nadie llega a GUARDAR.
+  bool _dedoEnAvatar = false;
   static const _ajustes = ['lentes_x', 'lentes_y', 'sombrero_x', 'sombrero_y', 'lentes_escala', 'sombrero_escala'];
   static const _vista = 120.0;
   bool _ocupado = false;
@@ -477,11 +480,13 @@ class _EditarPerfilState extends State<_EditarPerfil> {
 
   @override
   Widget build(BuildContext context) {
+    final p = paleta(context);
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: SingleChildScrollView(
-        physics: _moviendo == null ? null : const NeverScrollableScrollPhysics(),
-        padding: conBordeAbajo(context, const EdgeInsets.all(16)),
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+       Flexible(child: SingleChildScrollView(
+        physics: _moviendo != null && _dedoEnAvatar ? const NeverScrollableScrollPhysics() : null,
+        padding: const EdgeInsets.all(16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -493,6 +498,9 @@ class _EditarPerfilState extends State<_EditarPerfil> {
                 // Listener y no GestureDetector: no compite con el scroll de la hoja, que se
                 // congela mientras se mueve algo.
                 child: Listener(
+                  onPointerDown: (_) => setState(() => _dedoEnAvatar = true),
+                  onPointerUp: (_) => setState(() => _dedoEnAvatar = false),
+                  onPointerCancel: (_) => setState(() => _dedoEnAvatar = false),
                   onPointerMove: _moviendo == null ? null : _arrastrar,
                   child: Container(
                     color: Colors.transparent,
@@ -594,11 +602,16 @@ class _EditarPerfilState extends State<_EditarPerfil> {
               maxLines: 2,
               decoration: const InputDecoration(labelText: 'Bio'),
             ),
-            const SizedBox(height: 8),
-            FilledButton(onPressed: _ocupado ? null : _guardar, child: const Text('GUARDAR')),
           ],
         ),
-      ),
+       )),
+        // GUARDAR fijo abajo, siempre a la vista y encima de la barra del sistema.
+        Container(
+          padding: conBordeAbajo(context, const EdgeInsets.fromLTRB(16, 10, 16, 10)),
+          decoration: BoxDecoration(color: Theme.of(context).bottomSheetTheme.backgroundColor ?? p.fondo, border: Border(top: BorderSide(color: p.borde))),
+          child: FilledButton(onPressed: _ocupado ? null : _guardar, child: const Text('GUARDAR')),
+        ),
+      ]),
     );
   }
 }
