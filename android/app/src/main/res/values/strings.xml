@@ -2,4 +2,5 @@
 <resources>
     <string name="widget_descripcion">Botón de CAGUÉ: registra sin abrir la app</string>
     <string name="widget_ranking_descripcion">Tu puesto en el ranking de la semana y quién va cerca</string>
+    <string name="widget_ranking_global_descripcion">Tu puesto entre todos los que usan Rey Cagón esta semana</string>
 </resources>

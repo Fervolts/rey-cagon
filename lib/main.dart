@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'accesorios.dart';
 import 'actualizar.dart';
 import 'calendario.dart';
+import 'chat.dart';
 import 'invitar_play.dart';
 import 'config.dart';
 import 'onboarding.dart';
@@ -221,6 +222,7 @@ class _PantallaInicioState extends State<PantallaInicio> {
         children: [
           const PantallaRanking(),
           PantallaCalendario(usuarioId: yo, nombre: 'mí'),
+          const PantallaChat(),
           const PantallaTips(),
           PantallaPerfil(usuarioId: yo),
         ],
@@ -230,11 +232,12 @@ class _PantallaInicioState extends State<PantallaInicio> {
         child: NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() => _tab = i),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.emoji_events_outlined), selectedIcon: Icon(Icons.emoji_events), label: 'RANKING'),
-          NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: 'CALENDARIO'),
-          NavigationDestination(icon: Icon(Icons.lightbulb_outline), selectedIcon: Icon(Icons.lightbulb), label: 'TIPS'),
-          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'PERFIL'),
+        destinations: [
+          const NavigationDestination(icon: Icon(Icons.emoji_events_outlined), selectedIcon: Icon(Icons.emoji_events), label: 'RANKING'),
+          const NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: 'CALENDARIO'),
+          NavigationDestination(icon: const Icon(Icons.wc_outlined), selectedIcon: const Icon(Icons.wc), label: nombreSala.toUpperCase()),
+          const NavigationDestination(icon: Icon(Icons.lightbulb_outline), selectedIcon: Icon(Icons.lightbulb), label: 'TIPS'),
+          const NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'PERFIL'),
         ],
         ),
       ),
@@ -400,11 +403,15 @@ class _PantallaRankingState extends State<PantallaRanking> {
         ),
       );
       if (tipo != null) await db.from('cagadas').update({'tipo': tipo}).eq('id', nueva['id']);
-      if (!_secretoAbierto || !mounted) return;
-      final nota = await preguntarPlacer(context);
-      if (nota != null) {
-        await db.from('cagadas').update({'placer': nota.placer, 'etiquetas': nota.etiquetas.toList()}).eq('id', nueva['id']);
+      if (_secretoAbierto && mounted) {
+        final nota = await preguntarPlacer(context);
+        if (nota != null) {
+          await db.from('cagadas').update({'placer': nota.placer, 'etiquetas': nota.etiquetas.toList()}).eq('id', nueva['id']);
+        }
       }
+      // Llegó a un hito o desbloqueó algo: ofrece presumirlo en el chat.
+      final yo = await db.from('profiles').select('cagadas').eq('id', _yo).single();
+      if (mounted) await ofrecerPresumir(context, (yo['cagadas'] as num?)?.toInt() ?? 0);
     } on PostgrestException catch (e) {
       // El trigger limitar_cagadas devuelve el mensaje listo para mostrar.
       _mensaje(e.hint == 'limite_hora' ? e.message : 'Error: ${e.message}');

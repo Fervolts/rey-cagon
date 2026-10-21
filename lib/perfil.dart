@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'accesorios.dart';
 import 'calendario.dart';
+import 'chat.dart' show abrirReporteDeError;
 import 'placer.dart';
 import 'main.dart' show db, escucharCagadas;
 import 'push.dart';
@@ -264,6 +265,13 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                     );
                   }),
                 if (_esMio) ...[
+                  ListTile(
+                    leading: const Icon(Icons.bug_report_outlined),
+                    title: const Text('Reportar un error'),
+                    subtitle: const Text('Le llega directo al equipo'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => abrirReporteDeError(context),
+                  ),
                   ListTile(
                     leading: const Icon(Icons.open_in_new),
                     title: const Text('Hecho por ahimismito Studios C.A'),

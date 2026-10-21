@@ -8,6 +8,7 @@ import 'main.dart' show supabaseKey, supabaseUrl;
 
 const _proveedor = 'com.ahimismito.rey_cagon.ReyCagonWidget';
 const _proveedorRanking = 'com.ahimismito.rey_cagon.ReyCagonRankingWidget';
+const _proveedorGlobal = 'com.ahimismito.rey_cagon.ReyCagonRankingGlobalWidget';
 
 // Mismo día que usa leaderboard(): Venezuela, UTC-4 fijo.
 String _hoyCaracas() => DateTime.now().toUtc().subtract(const Duration(hours: 4)).toIso8601String().substring(0, 10);
@@ -33,13 +34,18 @@ Future<int> _contarHoy(SupabaseClient db) async {
   return (yo?['total'] ?? 0) as int;
 }
 
-/// Widget de ranking: tu puesto en la semana (entre los que sigues), cuánto te falta para pasar
-/// al de arriba y los vecinos.
+/// Widgets de ranking de la semana: entre los que sigues y entre todos. Tu puesto, cuánto te
+/// falta para pasar al de arriba y los vecinos.
 Future<void> refrescarRanking(SupabaseClient db) async {
+  await _pintarRanking(db, global: false);
+  await _pintarRanking(db, global: true);
+}
+
+Future<void> _pintarRanking(SupabaseClient db, {required bool global}) async {
   final yo = db.auth.currentUser?.id;
   if (yo == null) return;
   final filas = List<Map<String, dynamic>>.from(
-    await db.rpc('leaderboard', params: {'period': 'week', 'solo_siguiendo': true}),
+    await db.rpc('leaderboard', params: {'period': 'week', 'solo_siguiendo': !global}),
   );
   final i = filas.indexWhere((f) => f['user_id'] == yo);
   if (i < 0) return;
@@ -48,12 +54,14 @@ Future<void> refrescarRanking(SupabaseClient db) async {
 
   String frase;
   if (filas.length == 1) {
-    frase = 'Estás cagando solo. Sigue a tus amigos';
+    frase = global ? 'Eres el único. Invita a alguien' : 'Estás cagando solo. Sigue a tus amigos';
   } else if (filas.first['total'] == 0) {
     frase = 'Nadie ha cagado esta semana. Estrena el trono';
   } else if (rey) {
     final segundo = filas[1]['total'] as int;
-    frase = mio == segundo ? 'Rey empatado. Una más y es tuyo' : 'Eres el rey. Le llevas ${mio - segundo} al segundo';
+    frase = mio == segundo
+        ? 'Rey empatado. Una más y es tuyo'
+        : '${global ? 'Rey del mundo' : 'Eres el rey'}. Le llevas ${mio - segundo} al segundo';
   } else {
     final arriba = filas[i - 1];
     final falta = (arriba['total'] as int) - mio + 1;
@@ -67,12 +75,13 @@ Future<void> refrescarRanking(SupabaseClient db) async {
     for (var k = desde; k < filas.length && k < desde + maxFilas; k++)
       {'p': k + 1, 'n': filas[k]['username'], 't': filas[k]['total'], 'yo': filas[k]['user_id'] == yo},
   ];
-  await HomeWidget.saveWidgetData<String>('rk', jsonEncode(vecinos));
-  await HomeWidget.saveWidgetData<String>('rk_puesto', (i + 1).toString().padLeft(2, '0'));
-  await HomeWidget.saveWidgetData<String>('rk_de', 'DE ${filas.length} · SEMANA');
-  await HomeWidget.saveWidgetData<String>('rk_frase', frase);
-  await HomeWidget.saveWidgetData<bool>('rk_rey', rey);
-  await HomeWidget.updateWidget(qualifiedAndroidName: _proveedorRanking);
+  final c = global ? 'rkg' : 'rk';
+  await HomeWidget.saveWidgetData<String>(c, jsonEncode(vecinos));
+  await HomeWidget.saveWidgetData<String>('${c}_puesto', (i + 1).toString().padLeft(2, '0'));
+  await HomeWidget.saveWidgetData<String>('${c}_de', 'DE ${filas.length} · ${global ? 'TODOS · SEMANA' : 'SEMANA'}');
+  await HomeWidget.saveWidgetData<String>('${c}_frase', frase);
+  await HomeWidget.saveWidgetData<bool>('${c}_rey', rey);
+  await HomeWidget.updateWidget(qualifiedAndroidName: global ? _proveedorGlobal : _proveedorRanking);
 }
 
 /// Supabase para código que corre sin la app abierta (widget, push en segundo plano).

@@ -15,8 +15,11 @@ import org.json.JSONArray
  * Widget de ranking semanal (entre los que sigues): puesto, cuánto falta para subir y vecinos.
  * Los datos (`rk`, `rk_puesto`, `rk_de`, `rk_frase`, `rk_rey`) los escribe lib/widget.dart.
  * El ícono de la esquina registra una cagada sin abrir la app.
+ * [ReyCagonRankingGlobalWidget] es el mismo widget con el ranking de todos (claves `rkg…`).
  */
-class ReyCagonRankingWidget : HomeWidgetProvider() {
+open class ReyCagonRankingWidget : HomeWidgetProvider() {
+    protected open val prefijo = "rk"
+
     private val filas = listOf(
         listOf(R.id.rk_fila0, R.id.rk_pos0, R.id.rk_nombre0, R.id.rk_total0),
         listOf(R.id.rk_fila1, R.id.rk_pos1, R.id.rk_nombre1, R.id.rk_total1),
@@ -33,17 +36,17 @@ class ReyCagonRankingWidget : HomeWidgetProvider() {
         widgetData: SharedPreferences,
     ) {
         val datos = try {
-            JSONArray(widgetData.getString("rk", "[]"))
+            JSONArray(widgetData.getString(prefijo, "[]"))
         } catch (_: Exception) {
             JSONArray()
         }
-        val rey = widgetData.getBoolean("rk_rey", false)
+        val rey = widgetData.getBoolean("${prefijo}_rey", false)
 
         for (id in appWidgetIds) {
             val views = RemoteViews(context.packageName, R.layout.widget_ranking)
-            views.setTextViewText(R.id.rk_puesto, widgetData.getString("rk_puesto", "--"))
-            views.setTextViewText(R.id.rk_de, widgetData.getString("rk_de", "SEMANA"))
-            views.setTextViewText(R.id.rk_frase, widgetData.getString("rk_frase", "Abre Rey Cagón para cargar el ranking"))
+            views.setTextViewText(R.id.rk_puesto, widgetData.getString("${prefijo}_puesto", "--"))
+            views.setTextViewText(R.id.rk_de, widgetData.getString("${prefijo}_de", "SEMANA"))
+            views.setTextViewText(R.id.rk_frase, widgetData.getString("${prefijo}_frase", "Abre Rey Cagón para cargar el ranking"))
             views.setImageViewResource(R.id.rk_icono, if (rey) R.drawable.widget_corona else R.drawable.widget_poop)
 
             filas.forEachIndexed { i, (fila, pos, nombre, total) ->

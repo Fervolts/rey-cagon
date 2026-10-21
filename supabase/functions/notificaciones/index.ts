@@ -4,6 +4,8 @@
 //   - scripts/publicar.sh:   { tipo: "version" } → aviso de versión nueva.
 //   - trigger cagadas_calificar: { tipo: "placer" } → aviso del secreto, solo a seguidores
 //     que también lo desbloquearon y solo para las cagadas que valen la pena contar.
+//   - trigger mensajes_avisar_soporte: { tipo: "soporte" } → mensaje de soporte al otro lado del hilo.
+//   - trigger mensaje_reportes_contar: { tipo: "reporte_chat" } → aviso a los admins.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const sa = JSON.parse(Deno.env.get("FCM_SERVICE_ACCOUNT")!);
@@ -161,6 +163,61 @@ async function avisarPlacer(id: string) {
   return Response.json({ enviados: tokens.length - muertos.length });
 }
 
+// Manda el mismo aviso a todos los teléfonos de esos usuarios y limpia los tokens muertos.
+async function avisarA(usuarios: string[], title: string, body: string, data: Record<string, string>) {
+  if (!usuarios.length) return Response.json({ enviados: 0 });
+  const { data: tokens } = await db.from("push_tokens").select("token").in("user_id", usuarios);
+  if (!tokens?.length) return Response.json({ enviados: 0 });
+  const muertos: string[] = [];
+  await Promise.all(tokens.map(async (t) => {
+    const res = await enviar(t.token, title, body, data);
+    if (!res.ok) {
+      const err = await res.text();
+      if (res.status === 404 || err.includes("UNREGISTERED")) muertos.push(t.token);
+      else console.error("FCM", res.status, err);
+    }
+  }));
+  if (muertos.length) await db.from("push_tokens").delete().in("token", muertos);
+  return Response.json({ enviados: tokens.length - muertos.length });
+}
+
+const recortar = (t: string, n = 120) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
+
+// Soporte: si escribe el usuario, avisa a los admins; si responde un admin, avisa al usuario.
+async function avisarSoporte(id: number) {
+  const { data: m } = await db.from("mensajes").select("hilo, user_id, texto, es_bug").eq("id", id).single();
+  if (!m) return Response.json({ enviados: 0 });
+  if (m.user_id === m.hilo) {
+    const [{ data: admins }, { data: perfil }] = await Promise.all([
+      db.from("admins").select("user_id"),
+      db.from("profiles").select("username").eq("id", m.hilo).single(),
+    ]);
+    const quien = perfil?.username ?? "Alguien";
+    return avisarA(
+      (admins ?? []).map((a) => a.user_id).filter((u) => u !== m.user_id),
+      m.es_bug ? `🐞 ${quien} reportó un error` : `💬 ${quien} escribió a soporte`,
+      recortar(m.texto),
+      { tipo: "soporte", hilo: m.hilo },
+    );
+  }
+  return avisarA([m.hilo], "🛠️ Te respondió soporte", recortar(m.texto), { tipo: "soporte", hilo: m.hilo });
+}
+
+// Mensaje reportado en La Letrina: aviso a los admins.
+async function avisarReporteChat(mensajeId: number, motivo: string) {
+  const [{ data: admins }, { data: m }] = await Promise.all([
+    db.from("admins").select("user_id"),
+    db.from("mensajes").select("texto, oculto").eq("id", mensajeId).single(),
+  ]);
+  if (!m) return Response.json({ enviados: 0 });
+  return avisarA(
+    (admins ?? []).map((a) => a.user_id),
+    m.oculto ? "🚨 Mensaje ocultado por reportes" : "🚩 Reportaron un mensaje",
+    `${motivo}: ${recortar(m.texto || "(tarjeta)", 90)}`,
+    { tipo: "reporte_chat" },
+  );
+}
+
 Deno.serve(async (req) => {
   if (req.headers.get("x-webhook-secret") !== Deno.env.get("WEBHOOK_SECRET")) {
     return new Response("no", { status: 401 });
@@ -169,6 +226,8 @@ Deno.serve(async (req) => {
   if (cuerpo.tipo === "follow") return avisarFollow(cuerpo.follower, cuerpo.followed);
   if (cuerpo.tipo === "version") return avisarVersion(cuerpo.version, cuerpo.build);
   if (cuerpo.tipo === "placer") return avisarPlacer(cuerpo.id);
+  if (cuerpo.tipo === "soporte") return avisarSoporte(cuerpo.id);
+  if (cuerpo.tipo === "reporte_chat") return avisarReporteChat(cuerpo.mensaje_id, cuerpo.motivo);
   const { user_id } = cuerpo;
 
   const { data: seguidores } = await db.from("follows").select("follower").eq("followed", user_id);
