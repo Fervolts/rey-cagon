@@ -275,6 +275,9 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
   final _pidiendo = <String>{};
   Set<String> _admins = {};
   final _texto = TextEditingController();
+  // Solo se puede mencionar a gente que sigues.
+  List<Map<String, dynamic>> _amigos = [];
+  List<Map<String, dynamic>> _sugerencias = [];
   bool _enviando = false;
   bool _soyAdmin = false;
 
@@ -300,6 +303,10 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
       });
     }).catchError((_) {});
     if (widget.abrirBug) WidgetsBinding.instance.addPostFrameCallback((_) => _reportarError());
+    if (!_esSoporte) {
+      _cargarAmigos();
+      _texto.addListener(_buscarMencion);
+    }
     // El borrador sobrevive a cerrar la app o a que se actualice.
     SharedPreferences.getInstance().then((prefs) {
       final b = prefs.getString(_claveBorrador);
@@ -314,6 +321,44 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
   void dispose() {
     _texto.dispose();
     super.dispose();
+  }
+
+  Future<void> _cargarAmigos() async {
+    try {
+      final f = await db.from('follows').select('followed').eq('follower', _yo);
+      final ids = [for (final x in f) x['followed'] as String];
+      if (ids.isEmpty) return;
+      final r = await db.from('profiles').select(_columnasPerfil).inFilter('id', ids).order('username');
+      if (mounted) setState(() => _amigos = List<Map<String, dynamic>>.from(r));
+    } catch (_) {}
+  }
+
+  // "@algo" justo antes del cursor: sugiere amigos que empiezan así.
+  RegExpMatch? _arrobaActual() {
+    final sel = _texto.selection;
+    final hasta = sel.isValid ? sel.baseOffset : _texto.text.length;
+    return RegExp(r'(^|\s)@([^@\n]{0,30})$').firstMatch(_texto.text.substring(0, hasta.clamp(0, _texto.text.length)));
+  }
+
+  void _buscarMencion() {
+    final m = _arrobaActual();
+    final q = m?.group(2)?.toLowerCase();
+    final nuevas = q == null
+        ? <Map<String, dynamic>>[]
+        : _amigos.where((a) => (a['username'] as String).toLowerCase().startsWith(q)).take(8).toList();
+    if (nuevas.length != _sugerencias.length || !nuevas.every(_sugerencias.contains)) {
+      setState(() => _sugerencias = nuevas);
+    }
+  }
+
+  void _mencionar(Map<String, dynamic> amigo) {
+    final m = _arrobaActual();
+    final arroba = '@${amigo['username']} ';
+    final fin = m == null ? _texto.text.length : m.end;
+    final inicio = m == null ? fin : m.start + m.group(1)!.length;
+    final texto = _texto.text.replaceRange(inicio, fin, arroba);
+    _texto.value = TextEditingValue(text: texto, selection: TextSelection.collapsed(offset: inicio + arroba.length));
+    setState(() => _sugerencias = []);
   }
 
   bool _mencionaA(String? texto) {
@@ -442,7 +487,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
       context: context,
       builder: (context) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          if (!suyo && !_esSoporte && _perfiles[m['user_id']] != null)
+          if (!suyo && !_esSoporte && _amigos.any((a) => a['id'] == m['user_id']))
             ListTile(leading: const Icon(Icons.alternate_email), title: const Text('Mencionar'), onTap: () => Navigator.pop(context, 'mencionar')),
           if (!suyo && !_esSoporte)
             ListTile(leading: const Icon(Icons.flag_outlined), title: const Text('Reportar mensaje'), onTap: () => Navigator.pop(context, 'reportar')),
@@ -463,9 +508,8 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
     try {
       switch (accion) {
         case 'mencionar':
-          final arroba = '@${_perfiles[m['user_id']]!['username']} ';
-          _texto.text = '$arroba${_texto.text}';
           _texto.selection = TextSelection.collapsed(offset: _texto.text.length);
+          _mencionar(_amigos.firstWhere((a) => a['id'] == m['user_id']));
         case 'reportar':
           final motivo = await showModalBottomSheet<String>(
             context: context,
@@ -543,6 +587,26 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
             },
           ),
         ),
+        if (_sugerencias.isNotEmpty)
+          Container(
+            height: 52,
+            decoration: BoxDecoration(color: p.suave, border: Border(top: BorderSide(color: p.borde))),
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              children: [
+                for (final a in _sugerencias)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: ActionChip(
+                      avatar: Avatar(a, tamano: 20),
+                      label: Text('@${a['username']}'),
+                      onPressed: () => _mencionar(a),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         SafeArea(
           top: false,
           child: Container(
@@ -559,7 +623,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
                   maxLines: 5,
                   maxLength: 1000,
                   textCapitalization: TextCapitalization.sentences,
-                  decoration: InputDecoration(hintText: _esSoporte ? 'Escribe algo…' : 'Escribe algo… (@usuario para mencionar)', counterText: '', isDense: true),
+                  decoration: InputDecoration(hintText: _esSoporte ? 'Escribe algo…' : 'Escribe algo… (@ para mencionar a un amigo)', counterText: '', isDense: true),
                 ),
               ),
               const SizedBox(width: 6),
