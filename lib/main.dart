@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'accesorios.dart';
 import 'actualizar.dart';
+import 'cagadon.dart';
 import 'calendario.dart';
 import 'chat.dart';
 import 'invitar_play.dart';
@@ -603,7 +604,9 @@ class _PantallaRankingState extends State<PantallaRanking> {
               ),
             ),
           ],
-          const SizedBox(height: 28),
+          const SizedBox(height: 12),
+          const RetosDeHoy(),
+          const SizedBox(height: 16),
           if (_secretoAbierto && !_yaDeslizo) ...[
             const PistaSecreta(),
             const SizedBox(height: 12),

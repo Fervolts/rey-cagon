@@ -5,6 +5,7 @@ import 'emoji.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'accesorios.dart';
+import 'cagadon.dart';
 import 'calendario.dart';
 import 'chat.dart' show abrirReporteDeError;
 import 'placer.dart';
@@ -226,10 +227,29 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                 const SizedBox(height: 12),
                 if (!_esMio && !_bloqueado)
                   Center(
-                    child: p['lo_sigo'] == true
-                        ? OutlinedButton(onPressed: _ocupado ? null : _seguir, child: const Text('DEJAR DE SEGUIR'))
-                        : FilledButton(onPressed: _ocupado ? null : _seguir, child: const Text('SEGUIR')),
+                    child: Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: [
+                      p['lo_sigo'] == true
+                          ? OutlinedButton(onPressed: _ocupado ? null : _seguir, child: const Text('DEJAR DE SEGUIR'))
+                          : FilledButton(onPressed: _ocupado ? null : _seguir, child: const Text('SEGUIR')),
+                      // Solo se reta a gente que sigues.
+                      if (p['lo_sigo'] == true)
+                        FilledButton.icon(
+                          onPressed: () => retar(context, widget.usuarioId, p['username']),
+                          icon: const Text('⚔️'),
+                          label: const Text('RETAR'),
+                        ),
+                    ]),
                   ),
+                FutureBuilder<int>(
+                  future: victorias(widget.usuarioId),
+                  builder: (context, v) => (v.data ?? 0) == 0
+                      ? const SizedBox.shrink()
+                      : Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: Text('🏆 ${v.data} Cagadón${v.data == 1 ? '' : 'es'} ganado${v.data == 1 ? '' : 's'}',
+                              textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700)),
+                        ),
+                ),
                 const SizedBox(height: 16),
                 Card(
                   child: Padding(

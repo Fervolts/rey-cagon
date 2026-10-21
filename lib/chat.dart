@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'accesorios.dart';
+import 'cagadon.dart' show TarjetaReto;
 import 'emoji.dart';
 import 'main.dart' show db;
 import 'perfil.dart' show PantallaPerfil;
@@ -720,6 +721,7 @@ class _Tarjeta extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (t['tipo'] == 'reto' || t['tipo'] == 'reto_fin') return TarjetaReto(id: t['id'] as int, compacta: true);
     final (emoji, titulo, sub) = switch (t['tipo']) {
       'hito' => ('👑', 'LLEGÓ A ${t['n']} CAGADAS', 'Arrodíllense ante el rey'),
       'desbloqueo' => (

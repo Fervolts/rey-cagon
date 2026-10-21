@@ -7,6 +7,7 @@
 //   - trigger mensajes_avisar_soporte: { tipo: "soporte" } → mensaje de soporte al otro lado del hilo.
 //   - trigger mensaje_reportes_contar: { tipo: "reporte_chat" } → aviso a los admins.
 //   - trigger mensajes_avisar_mencion: { tipo: "mencion" } → aviso a quien mencionaron con @.
+//   - retos (Cagadón): { tipo: "reto", evento } → nuevo, aceptado, rechazado o fin del día.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const sa = JSON.parse(Deno.env.get("FCM_SERVICE_ACCOUNT")!);
@@ -227,6 +228,33 @@ async function avisarMencion(id: number, para: string[]) {
   return avisarA(para, `📣 ${perfil?.username ?? "Alguien"} te mencionó`, recortar(m.texto), { tipo: "mencion" });
 }
 
+// El Cagadón: avisos del reto a quien le toca.
+async function avisarReto(id: number, evento: string) {
+  const { data: r } = await db.from("retos")
+    .select("retador, retado, ganador, marcador_retador, marcador_retado").eq("id", id).single();
+  if (!r) return Response.json({ enviados: 0 });
+  const { data: perfiles } = await db.from("profiles").select("id, username").in("id", [r.retador, r.retado]);
+  const nombre = (u: string) => perfiles?.find((p) => p.id === u)?.username ?? "Alguien";
+  const data = { tipo: "reto", id: String(id) };
+  if (evento === "nuevo") {
+    return avisarA([r.retado], `⚔️ ${nombre(r.retador)} te retó a un Cagadón`, "Gana el que cague más hoy. ¿Aceptas o te rajas?", data);
+  }
+  if (evento === "aceptado") {
+    return avisarA([r.retador], `🔥 ${nombre(r.retado)} aceptó tu Cagadón`, "Que empiece la guerra. Gana el que cague más hoy 💩", data);
+  }
+  if (evento === "rechazado") {
+    return avisarA([r.retador], `🐔 ${nombre(r.retado)} se rajó`, "No aceptó tu Cagadón. Cobarde.", data);
+  }
+  const marcador = (yo: string) =>
+    yo === r.retador ? `${r.marcador_retador}-${r.marcador_retado}` : `${r.marcador_retado}-${r.marcador_retador}`;
+  if (!r.ganador) {
+    return avisarA([r.retador, r.retado], "🤝 Cagadón empatado en cero", "Ninguno cagó. Qué decepción.", data);
+  }
+  const perdedor = r.ganador === r.retador ? r.retado : r.retador;
+  await avisarA([r.ganador], "🏆 ¡Ganaste el Cagadón!", `${marcador(r.ganador)} contra ${nombre(perdedor)}. Rey indiscutible 👑`, data);
+  return avisarA([perdedor], "💀 Perdiste el Cagadón", `${marcador(perdedor)} contra ${nombre(r.ganador)}. Mañana revancha.`, data);
+}
+
 Deno.serve(async (req) => {
   if (req.headers.get("x-webhook-secret") !== Deno.env.get("WEBHOOK_SECRET")) {
     return new Response("no", { status: 401 });
@@ -237,6 +265,7 @@ Deno.serve(async (req) => {
   if (cuerpo.tipo === "placer") return avisarPlacer(cuerpo.id);
   if (cuerpo.tipo === "soporte") return avisarSoporte(cuerpo.id);
   if (cuerpo.tipo === "mencion") return avisarMencion(cuerpo.id, cuerpo.para);
+  if (cuerpo.tipo === "reto") return avisarReto(cuerpo.id, cuerpo.evento);
   if (cuerpo.tipo === "reporte_chat") return avisarReporteChat(cuerpo.mensaje_id, cuerpo.motivo);
   const { user_id } = cuerpo;
 
