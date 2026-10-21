@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'accesorios.dart';
 import 'actualizar.dart';
 import 'calendario.dart';
+import 'invitar_play.dart';
 import 'config.dart';
 import 'onboarding.dart';
 import 'perfil.dart';
@@ -300,6 +301,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
       await pedirPermisoNotificaciones().catchError((_) {});
       await registrarTelefono().catchError((_) {});
       if (mounted) await revisarActualizacion(context);
+      if (mounted) await invitarAPlay(context);
       return;
     }
     // Cuenta nueva (sin cagadas): bienvenida completa. Si ya cagaba (reinstaló), solo el aviso.
