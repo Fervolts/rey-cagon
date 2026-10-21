@@ -107,21 +107,41 @@ Future<void> _revisar(BuildContext context) async {
   );
 }
 
-/// En Play: actualización flexible de Google (In-App Updates). Se baja en segundo plano y,
-/// al terminar, un aviso con REINICIAR la instala sin pasar por la tienda.
-/// Solo funciona instalada desde Play; en el emulador o la APK directa no hace nada.
+/// En Play: actualización inmediata de Google (In-App Updates). Pantalla completa de Google,
+/// se instala y la app se reinicia sola. Solo funciona instalada desde Play.
+///
+/// Para no deshacerle nada a nadie:
+/// - Solo se revisa al abrir la app, antes de que toque nada; al volver de otra app no, para no
+///   cortar a nadie a mitad de registrar una cagada o de escribir.
+/// - Los datos viven en el servidor y las preferencias del teléfono sobreviven a la actualización;
+///   el borrador del chat se guarda aparte (ver chat.dart).
+/// - Si la inmediata falla o la cancelan, cae a la flexible (se baja de fondo y ofrece REINICIAR).
+/// - Una sola vez por sesión.
+var _playRevisada = false;
+
 Future<void> _revisarPlay(BuildContext context) async {
-  if (_abierto) return;
+  if (_playRevisada || _abierto) return;
+  _playRevisada = true;
   _abierto = true;
   try {
     final info = await InAppUpdate.checkForUpdate();
     if (!context.mounted) return;
     if (info.installStatus == InstallStatus.downloaded) return _ofrecerReinicio(context);
-    if (info.updateAvailability != UpdateAvailability.updateAvailable || !info.flexibleUpdateAllowed) return;
+    if (info.updateAvailability == UpdateAvailability.developerTriggeredUpdateInProgress) {
+      // Una inmediata que quedó a medias: se retoma.
+      await InAppUpdate.performImmediateUpdate();
+      return;
+    }
+    if (info.updateAvailability != UpdateAvailability.updateAvailable) return;
+    if (info.immediateUpdateAllowed) {
+      final r = await InAppUpdate.performImmediateUpdate();
+      if (r == AppUpdateResult.success) return;
+    }
+    if (!info.flexibleUpdateAllowed) return;
     if (await InAppUpdate.startFlexibleUpdate() != AppUpdateResult.success) return;
     if (context.mounted) _ofrecerReinicio(context);
   } catch (_) {
-    // Sin Play Store, sin internet o instalada por fuera: se revisa la próxima vez.
+    // Sin Play Store, sin internet o instalada por fuera: se revisa la próxima vez que abra.
   } finally {
     _abierto = false;
   }

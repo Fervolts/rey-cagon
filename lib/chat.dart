@@ -262,7 +262,15 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
       });
     }).catchError((_) {});
     if (widget.abrirBug) WidgetsBinding.instance.addPostFrameCallback((_) => _reportarError());
+    // El borrador sobrevive a cerrar la app o a que se actualice.
+    SharedPreferences.getInstance().then((prefs) {
+      final b = prefs.getString(_claveBorrador);
+      if (b != null && _texto.text.isEmpty) _texto.text = b;
+      _texto.addListener(() => prefs.setString(_claveBorrador, _texto.text));
+    });
   }
+
+  String get _claveBorrador => 'borrador_${widget.sala}_${widget.hilo ?? ''}';
 
   @override
   void dispose() {
