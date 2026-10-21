@@ -3,6 +3,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import 'actualizar.dart' show esDePlay;
 import 'main.dart' show db;
 import 'recordatorio.dart' show notificaciones;
 import 'widget.dart' show clienteDeFondo, refrescarRanking;
@@ -58,6 +59,7 @@ Future<void> _guardar(String token) async {
     'token': token,
     'user_id': uid,
     'app_build': build,
+    'canal': esDePlay ? 'play' : 'directo',
     'updated_at': DateTime.now().toUtc().toIso8601String(),
   });
 }

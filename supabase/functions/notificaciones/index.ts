@@ -96,7 +96,9 @@ async function avisarFollow(follower: string, followed: string) {
 // Aviso de versión nueva a los teléfonos con un build menor. app_build lo reporta la app
 // desde la 1.8.2; las versiones anteriores (null) no saben actualizarse y se omiten.
 async function avisarVersion(version: string, build: number) {
-  const { data: tokens } = await db.from("push_tokens").select("token").lt("app_build", build);
+  // Los de Play se actualizan por la tienda: solo avisa a la APK directa (null = versión vieja sin canal).
+  const { data: tokens } = await db.from("push_tokens").select("token").lt("app_build", build)
+    .or("canal.is.null,canal.eq.directo");
   if (!tokens?.length) return Response.json({ enviados: 0 });
   const muertos: string[] = [];
   await Promise.all(tokens.map(async (t) => {
