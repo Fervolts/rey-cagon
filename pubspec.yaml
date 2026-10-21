@@ -45,6 +45,7 @@ dependencies:
   ota_update: ^7.1.0
   package_info_plus: ^10.2.2
   url_launcher: ^6.3.3
+  in_app_update: ^5.0.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

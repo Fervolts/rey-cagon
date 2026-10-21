@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:in_app_update/in_app_update.dart';
 import 'package:ota_update/ota_update.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -19,7 +20,7 @@ const esDePlay = String.fromEnvironment('CANAL') == 'play';
 /// Al abrir la app y al volver a ella: si hay una versión con build mayor que la instalada,
 /// ofrece bajarla e instalarla. "Después" la calla hasta el próximo arranque.
 Future<void> revisarActualizacion(BuildContext context) async {
-  if (esDePlay) return;
+  if (esDePlay) return _revisarPlay(context);
   if (_abierto) return;
   _abierto = true;
   try {
@@ -102,6 +103,36 @@ Future<void> _revisar(BuildContext context) async {
           ],
         );
       },
+    ),
+  );
+}
+
+/// En Play: actualización flexible de Google (In-App Updates). Se baja en segundo plano y,
+/// al terminar, un aviso con REINICIAR la instala sin pasar por la tienda.
+/// Solo funciona instalada desde Play; en el emulador o la APK directa no hace nada.
+Future<void> _revisarPlay(BuildContext context) async {
+  if (_abierto) return;
+  _abierto = true;
+  try {
+    final info = await InAppUpdate.checkForUpdate();
+    if (!context.mounted) return;
+    if (info.installStatus == InstallStatus.downloaded) return _ofrecerReinicio(context);
+    if (info.updateAvailability != UpdateAvailability.updateAvailable || !info.flexibleUpdateAllowed) return;
+    if (await InAppUpdate.startFlexibleUpdate() != AppUpdateResult.success) return;
+    if (context.mounted) _ofrecerReinicio(context);
+  } catch (_) {
+    // Sin Play Store, sin internet o instalada por fuera: se revisa la próxima vez.
+  } finally {
+    _abierto = false;
+  }
+}
+
+void _ofrecerReinicio(BuildContext context) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: const Text('Actualización lista 💩'),
+      duration: const Duration(days: 1),
+      action: SnackBarAction(label: 'REINICIAR', onPressed: InAppUpdate.completeFlexibleUpdate),
     ),
   );
 }
