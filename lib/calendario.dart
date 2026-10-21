@@ -90,7 +90,7 @@ class _PantallaCalendarioState extends State<PantallaCalendario> {
       context: context,
       builder: (context) => ListView(
         shrinkWrap: true,
-        padding: const EdgeInsets.all(16),
+        padding: conBordeAbajo(context, const EdgeInsets.all(16)),
         children: [
           Text('$dia de ${_meses[_mes.month - 1]}',
               style: Theme.of(context).textTheme.titleLarge),
@@ -130,7 +130,7 @@ class _PantallaCalendarioState extends State<PantallaCalendario> {
     return Scaffold(
       appBar: AppBar(title: Text(_esMio ? 'MI CALENDARIO' : 'CALENDARIO DE ${widget.nombre.toUpperCase()}')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: conBordeAbajo(context, const EdgeInsets.all(16)),
         children: [
           Row(
             children: [

@@ -46,6 +46,11 @@ class Paleta {
     sobrePrimario: acentoTexto,
   );}
 
+/// Relleno con el borde de abajo del sistema sumado (barra de gestos o botones). Con la app de
+/// extremo a extremo, todo lo que no está sobre la barra de pestañas lo necesita.
+EdgeInsets conBordeAbajo(BuildContext context, EdgeInsets e) =>
+    e.copyWith(bottom: e.bottom + MediaQuery.paddingOf(context).bottom);
+
 Paleta paleta(BuildContext context) =>
     Theme.of(context).brightness == Brightness.dark ? Paleta.oscuro : Paleta.claro;
 

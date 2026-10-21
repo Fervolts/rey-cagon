@@ -78,7 +78,7 @@ class _PantallaRecuperarState extends State<PantallaRecuperar> {
       child: Scaffold(
         appBar: AppBar(title: const Text('RECUPERAR CONTRASEÑA'), automaticallyImplyLeading: _paso < 2),
         body: ListView(
-          padding: const EdgeInsets.all(24),
+          padding: conBordeAbajo(context, const EdgeInsets.all(24)),
           children: [
             Text(
               switch (_paso) {

@@ -509,7 +509,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
         context: context,
         builder: (context) => ListView(
           shrinkWrap: true,
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          padding: conBordeAbajo(context, const EdgeInsets.fromLTRB(16, 0, 16, 16)),
           children: [
             Text('¿QUÉ SALIÓ?', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
@@ -599,7 +599,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
     final normal = RefreshIndicator(
       onRefresh: _cargar,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+        padding: conBordeAbajo(context, const EdgeInsets.fromLTRB(16, 12, 16, 32)),
         children: [
           Row(
             children: [
@@ -783,7 +783,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
           return ColoredBox(
             color: p.fondo,
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 48),
+              padding: conBordeAbajo(context, const EdgeInsets.fromLTRB(16, 12, 16, 48)),
               children: [
                 // Mismas medidas que el lado normal: fila de 48, botón, deshacer y una tarjeta.
                 SizedBox(

@@ -423,7 +423,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
         initialChildSize: .6,
         builder: (context, scroll) => ListView(
           controller: scroll,
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          padding: conBordeAbajo(context, const EdgeInsets.fromLTRB(16, 0, 16, 16)),
           children: [
             Text('PRESUMIR', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),

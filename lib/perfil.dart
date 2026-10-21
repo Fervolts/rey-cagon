@@ -128,6 +128,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
     final cambio = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       // Sin arrastre de la hoja: arrastrar el avatar mueve lentes y sombrero.
       enableDrag: false,
       builder: (_) => _EditarPerfil(perfil: _p!),
@@ -196,7 +197,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
       body: p == null
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.all(16),
+              padding: conBordeAbajo(context, const EdgeInsets.all(16)),
               children: [
                 Padding(
                   padding: const EdgeInsets.only(top: 36, bottom: 8),
@@ -480,7 +481,7 @@ class _EditarPerfilState extends State<_EditarPerfil> {
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: SingleChildScrollView(
         physics: _moviendo == null ? null : const NeverScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
+        padding: conBordeAbajo(context, const EdgeInsets.all(16)),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -666,7 +667,7 @@ class _PantallaBuscarState extends State<PantallaBuscar> {
     return Scaffold(
       appBar: AppBar(title: const Text('BUSCAR AMIGOS')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: conBordeAbajo(context, const EdgeInsets.all(16)),
         children: [
           TextField(
             autofocus: true,
