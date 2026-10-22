@@ -4,6 +4,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'actualizar.dart' show esDePlay;
+import 'avisos.dart' show ir;
 import 'main.dart' show db;
 import 'recordatorio.dart' show notificaciones;
 import 'widget.dart' show clienteDeFondo, refrescarRanking;
@@ -23,6 +24,18 @@ Future<void> _alFondo(RemoteMessage m) async {
   try {
     await refrescarRanking(await clienteDeFondo());
   } catch (_) {}
+}
+
+/// Tocaron el push: abrir donde corresponde. Las cagadas y las versiones abren la app y ya.
+void _alTocar(RemoteMessage m) {
+  final destino = switch (m.data['tipo']) {
+    'mencion' || 'reporte_chat' => 'todos',
+    'soporte' => 'soporte',
+    'reto' => 'inicio',
+    'follow' || 'placer' || 'anuncio' => 'avisos',
+    _ => null,
+  };
+  if (destino != null) ir(destino);
 }
 
 Future<void> iniciarPush() async {
@@ -45,6 +58,9 @@ Future<void> iniciarPush() async {
       ),
     );
   });
+  FirebaseMessaging.onMessageOpenedApp.listen(_alTocar);
+  final inicial = await FirebaseMessaging.instance.getInitialMessage();
+  if (inicial != null) _alTocar(inicial);
   // getToken/onTokenRefresh están deprecados a favor de register()/FID, pero la Edge Function
   // manda por `message.token` de FCM HTTP v1, que sigue siendo el token clásico.
   // ignore: deprecated_member_use

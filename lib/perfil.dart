@@ -8,6 +8,7 @@ import 'accesorios.dart';
 import 'cagadon.dart';
 import 'calendario.dart';
 import 'chat.dart' show abrirReporteDeError;
+import 'comunidad.dart';
 import 'placer.dart';
 import 'main.dart' show conReintento, db, escucharCagadas, esDeRed, textoError;
 import 'push.dart';
@@ -293,6 +294,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => abrirReporteDeError(context),
                   ),
+                  const FilaComunidad(),
                   ListTile(
                     leading: const Icon(Icons.open_in_new),
                     title: const Text('Hecho por ahimismito Studios C.A'),

@@ -8,9 +8,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'accesorios.dart';
 import 'actualizar.dart';
+import 'avisos.dart';
 import 'cagadon.dart';
 import 'calendario.dart';
 import 'chat.dart';
+import 'comunidad.dart';
 import 'invitar_play.dart';
 import 'config.dart';
 import 'onboarding.dart';
@@ -263,12 +265,22 @@ class _PantallaInicioState extends State<PantallaInicio> {
   final _subs = <StreamSubscription>[];
   int _ultimoBano = 0, _vistoBano = 0, _ultimoSoporte = 0, _vistoSoporte = 0;
 
+  late final VoidCallback _soltarAvisos;
+
   String get _yo => db.auth.currentUser!.id;
   bool get _hayNuevo => _ultimoBano > _vistoBano || _ultimoSoporte > _vistoSoporte;
 
   @override
   void initState() {
     super.initState();
+    _soltarAvisos = escucharAvisos(onAnuncio: () {
+      if (mounted) mostrarAnuncioNuevo(context);
+    });
+    irA.addListener(_irA);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _irA();
+      if (mounted) mostrarAnuncioNuevo(context);
+    });
     SharedPreferences.getInstance().then((prefs) {
       if (!mounted) return;
       setState(() {
@@ -295,6 +307,19 @@ class _PantallaInicioState extends State<PantallaInicio> {
         if (m['user_id'] == _yo || _tab == _tabBano) _marcarVisto();
       }, onError: (_) {});
 
+  // Un toque en un push o en un aviso: cambiar de pestaña (el baño elige después su sub-pestaña).
+  void _irA() {
+    final destino = irA.value;
+    if (destino == null || destino.inicio || !mounted) return;
+    destino.inicio = true;
+    Navigator.of(context).popUntil((r) => r.isFirst);
+    setState(() => _tab = destino.a == 'inicio' || destino.a == 'avisos' ? 0 : _tabBano);
+    if (_tab == _tabBano) _marcarVisto();
+    if (destino.a == 'avisos') {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaAvisos()));
+    }
+  }
+
   Future<void> _marcarVisto() async {
     setState(() {
       _vistoBano = _ultimoBano;
@@ -307,6 +332,8 @@ class _PantallaInicioState extends State<PantallaInicio> {
 
   @override
   void dispose() {
+    _soltarAvisos();
+    irA.removeListener(_irA);
     for (final s in _subs) {
       s.cancel();
     }
@@ -432,6 +459,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
       await registrarTelefono().catchError((_) {});
       if (mounted) await revisarActualizacion(context);
       if (mounted) await invitarAPlay(context);
+      if (mounted) await ofrecerComunidad(context);
       return;
     }
     // Cuenta nueva (sin cagadas): bienvenida completa. Si ya cagaba (reinstaló), solo el aviso.
@@ -607,8 +635,10 @@ class _PantallaRankingState extends State<PantallaRanking> {
               IconButton.outlined(
                 icon: const Icon(Icons.person_add_alt_1),
                 tooltip: 'Buscar amigos',
-                onPressed: () => _abrir(const PantallaBuscar()),
+                onPressed: () => ir('amigos'),
               ),
+              const SizedBox(width: 8),
+              const BotonAvisos(),
             ],
           ),
           const SizedBox(height: 16),
@@ -715,7 +745,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
                       const Text('Estás cagando solo. Sigue a tus amigos para competir.', textAlign: TextAlign.center),
                       const SizedBox(height: 12),
                       FilledButton(
-                        onPressed: () => _abrir(const PantallaBuscar()),
+                        onPressed: () => ir('amigos'),
                         child: const Text('BUSCAR AMIGOS'),
                       ),
                     ],

@@ -8,6 +8,8 @@
 //   - trigger mensaje_reportes_contar: { tipo: "reporte_chat" } → aviso a los admins.
 //   - trigger mensajes_avisar_mencion: { tipo: "mencion" } → aviso a quien mencionaron con @.
 //   - retos (Cagadón): { tipo: "reto", evento } → nuevo, aceptado, rechazado o fin del día.
+//   - trigger anuncios_avisar: { tipo: "anuncio" } → anuncio de un admin a todos los teléfonos.
+// Lo que va a una persona también se guarda en public.notificaciones (centro de avisos de la app).
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const sa = JSON.parse(Deno.env.get("FCM_SERVICE_ACCOUNT")!);
@@ -73,6 +75,15 @@ async function enviar(token: string, title: string, body: string, data: Record<s
   });
 }
 
+// Copia del aviso en el centro de avisos de cada usuario, tenga o no teléfono registrado.
+async function guardar(usuarios: string[], titulo: string, cuerpo: string, datos: Record<string, string>) {
+  if (!usuarios.length) return;
+  const { error } = await db.from("notificaciones").insert(
+    [...new Set(usuarios)].map((u) => ({ user_id: u, tipo: datos.tipo ?? "otro", titulo, cuerpo, datos })),
+  );
+  if (error) console.error("notificaciones", error.message);
+}
+
 // Aviso de nuevo seguidor a todos los teléfonos del seguido.
 async function avisarFollow(follower: string, followed: string) {
   const [{ data: perfil }, { data: tokens }, { data: devuelta }] = await Promise.all([
@@ -80,13 +91,16 @@ async function avisarFollow(follower: string, followed: string) {
     db.from("push_tokens").select("token").eq("user_id", followed),
     db.from("follows").select("follower").eq("follower", followed).eq("followed", follower).maybeSingle(),
   ]);
-  if (!perfil || !tokens?.length) return Response.json({ enviados: 0 });
+  if (!perfil) return Response.json({ enviados: 0 });
   const body = devuelta
     ? "Ya lo sigues. Que empiece la guerra 💩"
     : "Síguelo de vuelta para saber cuánto caga 💩";
+  const datos = { tipo: "follow", user_id: follower };
+  await guardar([followed], `👀 ${perfil.username} te empezó a seguir`, body, datos);
+  if (!tokens?.length) return Response.json({ enviados: 0 });
   const muertos: string[] = [];
   await Promise.all(tokens.map(async (t) => {
-    const res = await enviar(t.token, `👀 ${perfil.username} te empezó a seguir`, body, { tipo: "follow", user_id: follower });
+    const res = await enviar(t.token, `👀 ${perfil.username} te empezó a seguir`, body, datos);
     if (!res.ok) {
       const err = await res.text();
       if (res.status === 404 || err.includes("UNREGISTERED")) muertos.push(t.token);
@@ -150,6 +164,7 @@ async function avisarPlacer(id: string) {
   const { data: abiertos } = await db.from("profiles").select("id").eq("placer_desbloqueado", true)
     .in("id", (seguidores ?? []).map((s) => s.follower));
   if (!abiertos?.length) return Response.json({ enviados: 0 });
+  await guardar(abiertos.map((a) => a.id), texto[0], texto[1], { tipo: "placer", user_id: c.user_id });
   const { data: tokens } = await db.from("push_tokens").select("token").in("user_id", abiertos.map((a) => a.id));
   if (!tokens?.length) return Response.json({ enviados: 0 });
   const muertos: string[] = [];
@@ -168,6 +183,7 @@ async function avisarPlacer(id: string) {
 // Manda el mismo aviso a todos los teléfonos de esos usuarios y limpia los tokens muertos.
 async function avisarA(usuarios: string[], title: string, body: string, data: Record<string, string>) {
   if (!usuarios.length) return Response.json({ enviados: 0 });
+  await guardar(usuarios, title, body, data);
   const { data: tokens } = await db.from("push_tokens").select("token").in("user_id", usuarios);
   if (!tokens?.length) return Response.json({ enviados: 0 });
   const muertos: string[] = [];
@@ -225,7 +241,7 @@ async function avisarMencion(id: number, para: string[]) {
   const { data: m } = await db.from("mensajes").select("user_id, texto").eq("id", id).single();
   if (!m) return Response.json({ enviados: 0 });
   const { data: perfil } = await db.from("profiles").select("username").eq("id", m.user_id).single();
-  return avisarA(para, `📣 ${perfil?.username ?? "Alguien"} te mencionó`, recortar(m.texto), { tipo: "mencion" });
+  return avisarA(para, `📣 ${perfil?.username ?? "Alguien"} te mencionó`, recortar(m.texto), { tipo: "mencion", id: String(id) });
 }
 
 // El Cagadón: avisos del reto a quien le toca.
@@ -255,6 +271,26 @@ async function avisarReto(id: number, evento: string) {
   return avisarA([perdedor], "💀 Perdiste el Cagadón", `${marcador(perdedor)} contra ${nombre(r.ganador)}. Mañana revancha.`, data);
 }
 
+// Anuncio de un admin: a todos los teléfonos, de Play y de la APK directa. No se guarda por
+// usuario: la app lee public.anuncios directo.
+async function avisarAnuncio(id: number) {
+  const { data: a } = await db.from("anuncios").select("titulo, texto, emoji").eq("id", id).single();
+  if (!a) return Response.json({ enviados: 0 });
+  const { data: tokens } = await db.from("push_tokens").select("token");
+  if (!tokens?.length) return Response.json({ enviados: 0 });
+  const muertos: string[] = [];
+  await Promise.all(tokens.map(async (t) => {
+    const res = await enviar(t.token, `${a.emoji ?? "📢"} ${a.titulo}`, recortar(a.texto, 160), { tipo: "anuncio", id: String(id) });
+    if (!res.ok) {
+      const err = await res.text();
+      if (res.status === 404 || err.includes("UNREGISTERED")) muertos.push(t.token);
+      else console.error("FCM", res.status, err);
+    }
+  }));
+  if (muertos.length) await db.from("push_tokens").delete().in("token", muertos);
+  return Response.json({ enviados: tokens.length - muertos.length });
+}
+
 Deno.serve(async (req) => {
   if (req.headers.get("x-webhook-secret") !== Deno.env.get("WEBHOOK_SECRET")) {
     return new Response("no", { status: 401 });
@@ -266,6 +302,7 @@ Deno.serve(async (req) => {
   if (cuerpo.tipo === "soporte") return avisarSoporte(cuerpo.id);
   if (cuerpo.tipo === "mencion") return avisarMencion(cuerpo.id, cuerpo.para);
   if (cuerpo.tipo === "reto") return avisarReto(cuerpo.id, cuerpo.evento);
+  if (cuerpo.tipo === "anuncio") return avisarAnuncio(cuerpo.id);
   if (cuerpo.tipo === "reporte_chat") return avisarReporteChat(cuerpo.mensaje_id, cuerpo.motivo);
   const { user_id } = cuerpo;
 

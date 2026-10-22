@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
@@ -9,9 +10,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'accesorios.dart';
+import 'amigos.dart';
+import 'avisos.dart';
 import 'cagadon.dart' show TarjetaReto;
+import 'popups.dart' show PantallaPopups;
 import 'emoji.dart';
-import 'main.dart' show db;
+import 'main.dart' show db, esDeRed;
 import 'perfil.dart' show PantallaPerfil;
 import 'tema.dart';
 import 'tipos.dart';
@@ -139,7 +143,8 @@ void _aviso(BuildContext context, String texto) => ScaffoldMessenger.of(context)
   ..hideCurrentSnackBar()
   ..showSnackBar(SnackBar(content: Text(texto)));
 
-/// Pestaña del medio (nombre al azar): la sala global y el soporte con los admins.
+/// Pestaña del medio (nombre al azar): la sala global, los amigos, el soporte con los admins
+/// y la campana del centro de avisos.
 class PantallaChat extends StatefulWidget {
   const PantallaChat({super.key});
 
@@ -147,7 +152,9 @@ class PantallaChat extends StatefulWidget {
   State<PantallaChat> createState() => _PantallaChatState();
 }
 
-class _PantallaChatState extends State<PantallaChat> {
+class _PantallaChatState extends State<PantallaChat> with SingleTickerProviderStateMixin {
+  static const _pestanas = ['todos', 'amigos', 'soporte'];
+  late final _tabs = TabController(length: _pestanas.length, vsync: this);
   bool _soyAdmin = false;
 
   @override
@@ -156,21 +163,48 @@ class _PantallaChatState extends State<PantallaChat> {
     db.rpc('es_admin').then((v) {
       if (mounted) setState(() => _soyAdmin = v == true);
     }).catchError((_) {});
+    irA.addListener(_irA);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _irA());
   }
 
   @override
-  Widget build(BuildContext context) => DefaultTabController(
-        length: 2,
-        child: Scaffold(
-          appBar: AppBar(
-            title: Text(nombreSala.toUpperCase()),
-            bottom: const TabBar(tabs: [Tab(text: 'TODOS 🚽'), Tab(text: 'SOPORTE 🛠️')]),
+  void dispose() {
+    irA.removeListener(_irA);
+    _tabs.dispose();
+    super.dispose();
+  }
+
+  // Un toque en un push o en un aviso: elegir la pestaña del baño.
+  void _irA() {
+    final destino = irA.value;
+    if (destino == null || destino.bano || !mounted) return;
+    destino.bano = true;
+    final i = _pestanas.indexOf(destino.a);
+    if (i >= 0) _tabs.animateTo(i);
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(
+          title: Text(nombreSala.toUpperCase()),
+          actions: [
+            if (_soyAdmin)
+              IconButton(
+                tooltip: 'Pop-ups',
+                icon: const Icon(Icons.campaign_outlined),
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaPopups())),
+              ),
+          ],
+          bottom: TabBar(
+            controller: _tabs,
+            tabs: const [Tab(text: 'TODOS 🚽'), Tab(text: 'AMIGOS 👥'), Tab(text: 'SOPORTE 🛠️')],
           ),
-          body: TabBarView(children: [
-            const Sala(sala: 'global'),
-            _soyAdmin ? const _Bandeja() : Sala(sala: 'soporte', hilo: db.auth.currentUser!.id),
-          ]),
         ),
+        body: TabBarView(controller: _tabs, children: [
+          const Sala(sala: 'global'),
+          const PantallaAmigos(),
+          _soyAdmin ? const _Bandeja() : Sala(sala: 'soporte', hilo: db.auth.currentUser!.id),
+        ]),
       );
 }
 
@@ -270,8 +304,20 @@ class Sala extends StatefulWidget {
   State<Sala> createState() => _SalaState();
 }
 
+var _canales = 0;
+
 class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
-  late final Stream<List<Map<String, dynamic>>> _mensajes;
+  // Mensajes por id. Se llena con una consulta normal y se mantiene al día con realtime; si
+  // realtime se cae (pantalla apagada, cambio de red, token vencido) se reconecta y se vuelve a
+  // consultar. Antes era db.from().stream(), que al fallar una vez se quedaba muerto o vacío.
+  static const _limite = 200;
+  final _porId = <int, Map<String, dynamic>>{};
+  bool _cargado = false;
+  Object? _errorCarga;
+  bool _reconectando = false;
+  RealtimeChannel? _canal;
+  Timer? _reintentoCarga, _reintentoCanal;
+  late final AppLifecycleListener _ciclo;
   final _perfiles = <String, Map<String, dynamic>>{};
   final _pidiendo = <String>{};
   Set<String> _admins = {};
@@ -291,10 +337,12 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
   @override
   void initState() {
     super.initState();
-    final base = db.from('mensajes').stream(primaryKey: ['id']);
-    _mensajes = (_esSoporte ? base.eq('hilo', widget.hilo!) : base.eq('sala', 'global'))
-        .order('created_at', ascending: false)
-        .limit(200);
+    _cargar();
+    _conectar();
+    _ciclo = AppLifecycleListener(onResume: () {
+      _conectar();
+      _cargar();
+    });
     db.rpc('admins_ids').then((r) {
       final ids = {for (final x in r as List) x as String};
       if (!mounted) return;
@@ -320,8 +368,111 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
 
   @override
   void dispose() {
+    _ciclo.dispose();
+    _reintentoCarga?.cancel();
+    _reintentoCanal?.cancel();
+    final canal = _canal;
+    _canal = null;
+    if (canal != null) db.removeChannel(canal);
     _texto.dispose();
     super.dispose();
+  }
+
+  // Lista para pintar: lo más nuevo primero (el ListView va al revés).
+  List<Map<String, dynamic>> get _lista {
+    final ids = _porId.keys.toList()..sort((a, b) => b.compareTo(a));
+    return [for (final id in ids.take(_limite)) _porId[id]!];
+  }
+
+  bool _esDeAqui(Map<String, dynamic> m) => _esSoporte ? m['hilo'] == widget.hilo : m['sala'] == 'global';
+
+  Future<void> _cargar({int intento = 0}) async {
+    try {
+      final base = db.from('mensajes').select();
+      final r = await (_esSoporte ? base.eq('hilo', widget.hilo!) : base.eq('sala', 'global'))
+          .order('id', ascending: false)
+          .limit(_limite);
+      if (!mounted) return;
+      final ultimo = r.isEmpty ? 0 : r.first['id'] as int;
+      setState(() {
+        // Lo que llegó por realtime mientras se consultaba (más nuevo que lo consultado) se queda.
+        final recientes = _porId.entries.where((e) => e.key > ultimo).toList();
+        _porId
+          ..clear()
+          ..addEntries([for (final m in r) MapEntry(m['id'] as int, m)])
+          ..addEntries(recientes);
+        _cargado = true;
+        _errorCarga = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      // Sin red: se reintenta solo. Mientras, se sigue mostrando lo que ya había.
+      if (intento < 4) {
+        _reintentoCarga?.cancel();
+        _reintentoCarga = Timer(Duration(seconds: 2 * (intento + 1)), () => _cargar(intento: intento + 1));
+      }
+      if (!_cargado || !esDeRed(e)) setState(() => _errorCarga = e);
+    }
+  }
+
+  void _conectar() {
+    final viejo = _canal;
+    if (viejo != null) db.removeChannel(viejo);
+    final filtro = _esSoporte
+        ? PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'hilo', value: widget.hilo)
+        : PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'sala', value: 'global');
+    late final RealtimeChannel canal;
+    var unido = false;
+    canal = db
+        .channel('sala-${widget.sala}-${_canales++}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'mensajes',
+          filter: filtro,
+          callback: (c) => _poner(c.newRecord),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'mensajes',
+          filter: filtro,
+          callback: (c) => _poner(c.newRecord),
+        )
+        // Los borrados no se pueden filtrar en realtime: llega solo el id y se quita si está.
+        .onPostgresChanges(
+          event: PostgresChangeEvent.delete,
+          schema: 'public',
+          table: 'mensajes',
+          callback: (c) {
+            final id = c.oldRecord['id'];
+            if (mounted && _porId.containsKey(id)) setState(() => _porId.remove(id));
+          },
+        )
+        .subscribe((estado, [_]) {
+          if (!mounted || _canal != canal) return;
+          switch (estado) {
+            case RealtimeSubscribeStatus.subscribed:
+              // Al unirse (o volver a unirse) se consulta de nuevo: pudo perderse algo en el hueco.
+              if (unido || _reconectando) _cargar();
+              unido = true;
+              if (_reconectando) setState(() => _reconectando = false);
+            case RealtimeSubscribeStatus.channelError:
+            case RealtimeSubscribeStatus.timedOut:
+            case RealtimeSubscribeStatus.closed:
+              setState(() => _reconectando = true);
+              _reintentoCanal?.cancel();
+              _reintentoCanal = Timer(const Duration(seconds: 3), () {
+                if (mounted && _canal == canal) _conectar();
+              });
+          }
+        });
+    _canal = canal;
+  }
+
+  void _poner(Map<String, dynamic> m) {
+    if (!mounted || m['id'] == null || !_esDeAqui(m)) return;
+    setState(() => _porId[m['id'] as int] = m);
   }
 
   Future<void> _cargarAmigos() async {
@@ -386,13 +537,19 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
     if (!_esSoporte && !await aceptoReglas(context)) return;
     setState(() => _enviando = true);
     try {
-      await db.from('mensajes').insert({
-        'sala': widget.sala,
-        if (_esSoporte) 'hilo': widget.hilo,
-        'texto': t,
-        'tarjeta': ?tarjeta,
-        'es_bug': bug,
-      });
+      final nuevo = await db
+          .from('mensajes')
+          .insert({
+            'sala': widget.sala,
+            if (_esSoporte) 'hilo': widget.hilo,
+            'texto': t,
+            'tarjeta': ?tarjeta,
+            'es_bug': bug,
+          })
+          .select()
+          .single();
+      // Se pinta ya, sin esperar a realtime.
+      _poner(nuevo);
       if (texto == null && tarjeta == null) _texto.clear();
     } catch (e) {
       if (mounted) _aviso(context, _error(e));
@@ -528,9 +685,11 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
           await db.from('bloqueos').insert({'bloqueado': m['user_id']});
           if (mounted) _aviso(context, 'Bloqueado. Ya no verás sus mensajes');
         case 'ocultar':
-          await db.from('mensajes').update({'oculto': m['oculto'] != true}).eq('id', m['id']);
+          final r = await db.from('mensajes').update({'oculto': m['oculto'] != true}).eq('id', m['id']).select().single();
+          _poner(r);
         case 'borrar':
           await db.from('mensajes').delete().eq('id', m['id']);
+          if (mounted) setState(() => _porId.remove(m['id']));
       }
     } on PostgrestException catch (e) {
       if (mounted) _aviso(context, e.code == '23505' ? 'Ya lo habías reportado' : e.message);
@@ -553,18 +712,45 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
               TextButton.icon(onPressed: _reportarError, icon: const Icon(Icons.bug_report_outlined), label: const Text('ERROR')),
             ]),
           ),
+        if (_reconectando && _cargado)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            color: p.suave,
+            child: Text('Reconectando…', textAlign: TextAlign.center, style: TextStyle(color: p.textoSuave, fontSize: 12)),
+          ),
         Expanded(
-          child: StreamBuilder<List<Map<String, dynamic>>>(
-            stream: _mensajes,
-            builder: (context, snap) {
-              if (snap.hasError) return Center(child: Text('No se pudo cargar el chat'));
-              final lista = snap.data;
-              if (lista == null) return const Center(child: CircularProgressIndicator());
+          child: Builder(
+            builder: (context) {
+              if (!_cargado) {
+                if (_errorCarga == null) return const Center(child: CircularProgressIndicator());
+                return Center(
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Text('No se pudo cargar el chat', style: TextStyle(color: p.textoSuave)),
+                    const SizedBox(height: 8),
+                    OutlinedButton(
+                      onPressed: () {
+                        setState(() => _errorCarga = null);
+                        _conectar();
+                        _cargar();
+                      },
+                      child: const Text('REINTENTAR'),
+                    ),
+                  ]),
+                );
+              }
+              final lista = _lista;
               _pedirPerfiles([_yo, ...lista.map((m) => m['user_id'] as String)]);
               if (lista.isEmpty) {
-                return Center(
-                  child: Text(_esSoporte ? 'Todavía no hay mensajes' : 'Nadie ha dicho nada. Estrena $nombreSala 🚽',
-                      style: TextStyle(color: p.textoSuave)),
+                return RefreshIndicator(
+                  onRefresh: _cargar,
+                  child: ListView(children: [
+                    const SizedBox(height: 120),
+                    Center(
+                      child: Text(_esSoporte ? 'Todavía no hay mensajes' : 'Nadie ha dicho nada. Estrena $nombreSala 🚽',
+                          style: TextStyle(color: p.textoSuave)),
+                    ),
+                  ]),
                 );
               }
               return ListView.builder(
