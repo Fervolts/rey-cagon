@@ -317,6 +317,9 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
   bool _reconectando = false;
   RealtimeChannel? _canal;
   Timer? _reintentoCarga, _reintentoCanal;
+  // Anuncios fijados arriba de la sala global (los fija un admin por un tiempo).
+  List<Map<String, dynamic>> _fijados = [];
+  int _verFijado = 0;
   late final AppLifecycleListener _ciclo;
   final _perfiles = <String, Map<String, dynamic>>{};
   final _pidiendo = <String>{};
@@ -404,6 +407,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
         _cargado = true;
         _errorCarga = null;
       });
+      _cargarFijados();
     } catch (e) {
       if (!mounted) return;
       // Sin red: se reintenta solo. Mientras, se sigue mostrando lo que ya había.
@@ -414,6 +418,29 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
       if (!_cargado || !esDeRed(e)) setState(() => _errorCarga = e);
     }
   }
+
+  // Aparte de los 200 últimos: un anuncio fijado puede ser más viejo que eso.
+  Future<void> _cargarFijados() async {
+    if (_esSoporte) return;
+    try {
+      final r = await db
+          .from('mensajes')
+          .select()
+          .eq('sala', 'global')
+          .gt('fijado_hasta', DateTime.now().toUtc().toIso8601String())
+          .order('id', ascending: false)
+          .limit(5);
+      if (!mounted) return;
+      _pedirPerfiles(r.map((m) => m['user_id'] as String));
+      setState(() => _fijados = List<Map<String, dynamic>>.from(r));
+    } catch (_) {}
+  }
+
+  List<Map<String, dynamic>> get _fijadosVigentes =>
+      _fijados.where((m) => DateTime.parse(m['fijado_hasta'] as String).isAfter(DateTime.now())).toList();
+
+  bool _estaFijado(Map<String, dynamic> m) =>
+      m['fijado_hasta'] != null && DateTime.parse(m['fijado_hasta'] as String).isAfter(DateTime.now());
 
   void _conectar() {
     final viejo = _canal;
@@ -437,7 +464,12 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
           schema: 'public',
           table: 'mensajes',
           filter: filtro,
-          callback: (c) => _poner(c.newRecord),
+          callback: (c) {
+            final m = c.newRecord;
+            final cambiaFijado = m['fijado_hasta'] != null || _fijados.any((f) => f['id'] == m['id']);
+            _poner(m);
+            if (cambiaFijado) _cargarFijados();
+          },
         )
         // Los borrados no se pueden filtrar en realtime: llega solo el id y se quita si está.
         .onPostgresChanges(
@@ -447,6 +479,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
           callback: (c) {
             final id = c.oldRecord['id'];
             if (mounted && _porId.containsKey(id)) setState(() => _porId.remove(id));
+            if (_fijados.any((f) => f['id'] == id)) _cargarFijados();
           },
         )
         .subscribe((estado, [_]) {
@@ -652,6 +685,10 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
           if (!suyo && !_esSoporte && !_admins.contains(m['user_id']))
             ListTile(leading: const Icon(Icons.block), title: const Text('Bloquear a esta persona'), onTap: () => Navigator.pop(context, 'bloquear')),
           if (_soyAdmin && !_esSoporte)
+            _estaFijado(m)
+                ? ListTile(leading: const Icon(Icons.push_pin_outlined), title: const Text('Desfijar'), onTap: () => Navigator.pop(context, 'desfijar'))
+                : ListTile(leading: const Icon(Icons.push_pin), title: const Text('Fijar arriba como anuncio'), onTap: () => Navigator.pop(context, 'fijar')),
+          if (_soyAdmin && !_esSoporte)
             ListTile(
               leading: Icon(m['oculto'] == true ? Icons.visibility : Icons.visibility_off),
               title: Text(m['oculto'] == true ? 'Volver a mostrar' : 'Ocultar a todos'),
@@ -687,6 +724,22 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
         case 'ocultar':
           final r = await db.from('mensajes').update({'oculto': m['oculto'] != true}).eq('id', m['id']).select().single();
           _poner(r);
+        case 'fijar':
+          final dias = await showModalBottomSheet<int>(
+            context: context,
+            builder: (context) => SafeArea(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const ListTile(title: Text('📌 ¿Cuánto tiempo se queda arriba?')),
+                for (final (d, nombre) in const [(1, '1 día'), (3, '3 días'), (7, '1 semana'), (30, '1 mes')])
+                  ListTile(title: Text(nombre), onTap: () => Navigator.pop(context, d)),
+              ]),
+            ),
+          );
+          if (dias == null) return;
+          await _fijar(m, DateTime.now().toUtc().add(Duration(days: dias)));
+          if (mounted) _aviso(context, 'Fijado arriba 📌');
+        case 'desfijar':
+          await _fijar(m, null);
         case 'borrar':
           await db.from('mensajes').delete().eq('id', m['id']);
           if (mounted) setState(() => _porId.remove(m['id']));
@@ -696,12 +749,58 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
     }
   }
 
+  Future<void> _fijar(Map<String, dynamic> m, DateTime? hasta) async {
+    final r = await db.from('mensajes').update({'fijado_hasta': hasta?.toIso8601String()}).eq('id', m['id']).select().single();
+    _poner(r);
+    await _cargarFijados();
+  }
+
+  Future<void> _abrirFijado(Map<String, dynamic> m) async {
+    final hasta = DateTime.parse(m['fijado_hasta'] as String).toLocal();
+    final tarjeta = m['tarjeta'] as Map<String, dynamic>?;
+    final texto = (m['texto'] as String?) ?? '';
+    final desfijar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('📌 ANUNCIO · ${_perfiles[m['user_id']]?['username'] ?? ''}'),
+        content: SingleChildScrollView(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            if (tarjeta != null) ...[_Tarjeta(tarjeta), const SizedBox(height: 8)],
+            if (texto.isNotEmpty) _TextoConLinks(texto),
+            const SizedBox(height: 12),
+            Text('Fijado hasta el ${hasta.day}/${hasta.month}', style: numeros(context, tamano: 12, color: paleta(context).textoSuave)),
+          ]),
+        ),
+        actions: [
+          if (_soyAdmin) TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('DESFIJAR')),
+          FilledButton(onPressed: () => Navigator.pop(context, false), child: const Text('VALE')),
+        ],
+      ),
+    );
+    if (desfijar == true) {
+      try {
+        await _fijar(m, null);
+      } on PostgrestException catch (e) {
+        if (mounted) _aviso(context, e.message);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
     final p = paleta(context);
+    final fijados = _fijadosVigentes;
     return Column(
       children: [
+        if (fijados.isNotEmpty)
+          _BarraFijada(
+            mensaje: fijados[_verFijado % fijados.length],
+            indice: _verFijado % fijados.length,
+            total: fijados.length,
+            onTap: () => _abrirFijado(fijados[_verFijado % fijados.length]),
+            onSiguiente: () => setState(() => _verFijado++),
+          ),
         if (_esSoporte && widget.hilo == _yo)
           Container(
             width: double.infinity,
@@ -823,6 +922,49 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
   }
 }
 
+/// La franja de arriba del chat con el anuncio fijado. Con varios, se pasa al siguiente.
+class _BarraFijada extends StatelessWidget {
+  const _BarraFijada({required this.mensaje, required this.indice, required this.total, required this.onTap, required this.onSiguiente});
+
+  final Map<String, dynamic> mensaje;
+  final int indice, total;
+  final VoidCallback onTap, onSiguiente;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paleta(context);
+    final texto = (mensaje['texto'] as String?)?.replaceAll('\n', ' ') ?? '';
+    return Material(
+      color: acento.withValues(alpha: .14),
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(left: const BorderSide(color: acento, width: 4), bottom: BorderSide(color: p.borde)),
+          ),
+          padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+          child: Row(children: [
+            const Emoji('📌', tamano: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('ANUNCIO', style: numeros(context, tamano: 10, weight: FontWeight.w900).copyWith(letterSpacing: 1.2)),
+                Text(texto.isEmpty ? 'Toca para verlo' : texto, maxLines: 2, overflow: TextOverflow.ellipsis),
+              ]),
+            ),
+            if (total > 1)
+              TextButton(
+                onPressed: onSiguiente,
+                style: TextButton.styleFrom(minimumSize: Size.zero, padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6)),
+                child: Text('${indice + 1}/$total ›', style: numeros(context, tamano: 12, weight: FontWeight.w800)),
+              ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
 class _Burbuja extends StatelessWidget {
   const _Burbuja({required this.mensaje, required this.perfil, required this.mio, required this.admin, this.meMencionan = false});
 
@@ -882,6 +1024,8 @@ class _Burbuja extends StatelessWidget {
                         ),
                       ],
                       if (mensaje['es_bug'] == true) const Text('  🐞'),
+                      if (mensaje['fijado_hasta'] != null && DateTime.parse(mensaje['fijado_hasta'] as String).isAfter(DateTime.now()))
+                        const Text('  📌'),
                       const Spacer(),
                       Text(_hora(mensaje['created_at']), style: numeros(context, tamano: 11, color: p.textoSuave)),
                     ]),
