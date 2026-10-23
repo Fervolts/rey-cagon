@@ -1,6 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Inglés: para todo teléfono que no esté en español (values-es tiene el español). -->
 <resources>
-    <string name="widget_descripcion">Botón de CAGUÉ: registra sin abrir la app</string>
-    <string name="widget_ranking_descripcion">Tu puesto en el ranking de la semana y quién va cerca</string>
-    <string name="widget_ranking_global_descripcion">Tu puesto entre todos los que usan Rey Cagón esta semana</string>
+    <string name="app_name">King of the Throne</string>
+    <string name="widget_cague_nombre">King of the Throne</string>
+    <string name="widget_ranking_nombre">King of the Throne · Leaderboard</string>
+    <string name="widget_ranking_global_nombre">King of the Throne · Global leaderboard</string>
+    <string name="widget_descripcion">I POOPED button: log it without opening the app</string>
+    <string name="widget_ranking_descripcion">Your spot on this week\'s leaderboard and who\'s close</string>
+    <string name="widget_ranking_global_descripcion">Your spot among everyone on King of the Throne this week</string>
+    <string name="widget_cague">I POOPED</string>
+    <string name="widget_hoy">TODAY %s</string>
+    <string name="widget_hoy_cero">TODAY 0</string>
+    <string name="widget_puesto">RANK</string>
+    <string name="widget_semana">WEEK</string>
+    <string name="widget_abrir">Open King of the Throne to load the leaderboard</string>
+    <string name="widget_tu">%s (you)</string>
 </resources>

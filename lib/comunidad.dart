@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'emoji.dart';
+import 'idioma.dart';
 import 'main.dart' show db;
 
 // Comunidad oficial fuera de la app: el canal de WhatsApp (y Discord si algún día hace falta).
@@ -11,6 +12,8 @@ import 'main.dart' show db;
 typedef _Link = ({String id, String url});
 
 Future<List<_Link>> _links() async {
+  // El canal de WhatsApp es en español: en inglés no se ofrece.
+  if (enIngles) return [];
   try {
     final r = await db.from('comunidad').select('id, url').order('id', ascending: false);
     return [for (final x in r) (id: x['id'] as String, url: x['url'] as String)];
@@ -19,7 +22,9 @@ Future<List<_Link>> _links() async {
   }
 }
 
-String _nombre(String id) => id == 'discord' ? 'el Discord' : 'el canal de WhatsApp';
+String _nombre(String id) => id == 'discord'
+    ? tr('el Discord', 'the Discord')
+    : tr('el canal de WhatsApp', 'the WhatsApp channel');
 
 Future<void> _abrir(String url) => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
 
@@ -37,12 +42,15 @@ Future<void> ofrecerComunidad(BuildContext context) async {
   final unirme = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('🚽 La comunidad del trono'),
-      content: Text('Únete a ${_nombre(link.id)} de Rey Cagón: memes, chisme del baño y adelantos de lo que viene.\n\n'
-          'Es un canal: nadie ve tu número.'),
+      title: Text(tr('🚽 La comunidad del trono', '🚽 The throne community')),
+      content: Text(tr(
+          'Únete a ${_nombre(link.id)} de Rey Cagón: memes, chisme del baño y adelantos de lo que viene.\n\n'
+              'Es un canal: nadie ve tu número.',
+          'Join ${_nombre(link.id)} of King of the Throne: memes, bathroom gossip and sneak peeks of what is coming.\n\n'
+              "It's a channel: nobody sees your number.")),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('AHORA NO')),
-        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('UNIRME')),
+        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('AHORA NO', 'NOT NOW'))),
+        FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('UNIRME', 'JOIN'))),
       ],
     ),
   );
@@ -73,8 +81,10 @@ class _FilaComunidadState extends State<FilaComunidad> {
         for (final l in _lista)
           ListTile(
             leading: Emoji(l.id == 'discord' ? '🎮' : '📢', tamano: 24),
-            title: Text(l.id == 'discord' ? 'Discord de Rey Cagón' : 'Canal de WhatsApp de Rey Cagón'),
-            subtitle: const Text('Memes, chisme y adelantos'),
+            title: Text(l.id == 'discord'
+                ? tr('Discord de Rey Cagón', 'King of the Throne Discord')
+                : tr('Canal de WhatsApp de Rey Cagón', 'King of the Throne WhatsApp channel')),
+            subtitle: Text(tr('Memes, chisme y adelantos', 'Memes, gossip and sneak peeks')),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _abrir(l.url),
           ),

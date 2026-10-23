@@ -15,6 +15,7 @@ import 'avisos.dart';
 import 'cagadon.dart' show TarjetaReto;
 import 'popups.dart' show PantallaPopups;
 import 'emoji.dart';
+import 'idioma.dart';
 import 'main.dart' show db, esDeRed;
 import 'perfil.dart' show PantallaPerfil;
 import 'tema.dart';
@@ -47,31 +48,54 @@ const _nombres = [
   ('Benjo 🇯🇵', 'BENJO'),
 ];
 
+const _nombresEn = [
+  ('The Throne', 'THRONE'),
+  ('The Porcelain Throne', 'PORCELAIN'),
+  ('The Loo', 'LOO'),
+  ('The John', 'JOHN'),
+  ('The Can', 'CAN'),
+  ('The Crapper', 'CRAPPER'),
+  ('The Head', 'HEAD'),
+  ('The Bog', 'BOG'),
+  ('The Potty', 'POTTY'),
+  ('The Latrine', 'LATRINE'),
+  ('The Commode', 'COMMODE'),
+  ('The Restroom', 'RESTROOM'),
+  ('El Baño 🇪🇸', 'BAÑO'),
+  ('Das Klo 🇩🇪', 'KLO'),
+  ('Le Petit Coin 🇫🇷', 'PETIT COIN'),
+  ('Il Gabinetto 🇮🇹', 'GABINETTO'),
+  ('Benjo 🇯🇵', 'BENJO'),
+];
+
 var nombreSala = 'El Baño';
 var nombreCorto = 'BAÑO';
 
 Future<void> elegirNombreSala() async {
+  final nombres = enIngles ? _nombresEn : _nombres;
+  final clave = enIngles ? 'nombre_sala_en' : 'nombre_sala';
   try {
     final prefs = await SharedPreferences.getInstance();
-    final antes = prefs.getInt('nombre_sala');
+    var antes = prefs.getInt(clave);
+    if (antes != null && antes >= nombres.length) antes = null;
     // Sorteo entre todos menos el de la vez pasada.
-    var i = Random().nextInt(antes == null ? _nombres.length : _nombres.length - 1);
+    var i = Random().nextInt(antes == null ? nombres.length : nombres.length - 1);
     if (antes != null && i >= antes) i++;
-    await prefs.setInt('nombre_sala', i);
-    nombreSala = _nombres[i].$1;
-    nombreCorto = _nombres[i].$2;
+    await prefs.setInt(clave, i);
+    nombreSala = nombres[i].$1;
+    nombreCorto = nombres[i].$2;
   } catch (_) {}
 }
 
 const _columnasPerfil =
     'id, username, avatar, sombrero, lentes, mascota, cagadas, lentes_x, lentes_y, sombrero_x, sombrero_y, lentes_escala, sombrero_escala';
 
-const _reglas = [
-  ('💩', 'Aquí se habla de mojones. Groserías sí, odio no.'),
-  ('🚫', 'Nada de insultos racistas, acoso, amenazas ni contenido sexual.'),
-  ('📵', 'No compartas teléfonos, correos ni datos de nadie.'),
-  ('🔗', 'Los links pasan por un filtro: acortadores, IPs y archivos que se instalan no entran.'),
-  ('🚩', 'Mantén apretado un mensaje para reportarlo o bloquear a quien lo escribió. Con 3 reportes se oculta.'),
+List<(String, String)> get _reglas => [
+  ('💩', tr('Aquí se habla de mojones. Groserías sí, odio no.', 'We talk turds here. Swearing is fine, hate is not.')),
+  ('🚫', tr('Nada de insultos racistas, acoso, amenazas ni contenido sexual.', 'No racist insults, harassment, threats or sexual content.')),
+  ('📵', tr('No compartas teléfonos, correos ni datos de nadie.', "Don't share phone numbers, emails or anyone's personal info.")),
+  ('🔗', tr('Los links pasan por un filtro: acortadores, IPs y archivos que se instalan no entran.', "Links go through a filter: shorteners, IPs and files that install stuff don't get in.")),
+  ('🚩', tr('Mantén apretado un mensaje para reportarlo o bloquear a quien lo escribió. Con 3 reportes se oculta.', 'Press and hold a message to report it or block whoever wrote it. With 3 reports it gets hidden.')),
 ];
 
 /// La primera vez que alguien va a escribir: reglas de la sala y "Acepto".
@@ -82,7 +106,7 @@ Future<bool> aceptoReglas(BuildContext context) async {
   final ok = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      title: Text('Reglas de $nombreSala 🚽'),
+      title: Text(tr('Reglas de $nombreSala 🚽', '$nombreSala rules 🚽')),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -100,8 +124,8 @@ Future<bool> aceptoReglas(BuildContext context) async {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('AHORA NO')),
-        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('ACEPTO')),
+        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('AHORA NO', 'NOT NOW'))),
+        FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('ACEPTO', 'I AGREE'))),
       ],
     ),
   );
@@ -109,7 +133,7 @@ Future<bool> aceptoReglas(BuildContext context) async {
   return ok == true;
 }
 
-String _error(Object e) => e is PostgrestException ? e.message : '$e';
+String _error(Object e) => e is PostgrestException ? trServidor(e.message) : '$e';
 
 /// Después de registrar: si llegó a un hito o desbloqueó algo, pregunta si lo presume.
 Future<void> ofrecerPresumir(BuildContext context, int total) async {
@@ -119,11 +143,11 @@ Future<void> ofrecerPresumir(BuildContext context, int total) async {
   final presumir = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      title: Text(esHito ? '¡$total cagadas! 👑' : '¡Desbloqueaste ${desbloqueo!.nombre}!'),
-      content: Text('¿Lo presumes en $nombreSala?'),
+      title: Text(esHito ? tr('¡$total cagadas! 👑', '$total poops! 👑') : tr('¡Desbloqueaste ${desbloqueo!.nombre}!', 'You unlocked ${desbloqueo.nombre}!')),
+      content: Text(tr('¿Lo presumes en $nombreSala?', 'Show it off in $nombreSala?')),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('NO')),
-        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('PRESUMIR')),
+        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('NO', 'NO'))),
+        FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('PRESUMIR', 'SHOW OFF'))),
       ],
     ),
   );
@@ -133,7 +157,7 @@ Future<void> ofrecerPresumir(BuildContext context, int total) async {
       'sala': 'global',
       'tarjeta': esHito ? {'tipo': 'hito', 'n': total} : {'tipo': 'desbloqueo', 'emoji': desbloqueo!.emoji},
     });
-    if (context.mounted) _aviso(context, 'Publicado en $nombreSala 🚽');
+    if (context.mounted) _aviso(context, tr('Publicado en $nombreSala 🚽', 'Posted in $nombreSala 🚽'));
   } catch (e) {
     if (context.mounted) _aviso(context, _error(e));
   }
@@ -143,8 +167,8 @@ void _aviso(BuildContext context, String texto) => ScaffoldMessenger.of(context)
   ..hideCurrentSnackBar()
   ..showSnackBar(SnackBar(content: Text(texto)));
 
-/// Pestaña del medio (nombre al azar): la sala global, los amigos, el soporte con los admins
-/// y la campana del centro de avisos.
+/// Pestaña del medio (nombre al azar): la sala general, la de cada idioma (primero la tuya), los
+/// amigos y, desde el botón de arriba, el soporte con los admins.
 class PantallaChat extends StatefulWidget {
   const PantallaChat({super.key});
 
@@ -153,7 +177,8 @@ class PantallaChat extends StatefulWidget {
 }
 
 class _PantallaChatState extends State<PantallaChat> with SingleTickerProviderStateMixin {
-  static const _pestanas = ['todos', 'amigos', 'soporte'];
+  // Salas en public.mensajes: 'global' es la general, 'es' y 'en' las de cada idioma.
+  final _pestanas = ['global', idioma.value, if (enIngles) 'es' else 'en', 'amigos'];
   late final _tabs = TabController(length: _pestanas.length, vsync: this);
   bool _soyAdmin = false;
 
@@ -179,9 +204,30 @@ class _PantallaChatState extends State<PantallaChat> with SingleTickerProviderSt
     final destino = irA.value;
     if (destino == null || destino.bano || !mounted) return;
     destino.bano = true;
-    final i = _pestanas.indexOf(destino.a);
+    if (destino.a == 'soporte') {
+      _abrirSoporte();
+      return;
+    }
+    final i = _pestanas.indexOf(destino.a == 'todos' ? 'global' : destino.a);
     if (i >= 0) _tabs.animateTo(i);
   }
+
+  void _abrirSoporte() => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => Scaffold(
+            appBar: AppBar(title: Text(tr('SOPORTE 🛠️', 'SUPPORT 🛠️'))),
+            body: _soyAdmin ? const _Bandeja() : Sala(sala: 'soporte', hilo: db.auth.currentUser!.id),
+          ),
+        ),
+      );
+
+  String _nombrePestana(String sala) => switch (sala) {
+        'global' => 'GENERAL 🌎',
+        'es' => 'ESPAÑOL',
+        'en' => 'ENGLISH',
+        _ => tr('AMIGOS 👥', 'FRIENDS 👥'),
+      };
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -194,16 +240,21 @@ class _PantallaChatState extends State<PantallaChat> with SingleTickerProviderSt
                 icon: const Icon(Icons.campaign_outlined),
                 onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaPopups())),
               ),
+            IconButton(
+              tooltip: tr('Soporte', 'Support'),
+              icon: const Icon(Icons.support_agent),
+              onPressed: _abrirSoporte,
+            ),
           ],
           bottom: TabBar(
             controller: _tabs,
-            tabs: const [Tab(text: 'TODOS 🚽'), Tab(text: 'AMIGOS 👥'), Tab(text: 'SOPORTE 🛠️')],
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            tabs: [for (final p in _pestanas) Tab(text: _nombrePestana(p))],
           ),
         ),
         body: TabBarView(controller: _tabs, children: [
-          const Sala(sala: 'global'),
-          const PantallaAmigos(),
-          _soyAdmin ? const _Bandeja() : Sala(sala: 'soporte', hilo: db.auth.currentUser!.id),
+          for (final p in _pestanas) p == 'amigos' ? const PantallaAmigos() : Sala(key: ValueKey(p), sala: p),
         ]),
       );
 }
@@ -213,7 +264,7 @@ Future<void> abrirReporteDeError(BuildContext context) => Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => Scaffold(
-          appBar: AppBar(title: const Text('SOPORTE 🛠️')),
+          appBar: AppBar(title: Text(tr('SOPORTE 🛠️', 'SUPPORT 🛠️'))),
           body: Sala(sala: 'soporte', hilo: db.auth.currentUser!.id, abrirBug: true),
         ),
       ),
@@ -250,7 +301,7 @@ class _BandejaState extends State<_Bandeja> {
     return RefreshIndicator(
       onRefresh: _cargar,
       child: hilos.isEmpty
-          ? ListView(children: const [Padding(padding: EdgeInsets.all(32), child: Center(child: Text('Nadie ha escrito a soporte')))])
+          ? ListView(children: [Padding(padding: const EdgeInsets.all(32), child: Center(child: Text(tr('Nadie ha escrito a soporte', 'Nobody has written to support'))))])
           : ListView.separated(
               itemCount: hilos.length,
               separatorBuilder: (_, _) => Divider(height: 1, color: p.borde),
@@ -260,7 +311,7 @@ class _BandejaState extends State<_Bandeja> {
                   leading: Avatar(h, tamano: 36),
                   title: Text(h['username'] ?? '?'),
                   subtitle: Text(
-                    '${h['del_usuario'] == true ? '' : 'Tú: '}${h['es_bug'] == true ? '🐞 ' : ''}${h['texto']}',
+                    '${h['del_usuario'] == true ? '' : tr('Tú: ', 'You: ')}${h['es_bug'] == true ? '🐞 ' : ''}${h['texto']}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -270,7 +321,7 @@ class _BandejaState extends State<_Bandeja> {
                       context,
                       MaterialPageRoute(
                         builder: (_) => Scaffold(
-                          appBar: AppBar(title: Text('SOPORTE · ${h['username']}')),
+                          appBar: AppBar(title: Text(tr('SOPORTE · ${h['username']}', 'SUPPORT · ${h['username']}'))),
                           body: Sala(sala: 'soporte', hilo: h['hilo']),
                         ),
                       ),
@@ -289,7 +340,7 @@ String _hora(String iso) {
   final hoy = DateTime.now();
   final hh = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
   if (t.year == hoy.year && t.month == hoy.month && t.day == hoy.day) return hh;
-  return '${t.day}/${t.month} $hh';
+  return enIngles ? '${t.month}/${t.day} $hh' : '${t.day}/${t.month} $hh';
 }
 
 /// Una sala de mensajes en tiempo real: la global, o un hilo de soporte.
@@ -387,12 +438,12 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
     return [for (final id in ids.take(_limite)) _porId[id]!];
   }
 
-  bool _esDeAqui(Map<String, dynamic> m) => _esSoporte ? m['hilo'] == widget.hilo : m['sala'] == 'global';
+  bool _esDeAqui(Map<String, dynamic> m) => _esSoporte ? m['hilo'] == widget.hilo : m['sala'] == widget.sala;
 
   Future<void> _cargar({int intento = 0}) async {
     try {
       final base = db.from('mensajes').select();
-      final r = await (_esSoporte ? base.eq('hilo', widget.hilo!) : base.eq('sala', 'global'))
+      final r = await (_esSoporte ? base.eq('hilo', widget.hilo!) : base.eq('sala', widget.sala))
           .order('id', ascending: false)
           .limit(_limite);
       if (!mounted) return;
@@ -426,7 +477,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
       final r = await db
           .from('mensajes')
           .select()
-          .eq('sala', 'global')
+          .eq('sala', widget.sala)
           .gt('fijado_hasta', DateTime.now().toUtc().toIso8601String())
           .order('id', ascending: false)
           .limit(5);
@@ -447,7 +498,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
     if (viejo != null) db.removeChannel(viejo);
     final filtro = _esSoporte
         ? PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'hilo', value: widget.hilo)
-        : PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'sala', value: 'global');
+        : PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'sala', value: widget.sala);
     late final RealtimeChannel canal;
     var unido = false;
     canal = db
@@ -615,30 +666,30 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
           controller: scroll,
           padding: conBordeAbajo(context, const EdgeInsets.fromLTRB(16, 0, 16, 16)),
           children: [
-            Text('PRESUMIR', style: Theme.of(context).textTheme.titleLarge),
+            Text(tr('PRESUMIR', 'SHOW OFF'), style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),
             if (ultima != null)
               ListTile(
                 leading: Emoji(tipoEmoji(ultima['tipo'] as int?), tamano: 30),
-                title: Text('Mi última cagada: ${tipos[ultima['tipo']]?.$2}'),
+                title: Text(tr('Mi última cagada: ${tipos[ultima['tipo']]?.$2}', 'My latest poop: ${tipos[ultima['tipo']]?.$2}')),
                 onTap: () => Navigator.pop(context, {'tipo': 'cagada', 'id': ultima['id']}),
               ),
             for (final h in logrados)
               ListTile(
                 leading: const Emoji('👑', tamano: 30),
-                title: Text('Llegué a $h cagadas'),
+                title: Text(tr('Llegué a $h cagadas', 'I hit $h poops')),
                 onTap: () => Navigator.pop(context, {'tipo': 'hito', 'n': h}),
               ),
             for (final d in mios)
               ListTile(
                 leading: Emoji(d.emoji, tamano: 30),
-                title: Text('Desbloqueé ${d.nombre}'),
+                title: Text(tr('Desbloqueé ${d.nombre}', 'I unlocked ${d.nombre}')),
                 onTap: () => Navigator.pop(context, {'tipo': 'desbloqueo', 'emoji': d.emoji}),
               ),
             if (ultima == null && logrados.isEmpty && mios.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Text('Todavía no tienes nada que presumir. ¡A cagar!'),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(tr('Todavía no tienes nada que presumir. ¡A cagar!', 'Nothing to show off yet. Go drop a deuce!')),
               ),
           ],
         ),
@@ -652,17 +703,17 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
     final enviar = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Reportar un error 🐞'),
+        title: Text(tr('Reportar un error 🐞', 'Report a bug 🐞')),
         content: TextField(
           controller: que,
           autofocus: true,
           maxLines: 5,
           maxLength: 800,
-          decoration: const InputDecoration(hintText: '¿Qué pasó y qué estabas haciendo?'),
+          decoration: InputDecoration(hintText: tr('¿Qué pasó y qué estabas haciendo?', 'What happened and what were you doing?')),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('CANCELAR')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('ENVIAR')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('CANCELAR', 'CANCEL'))),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('ENVIAR', 'SEND'))),
         ],
       ),
     );
@@ -679,23 +730,23 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
       builder: (context) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           if (!suyo && !_esSoporte && _amigos.any((a) => a['id'] == m['user_id']))
-            ListTile(leading: const Icon(Icons.alternate_email), title: const Text('Mencionar'), onTap: () => Navigator.pop(context, 'mencionar')),
+            ListTile(leading: const Icon(Icons.alternate_email), title: Text(tr('Mencionar', 'Mention')), onTap: () => Navigator.pop(context, 'mencionar')),
           if (!suyo && !_esSoporte)
-            ListTile(leading: const Icon(Icons.flag_outlined), title: const Text('Reportar mensaje'), onTap: () => Navigator.pop(context, 'reportar')),
+            ListTile(leading: const Icon(Icons.flag_outlined), title: Text(tr('Reportar mensaje', 'Report message')), onTap: () => Navigator.pop(context, 'reportar')),
           if (!suyo && !_esSoporte && !_admins.contains(m['user_id']))
-            ListTile(leading: const Icon(Icons.block), title: const Text('Bloquear a esta persona'), onTap: () => Navigator.pop(context, 'bloquear')),
+            ListTile(leading: const Icon(Icons.block), title: Text(tr('Bloquear a esta persona', 'Block this person')), onTap: () => Navigator.pop(context, 'bloquear')),
           if (_soyAdmin && !_esSoporte)
             _estaFijado(m)
-                ? ListTile(leading: const Icon(Icons.push_pin_outlined), title: const Text('Desfijar'), onTap: () => Navigator.pop(context, 'desfijar'))
-                : ListTile(leading: const Icon(Icons.push_pin), title: const Text('Fijar arriba como anuncio'), onTap: () => Navigator.pop(context, 'fijar')),
+                ? ListTile(leading: const Icon(Icons.push_pin_outlined), title: Text(tr('Desfijar', 'Unpin')), onTap: () => Navigator.pop(context, 'desfijar'))
+                : ListTile(leading: const Icon(Icons.push_pin), title: Text(tr('Fijar arriba como anuncio', 'Pin on top as announcement')), onTap: () => Navigator.pop(context, 'fijar')),
           if (_soyAdmin && !_esSoporte)
             ListTile(
               leading: Icon(m['oculto'] == true ? Icons.visibility : Icons.visibility_off),
-              title: Text(m['oculto'] == true ? 'Volver a mostrar' : 'Ocultar a todos'),
+              title: Text(m['oculto'] == true ? tr('Volver a mostrar', 'Show again') : tr('Ocultar a todos', 'Hide from everyone')),
               onTap: () => Navigator.pop(context, 'ocultar'),
             ),
           if (suyo || _soyAdmin)
-            ListTile(leading: const Icon(Icons.delete_outline), title: const Text('Borrar'), onTap: () => Navigator.pop(context, 'borrar')),
+            ListTile(leading: const Icon(Icons.delete_outline), title: Text(tr('Borrar', 'Delete')), onTap: () => Navigator.pop(context, 'borrar')),
         ]),
       ),
     );
@@ -710,17 +761,25 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
             context: context,
             builder: (context) => SafeArea(
               child: Column(mainAxisSize: MainAxisSize.min, children: [
-                for (final mo in const ['Odio o insultos', 'Acoso', 'Contenido sexual', 'Spam o estafa', 'Datos personales', 'Otro'])
-                  ListTile(title: Text(mo), onTap: () => Navigator.pop(context, mo)),
+                // El primero es lo que se guarda en la base de datos; el segundo, lo que se ve en inglés.
+                for (final (mo, moEn) in const [
+                  ('Odio o insultos', 'Hate or insults'),
+                  ('Acoso', 'Harassment'),
+                  ('Contenido sexual', 'Sexual content'),
+                  ('Spam o estafa', 'Spam or scam'),
+                  ('Datos personales', 'Personal info'),
+                  ('Otro', 'Other'),
+                ])
+                  ListTile(title: Text(tr(mo, moEn)), onTap: () => Navigator.pop(context, mo)),
               ]),
             ),
           );
           if (motivo == null) return;
           await db.from('mensaje_reportes').insert({'mensaje_id': m['id'], 'motivo': motivo});
-          if (mounted) _aviso(context, 'Reportado. Gracias 🙏');
+          if (mounted) _aviso(context, tr('Reportado. Gracias 🙏', 'Reported. Thanks 🙏'));
         case 'bloquear':
           await db.from('bloqueos').insert({'bloqueado': m['user_id']});
-          if (mounted) _aviso(context, 'Bloqueado. Ya no verás sus mensajes');
+          if (mounted) _aviso(context, tr('Bloqueado. Ya no verás sus mensajes', "Blocked. You won't see their messages anymore"));
         case 'ocultar':
           final r = await db.from('mensajes').update({'oculto': m['oculto'] != true}).eq('id', m['id']).select().single();
           _poner(r);
@@ -729,15 +788,15 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
             context: context,
             builder: (context) => SafeArea(
               child: Column(mainAxisSize: MainAxisSize.min, children: [
-                const ListTile(title: Text('📌 ¿Cuánto tiempo se queda arriba?')),
-                for (final (d, nombre) in const [(1, '1 día'), (3, '3 días'), (7, '1 semana'), (30, '1 mes')])
+                ListTile(title: Text(tr('📌 ¿Cuánto tiempo se queda arriba?', '📌 How long does it stay on top?'))),
+                for (final (d, nombre) in [(1, tr('1 día', '1 day')), (3, tr('3 días', '3 days')), (7, tr('1 semana', '1 week')), (30, tr('1 mes', '1 month'))])
                   ListTile(title: Text(nombre), onTap: () => Navigator.pop(context, d)),
               ]),
             ),
           );
           if (dias == null) return;
           await _fijar(m, DateTime.now().toUtc().add(Duration(days: dias)));
-          if (mounted) _aviso(context, 'Fijado arriba 📌');
+          if (mounted) _aviso(context, tr('Fijado arriba 📌', 'Pinned on top 📌'));
         case 'desfijar':
           await _fijar(m, null);
         case 'borrar':
@@ -745,7 +804,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
           if (mounted) setState(() => _porId.remove(m['id']));
       }
     } on PostgrestException catch (e) {
-      if (mounted) _aviso(context, e.code == '23505' ? 'Ya lo habías reportado' : e.message);
+      if (mounted) _aviso(context, e.code == '23505' ? tr('Ya lo habías reportado', "You've already reported it") : trServidor(e.message));
     }
   }
 
@@ -762,18 +821,18 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
     final desfijar = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('📌 ANUNCIO · ${_perfiles[m['user_id']]?['username'] ?? ''}'),
+        title: Text('📌 ${tr('ANUNCIO', 'ANNOUNCEMENT')} · ${_perfiles[m['user_id']]?['username'] ?? ''}'),
         content: SingleChildScrollView(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
             if (tarjeta != null) ...[_Tarjeta(tarjeta), const SizedBox(height: 8)],
             if (texto.isNotEmpty) _TextoConLinks(texto),
             const SizedBox(height: 12),
-            Text('Fijado hasta el ${hasta.day}/${hasta.month}', style: numeros(context, tamano: 12, color: paleta(context).textoSuave)),
+            Text(tr('Fijado hasta el ${hasta.day}/${hasta.month}', 'Pinned until ${hasta.month}/${hasta.day}'), style: numeros(context, tamano: 12, color: paleta(context).textoSuave)),
           ]),
         ),
         actions: [
-          if (_soyAdmin) TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('DESFIJAR')),
-          FilledButton(onPressed: () => Navigator.pop(context, false), child: const Text('VALE')),
+          if (_soyAdmin) TextButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('DESFIJAR', 'UNPIN'))),
+          FilledButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('VALE', 'OK'))),
         ],
       ),
     );
@@ -781,7 +840,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
       try {
         await _fijar(m, null);
       } on PostgrestException catch (e) {
-        if (mounted) _aviso(context, e.message);
+        if (mounted) _aviso(context, trServidor(e.message));
       }
     }
   }
@@ -807,8 +866,8 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
             padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
             decoration: BoxDecoration(color: p.suave, border: Border(bottom: BorderSide(color: p.borde))),
             child: Row(children: [
-              const Expanded(child: Text('Escríbenos dudas, ideas o errores. Te respondemos aquí.')),
-              TextButton.icon(onPressed: _reportarError, icon: const Icon(Icons.bug_report_outlined), label: const Text('ERROR')),
+              Expanded(child: Text(tr('Escríbenos dudas, ideas o errores. Te respondemos aquí.', 'Write us questions, ideas or bugs. We reply here.'))),
+              TextButton.icon(onPressed: _reportarError, icon: const Icon(Icons.bug_report_outlined), label: Text(tr('ERROR', 'BUG'))),
             ]),
           ),
         if (_reconectando && _cargado)
@@ -816,7 +875,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 4),
             color: p.suave,
-            child: Text('Reconectando…', textAlign: TextAlign.center, style: TextStyle(color: p.textoSuave, fontSize: 12)),
+            child: Text(tr('Reconectando…', 'Reconnecting…'), textAlign: TextAlign.center, style: TextStyle(color: p.textoSuave, fontSize: 12)),
           ),
         Expanded(
           child: Builder(
@@ -825,7 +884,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
                 if (_errorCarga == null) return const Center(child: CircularProgressIndicator());
                 return Center(
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    Text('No se pudo cargar el chat', style: TextStyle(color: p.textoSuave)),
+                    Text(tr('No se pudo cargar el chat', "Couldn't load the chat"), style: TextStyle(color: p.textoSuave)),
                     const SizedBox(height: 8),
                     OutlinedButton(
                       onPressed: () {
@@ -833,7 +892,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
                         _conectar();
                         _cargar();
                       },
-                      child: const Text('REINTENTAR'),
+                      child: Text(tr('REINTENTAR', 'RETRY')),
                     ),
                   ]),
                 );
@@ -846,7 +905,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
                   child: ListView(children: [
                     const SizedBox(height: 120),
                     Center(
-                      child: Text(_esSoporte ? 'Todavía no hay mensajes' : 'Nadie ha dicho nada. Estrena $nombreSala 🚽',
+                      child: Text(_esSoporte ? tr('Todavía no hay mensajes', 'No messages yet') : tr('Nadie ha dicho nada. Estrena $nombreSala 🚽', 'Nobody has said anything. Break the ice in $nombreSala 🚽'),
                           style: TextStyle(color: p.textoSuave)),
                     ),
                   ]),
@@ -900,7 +959,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
             decoration: BoxDecoration(border: Border(top: BorderSide(color: p.borde))),
             child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
               if (!_esSoporte)
-                IconButton(onPressed: _enviando ? null : _compartir, icon: const Icon(Icons.emoji_events_outlined), tooltip: 'Presumir'),
+                IconButton(onPressed: _enviando ? null : _compartir, icon: const Icon(Icons.emoji_events_outlined), tooltip: tr('Presumir', 'Show off')),
               if (_esSoporte) const SizedBox(width: 8),
               Expanded(
                 child: TextField(
@@ -909,7 +968,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
                   maxLines: 5,
                   maxLength: 1000,
                   textCapitalization: TextCapitalization.sentences,
-                  decoration: InputDecoration(hintText: _esSoporte ? 'Escribe algo…' : 'Escribe algo… (@ para mencionar a un amigo)', counterText: '', isDense: true),
+                  decoration: InputDecoration(hintText: _esSoporte ? tr('Escribe algo…', 'Write something…') : tr('Escribe algo… (@ para mencionar a un amigo)', 'Write something… (@ to mention a friend)'), counterText: '', isDense: true),
                 ),
               ),
               const SizedBox(width: 6),
@@ -948,8 +1007,8 @@ class _BarraFijada extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('ANUNCIO', style: numeros(context, tamano: 10, weight: FontWeight.w900).copyWith(letterSpacing: 1.2)),
-                Text(texto.isEmpty ? 'Toca para verlo' : texto, maxLines: 2, overflow: TextOverflow.ellipsis),
+                Text(tr('ANUNCIO', 'ANNOUNCEMENT'), style: numeros(context, tamano: 10, weight: FontWeight.w900).copyWith(letterSpacing: 1.2)),
+                Text(texto.isEmpty ? tr('Toca para verlo', 'Tap to view') : texto, maxLines: 2, overflow: TextOverflow.ellipsis),
               ]),
             ),
             if (total > 1)
@@ -1032,7 +1091,7 @@ class _Burbuja extends StatelessWidget {
                     if (tarjeta != null) ...[const SizedBox(height: 6), _Tarjeta(tarjeta)],
                     if (cuerpo.isNotEmpty) ...[const SizedBox(height: 3), _TextoConLinks(cuerpo)],
                     if (mensaje['oculto'] == true)
-                      Text('Oculto por reportes', style: TextStyle(color: p.textoSuave, fontSize: 11)),
+                      Text(tr('Oculto por reportes', 'Hidden due to reports'), style: TextStyle(color: p.textoSuave, fontSize: 11)),
                   ],
                 ),
               ),
@@ -1053,13 +1112,13 @@ class _Tarjeta extends StatelessWidget {
   Widget build(BuildContext context) {
     if (t['tipo'] == 'reto' || t['tipo'] == 'reto_fin') return TarjetaReto(id: t['id'] as int, compacta: true);
     final (emoji, titulo, sub) = switch (t['tipo']) {
-      'hito' => ('👑', 'LLEGÓ A ${t['n']} CAGADAS', 'Arrodíllense ante el rey'),
+      'hito' => ('👑', tr('LLEGÓ A ${t['n']} CAGADAS', 'HIT ${t['n']} POOPS'), tr('Arrodíllense ante el rey', 'Bow down to the king')),
       'desbloqueo' => (
           t['emoji'] as String,
-          'DESBLOQUEÓ ${(desbloqueos.where((d) => d.emoji == t['emoji']).firstOrNull?.nombre ?? '').toUpperCase()}',
-          'A las ${t['minimo']} cagadas',
+          tr('DESBLOQUEÓ ${(desbloqueos.where((d) => d.emoji == t['emoji']).firstOrNull?.nombre ?? '').toUpperCase()}', 'UNLOCKED ${(desbloqueos.where((d) => d.emoji == t['emoji']).firstOrNull?.nombre ?? '').toUpperCase()}'),
+          tr('A las ${t['minimo']} cagadas', 'At ${t['minimo']} poops'),
         ),
-      'cagada' => (tipoEmoji(t['mojon'] as int?), 'CAGADA #${t['n']}', 'Le salió: ${tipos[t['mojon']]?.$2 ?? '?'}'),
+      'cagada' => (tipoEmoji(t['mojon'] as int?), tr('CAGADA #${t['n']}', 'POOP #${t['n']}'), tr('Le salió: ${tipos[t['mojon']]?.$2 ?? '?'}', 'Came out as: ${tipos[t['mojon']]?.$2 ?? '?'}')),
       _ => ('💩', '', ''),
     };
     return Container(
@@ -1093,11 +1152,11 @@ class _TextoConLinks extends StatelessWidget {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('¿Abrir link?'),
-        content: Text('Vas a salir de Rey Cagón hacia:\n\n${uri.host}\n\nNo pongas contraseñas ni datos de pago en páginas que te manden por chat.'),
+        title: Text(tr('¿Abrir link?', 'Open link?')),
+        content: Text(tr('Vas a salir de Rey Cagón hacia:\n\n${uri.host}\n\nNo pongas contraseñas ni datos de pago en páginas que te manden por chat.', "You're leaving King of the Throne for:\n\n${uri.host}\n\nDon't enter passwords or payment info on pages sent to you in chat.")),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('CANCELAR')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('ABRIR')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('CANCELAR', 'CANCEL'))),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('ABRIR', 'OPEN'))),
         ],
       ),
     );

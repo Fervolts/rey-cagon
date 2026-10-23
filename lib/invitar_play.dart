@@ -3,13 +3,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'actualizar.dart' show esDePlay;
+import 'idioma.dart';
 import 'tema.dart';
 
-const _pasos = [
-  ('Únete al grupo de testers', 'https://groups.google.com/g/rey-cagon-testers'),
-  ('Acepta la prueba', 'https://play.google.com/apps/testing/com.ahimismito.rey_cagon'),
-  ('Instala desde Play', 'https://play.google.com/store/apps/details?id=com.ahimismito.rey_cagon'),
-];
+List<(String, String)> get _pasos => [
+      (tr('Únete al grupo de testers', 'Join the testers group'), 'https://groups.google.com/g/rey-cagon-testers'),
+      (tr('Acepta la prueba', 'Accept the test'), 'https://play.google.com/apps/testing/com.ahimismito.rey_cagon'),
+      (tr('Instala desde Play', 'Install from Play'), 'https://play.google.com/store/apps/details?id=com.ahimismito.rey_cagon'),
+    ];
 
 /// Solo en la APK directa: invita a pasarse a la prueba cerrada de Play Store.
 /// "Después" la calla hasta el próximo arranque; "Ya estoy" no la vuelve a mostrar.
@@ -23,14 +24,16 @@ Future<void> invitarAPlay(BuildContext context) async {
     builder: (context) {
       final p = paleta(context);
       return AlertDialog(
-        title: const Text('¡Llegamos a Play Store! 👑'),
+        title: Text(tr('¡Llegamos a Play Store! 👑', "We're on the Play Store! 👑")),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Necesitamos testers para salir publicados. Hazlo en este orden, '
-                  'con la misma cuenta de Google del teléfono:'),
+              Text(tr('Necesitamos testers para salir publicados. Hazlo en este orden, '
+                  'con la misma cuenta de Google del teléfono:',
+                  'We need testers to get published. Do it in this order, '
+                  'with the same Google account as your phone:')),
               const SizedBox(height: 12),
               for (final (i, (texto, url)) in _pasos.indexed)
                 Padding(
@@ -42,16 +45,19 @@ Future<void> invitarAPlay(BuildContext context) async {
                 ),
               const SizedBox(height: 4),
               Text(
-                'Antes de instalar la de Play, desinstala esta: no se instala encima. '
-                'Tu cuenta y tus cagadas no se pierden. Déjala instalada al menos 14 días.',
+                tr(
+                    'Antes de instalar la de Play, desinstala esta: no se instala encima. '
+                    'Tu cuenta y tus cagadas no se pierden. Déjala instalada al menos 14 días.',
+                    "Before installing the Play version, uninstall this one: it won't install on top. "
+                    "Your account and your poops are safe. Keep it installed for at least 14 days."),
                 style: TextStyle(color: p.textoSuave, fontSize: 13),
               ),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Después')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Ya estoy')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('Después', 'Later'))),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('Ya estoy', "I'm in"))),
         ],
       );
     },

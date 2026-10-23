@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'accesorios.dart';
 import 'emoji.dart';
+import 'idioma.dart';
 import 'main.dart' show db;
 import 'tema.dart';
 
@@ -14,14 +15,24 @@ const minimoSecreto = 10;
 /// El servidor aplica la misma regla (trigger validar_secreto).
 final finEarlyBirds = DateTime.parse('2026-10-20T00:00:00-04:00');
 
-const _etiquetas = {
-  1: 'Destructiva',
-  2: 'Dolorosa',
-  3: 'Meh, dolió',
-  4: 'Normal',
-  5: 'Rica',
-  6: 'Placentera',
-  7: 'Celestial',
+Map<int, String> get _etiquetas => {
+  1: tr('Destructiva', 'Destructive'),
+  2: tr('Dolorosa', 'Painful'),
+  3: tr('Meh, dolió', 'Meh, it hurt'),
+  4: tr('Normal', 'Normal'),
+  5: tr('Rica', 'Tasty'),
+  6: tr('Placentera', 'Pleasurable'),
+  7: tr('Celestial', 'Celestial'),
+};
+
+/// Las etiquetas se guardan en español; esto es solo lo que se ve.
+const _etiquetasEn = {
+  'dolorosa': 'painful',
+  'sangrante': 'bleeding',
+  'ardiente': 'burning',
+  'virtuosa': 'virtuous',
+  'placentera': 'pleasurable',
+  'liberadora': 'liberating',
 };
 
 /// Imagen de la escala: mojón carbonizado en 1, con alas en 7 y 💩 normal en el medio.
@@ -62,7 +73,7 @@ class _PreguntaState extends State<_Pregunta> {
         children: [
           for (final e in cuales)
             FilterChip(
-              label: Text(e.toUpperCase()),
+              label: Text(enIngles ? (_etiquetasEn[e] ?? e).toUpperCase() : e.toUpperCase()),
               selected: _etiquetas.contains(e),
               onSelected: (si) => setState(() => si ? _etiquetas.add(e) : _etiquetas.remove(e)),
             ),
@@ -80,12 +91,12 @@ class _PreguntaState extends State<_Pregunta> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Rotulo('Pregunta secreta'),
+            Rotulo(tr('Pregunta secreta', 'Secret question')),
             const SizedBox(height: 8),
             Center(child: MojonDelMomento(placer: _placer, etiquetas: _etiquetas, tamano: 110)),
             const SizedBox(height: 12),
-            Text('¿Lo disfrutaste?', textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineSmall),
-            Text('Del 1 al 7, ¿cuánto?', textAlign: TextAlign.center, style: TextStyle(color: p.textoSuave)),
+            Text(tr('¿Lo disfrutaste?', 'Did you enjoy it?'), textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineSmall),
+            Text(tr('Del 1 al 7, ¿cuánto?', 'From 1 to 7, how much?'), textAlign: TextAlign.center, style: TextStyle(color: p.textoSuave)),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -113,25 +124,25 @@ class _PreguntaState extends State<_Pregunta> {
             const SizedBox(height: 4),
             Row(
               children: [
-                Text('DESTRUCTIVA', style: numeros(context, tamano: 10, color: p.textoSuave)),
+                Text(tr('DESTRUCTIVA', 'DESTRUCTIVE'), style: numeros(context, tamano: 10, color: p.textoSuave)),
                 const Spacer(),
-                Text('CELESTIAL', style: numeros(context, tamano: 10, color: p.textoSuave)),
+                Text(tr('CELESTIAL', 'CELESTIAL'), style: numeros(context, tamano: 10, color: p.textoSuave)),
               ],
             ),
             const SizedBox(height: 14),
-            const Rotulo('Lo malo'),
+            Rotulo(tr('Lo malo', 'The bad')),
             const SizedBox(height: 6),
             _chips(destructivas),
             const SizedBox(height: 12),
-            const Rotulo('Lo bueno'),
+            Rotulo(tr('Lo bueno', 'The good')),
             const SizedBox(height: 6),
             _chips(placenteras),
             const SizedBox(height: 16),
             FilledButton(
               onPressed: respondio ? () => Navigator.pop(context, (placer: _placer, etiquetas: _etiquetas)) : null,
-              child: const Text('LISTO'),
+              child: Text(tr('LISTO', 'DONE')),
             ),
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Me reservo el comentario')),
+            TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('Me reservo el comentario', 'No comment'))),
           ],
         ),
       ),
@@ -340,8 +351,8 @@ class _TablaPlacerState extends State<TablaPlacer> {
       children: [
         SegmentedButton<bool>(
           segments: [
-            ButtonSegment(value: true, icon: iconoPlacer(7, tamano: 22), label: const Text('PLACENTERAS')),
-            ButtonSegment(value: false, icon: iconoPlacer(1, tamano: 22), label: const Text('DESTRUCTIVAS')),
+            ButtonSegment(value: true, icon: iconoPlacer(7, tamano: 22), label: Text(tr('PLACENTERAS', 'PLEASURABLE'))),
+            ButtonSegment(value: false, icon: iconoPlacer(1, tamano: 22), label: Text(tr('DESTRUCTIVAS', 'DESTRUCTIVE'))),
           ],
           selected: {_placenteras},
           showSelectedIcon: false,
@@ -377,7 +388,7 @@ class _TablaPlacerState extends State<TablaPlacer> {
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(fontWeight: FontWeight.w700, color: p.texto)),
                               Text(
-                                f['promedio'] == null ? 'Sin calificar' : 'Promedio ${f['promedio']} · ${_etiqueta(f['promedio'])}',
+                                f['promedio'] == null ? tr('Sin calificar', 'Not rated') : tr('Promedio ${f['promedio']} · ${_etiqueta(f['promedio'])}', 'Average ${f['promedio']} · ${_etiqueta(f['promedio'])}'),
                                 style: TextStyle(fontSize: 12, color: p.textoSuave),
                               ),
                             ],
@@ -394,7 +405,7 @@ class _TablaPlacerState extends State<TablaPlacer> {
           ),
         ),
         const SizedBox(height: 8),
-        Text('Desliza → para volver.',
+        Text(tr('Desliza → para volver.', 'Swipe → to go back.'),
             style: TextStyle(fontSize: 12, color: p.textoSuave)),
       ],
     );
@@ -595,16 +606,16 @@ class _FelicidadesState extends State<_Felicidades> with SingleTickerProviderSta
                         margin: const EdgeInsets.symmetric(horizontal: 24),
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.black, width: 2)),
-                        child: const Column(
+                        child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text('¡FELICIDADES!',
+                            Text(tr('¡FELICIDADES!', 'CONGRATULATIONS!'),
                                 style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Colors.black)),
-                            SizedBox(height: 4),
-                            Text('Descubriste el secreto.\nAhora puedes ver el secreto de los demás.',
+                            const SizedBox(height: 4),
+                            Text(tr('Descubriste el secreto.\nAhora puedes ver el secreto de los demás.', "You found the secret.\nNow you can see everyone else's secret."),
                                 textAlign: TextAlign.center, style: TextStyle(fontSize: 16, color: Colors.black)),
-                            SizedBox(height: 8),
-                            Text('Ve al ranking y desliza ←', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                            const SizedBox(height: 8),
+                            Text(tr('Ve al ranking y desliza ←', 'Go to the leaderboard and swipe ←'), style: TextStyle(fontSize: 12, color: Colors.black54)),
                           ],
                         ),
                       ),
@@ -655,9 +666,9 @@ class _PistaSecretaState extends State<PistaSecreta> with SingleTickerProviderSt
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('DESLIZA', style: numeros(context, tamano: 12, weight: FontWeight.w800, color: p.textoSuave)
+              Text(tr('DESLIZA', 'SWIPE'), style: numeros(context, tamano: 12, weight: FontWeight.w800, color: p.textoSuave)
                   .copyWith(letterSpacing: 2)),
-              Text('(es un secreto... que tu mamá vende empanadas...)',
+              Text(tr('(es un secreto... que tu mamá vende empanadas...)', "(it's a secret... that your mom sells empanadas...)"),
                   style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: p.textoSuave)),
             ],
           ),

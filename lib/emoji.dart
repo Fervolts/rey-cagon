@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'idioma.dart';
+
 // Fluent Emoji 3D de Microsoft (MIT, assets/emoji/LICENSE). Se usan como imágenes para que
 // se vean igual en todos los teléfonos.
 const _archivos = {
@@ -100,9 +102,10 @@ void registrarLicencias() {
       ['Fluent Emoji (Microsoft)'],
       await rootBundle.loadString('assets/emoji/LICENSE'),
     );
-    yield const LicenseEntryWithLineBreaks(
-      ['Noto Emoji (Google), ícono de la app'],
-      'Noto Emoji © Google LLC. Licencia Apache 2.0 / CC BY 4.0.\nhttps://github.com/googlefonts/noto-emoji',
+    yield LicenseEntryWithLineBreaks(
+      [tr('Noto Emoji (Google), ícono de la app', 'Noto Emoji (Google), app icon')],
+      '${tr('Noto Emoji © Google LLC. Licencia Apache 2.0 / CC BY 4.0.', 'Noto Emoji © Google LLC. Apache 2.0 / CC BY 4.0 license.')}\n'
+      'https://github.com/googlefonts/noto-emoji',
     );
   });
 }

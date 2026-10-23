@@ -3,49 +3,50 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'emoji.dart';
+import 'idioma.dart';
 
 /// Algo que se desbloquea al llegar a [minimo] cagadas en total.
 typedef Desbloqueo = ({String ranura, String emoji, String nombre, int minimo});
 
 // Mismo catálogo que la tabla desbloqueos (supabase/migrations/…_accesorios.sql).
 // El servidor rechaza lo que no esté desbloqueado.
-const desbloqueos = <Desbloqueo>[
-  (ranura: 'mascota', emoji: '🪰', nombre: 'Mosca', minimo: 1),
-  (ranura: 'sombrero', emoji: '🧢', nombre: 'Gorra', minimo: 3),
-  (ranura: 'lentes', emoji: '👓', nombre: 'Lentes', minimo: 5),
-  (ranura: 'mascota', emoji: '🐛', nombre: 'Gusanito', minimo: 8),
-  (ranura: 'sombrero', emoji: '👒', nombre: 'Sombrero de playa', minimo: 12),
-  (ranura: 'avatar', emoji: '👽', nombre: 'Alien', minimo: 15),
-  (ranura: 'lentes', emoji: '🕶️', nombre: 'Lentes oscuros', minimo: 20),
-  (ranura: 'mascota', emoji: '🐀', nombre: 'Rata', minimo: 25),
-  (ranura: 'sombrero', emoji: '🎓', nombre: 'Doctor en cagología', minimo: 30),
-  (ranura: 'avatar', emoji: '🤖', nombre: 'Robot', minimo: 40),
-  (ranura: 'mascota', emoji: '🪳', nombre: 'Cucaracha', minimo: 50),
-  (ranura: 'sombrero', emoji: '🎩', nombre: 'Copa', minimo: 60),
-  (ranura: 'lentes', emoji: '🥽', nombre: 'Goggles', minimo: 75),
-  (ranura: 'avatar', emoji: '🐲', nombre: 'Dragón', minimo: 100),
-  (ranura: 'mascota', emoji: '🦨', nombre: 'Mapurite', minimo: 125),
-  (ranura: 'sombrero', emoji: '🪖', nombre: 'Casco', minimo: 150),
-  (ranura: 'avatar', emoji: '💎', nombre: 'Diamante', minimo: 200),
-  (ranura: 'mascota', emoji: '🦆', nombre: 'Pato', minimo: 250),
-  (ranura: 'avatar', emoji: '🏆', nombre: 'Un año cagando', minimo: 365),
+List<Desbloqueo> get desbloqueos => <Desbloqueo>[
+  (ranura: 'mascota', emoji: '🪰', nombre: tr('Mosca', 'Fly'), minimo: 1),
+  (ranura: 'sombrero', emoji: '🧢', nombre: tr('Gorra', 'Cap'), minimo: 3),
+  (ranura: 'lentes', emoji: '👓', nombre: tr('Lentes', 'Glasses'), minimo: 5),
+  (ranura: 'mascota', emoji: '🐛', nombre: tr('Gusanito', 'Little worm'), minimo: 8),
+  (ranura: 'sombrero', emoji: '👒', nombre: tr('Sombrero de playa', 'Beach hat'), minimo: 12),
+  (ranura: 'avatar', emoji: '👽', nombre: tr('Alien', 'Alien'), minimo: 15),
+  (ranura: 'lentes', emoji: '🕶️', nombre: tr('Lentes oscuros', 'Sunglasses'), minimo: 20),
+  (ranura: 'mascota', emoji: '🐀', nombre: tr('Rata', 'Rat'), minimo: 25),
+  (ranura: 'sombrero', emoji: '🎓', nombre: tr('Doctor en cagología', 'Doctor of Poopology'), minimo: 30),
+  (ranura: 'avatar', emoji: '🤖', nombre: tr('Robot', 'Robot'), minimo: 40),
+  (ranura: 'mascota', emoji: '🪳', nombre: tr('Cucaracha', 'Cockroach'), minimo: 50),
+  (ranura: 'sombrero', emoji: '🎩', nombre: tr('Copa', 'Top hat'), minimo: 60),
+  (ranura: 'lentes', emoji: '🥽', nombre: tr('Goggles', 'Goggles'), minimo: 75),
+  (ranura: 'avatar', emoji: '🐲', nombre: tr('Dragón', 'Dragon'), minimo: 100),
+  (ranura: 'mascota', emoji: '🦨', nombre: tr('Mapurite', 'Skunk'), minimo: 125),
+  (ranura: 'sombrero', emoji: '🪖', nombre: tr('Casco', 'Helmet'), minimo: 150),
+  (ranura: 'avatar', emoji: '💎', nombre: tr('Diamante', 'Diamond'), minimo: 200),
+  (ranura: 'mascota', emoji: '🦆', nombre: tr('Pato', 'Duck'), minimo: 250),
+  (ranura: 'avatar', emoji: '🏆', nombre: tr('Un año cagando', 'A year of pooping'), minimo: 365),
 ];
 
 /// Desde estas cagadas la mascota pasea alrededor del avatar.
 const mascotaSeMueve = 50;
 
 /// Efectos del avatar según el total histórico. Se aplica el más alto alcanzado.
-const efectosAvatar = [
-  (nombre: 'Avatar cromado', minimo: 100),
-  (nombre: 'Avatar dorado', minimo: 200),
-  (nombre: 'Avatar arcoíris', minimo: 300),
+List<({String nombre, int minimo})> get efectosAvatar => [
+  (nombre: tr('Avatar cromado', 'Chrome avatar'), minimo: 100),
+  (nombre: tr('Avatar dorado', 'Golden avatar'), minimo: 200),
+  (nombre: tr('Avatar arcoíris', 'Rainbow avatar'), minimo: 300),
 ];
 
 /// Lo próximo que se desbloquea con [total] cagadas (accesorio o efecto), o null si ya tiene todo.
 ({String emoji, String nombre, int minimo})? siguienteDesbloqueo(int total) {
   final todo = [
     for (final d in desbloqueos) (emoji: d.emoji, nombre: d.nombre, minimo: d.minimo),
-    (emoji: '🪰', nombre: 'Mascota que pasea', minimo: mascotaSeMueve),
+    (emoji: '🪰', nombre: tr('Mascota que pasea', 'Wandering pet'), minimo: mascotaSeMueve),
     for (final e in efectosAvatar) (emoji: '💩', nombre: e.nombre, minimo: e.minimo),
   ]..sort((a, b) => a.minimo.compareTo(b.minimo));
   for (final d in todo) {

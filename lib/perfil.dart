@@ -9,6 +9,7 @@ import 'cagadon.dart';
 import 'calendario.dart';
 import 'chat.dart' show abrirReporteDeError;
 import 'comunidad.dart';
+import 'idioma.dart';
 import 'placer.dart';
 import 'main.dart' show conReintento, db, escucharCagadas, esDeRed, textoError;
 import 'push.dart';
@@ -77,10 +78,10 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
     try {
       if (_bloqueado) {
         await db.from('bloqueos').delete().eq('bloqueador', db.auth.currentUser!.id).eq('bloqueado', widget.usuarioId);
-        _mensaje('Desbloqueado');
+        _mensaje(tr('Desbloqueado', 'Unblocked'));
       } else {
         await db.from('bloqueos').insert({'bloqueado': widget.usuarioId});
-        _mensaje('Bloqueado. Ya no lo verás en tus rankings.');
+        _mensaje(tr('Bloqueado. Ya no lo verás en tus rankings.', "Blocked. You won't see them on your leaderboards anymore."));
       }
       await _cargar();
     } catch (e) {
@@ -88,22 +89,29 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
     }
   }
 
-  static const _motivos = ['Username o bio ofensivos', 'Acoso', 'Spam o trampas', 'Otro'];
+  // El primero es lo que se guarda en reportes.motivo; el segundo, lo que se ve.
+  List<(String, String)> get _motivos => [
+        ('Username o bio ofensivos', tr('Username o bio ofensivos', 'Offensive username or bio')),
+        ('Acoso', tr('Acoso', 'Harassment')),
+        ('Spam o trampas', tr('Spam o trampas', 'Spam or cheating')),
+        ('Otro', tr('Otro', 'Other')),
+      ];
 
   Future<void> _reportar() async {
     final motivo = await showDialog<String>(
       context: context,
       builder: (context) => SimpleDialog(
-        title: const Text('¿Por qué lo reportas?'),
+        title: Text(tr('¿Por qué lo reportas?', 'Why are you reporting them?')),
         children: [
-          for (final m in _motivos) SimpleDialogOption(onPressed: () => Navigator.pop(context, m), child: Text(m)),
+          for (final (valor, etiqueta) in _motivos)
+            SimpleDialogOption(onPressed: () => Navigator.pop(context, valor), child: Text(etiqueta)),
         ],
       ),
     );
     if (motivo == null) return;
     try {
       await db.from('reportes').insert({'reportado': widget.usuarioId, 'motivo': motivo});
-      _mensaje('Gracias. Lo vamos a revisar.');
+      _mensaje(tr('Gracias. Lo vamos a revisar.', "Thanks. We'll look into it."));
     } catch (e) {
       _mensaje(textoError(e));
     }
@@ -123,6 +131,23 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
     } finally {
       if (mounted) setState(() => _ocupado = false);
     }
+  }
+
+  Future<void> _elegirIdioma() async {
+    final valor = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          for (final (v, nombre) in [('auto', tr('El del teléfono', "Phone's language")), ('es', 'Español'), ('en', 'English')])
+            ListTile(
+              title: Text(nombre),
+              trailing: idiomaElegido == v ? const Icon(Icons.check) : null,
+              onTap: () => Navigator.pop(context, v),
+            ),
+        ]),
+      ),
+    );
+    if (valor != null && valor != idiomaElegido) await elegirIdioma(valor);
   }
 
   Future<void> _editar() async {
@@ -150,14 +175,14 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
     final seguro = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('¿Borrar tu cuenta?'),
-        content: const Text('Se borran tu perfil, todas tus cagadas y tus seguidores. No se puede deshacer.'),
+        title: Text(tr('¿Borrar tu cuenta?', 'Delete your account?')),
+        content: Text(tr('Se borran tu perfil, todas tus cagadas y tus seguidores. No se puede deshacer.', 'Your profile, all your poops and your followers get deleted. This cannot be undone.')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('CANCELAR')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('CANCELAR', 'CANCEL'))),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: const Color(0xFFB3261E), foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('BORRAR'),
+            child: Text(tr('BORRAR', 'DELETE')),
           ),
         ],
       ),
@@ -170,7 +195,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
       await db.auth.signOut().catchError((_) {});
       if (mounted) Navigator.of(context).popUntil((r) => r.isFirst);
     } catch (e) {
-      _mensaje('No se pudo borrar la cuenta: $e');
+      _mensaje(tr('No se pudo borrar la cuenta: $e', "Couldn't delete the account: $e"));
     }
   }
 
@@ -180,17 +205,17 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
     final texto = Theme.of(context).textTheme;
     return Scaffold(
       appBar: AppBar(
-        title: Text(_esMio ? 'MI PERFIL' : 'PERFIL'),
+        title: Text(_esMio ? tr('MI PERFIL', 'MY PROFILE') : tr('PERFIL', 'PROFILE')),
         actions: [
-          if (_esMio && p != null) IconButton(icon: const Icon(Icons.edit), tooltip: 'Editar', onPressed: _editar),
-          if (_esMio) IconButton(icon: const Icon(Icons.logout), tooltip: 'Cerrar sesión', onPressed: _salir),
+          if (_esMio && p != null) IconButton(icon: const Icon(Icons.edit), tooltip: tr('Editar', 'Edit'), onPressed: _editar),
+          if (_esMio) IconButton(icon: const Icon(Icons.logout), tooltip: tr('Cerrar sesión', 'Log out'), onPressed: _salir),
           if (!_esMio && p != null)
             PopupMenuButton<String>(
-              tooltip: 'Más opciones',
+              tooltip: tr('Más opciones', 'More options'),
               onSelected: (o) => o == 'reportar' ? _reportar() : _alternarBloqueo(),
               itemBuilder: (_) => [
-                const PopupMenuItem(value: 'reportar', child: Text('Reportar')),
-                PopupMenuItem(value: 'bloquear', child: Text(_bloqueado ? 'Desbloquear' : 'Bloquear')),
+                PopupMenuItem(value: 'reportar', child: Text(tr('Reportar', 'Report'))),
+                PopupMenuItem(value: 'bloquear', child: Text(_bloqueado ? tr('Desbloquear', 'Unblock') : tr('Bloquear', 'Block'))),
               ],
             ),
         ],
@@ -215,15 +240,15 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                     child: Text(p['bio'], textAlign: TextAlign.center),
                   ),
                 const SizedBox(height: 4),
-                Text('Cagando desde el ${_fecha(DateTime.parse(p['desde']).toLocal())}',
+                Text(tr('Cagando desde el ${_fecha(DateTime.parse(p['desde']).toLocal())}', 'Pooping since ${_fecha(DateTime.parse(p['desde']).toLocal())}'),
                     textAlign: TextAlign.center, style: texto.bodySmall),
                 const SizedBox(height: 12),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _Numero(valor: p['seguidores'], texto: 'seguidores'),
+                    _Numero(valor: p['seguidores'], texto: tr('seguidores', 'followers')),
                     const SizedBox(width: 32),
-                    _Numero(valor: p['siguiendo'], texto: 'siguiendo'),
+                    _Numero(valor: p['siguiendo'], texto: tr('siguiendo', 'following')),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -231,14 +256,14 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                   Center(
                     child: Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: [
                       p['lo_sigo'] == true
-                          ? OutlinedButton(onPressed: _ocupado ? null : _seguir, child: const Text('DEJAR DE SEGUIR'))
-                          : FilledButton(onPressed: _ocupado ? null : _seguir, child: const Text('SEGUIR')),
+                          ? OutlinedButton(onPressed: _ocupado ? null : _seguir, child: Text(tr('DEJAR DE SEGUIR', 'UNFOLLOW')))
+                          : FilledButton(onPressed: _ocupado ? null : _seguir, child: Text(tr('SEGUIR', 'FOLLOW'))),
                       // Solo se reta a gente que sigues.
                       if (p['lo_sigo'] == true)
                         FilledButton.icon(
                           onPressed: () => retar(context, widget.usuarioId, p['username']),
                           icon: const Text('⚔️'),
-                          label: const Text('RETAR'),
+                          label: Text(tr('RETAR', 'CHALLENGE')),
                         ),
                     ]),
                   ),
@@ -248,7 +273,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                       ? const SizedBox.shrink()
                       : Padding(
                           padding: const EdgeInsets.only(top: 10),
-                          child: Text('🏆 ${v.data} Cagadón${v.data == 1 ? '' : 'es'} ganado${v.data == 1 ? '' : 's'}',
+                          child: Text(tr('🏆 ${v.data} Cagadón${v.data == 1 ? '' : 'es'} ganado${v.data == 1 ? '' : 's'}', '🏆 ${v.data} Poop-Off${v.data == 1 ? '' : 's'} won'),
                               textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700)),
                         ),
                 ),
@@ -260,19 +285,19 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                       alignment: WrapAlignment.spaceEvenly,
                       runSpacing: 12,
                       children: [
-                        _Numero(valor: p['hoy'], texto: 'hoy'),
-                        _Numero(valor: p['semana'], texto: 'semana'),
-                        _Numero(valor: p['mes'], texto: 'mes'),
-                        _Numero(valor: p['anio'], texto: 'año'),
-                        _Numero(valor: p['total'], texto: 'total'),
+                        _Numero(valor: p['hoy'], texto: tr('hoy', 'today')),
+                        _Numero(valor: p['semana'], texto: tr('semana', 'week')),
+                        _Numero(valor: p['mes'], texto: tr('mes', 'month')),
+                        _Numero(valor: p['anio'], texto: tr('año', 'year')),
+                        _Numero(valor: p['total'], texto: tr('total', 'total')),
                       ],
                     ),
                   ),
                 ),
                 ListTile(
                   leading: Emoji(tipoEmoji(p['tipo_favorito']), tamano: 36),
-                  title: const Text('Especialidad de la casa'),
-                  subtitle: Text(tipos[p['tipo_favorito']]?.$2 ?? 'Todavía no se sabe'),
+                  title: Text(tr('Especialidad de la casa', 'House specialty')),
+                  subtitle: Text(tipos[p['tipo_favorito']]?.$2 ?? tr('Todavía no se sabe', 'Nobody knows yet')),
                 ),
                 if (_esMio)
                   Builder(builder: (context) {
@@ -280,8 +305,8 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                     final d = siguienteDesbloqueo(total);
                     return ListTile(
                       leading: d == null ? const Emoji('🏆', tamano: 36) : Opacity(opacity: .4, child: Emoji(d.emoji, tamano: 36)),
-                      title: Text(d == null ? 'Lo desbloqueaste todo' : 'Próximo: ${d.nombre}'),
-                      subtitle: d == null ? null : Text(d.minimo - total == 1 ? 'Te falta 1 cagada' : 'Te faltan ${d.minimo - total} cagadas'),
+                      title: Text(d == null ? tr('Lo desbloqueaste todo', 'You unlocked everything') : tr('Próximo: ${d.nombre}', 'Next: ${d.nombre}')),
+                      subtitle: d == null ? null : Text(d.minimo - total == 1 ? tr('Te falta 1 cagada', 'You need 1 more poop') : tr('Te faltan ${d.minimo - total} cagadas', 'You need ${d.minimo - total} more poops')),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: _editar,
                     );
@@ -289,27 +314,38 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                 if (_esMio) ...[
                   ListTile(
                     leading: const Icon(Icons.bug_report_outlined),
-                    title: const Text('Reportar un error'),
-                    subtitle: const Text('Le llega directo al equipo'),
+                    title: Text(tr('Reportar un error', 'Report a bug')),
+                    subtitle: Text(tr('Le llega directo al equipo', 'Goes straight to the team')),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => abrirReporteDeError(context),
                   ),
                   const FilaComunidad(),
                   ListTile(
+                    leading: const Icon(Icons.translate),
+                    title: const Text('Idioma / Language'),
+                    subtitle: Text(switch (idiomaElegido) {
+                      'es' => 'Español',
+                      'en' => 'English',
+                      _ => tr('El del teléfono', "Phone's language"),
+                    }),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: _elegirIdioma,
+                  ),
+                  ListTile(
                     leading: const Icon(Icons.open_in_new),
-                    title: const Text('Hecho por ahimismito Studios C.A'),
+                    title: Text(tr('Hecho por ahimismito Studios C.A', 'Made by ahimismito Studios C.A')),
                     subtitle: const Text('ahimismito.com'),
                     onTap: () => launchUrl(Uri.parse('https://ahimismito.com'), mode: LaunchMode.externalApplication),
                   ),
                   ListTile(
                     leading: const Icon(Icons.info_outline),
-                    title: const Text('Créditos y licencias'),
+                    title: Text(tr('Créditos y licencias', 'Credits and licenses')),
                     onTap: () async {
                       final info = await PackageInfo.fromPlatform();
                       if (!context.mounted) return;
                       showLicensePage(
                         context: context,
-                        applicationName: 'Rey Cagón',
+                        applicationName: tr('Rey Cagón', 'King of the Throne'),
                         applicationVersion: info.version,
                         applicationLegalese: '© 2026 ahimismito Studios C.A\nahimismito.com',
                       );
@@ -318,7 +354,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                 ],
                 ListTile(
                   leading: const Icon(Icons.calendar_month),
-                  title: const Text('Ver calendario'),
+                  title: Text(tr('Ver calendario', 'View calendar')),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.push(
                     context,
@@ -330,7 +366,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                 if (_esMio)
                   ListTile(
                     leading: const Icon(Icons.delete_forever, color: Color(0xFFB3261E)),
-                    title: const Text('Borrar mi cuenta', style: TextStyle(color: Color(0xFFB3261E))),
+                    title: Text(tr('Borrar mi cuenta', 'Delete my account'), style: const TextStyle(color: Color(0xFFB3261E))),
                     onTap: _borrarCuenta,
                   ),
               ],
@@ -408,10 +444,10 @@ class _EditarPerfilState extends State<_EditarPerfil> {
       if (mounted) Navigator.pop(context, true);
     } on PostgrestException catch (e) {
       final texto = e.code == '23505'
-          ? 'Ese username ya existe'
+          ? tr('Ese username ya existe', 'That username already exists')
           : e.code == '23514'
-              ? 'Username de 2 a 24 letras, bio de máximo 140'
-              : e.message;
+              ? tr('Username de 2 a 24 letras, bio de máximo 140', 'Username 2 to 24 characters, bio up to 140')
+              : trServidor(e.message);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(texto)));
     } finally {
       if (mounted) setState(() => _ocupado = false);
@@ -462,7 +498,7 @@ class _EditarPerfilState extends State<_EditarPerfil> {
                   showCheckmark: false,
                   onSelected: o.minimo > _total
                       ? (_) => ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Se desbloquea a las ${o.minimo} cagadas. Llevas $_total.')))
+                          SnackBar(content: Text(tr('Se desbloquea a las ${o.minimo} cagadas. Llevas $_total.', 'Unlocks at ${o.minimo} poops. You have $_total.'))))
                       : (_) => setState(() {
                           _puesto[ranura] = o.emoji;
                           // Avatar nuevo: vuelven a la posición calibrada para él.
@@ -493,7 +529,7 @@ class _EditarPerfilState extends State<_EditarPerfil> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('EDITAR PERFIL', style: Theme.of(context).textTheme.titleLarge),
+            Text(tr('EDITAR PERFIL', 'EDIT PROFILE'), style: Theme.of(context).textTheme.titleLarge),
             Padding(
               padding: const EdgeInsets.only(top: 48, bottom: 16),
               child: Center(
@@ -523,7 +559,7 @@ class _EditarPerfilState extends State<_EditarPerfil> {
                     for (final r in ['lentes', 'sombrero'])
                       if (_puesto[r] != null)
                         ChoiceChip(
-                          label: Text('MOVER ${r.toUpperCase()}'),
+                          label: Text(enIngles ? 'MOVE ${r == 'lentes' ? 'GLASSES' : 'HAT'}' : 'MOVER ${r.toUpperCase()}'),
                           selected: _moviendo == r,
                           onSelected: (si) => setState(() => _moviendo = si ? r : null),
                         ),
@@ -533,17 +569,17 @@ class _EditarPerfilState extends State<_EditarPerfil> {
                           _puesto[k] = null;
                         }
                       }),
-                      child: const Text('RESTABLECER'),
+                      child: Text(tr('RESTABLECER', 'RESET')),
                     ),
                   ],
                 ),
               ),
             if (_moviendo != null) ...[
-              Text('Arrastra sobre el avatar para mover ${_moviendo == 'lentes' ? 'los lentes' : 'el sombrero'}.',
+              Text(tr('Arrastra sobre el avatar para mover ${_moviendo == 'lentes' ? 'los lentes' : 'el sombrero'}.', 'Drag on the avatar to move the ${_moviendo == 'lentes' ? 'glasses' : 'hat'}.'),
                   textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall),
               Row(
                 children: [
-                  const Rotulo('Tamaño'),
+                  Rotulo(tr('Tamaño', 'Size')),
                   Expanded(
                     child: Slider(
                       min: .4,
@@ -556,10 +592,10 @@ class _EditarPerfilState extends State<_EditarPerfil> {
               ),
               const SizedBox(height: 8),
             ],
-            _ranura('Avatar', 'avatar'),
-            _ranura('Sombrero', 'sombrero'),
-            _ranura('Lentes', 'lentes'),
-            _ranura('Mascota', 'mascota'),
+            _ranura(tr('Avatar', 'Avatar'), 'avatar'),
+            _ranura(tr('Sombrero', 'Hat'), 'sombrero'),
+            _ranura(tr('Lentes', 'Glasses'), 'lentes'),
+            _ranura(tr('Mascota', 'Pet'), 'mascota'),
             // Solo para quien ya encontró el secreto de Tips.
             if (_secreto)
             Padding(
@@ -567,7 +603,7 @@ class _EditarPerfilState extends State<_EditarPerfil> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Rotulo('Secretos · coming soon'),
+                  Rotulo(tr('Secretos · coming soon', 'Secrets · coming soon')),
                   const SizedBox(height: 6),
                   Row(
                     children: [
@@ -577,7 +613,7 @@ class _EditarPerfilState extends State<_EditarPerfil> {
                           child: Opacity(opacity: .3, child: iconoPlacer(v, tamano: 44)),
                         ),
                       Expanded(
-                        child: Text('Accesorios que salen de tus cagadas placenteras y destructivas.',
+                        child: Text(tr('Accesorios que salen de tus cagadas placenteras y destructivas.', 'Accessories that come from your pleasurable and destructive poops.'),
                             style: Theme.of(context).textTheme.bodySmall),
                       ),
                     ],
@@ -588,8 +624,11 @@ class _EditarPerfilState extends State<_EditarPerfil> {
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Text(
-                'Tu mascota sale a pasear a las $mascotaSeMueve cagadas. Tu avatar se vuelve '
-                '${efectosAvatar.map((e) => '${e.nombre.replaceFirst('Avatar ', '')} a las ${e.minimo}').join(', ')}.',
+                enIngles
+                    ? 'Your pet goes for a walk at $mascotaSeMueve poops. Your avatar turns '
+                        '${efectosAvatar.map((e) => '${e.nombre.replaceFirst(' avatar', '').toLowerCase()} at ${e.minimo}').join(', ')}.'
+                    : 'Tu mascota sale a pasear a las $mascotaSeMueve cagadas. Tu avatar se vuelve '
+                        '${efectosAvatar.map((e) => '${e.nombre.replaceFirst('Avatar ', '')} a las ${e.minimo}').join(', ')}.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
@@ -611,7 +650,7 @@ class _EditarPerfilState extends State<_EditarPerfil> {
         Container(
           padding: conBordeAbajo(context, const EdgeInsets.fromLTRB(16, 10, 16, 10)),
           decoration: BoxDecoration(color: Theme.of(context).bottomSheetTheme.backgroundColor ?? p.fondo, border: Border(top: BorderSide(color: p.borde))),
-          child: FilledButton(onPressed: _ocupado ? null : _guardar, child: const Text('GUARDAR')),
+          child: FilledButton(onPressed: _ocupado ? null : _guardar, child: Text(tr('GUARDAR', 'SAVE'))),
         ),
       ]),
     );
@@ -680,7 +719,7 @@ class _PantallaBuscarState extends State<PantallaBuscar> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('BUSCAR AMIGOS')),
+      appBar: AppBar(title: Text(tr('BUSCAR AMIGOS', 'FIND FRIENDS'))),
       body: ListView(
         padding: conBordeAbajo(context, const EdgeInsets.all(16)),
         children: [
@@ -690,7 +729,7 @@ class _PantallaBuscarState extends State<PantallaBuscar> {
             onChanged: _buscar,
           ),
           const SizedBox(height: 8),
-          if (_gente.isEmpty) const Padding(padding: EdgeInsets.all(24), child: Text('Nadie por aquí 🫥', textAlign: TextAlign.center)),
+          if (_gente.isEmpty) Padding(padding: const EdgeInsets.all(24), child: Text(tr('Nadie por aquí 🫥', 'Nobody here 🫥'), textAlign: TextAlign.center)),
           for (final g in _gente)
             InkWell(
               onTap: () => Navigator.push(
@@ -720,12 +759,12 @@ class _PantallaBuscarState extends State<PantallaBuscar> {
                           ? OutlinedButton(
                               onPressed: () => _toggle(g['id']),
                               style: OutlinedButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
-                              child: const Text('SIGUIENDO'),
+                              child: Text(tr('SIGUIENDO', 'FOLLOWING')),
                             )
                           : FilledButton(
                               onPressed: () => _toggle(g['id']),
                               style: FilledButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
-                              child: const Text('SEGUIR'),
+                              child: Text(tr('SEGUIR', 'FOLLOW')),
                             ),
                     ),
                   ],

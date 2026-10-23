@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'accesorios.dart';
 import 'emoji.dart';
+import 'idioma.dart';
 import 'main.dart' show db;
 import 'perfil.dart' show PantallaBuscar, avataresGratis;
 import 'tema.dart';
@@ -62,7 +63,7 @@ class _PantallaBienvenidaState extends State<PantallaBienvenida> {
                       : TextButton(
                           onPressed: () => _paginas.animateToPage(_total - 1,
                               duration: const Duration(milliseconds: 450), curve: Curves.easeOutCubic),
-                          child: const Text('SALTAR'),
+                          child: Text(tr('SALTAR', 'SKIP')),
                         ),
                 ),
               ),
@@ -71,25 +72,30 @@ class _PantallaBienvenidaState extends State<PantallaBienvenida> {
                   controller: _paginas,
                   onPageChanged: (i) => setState(() => _pagina = i),
                   children: [
-                    const _Pagina(
-                      visual: _Rebote(child: Emoji('👑', tamano: 150)),
-                      titulo: 'Bienvenido, rey',
-                      texto: 'Aquí compites con tus amigos por quién caga más. Semana, mes, trimestre y año.',
+                    _Pagina(
+                      visual: const _Rebote(child: Emoji('👑', tamano: 150)),
+                      titulo: tr('Bienvenido, rey', 'Welcome, your majesty'),
+                      texto: tr('Aquí compites con tus amigos por quién caga más. Semana, mes, trimestre y año.',
+                          'Here you compete with your friends over who poops the most. Week, month, quarter and year.'),
                     ),
-                    const _Pagina(
-                      visual: _BotonDeMuestra(),
-                      titulo: 'Cagaste, lo tocas',
-                      texto: 'Cada vez que vayas al baño, dale a CAGUÉ y dinos qué salió. '
-                          'Una por hora como máximo: sin trampas.',
+                    _Pagina(
+                      visual: const _BotonDeMuestra(),
+                      titulo: tr('Cagaste, lo tocas', 'You pooped, you tap it'),
+                      texto: tr(
+                          'Cada vez que vayas al baño, dale a CAGUÉ y dinos qué salió. '
+                              'Una por hora como máximo: sin trampas.',
+                          'Every time you hit the bathroom, tap I POOPED and tell us what came out. '
+                              'One per hour max: no cheating.'),
                     ),
                     _Pagina(
                       visual: const _Rebote(child: Emoji('👀', tamano: 150)),
-                      titulo: 'Busca a tus amigos',
-                      texto: 'Síguelos para competir. Solo te llegan avisos de la gente que sigues.',
+                      titulo: tr('Busca a tus amigos', 'Find your friends'),
+                      texto: tr('Síguelos para competir. Solo te llegan avisos de la gente que sigues.',
+                          'Follow them to compete. You only get alerts from people you follow.'),
                       extra: OutlinedButton.icon(
                         onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaBuscar())),
                         icon: const Icon(Icons.person_add_alt_1),
-                        label: const Text('BUSCAR AMIGOS'),
+                        label: Text(tr('BUSCAR AMIGOS', 'FIND FRIENDS')),
                       ),
                     ),
                     _Pagina(
@@ -97,8 +103,9 @@ class _PantallaBienvenidaState extends State<PantallaBienvenida> {
                         padding: const EdgeInsets.only(top: 40),
                         child: Avatar({'avatar': _avatar}, tamano: 120),
                       ),
-                      titulo: 'Elige tu avatar',
-                      texto: 'Mientras más cagas, más sombreros, lentes y mascotas desbloqueas.',
+                      titulo: tr('Elige tu avatar', 'Pick your avatar'),
+                      texto: tr('Mientras más cagas, más sombreros, lentes y mascotas desbloqueas.',
+                          'The more you poop, the more hats, glasses and pets you unlock.'),
                       extra: Column(
                         children: [
                           Wrap(
@@ -134,9 +141,9 @@ class _PantallaBienvenidaState extends State<PantallaBienvenida> {
                         ],
                       ),
                     ),
-                    const _Pagina(
-                      visual: _Rebote(child: Emoji('🧻', tamano: 150)),
-                      titulo: 'Último detalle',
+                    _Pagina(
+                      visual: const _Rebote(child: Emoji('🧻', tamano: 150)),
+                      titulo: tr('Último detalle', 'One last thing'),
                       texto: disclaimer,
                     ),
                   ],
@@ -164,7 +171,7 @@ class _PantallaBienvenidaState extends State<PantallaBienvenida> {
                       width: double.infinity,
                       child: FilledButton(
                         onPressed: _siguiente,
-                        child: Text(ultima ? 'ENTENDIDO, A CAGAR' : 'SIGUIENTE'),
+                        child: Text(ultima ? tr('ENTENDIDO, A CAGAR', "GOT IT, LET'S POOP") : tr('SIGUIENTE', 'NEXT')),
                       ),
                     ),
                   ],
@@ -271,7 +278,7 @@ class _BotonDeMuestraState extends State<_BotonDeMuestra> with SingleTickerProvi
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Emoji('💩', tamano: 80),
-                Text('CAGUÉ',
+                Text(tr('CAGUÉ', 'I POOPED'),
                     style: TextStyle(
                       color: apretado ? acentoTexto : p.sobrePrimario,
                       fontSize: 22,

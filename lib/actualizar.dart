@@ -6,6 +6,7 @@ import 'package:in_app_update/in_app_update.dart';
 import 'package:ota_update/ota_update.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import 'idioma.dart';
 import 'main.dart' show supabaseUrl;
 
 // Lo escribe scripts/publicar.sh junto con la APK.
@@ -49,12 +50,12 @@ Future<void> _revisar(BuildContext context) async {
   final actualizar = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('Actualízame, mojón 💩'),
+      title: Text(tr('Actualízame, mojón 💩', 'Update me, you turd 💩')),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Versión ${remota['version']} disponible',
+          Text(tr('Versión ${remota['version']} disponible', 'Version ${remota['version']} available'),
               style: const TextStyle(fontWeight: FontWeight.w700)),
           if ((remota['notas'] as String?)?.trim().isNotEmpty == true) ...[
             const SizedBox(height: 8),
@@ -63,8 +64,8 @@ Future<void> _revisar(BuildContext context) async {
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('DESPUÉS')),
-        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('ACTUALIZAR')),
+        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('DESPUÉS', 'LATER'))),
+        FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('ACTUALIZAR', 'UPDATE'))),
       ],
     ),
   );
@@ -94,12 +95,12 @@ Future<void> _revisar(BuildContext context) async {
           });
         }
         return AlertDialog(
-          title: Text(error ? 'No se pudo actualizar' : 'Bajando actualización'),
+          title: Text(error ? tr('No se pudo actualizar', "Couldn't update") : tr('Bajando actualización', 'Downloading update')),
           content: error
               ? Text('${e.status.name}: ${e.value ?? ''}')
               : LinearProgressIndicator(value: pct == null ? null : pct / 100),
           actions: [
-            if (error) TextButton(onPressed: () => Navigator.pop(context), child: const Text('CERRAR')),
+            if (error) TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('CERRAR', 'CLOSE'))),
           ],
         );
       },
@@ -150,9 +151,9 @@ Future<void> _revisarPlay(BuildContext context) async {
 void _ofrecerReinicio(BuildContext context) {
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
-      content: const Text('Actualización lista 💩'),
+      content: Text(tr('Actualización lista 💩', 'Update ready 💩')),
       duration: const Duration(days: 1),
-      action: SnackBarAction(label: 'REINICIAR', onPressed: InAppUpdate.completeFlexibleUpdate),
+      action: SnackBarAction(label: tr('REINICIAR', 'RESTART'), onPressed: InAppUpdate.completeFlexibleUpdate),
     ),
   );
 }

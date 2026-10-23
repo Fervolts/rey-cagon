@@ -10,6 +10,7 @@
 //   - retos (Cagadón): { tipo: "reto", evento } → nuevo, aceptado, rechazado o fin del día.
 //   - trigger anuncios_avisar: { tipo: "anuncio" } → anuncio de un admin a todos los teléfonos.
 // Lo que va a una persona también se guarda en public.notificaciones (centro de avisos de la app).
+// Cada texto va en español y en inglés: cada teléfono recibe el de su idioma (push_tokens.idioma).
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const sa = JSON.parse(Deno.env.get("FCM_SERVICE_ACCOUNT")!);
@@ -64,6 +65,12 @@ async function accessToken(): Promise<string> {
   return cache.token;
 }
 
+// Título y cuerpo en los dos idiomas.
+type Aviso = { es: [string, string]; en: [string, string] };
+const aviso = (esTitulo: string, esCuerpo: string, enTitulo: string, enCuerpo: string): Aviso =>
+  ({ es: [esTitulo, esCuerpo], en: [enTitulo, enCuerpo] });
+const enSuIdioma = (a: Aviso, idioma?: string | null) => (idioma === "en" ? a.en : a.es);
+
 async function enviar(token: string, title: string, body: string, data: Record<string, string> = {}) {
   const bearer = await accessToken();
   return fetch(`https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`, {
@@ -76,10 +83,18 @@ async function enviar(token: string, title: string, body: string, data: Record<s
 }
 
 // Copia del aviso en el centro de avisos de cada usuario, tenga o no teléfono registrado.
-async function guardar(usuarios: string[], titulo: string, cuerpo: string, datos: Record<string, string>) {
+async function guardar(usuarios: string[], a: Aviso, datos: Record<string, string>) {
   if (!usuarios.length) return;
   const { error } = await db.from("notificaciones").insert(
-    [...new Set(usuarios)].map((u) => ({ user_id: u, tipo: datos.tipo ?? "otro", titulo, cuerpo, datos })),
+    [...new Set(usuarios)].map((u) => ({
+      user_id: u,
+      tipo: datos.tipo ?? "otro",
+      titulo: a.es[0],
+      cuerpo: a.es[1],
+      titulo_en: a.en[0],
+      cuerpo_en: a.en[1],
+      datos,
+    })),
   );
   if (error) console.error("notificaciones", error.message);
 }
@@ -88,19 +103,21 @@ async function guardar(usuarios: string[], titulo: string, cuerpo: string, datos
 async function avisarFollow(follower: string, followed: string) {
   const [{ data: perfil }, { data: tokens }, { data: devuelta }] = await Promise.all([
     db.from("profiles").select("username").eq("id", follower).single(),
-    db.from("push_tokens").select("token").eq("user_id", followed),
+    db.from("push_tokens").select("token, idioma").eq("user_id", followed),
     db.from("follows").select("follower").eq("follower", followed).eq("followed", follower).maybeSingle(),
   ]);
   if (!perfil) return Response.json({ enviados: 0 });
-  const body = devuelta
-    ? "Ya lo sigues. Que empiece la guerra 💩"
-    : "Síguelo de vuelta para saber cuánto caga 💩";
+  const a = devuelta
+    ? aviso(`👀 ${perfil.username} te empezó a seguir`, "Ya lo sigues. Que empiece la guerra 💩",
+      `👀 ${perfil.username} started following you`, "You already follow them. Let the war begin 💩")
+    : aviso(`👀 ${perfil.username} te empezó a seguir`, "Síguelo de vuelta para saber cuánto caga 💩",
+      `👀 ${perfil.username} started following you`, "Follow back to see how much they poop 💩");
   const datos = { tipo: "follow", user_id: follower };
-  await guardar([followed], `👀 ${perfil.username} te empezó a seguir`, body, datos);
+  await guardar([followed], a, datos);
   if (!tokens?.length) return Response.json({ enviados: 0 });
   const muertos: string[] = [];
   await Promise.all(tokens.map(async (t) => {
-    const res = await enviar(t.token, `👀 ${perfil.username} te empezó a seguir`, body, datos);
+    const res = await enviar(t.token, ...enSuIdioma(a, t.idioma), datos);
     if (!res.ok) {
       const err = await res.text();
       if (res.status === 404 || err.includes("UNREGISTERED")) muertos.push(t.token);
@@ -115,15 +132,19 @@ async function avisarFollow(follower: string, followed: string) {
 // desde la 1.8.2; las versiones anteriores (null) no saben actualizarse y se omiten.
 async function avisarVersion(version: string, build: number) {
   // Los de Play se actualizan por la tienda: solo avisa a la APK directa (null = versión vieja sin canal).
-  const { data: tokens } = await db.from("push_tokens").select("token").lt("app_build", build)
+  const { data: tokens } = await db.from("push_tokens").select("token, idioma").lt("app_build", build)
     .or("canal.is.null,canal.eq.directo");
   if (!tokens?.length) return Response.json({ enviados: 0 });
   const muertos: string[] = [];
   await Promise.all(tokens.map(async (t) => {
     const res = await enviar(
       t.token,
-      "Actualízame, mojón 💩",
-      `La versión ${version} ya está lista. Toca para instalarla.`,
+      ...enSuIdioma(aviso(
+        "Actualízame, mojón 💩",
+        `La versión ${version} ya está lista. Toca para instalarla.`,
+        "Update me, you turd 💩",
+        `Version ${version} is ready. Tap to install it.`,
+      ), t.idioma),
       { tipo: "version", version },
     );
     if (!res.ok) {
@@ -140,16 +161,40 @@ const malas = ["dolorosa", "sangrante", "ardiente"];
 const buenas = ["virtuosa", "placentera", "liberadora"];
 
 // Texto del aviso según cómo le fue. null = nada que contar (las del medio no avisan).
-function chisme(u: string, placer: number | null, etiquetas: string[]): [string, string] | null {
+function chisme(u: string, placer: number | null, etiquetas: string[]): Aviso | null {
   const todas = (l: string[]) => l.every((e) => etiquetas.includes(e));
-  if (placer === 7 && todas(buenas)) return [`👑 ${u} tiró la cagada PERFECTA`, "7 de 7, virtuosa, placentera y liberadora. Brilla como el oro."];
-  if (todas(malas)) return [`😈 ${u} invocó al demonio`, "Dolorosa, sangrante y ardiente. Mándale fuerzas (y una vela)."];
-  if (placer === 1) return [`💀 ${u} quedó carbonizado`, "Cagada destructiva, 1 de 7. Que alguien le lleve agua."];
-  if (placer === 7) return [`😇 ${u} tocó el cielo`, "Cagada celestial, 7 de 7. Hay gente con suerte."];
-  if (todas(buenas)) return [`✨ ${u} brilla como el oro`, "Virtuosa, placentera y liberadora. Qué envidia."];
-  if (etiquetas.includes("sangrante")) return [`🩸 ${u} sangró en el intento`, "Fue una cagada sangrante. Si sigue así, que vaya al médico."];
-  if (etiquetas.includes("ardiente")) return [`🔥 ${u} tiene el ano en llamas`, "Cagada ardiente. Nada de picante por hoy."];
-  if (etiquetas.includes("liberadora")) return [`🕊️ ${u} se liberó`, "Cagada liberadora. Salió flotando del baño."];
+  if (placer === 7 && todas(buenas)) {
+    return aviso(`👑 ${u} tiró la cagada PERFECTA`, "7 de 7, virtuosa, placentera y liberadora. Brilla como el oro.",
+      `👑 ${u} dropped the PERFECT poop`, "7 out of 7, virtuous, pleasurable and liberating. Shining like gold.");
+  }
+  if (todas(malas)) {
+    return aviso(`😈 ${u} invocó al demonio`, "Dolorosa, sangrante y ardiente. Mándale fuerzas (y una vela).",
+      `😈 ${u} summoned the devil`, "Painful, bloody and burning. Send strength (and a candle).");
+  }
+  if (placer === 1) {
+    return aviso(`💀 ${u} quedó carbonizado`, "Cagada destructiva, 1 de 7. Que alguien le lleve agua.",
+      `💀 ${u} got incinerated`, "Destructive poop, 1 out of 7. Someone bring them water.");
+  }
+  if (placer === 7) {
+    return aviso(`😇 ${u} tocó el cielo`, "Cagada celestial, 7 de 7. Hay gente con suerte.",
+      `😇 ${u} touched heaven`, "Heavenly poop, 7 out of 7. Some people have all the luck.");
+  }
+  if (todas(buenas)) {
+    return aviso(`✨ ${u} brilla como el oro`, "Virtuosa, placentera y liberadora. Qué envidia.",
+      `✨ ${u} is shining like gold`, "Virtuous, pleasurable and liberating. So jealous.");
+  }
+  if (etiquetas.includes("sangrante")) {
+    return aviso(`🩸 ${u} sangró en el intento`, "Fue una cagada sangrante. Si sigue así, que vaya al médico.",
+      `🩸 ${u} bled trying`, "It was a bloody one. If it keeps up, see a doctor.");
+  }
+  if (etiquetas.includes("ardiente")) {
+    return aviso(`🔥 ${u} tiene el ano en llamas`, "Cagada ardiente. Nada de picante por hoy.",
+      `🔥 ${u}'s butt is on fire`, "Burning poop. No spicy food today.");
+  }
+  if (etiquetas.includes("liberadora")) {
+    return aviso(`🕊️ ${u} se liberó`, "Cagada liberadora. Salió flotando del baño.",
+      `🕊️ ${u} is free`, "Liberating poop. Floated right out of the bathroom.");
+  }
   return null;
 }
 
@@ -164,12 +209,12 @@ async function avisarPlacer(id: string) {
   const { data: abiertos } = await db.from("profiles").select("id").eq("placer_desbloqueado", true)
     .in("id", (seguidores ?? []).map((s) => s.follower));
   if (!abiertos?.length) return Response.json({ enviados: 0 });
-  await guardar(abiertos.map((a) => a.id), texto[0], texto[1], { tipo: "placer", user_id: c.user_id });
-  const { data: tokens } = await db.from("push_tokens").select("token").in("user_id", abiertos.map((a) => a.id));
+  await guardar(abiertos.map((a) => a.id), texto, { tipo: "placer", user_id: c.user_id });
+  const { data: tokens } = await db.from("push_tokens").select("token, idioma").in("user_id", abiertos.map((a) => a.id));
   if (!tokens?.length) return Response.json({ enviados: 0 });
   const muertos: string[] = [];
   await Promise.all(tokens.map(async (t) => {
-    const res = await enviar(t.token, texto[0], texto[1], { tipo: "placer", user_id: c.user_id });
+    const res = await enviar(t.token, ...enSuIdioma(texto, t.idioma), { tipo: "placer", user_id: c.user_id });
     if (!res.ok) {
       const err = await res.text();
       if (res.status === 404 || err.includes("UNREGISTERED")) muertos.push(t.token);
@@ -181,14 +226,14 @@ async function avisarPlacer(id: string) {
 }
 
 // Manda el mismo aviso a todos los teléfonos de esos usuarios y limpia los tokens muertos.
-async function avisarA(usuarios: string[], title: string, body: string, data: Record<string, string>) {
+async function avisarA(usuarios: string[], a: Aviso, data: Record<string, string>) {
   if (!usuarios.length) return Response.json({ enviados: 0 });
-  await guardar(usuarios, title, body, data);
-  const { data: tokens } = await db.from("push_tokens").select("token").in("user_id", usuarios);
+  await guardar(usuarios, a, data);
+  const { data: tokens } = await db.from("push_tokens").select("token, idioma").in("user_id", usuarios);
   if (!tokens?.length) return Response.json({ enviados: 0 });
   const muertos: string[] = [];
   await Promise.all(tokens.map(async (t) => {
-    const res = await enviar(t.token, title, body, data);
+    const res = await enviar(t.token, ...enSuIdioma(a, t.idioma), data);
     if (!res.ok) {
       const err = await res.text();
       if (res.status === 404 || err.includes("UNREGISTERED")) muertos.push(t.token);
@@ -213,35 +258,46 @@ async function avisarSoporte(id: number) {
     const quien = perfil?.username ?? "Alguien";
     return avisarA(
       (admins ?? []).map((a) => a.user_id).filter((u) => u !== m.user_id),
-      m.es_bug ? `🐞 ${quien} reportó un error` : `💬 ${quien} escribió a soporte`,
-      recortar(m.texto),
+      m.es_bug
+        ? aviso(`🐞 ${quien} reportó un error`, recortar(m.texto), `🐞 ${quien} reported a bug`, recortar(m.texto))
+        : aviso(`💬 ${quien} escribió a soporte`, recortar(m.texto), `💬 ${quien} wrote to support`, recortar(m.texto)),
       { tipo: "soporte", hilo: m.hilo },
     );
   }
-  return avisarA([m.hilo], "🛠️ Te respondió soporte", recortar(m.texto), { tipo: "soporte", hilo: m.hilo });
+  return avisarA([m.hilo], aviso("🛠️ Te respondió soporte", recortar(m.texto), "🛠️ Support replied", recortar(m.texto)), {
+    tipo: "soporte",
+    hilo: m.hilo,
+  });
 }
 
 // Mensaje reportado en La Letrina: aviso a los admins.
 async function avisarReporteChat(mensajeId: number, motivo: string) {
   const [{ data: admins }, { data: m }] = await Promise.all([
     db.from("admins").select("user_id"),
-    db.from("mensajes").select("texto, oculto").eq("id", mensajeId).single(),
+    db.from("mensajes").select("texto, oculto, sala").eq("id", mensajeId).single(),
   ]);
   if (!m) return Response.json({ enviados: 0 });
+  const cuerpo = `${motivo}: ${recortar(m.texto || "(tarjeta)", 90)}`;
   return avisarA(
     (admins ?? []).map((a) => a.user_id),
-    m.oculto ? "🚨 Mensaje ocultado por reportes" : "🚩 Reportaron un mensaje",
-    `${motivo}: ${recortar(m.texto || "(tarjeta)", 90)}`,
-    { tipo: "reporte_chat" },
+    m.oculto
+      ? aviso("🚨 Mensaje ocultado por reportes", cuerpo, "🚨 Message hidden by reports", cuerpo)
+      : aviso("🚩 Reportaron un mensaje", cuerpo, "🚩 A message was reported", cuerpo),
+    { tipo: "reporte_chat", sala: m.sala },
   );
 }
 
-// "@username" en la sala global: aviso a los mencionados.
+// "@username" en una sala pública: aviso a los mencionados (el toque abre esa sala).
 async function avisarMencion(id: number, para: string[]) {
-  const { data: m } = await db.from("mensajes").select("user_id, texto").eq("id", id).single();
+  const { data: m } = await db.from("mensajes").select("user_id, texto, sala").eq("id", id).single();
   if (!m) return Response.json({ enviados: 0 });
   const { data: perfil } = await db.from("profiles").select("username").eq("id", m.user_id).single();
-  return avisarA(para, `📣 ${perfil?.username ?? "Alguien"} te mencionó`, recortar(m.texto), { tipo: "mencion", id: String(id) });
+  const quien = perfil?.username ?? "Alguien";
+  return avisarA(para, aviso(`📣 ${quien} te mencionó`, recortar(m.texto), `📣 ${quien} mentioned you`, recortar(m.texto)), {
+    tipo: "mencion",
+    id: String(id),
+    sala: m.sala,
+  });
 }
 
 // El Cagadón: avisos del reto a quien le toca.
@@ -253,30 +309,49 @@ async function avisarReto(id: number, evento: string) {
   const nombre = (u: string) => perfiles?.find((p) => p.id === u)?.username ?? "Alguien";
   const data = { tipo: "reto", id: String(id) };
   if (evento === "nuevo") {
-    return avisarA([r.retado], `⚔️ ${nombre(r.retador)} te retó a un Cagadón`, "Gana el que cague más hoy. ¿Aceptas o te rajas?", data);
+    return avisarA([r.retado], aviso(
+      `⚔️ ${nombre(r.retador)} te retó a un Cagadón`, "Gana el que cague más hoy. ¿Aceptas o te rajas?",
+      `⚔️ ${nombre(r.retador)} challenged you to a Poop-Off`, "Whoever poops the most today wins. In or chicken?",
+    ), data);
   }
   if (evento === "aceptado") {
-    return avisarA([r.retador], `🔥 ${nombre(r.retado)} aceptó tu Cagadón`, "Que empiece la guerra. Gana el que cague más hoy 💩", data);
+    return avisarA([r.retador], aviso(
+      `🔥 ${nombre(r.retado)} aceptó tu Cagadón`, "Que empiece la guerra. Gana el que cague más hoy 💩",
+      `🔥 ${nombre(r.retado)} accepted your Poop-Off`, "Let the war begin. Whoever poops the most today wins 💩",
+    ), data);
   }
   if (evento === "rechazado") {
-    return avisarA([r.retador], `🐔 ${nombre(r.retado)} se rajó`, "No aceptó tu Cagadón. Cobarde.", data);
+    return avisarA([r.retador], aviso(
+      `🐔 ${nombre(r.retado)} se rajó`, "No aceptó tu Cagadón. Cobarde.",
+      `🐔 ${nombre(r.retado)} chickened out`, "They turned down your Poop-Off. Coward.",
+    ), data);
   }
   const marcador = (yo: string) =>
     yo === r.retador ? `${r.marcador_retador}-${r.marcador_retado}` : `${r.marcador_retado}-${r.marcador_retador}`;
   if (!r.ganador) {
-    return avisarA([r.retador, r.retado], "🤝 Cagadón empatado en cero", "Ninguno cagó. Qué decepción.", data);
+    return avisarA([r.retador, r.retado], aviso(
+      "🤝 Cagadón empatado en cero", "Ninguno cagó. Qué decepción.",
+      "🤝 Poop-Off tied at zero", "Nobody pooped. What a letdown.",
+    ), data);
   }
   const perdedor = r.ganador === r.retador ? r.retado : r.retador;
-  await avisarA([r.ganador], "🏆 ¡Ganaste el Cagadón!", `${marcador(r.ganador)} contra ${nombre(perdedor)}. Rey indiscutible 👑`, data);
-  return avisarA([perdedor], "💀 Perdiste el Cagadón", `${marcador(perdedor)} contra ${nombre(r.ganador)}. Mañana revancha.`, data);
+  await avisarA([r.ganador], aviso(
+    "🏆 ¡Ganaste el Cagadón!", `${marcador(r.ganador)} contra ${nombre(perdedor)}. Rey indiscutible 👑`,
+    "🏆 You won the Poop-Off!", `${marcador(r.ganador)} against ${nombre(perdedor)}. Undisputed king 👑`,
+  ), data);
+  return avisarA([perdedor], aviso(
+    "💀 Perdiste el Cagadón", `${marcador(perdedor)} contra ${nombre(r.ganador)}. Mañana revancha.`,
+    "💀 You lost the Poop-Off", `${marcador(perdedor)} against ${nombre(r.ganador)}. Rematch tomorrow.`,
+  ), data);
 }
 
-// Anuncio de un admin: a todos los teléfonos, de Play y de la APK directa. No se guarda por
-// usuario: la app lee public.anuncios directo.
+// Anuncio de un admin: a todos los teléfonos (o solo a los de un idioma), de Play y de la APK
+// directa. No se guarda por usuario: la app lee public.anuncios directo.
 async function avisarAnuncio(id: number) {
-  const { data: a } = await db.from("anuncios").select("titulo, texto, emoji").eq("id", id).single();
+  const { data: a } = await db.from("anuncios").select("titulo, texto, emoji, idioma").eq("id", id).single();
   if (!a) return Response.json({ enviados: 0 });
-  const { data: tokens } = await db.from("push_tokens").select("token");
+  const consulta = db.from("push_tokens").select("token");
+  const { data: tokens } = await (a.idioma ? consulta.eq("idioma", a.idioma) : consulta);
   if (!tokens?.length) return Response.json({ enviados: 0 });
   const muertos: string[] = [];
   await Promise.all(tokens.map(async (t) => {
@@ -312,27 +387,32 @@ Deno.serve(async (req) => {
   const [{ data: perfil }, { data: hoy }, { data: tokens }] = await Promise.all([
     db.from("profiles").select("username").eq("id", user_id).single(),
     db.from("cagadas").select("user_id").gte("created_at", inicioDelDia()),
-    db.from("push_tokens").select("token, user_id").in("user_id", seguidores.map((s) => s.follower)),
+    db.from("push_tokens").select("token, user_id, idioma").in("user_id", seguidores.map((s) => s.follower)),
   ]);
   if (!perfil || !tokens?.length) return Response.json({ enviados: 0 });
 
   const cuenta = new Map<string, number>();
   for (const c of hoy ?? []) cuenta.set(c.user_id, (cuenta.get(c.user_id) ?? 0) + 1);
   const n = cuenta.get(user_id) ?? 0;
-  const veces = n === 1 ? "vez" : "veces";
 
   const bearer = await accessToken();
   const muertos: string[] = [];
   await Promise.all(tokens.map(async (t) => {
     const mio = cuenta.get(t.user_id) ?? 0;
-    const cola = mio < n ? "vas perdiendo 😬" : mio === n ? "van empatados 👀" : "todavía le ganas 👑";
+    const en = t.idioma === "en";
+    const cola = en
+      ? (mio < n ? "you're losing 😬" : mio === n ? "you're tied 👀" : "you're still winning 👑")
+      : (mio < n ? "vas perdiendo 😬" : mio === n ? "van empatados 👀" : "todavía le ganas 👑");
+    const notification = en
+      ? { title: `💩 ${perfil.username} pooped`, body: `${perfil.username} pooped ${n} ${n === 1 ? "time" : "times"} today... ${cola}` }
+      : { title: `💩 ${perfil.username} cagó`, body: `${perfil.username} cagó ${n} ${n === 1 ? "vez" : "veces"} hoy... ${cola}` };
     const res = await fetch(`https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`, {
       method: "POST",
       headers: { Authorization: `Bearer ${bearer}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         message: {
           token: t.token,
-          notification: { title: `💩 ${perfil.username} cagó`, body: `${perfil.username} cagó ${n} ${veces} hoy... ${cola}` },
+          notification,
           data: { tipo: "cagada", user_id },
           android: { notification: { channel_id: "cagadas" } },
         },

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Rey Cagón</string>
+    <string name="widget_cague_nombre">Rey Cagón</string>
+    <string name="widget_ranking_nombre">Rey Cagón · Ranking</string>
+    <string name="widget_ranking_global_nombre">Rey Cagón · Ranking global</string>
+    <string name="widget_descripcion">Botón de CAGUÉ: registra sin abrir la app</string>
+    <string name="widget_ranking_descripcion">Tu puesto en el ranking de la semana y quién va cerca</string>
+    <string name="widget_ranking_global_descripcion">Tu puesto entre todos los que usan Rey Cagón esta semana</string>
+    <string name="widget_cague">CAGUÉ</string>
+    <string name="widget_hoy">HOY %s</string>
+    <string name="widget_hoy_cero">HOY 0</string>
+    <string name="widget_puesto">PUESTO</string>
+    <string name="widget_semana">SEMANA</string>
+    <string name="widget_abrir">Abre Rey Cagón para cargar el ranking</string>
+    <string name="widget_tu">%s (tú)</string>
+</resources>

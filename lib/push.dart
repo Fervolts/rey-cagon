@@ -5,6 +5,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import 'actualizar.dart' show esDePlay;
 import 'avisos.dart' show ir;
+import 'idioma.dart' show idioma;
 import 'main.dart' show db;
 import 'recordatorio.dart' show notificaciones;
 import 'widget.dart' show clienteDeFondo, refrescarRanking;
@@ -29,7 +30,7 @@ Future<void> _alFondo(RemoteMessage m) async {
 /// Tocaron el push: abrir donde corresponde. Las cagadas y las versiones abren la app y ya.
 void _alTocar(RemoteMessage m) {
   final destino = switch (m.data['tipo']) {
-    'mencion' || 'reporte_chat' => 'todos',
+    'mencion' || 'reporte_chat' => m.data['sala'] ?? 'todos',
     'soporte' => 'soporte',
     'reto' => 'inicio',
     'follow' || 'placer' || 'anuncio' => 'avisos',
@@ -76,6 +77,7 @@ Future<void> _guardar(String token) async {
     'user_id': uid,
     'app_build': build,
     'canal': esDePlay ? 'play' : 'directo',
+    'idioma': idioma.value,
     'updated_at': DateTime.now().toUtc().toIso8601String(),
   });
 }

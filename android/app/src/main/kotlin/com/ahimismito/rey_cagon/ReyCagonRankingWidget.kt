@@ -45,8 +45,8 @@ open class ReyCagonRankingWidget : HomeWidgetProvider() {
         for (id in appWidgetIds) {
             val views = RemoteViews(context.packageName, R.layout.widget_ranking)
             views.setTextViewText(R.id.rk_puesto, widgetData.getString("${prefijo}_puesto", "--"))
-            views.setTextViewText(R.id.rk_de, widgetData.getString("${prefijo}_de", "SEMANA"))
-            views.setTextViewText(R.id.rk_frase, widgetData.getString("${prefijo}_frase", "Abre Rey Cagón para cargar el ranking"))
+            views.setTextViewText(R.id.rk_de, widgetData.getString("${prefijo}_de", null) ?: context.getString(R.string.widget_semana))
+            views.setTextViewText(R.id.rk_frase, widgetData.getString("${prefijo}_frase", null) ?: context.getString(R.string.widget_abrir))
             views.setImageViewResource(R.id.rk_icono, if (rey) R.drawable.widget_corona else R.drawable.widget_poop)
 
             filas.forEachIndexed { i, (fila, pos, nombre, total) ->
@@ -56,7 +56,7 @@ open class ReyCagonRankingWidget : HomeWidgetProvider() {
                     val color = if (yo) 0xFFFFD60A.toInt() else 0xFFF2F0EC.toInt()
                     views.setViewVisibility(fila, View.VISIBLE)
                     views.setTextViewText(pos, String.format("%02d", f.optInt("p")))
-                    views.setTextViewText(nombre, if (yo) "${f.optString("n")} (tú)" else f.optString("n"))
+                    views.setTextViewText(nombre, if (yo) context.getString(R.string.widget_tu, f.optString("n")) else f.optString("n"))
                     views.setTextViewText(total, f.optInt("t").toString())
                     views.setTextColor(nombre, color)
                     views.setTextColor(total, color)

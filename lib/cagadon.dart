@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'accesorios.dart';
 import 'emoji.dart';
+import 'idioma.dart';
 import 'main.dart' show db, escucharCagadas;
 import 'tema.dart';
 
@@ -23,21 +24,24 @@ Future<void> retar(BuildContext context, String uid, String nombre) async {
   final ok = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('⚔️ Cagadón'),
-      content: Text('¿Retas a $nombre? Gana el que cague más hoy, hasta las 11:59 p. m. '
-          'Si empatan, gana el que llegó primero.'),
+      title: Text(tr('⚔️ Cagadón', '⚔️ Poop-Off')),
+      content: Text(tr(
+          '¿Retas a $nombre? Gana el que cague más hoy, hasta las 11:59 p. m. '
+              'Si empatan, gana el que llegó primero.',
+          'Challenge $nombre? Whoever poops more today wins, until 11:59 p.m. '
+              'If you tie, whoever got there first wins.')),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('NO')),
-        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('RETAR')),
+        FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('RETAR', 'CHALLENGE'))),
       ],
     ),
   );
   if (ok != true) return;
   try {
     await db.from('retos').insert({'retado': uid});
-    if (context.mounted) _aviso(context, 'Reto enviado a $nombre ⚔️');
+    if (context.mounted) _aviso(context, tr('Reto enviado a $nombre ⚔️', 'Challenge sent to $nombre ⚔️'));
   } on PostgrestException catch (e) {
-    if (context.mounted) _aviso(context, e.message);
+    if (context.mounted) _aviso(context, trServidor(e.message));
   }
 }
 
@@ -101,9 +105,9 @@ class _InvitacionState extends State<_Invitacion> {
     setState(() => _ocupado = true);
     try {
       await db.rpc('responder_reto', params: {'rid': widget.reto['id'], 'accion': accion});
-      if (mounted && accion == 'aceptar') _aviso(context, '¡Que empiece el Cagadón! 💩');
+      if (mounted && accion == 'aceptar') _aviso(context, tr('¡Que empiece el Cagadón! 💩', 'Let the Poop-Off begin! 💩'));
     } on PostgrestException catch (e) {
-      if (mounted) _aviso(context, e.message);
+      if (mounted) _aviso(context, trServidor(e.message));
     } finally {
       if (mounted) setState(() => _ocupado = false);
     }
@@ -122,21 +126,23 @@ class _InvitacionState extends State<_Invitacion> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              _meRetaron ? '⚔️ $nombre te retó a un Cagadón' : '⏳ Esperando a que $nombre acepte tu Cagadón',
+              _meRetaron
+                  ? tr('⚔️ $nombre te retó a un Cagadón', '⚔️ $nombre challenged you to a Poop-Off')
+                  : tr('⏳ Esperando a que $nombre acepte tu Cagadón', '⏳ Waiting for $nombre to accept your Poop-Off'),
               style: const TextStyle(fontWeight: FontWeight.w800),
             ),
           ),
         ]),
         const SizedBox(height: 4),
-        Text('Gana el que cague más hoy.', style: TextStyle(color: p.textoSuave, fontSize: 13)),
+        Text(tr('Gana el que cague más hoy.', 'Whoever poops more today wins.'), style: TextStyle(color: p.textoSuave, fontSize: 13)),
         const SizedBox(height: 8),
         Row(mainAxisAlignment: MainAxisAlignment.end, children: [
           if (_meRetaron) ...[
-            TextButton(onPressed: _ocupado ? null : () => _responder('rechazar'), child: const Text('RAJARSE 🐔')),
+            TextButton(onPressed: _ocupado ? null : () => _responder('rechazar'), child: Text(tr('RAJARSE 🐔', 'CHICKEN OUT 🐔'))),
             const SizedBox(width: 6),
-            FilledButton(onPressed: _ocupado ? null : () => _responder('aceptar'), child: const Text('ACEPTAR')),
+            FilledButton(onPressed: _ocupado ? null : () => _responder('aceptar'), child: Text(tr('ACEPTAR', 'ACCEPT'))),
           ] else
-            TextButton(onPressed: _ocupado ? null : () => _responder('cancelar'), child: const Text('CANCELAR')),
+            TextButton(onPressed: _ocupado ? null : () => _responder('cancelar'), child: Text(tr('CANCELAR', 'CANCEL'))),
         ]),
       ]),
     );
@@ -210,7 +216,7 @@ class _TarjetaRetoState extends State<TarjetaReto> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: acento, width: 2), borderRadius: BorderRadius.circular(radio)),
       child: Column(children: [
-        Text(fin ? (ganador == null ? '🤝 CAGADÓN EMPATADO' : '🏆 CAGADÓN TERMINADO') : '⚔️ CAGADÓN EN VIVO · HOY',
+        Text(fin ? (ganador == null ? tr('🤝 CAGADÓN EMPATADO', '🤝 POOP-OFF TIED') : tr('🏆 CAGADÓN TERMINADO', '🏆 POOP-OFF OVER')) : tr('⚔️ CAGADÓN EN VIVO · HOY', '⚔️ POOP-OFF LIVE · TODAY'),
             style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)),
         const SizedBox(height: 8),
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -222,7 +228,7 @@ class _TarjetaRetoState extends State<TarjetaReto> {
           lado(r['retado'], b, b >= a),
         ]),
         if (!fin)
-          Text(a == b ? 'Empatados. En empate gana el que llegó primero.' : 'Hasta las 11:59 p. m.',
+          Text(a == b ? tr('Empatados. En empate gana el que llegó primero.', 'Tied. In a tie, whoever got there first wins.') : tr('Hasta las 11:59 p. m.', 'Until 11:59 p.m.'),
               style: TextStyle(color: p.textoSuave, fontSize: 12)),
       ]),
     );

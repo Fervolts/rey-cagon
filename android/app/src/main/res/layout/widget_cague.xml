@@ -26,7 +26,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:letterSpacing="0.08"
-            android:text="CAGUÉ"
+            android:text="@string/widget_cague"
             android:textColor="#FFFFFF"
             android:textSize="14sp"
             android:textStyle="bold" />
@@ -41,7 +41,7 @@
         android:letterSpacing="0.1"
         android:paddingHorizontal="8dp"
         android:paddingVertical="2dp"
-        android:text="HOY 0"
+        android:text="@string/widget_hoy_cero"
         android:textColor="#171513"
         android:textSize="11sp"
         android:textStyle="bold" />

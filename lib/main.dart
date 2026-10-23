@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'emoji.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ import 'cagadon.dart';
 import 'calendario.dart';
 import 'chat.dart';
 import 'comunidad.dart';
+import 'idioma.dart';
 import 'invitar_play.dart';
 import 'config.dart';
 import 'onboarding.dart';
@@ -40,7 +42,13 @@ Future<void> main() async {
   } catch (_) {
     // Sin notificaciones la app igual sirve.
   }
+  await iniciarIdioma();
   await elegirNombreSala();
+  // Al cambiar de idioma en Perfil: otro nombre de sala y los avisos en el idioma nuevo.
+  idioma.addListener(() {
+    elegirNombreSala();
+    registrarTelefono().catchError((_) {});
+  });
   runApp(const ReyCagonApp());
 }
 
@@ -69,16 +77,16 @@ bool esDeRed(Object e) {
 
 /// Mensaje para la gente: nada de trazas técnicas.
 String textoError(Object e) {
-  if (esDeRed(e)) return 'Sin conexión. Revisa tu internet e intenta de nuevo.';
-  if (e is PostgrestException) return e.message;
+  if (esDeRed(e)) return tr('Sin conexión. Revisa tu internet e intenta de nuevo.', 'No connection. Check your internet and try again.');
+  if (e is PostgrestException) return trServidor(e.message);
   if (e is ParallelWaitError) {
     final errores = e.errors;
     if (errores is Iterable) {
       final pg = errores.whereType<Object>().map((x) => x is AsyncError ? x.error : x).whereType<PostgrestException>().firstOrNull;
-      if (pg != null) return pg.message;
+      if (pg != null) return trServidor(pg.message);
     }
   }
-  return 'Algo falló. Intenta de nuevo.';
+  return tr('Algo falló. Intenta de nuevo.', 'Something broke. Try again.');
 }
 
 /// Corre la consulta y, si la red se cayó un momento, la repite hasta 2 veces.
@@ -136,15 +144,20 @@ class ReyCagonApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Rey Cagón',
-      debugShowCheckedModeBanner: false,
-      theme: tema(Brightness.light),
-      darkTheme: tema(Brightness.dark),
-      home: StreamBuilder<AuthState>(
-        stream: db.auth.onAuthStateChange,
-        builder: (context, _) =>
-            db.auth.currentSession == null ? const PantallaEntrar() : const PantallaInicio(),
+    return ValueListenableBuilder(
+      valueListenable: idioma,
+      builder: (context, valor, _) => MaterialApp(
+        // Cambiar de idioma rearma toda la app con los textos nuevos.
+        key: ValueKey(valor),
+        title: tr('Rey Cagón', 'King of the Throne'),
+        debugShowCheckedModeBanner: false,
+        theme: tema(Brightness.light),
+        darkTheme: tema(Brightness.dark),
+        home: StreamBuilder<AuthState>(
+          stream: db.auth.onAuthStateChange,
+          builder: (context, _) =>
+              db.auth.currentSession == null ? const PantallaEntrar() : const PantallaInicio(),
+        ),
       ),
     );
   }
@@ -180,7 +193,7 @@ class _PantallaEntrarState extends State<PantallaEntrar> {
         );
       }
     } on AuthException catch (e) {
-      _mensaje(e.message);
+      _mensaje(trServidor(e.message));
     } finally {
       if (mounted) setState(() => _ocupado = false);
     }
@@ -200,11 +213,11 @@ class _PantallaEntrarState extends State<PantallaEntrar> {
           children: [
             const Emoji('💩', tamano: 76),
             const SizedBox(height: 16),
-            Text('REY\nCAGÓN', style: texto.headlineLarge?.copyWith(fontSize: 52, height: 0.95)),
+            Text(tr('REY\nCAGÓN', 'KING OF\nTHE THRONE'), style: texto.headlineLarge?.copyWith(fontSize: 52, height: 0.95)),
             const SizedBox(height: 12),
             Align(alignment: Alignment.centerLeft, child: Container(height: 4, width: 56, color: acento)),
             const SizedBox(height: 12),
-            Text('Compite con tus amigos por la corona.', style: texto.bodyLarge?.copyWith(color: p.textoSuave)),
+            Text(tr('Compite con tus amigos por la corona.', 'Battle your friends for the crown.'), style: texto.bodyLarge?.copyWith(color: p.textoSuave)),
             const SizedBox(height: 36),
             if (_esRegistro) ...[
               const Rotulo('Username'),
@@ -216,7 +229,7 @@ class _PantallaEntrarState extends State<PantallaEntrar> {
             const SizedBox(height: 6),
             TextField(controller: _correo, keyboardType: TextInputType.emailAddress),
             const SizedBox(height: 16),
-            const Rotulo('Contraseña'),
+            Rotulo(tr('Contraseña', 'Password')),
             const SizedBox(height: 6),
             TextField(
               controller: _clave,
@@ -227,18 +240,18 @@ class _PantallaEntrarState extends State<PantallaEntrar> {
             const SizedBox(height: 24),
             FilledButton(
               onPressed: _ocupado ? null : _enviar,
-              child: Text(_esRegistro ? 'CREAR CUENTA' : 'ENTRAR'),
+              child: Text(_esRegistro ? tr('CREAR CUENTA', 'CREATE ACCOUNT') : tr('ENTRAR', 'LOG IN')),
             ),
             const SizedBox(height: 8),
             OutlinedButton(
               onPressed: () => setState(() => _esRegistro = !_esRegistro),
-              child: Text(_esRegistro ? 'YA TENGO CUENTA' : 'CREAR CUENTA NUEVA'),
+              child: Text(_esRegistro ? tr('YA TENGO CUENTA', 'I HAVE AN ACCOUNT') : tr('CREAR CUENTA NUEVA', 'CREATE NEW ACCOUNT')),
             ),
             if (!_esRegistro)
               TextButton(
                 onPressed: () => Navigator.push(context,
                     MaterialPageRoute(builder: (_) => PantallaRecuperar(correo: _correo.text.trim()))),
-                child: const Text('¿OLVIDASTE TU CONTRASEÑA?'),
+                child: Text(tr('¿OLVIDASTE TU CONTRASEÑA?', 'FORGOT YOUR PASSWORD?')),
               ),
             const SizedBox(height: 32),
             Text(disclaimer, style: texto.bodySmall?.copyWith(color: p.textoSuave)),
@@ -263,7 +276,10 @@ class _PantallaInicioState extends State<PantallaInicio> {
 
   // Puntito en la pestaña del baño: hay mensajes de otros desde la última vez que entraste.
   final _subs = <StreamSubscription>[];
-  int _ultimoBano = 0, _vistoBano = 0, _ultimoSoporte = 0, _vistoSoporte = 0;
+  // La general y la de tu idioma; los ids son de una sola secuencia, así que se comparan directo.
+  int _ultimoGeneral = 0, _ultimoIdioma = 0, _vistoBano = 0, _ultimoSoporte = 0, _vistoSoporte = 0;
+
+  int get _ultimoBano => max(_ultimoGeneral, _ultimoIdioma);
 
   late final VoidCallback _soltarAvisos;
 
@@ -288,7 +304,8 @@ class _PantallaInicioState extends State<PantallaInicio> {
         _vistoSoporte = prefs.getInt('soporte_visto') ?? 0;
       });
       _subs
-        ..add(_escucharUltimo('sala', 'global', (id) => _ultimoBano = id))
+        ..add(_escucharUltimo('sala', 'global', (id) => _ultimoGeneral = id))
+        ..add(_escucharUltimo('sala', idioma.value, (id) => _ultimoIdioma = id))
         ..add(_escucharUltimo('hilo', _yo, (id) => _ultimoSoporte = id));
     });
   }
@@ -358,7 +375,7 @@ class _PantallaInicioState extends State<PantallaInicio> {
         index: _tab,
         children: [
           const PantallaRanking(),
-          PantallaCalendario(usuarioId: yo, nombre: 'mí'),
+          PantallaCalendario(usuarioId: yo, nombre: tr('mí', 'me')),
           const PantallaChat(),
           const PantallaTips(),
           PantallaPerfil(usuarioId: yo),
@@ -381,11 +398,11 @@ class _PantallaInicioState extends State<PantallaInicio> {
                 if (i == _tabBano) _marcarVisto();
               },
               destinations: [
-                const NavigationDestination(icon: Icon(Icons.emoji_events_outlined), selectedIcon: Icon(Icons.emoji_events), label: 'RANKING'),
-                const NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: 'CALENDARIO'),
+                NavigationDestination(icon: const Icon(Icons.emoji_events_outlined), selectedIcon: const Icon(Icons.emoji_events), label: tr('RANKING', 'LEADERBOARD')),
+                NavigationDestination(icon: const Icon(Icons.calendar_month_outlined), selectedIcon: const Icon(Icons.calendar_month), label: tr('CALENDARIO', 'CALENDAR')),
                 NavigationDestination(icon: icono(Icons.wc_outlined), selectedIcon: const Icon(Icons.wc), label: nombreCorto),
                 const NavigationDestination(icon: Icon(Icons.lightbulb_outline), selectedIcon: Icon(Icons.lightbulb), label: 'TIPS'),
-                const NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'PERFIL'),
+                NavigationDestination(icon: const Icon(Icons.person_outline), selectedIcon: const Icon(Icons.person), label: tr('PERFIL', 'PROFILE')),
               ],
             ),
           ),
@@ -395,12 +412,12 @@ class _PantallaInicioState extends State<PantallaInicio> {
   }
 }
 
-const periodos = {
-  'week': 'Semana',
-  'month': 'Mes',
-  'quarter': 'Trimestre',
-  'year': 'Año',
-};
+Map<String, String> get periodos => {
+      'week': tr('Semana', 'Week'),
+      'month': tr('Mes', 'Month'),
+      'quarter': tr('Trimestre', 'Quarter'),
+      'year': tr('Año', 'Year'),
+    };
 
 class PantallaRanking extends StatefulWidget {
   const PantallaRanking({super.key});
@@ -476,12 +493,12 @@ class _PantallaRankingState extends State<PantallaRanking> {
         context: context,
         barrierDismissible: false,
         builder: (context) => AlertDialog(
-          title: const Text('Antes de empezar 👑'),
-          content: const Text(disclaimer),
+          title: Text(tr('Antes de empezar 👑', 'Before we start 👑')),
+          content: Text(disclaimer),
           actions: [
             FilledButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Entendido, a cagar'),
+              child: Text(tr('Entendido, a cagar', "Got it, let's poop")),
             ),
           ],
         ),
@@ -530,7 +547,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
     HapticFeedback.mediumImpact();
     try {
       final nueva = await db.from('cagadas').insert({}).select('id').single();
-      _mensaje('Registrado 💩');
+      _mensaje(tr('Registrado 💩', 'Logged 💩'));
       await _cargar(spinner: false);
       if (!mounted) return;
       final tipo = await showModalBottomSheet<int>(
@@ -539,7 +556,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
           shrinkWrap: true,
           padding: conBordeAbajo(context, const EdgeInsets.fromLTRB(16, 0, 16, 16)),
           children: [
-            Text('¿QUÉ SALIÓ?', style: Theme.of(context).textTheme.titleLarge),
+            Text(tr('¿QUÉ SALIÓ?', 'WHAT CAME OUT?'), style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
             GridView.count(
               crossAxisCount: 4,
@@ -554,7 +571,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
               ],
             ),
             const SizedBox(height: 8),
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Prefiero no decir')),
+            TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('Prefiero no decir', 'Rather not say'))),
           ],
         ),
       );
@@ -570,7 +587,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
       if (mounted) await ofrecerPresumir(context, (yo['cagadas'] as num?)?.toInt() ?? 0);
     } on PostgrestException catch (e) {
       // El trigger limitar_cagadas devuelve el mensaje listo para mostrar.
-      _mensaje(e.hint == 'limite_hora' ? e.message : 'Error: ${e.message}');
+      _mensaje(e.hint == 'limite_hora' ? trServidor(e.message) : 'Error: ${trServidor(e.message)}');
     } catch (e) {
       _mensaje(textoError(e));
     }
@@ -585,9 +602,9 @@ class _PantallaRankingState extends State<PantallaRanking> {
           .order('created_at', ascending: false)
           .limit(1)
           .maybeSingle();
-      if (ultima == null) return _mensaje('No hay nada que deshacer');
+      if (ultima == null) return _mensaje(tr('No hay nada que deshacer', 'Nothing to undo'));
       await db.from('cagadas').delete().eq('id', ultima['id']);
-      _mensaje('Deshecho');
+      _mensaje(tr('Deshecho', 'Undone'));
       await _cargar(spinner: false);
     } catch (e) {
       _mensaje(textoError(e));
@@ -607,10 +624,13 @@ class _PantallaRankingState extends State<PantallaRanking> {
     final lider = _hoy.first;
     final mio = _miHoy;
     final n = lider['total'] as int;
-    if (_hoy.length == 1) return 'Sigue a tus amigos para competir';
-    if (n == 0) return 'Nadie ha cagado hoy. Sé el primero 💩';
-    if (lider['user_id'] == _yo || mio == n) return 'Vas ganando hoy 👑';
-    return '${lider['username']} cagó $n ${n == 1 ? 'vez' : 'veces'} hoy... vas perdiendo';
+    if (_hoy.length == 1) return tr('Sigue a tus amigos para competir', 'Follow your friends to compete');
+    if (n == 0) return tr('Nadie ha cagado hoy. Sé el primero 💩', "Nobody has pooped today. Be the first 💩");
+    if (lider['user_id'] == _yo || mio == n) return tr('Vas ganando hoy 👑', "You're winning today 👑");
+    return tr(
+      '${lider['username']} cagó $n ${n == 1 ? 'vez' : 'veces'} hoy... vas perdiendo',
+      "${lider['username']} pooped $n ${n == 1 ? 'time' : 'times'} today... you're losing",
+    );
   }
 
   void _abrir(Widget pantalla) =>
@@ -621,7 +641,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
     final texto = Theme.of(context).textTheme;
     final p = paleta(context);
     final aviso = _avisoDelDia;
-    final perdiendo = aviso?.endsWith('vas perdiendo') ?? false;
+    final perdiendo = aviso?.endsWith(tr('vas perdiendo', "you're losing")) ?? false;
     final maximo = _filas.isEmpty ? 0 : _filas.first['total'] as int;
 
     final normal = RefreshIndicator(
@@ -631,10 +651,10 @@ class _PantallaRankingState extends State<PantallaRanking> {
         children: [
           Row(
             children: [
-              Expanded(child: Text('Rey Cagón', style: texto.headlineSmall)),
+              Expanded(child: Text(tr('Rey Cagón', 'King of the Throne'), style: texto.headlineSmall)),
               IconButton.outlined(
                 icon: const Icon(Icons.person_add_alt_1),
-                tooltip: 'Buscar amigos',
+                tooltip: tr('Buscar amigos', 'Find friends'),
                 onPressed: () => ir('amigos'),
               ),
               const SizedBox(width: 8),
@@ -648,7 +668,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
             child: TextButton.icon(
               onPressed: _deshacer,
               icon: const Icon(Icons.undo, size: 18),
-              label: const Text('DESHACER LA ÚLTIMA'),
+              label: Text(tr('DESHACER LA ÚLTIMA', 'UNDO THE LAST ONE')),
             ),
           ),
           const SizedBox(height: 8),
@@ -670,7 +690,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Rotulo('Hoy · llevas $_miHoy'),
+                            Rotulo(tr('Hoy · llevas $_miHoy', 'Today · you have $_miHoy')),
                             const SizedBox(height: 4),
                             Text(aviso, style: texto.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
                           ],
@@ -691,10 +711,10 @@ class _PantallaRankingState extends State<PantallaRanking> {
           ],
           Row(
             children: [
-              const Rotulo('Ranking'),
+              Rotulo(tr('Ranking', 'Leaderboard')),
               const Spacer(),
               FilterChip(
-                label: const Text('SOLO MIS AMIGOS'),
+                label: Text(tr('SOLO MIS AMIGOS', 'FRIENDS ONLY')),
                 labelStyle: TextStyle(color: _soloSiguiendo ? acentoTexto : null),
                 selected: _soloSiguiendo,
                 visualDensity: VisualDensity.compact,
@@ -742,11 +762,12 @@ class _PantallaRankingState extends State<PantallaRanking> {
                     children: [
                       const Center(child: Emoji('🚽', tamano: 64)),
                       const SizedBox(height: 8),
-                      const Text('Estás cagando solo. Sigue a tus amigos para competir.', textAlign: TextAlign.center),
+                      Text(tr('Estás cagando solo. Sigue a tus amigos para competir.',
+                          "You're pooping alone. Follow your friends to compete."), textAlign: TextAlign.center),
                       const SizedBox(height: 12),
                       FilledButton(
                         onPressed: () => ir('amigos'),
-                        child: const Text('BUSCAR AMIGOS'),
+                        child: Text(tr('BUSCAR AMIGOS', 'FIND FRIENDS')),
                       ),
                     ],
                   ),
@@ -822,7 +843,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
                     children: [
                       const Icon(Icons.lock_open, color: acento),
                       const SizedBox(width: 8),
-                      Expanded(child: Text('El lado secreto', style: texto.headlineSmall)),
+                      Expanded(child: Text(tr('El lado secreto', 'The secret side'), style: texto.headlineSmall)),
                     ],
                   ),
                 ),
@@ -832,7 +853,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
                   child: TextButton.icon(
                     onPressed: _deshacer,
                     icon: const Icon(Icons.undo, size: 18),
-                    label: const Text('DESHACER LA ÚLTIMA'),
+                    label: Text(tr('DESHACER LA ÚLTIMA', 'UNDO THE LAST ONE')),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -849,9 +870,9 @@ class _PantallaRankingState extends State<PantallaRanking> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Rotulo('Solo para los que saben'),
+                                Rotulo(tr('Solo para los que saben', 'Only for those in the know')),
                                 const SizedBox(height: 4),
-                                Text('Aquí cada cagada se califica',
+                                Text(tr('Aquí cada cagada se califica', 'Here every poop gets a grade'),
                                     style: texto.bodyLarge?.copyWith(fontWeight: FontWeight.w600, color: p.texto)),
                               ],
                             ),
@@ -864,10 +885,10 @@ class _PantallaRankingState extends State<PantallaRanking> {
                 const SizedBox(height: 28),
                 Row(
                   children: [
-                    const Rotulo('Ranking secreto'),
+                    Rotulo(tr('Ranking secreto', 'Secret leaderboard')),
                     const Spacer(),
                     FilterChip(
-                      label: const Text('SOLO MIS AMIGOS'),
+                      label: Text(tr('SOLO MIS AMIGOS', 'FRIENDS ONLY')),
                       labelStyle: TextStyle(color: _soloSiguiendo ? acentoTexto : null),
                       selected: _soloSiguiendo,
                       visualDensity: VisualDensity.compact,
@@ -953,7 +974,7 @@ class _BotonCagueState extends State<_BotonCague> {
     final p = paleta(context);
     return Semantics(
       button: true,
-      label: 'Cagué',
+      label: tr('Cagué', 'I pooped'),
       child: GestureDetector(
         onTapDown: (_) => setState(() => _apretado = true),
         onTapUp: (_) => setState(() => _apretado = false),
@@ -985,7 +1006,7 @@ class _BotonCagueState extends State<_BotonCague> {
                   Image.asset('assets/img/mojon_angel.png', width: 104, height: 104)
                 else
                   const Emoji('💩', tamano: 88),
-                Text('CAGUÉ',
+                Text(tr('CAGUÉ', 'I POOPED'),
                     style: TextStyle(
                       color: _apretado ? acentoTexto : (widget.secreto ? acento : p.sobrePrimario),
                       fontSize: 24,
@@ -1058,10 +1079,10 @@ class _Tabla extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
-              children: const [
-                SizedBox(width: 44, child: Rotulo('#')),
-                Expanded(child: Rotulo('Amigo')),
-                Rotulo('Total'),
+              children: [
+                const SizedBox(width: 44, child: Rotulo('#')),
+                Expanded(child: Rotulo(tr('Amigo', 'Friend'))),
+                const Rotulo('Total'),
               ],
             ),
           ),

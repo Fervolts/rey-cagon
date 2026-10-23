@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
 
 import 'emoji.dart';
+import 'idioma.dart';
 import 'main.dart' show conReintento, db, escucharCagadas, esDeRed, textoError;
 import 'tema.dart';
 import 'tipos.dart';
 
-const _meses = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-];
+List<String> get _meses => enIngles
+    ? [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December',
+      ]
+    : [
+        'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+      ];
 
 /// Mes de cagadas de un usuario. Solo el dueño puede borrar (RLS igual lo impide).
 class PantallaCalendario extends StatefulWidget {
@@ -77,7 +83,7 @@ class _PantallaCalendarioState extends State<PantallaCalendario> {
   Future<void> _borrar(int id) async {
     try {
       await db.from('cagadas').delete().eq('id', id);
-      _mensaje('Borrada');
+      _mensaje(tr('Borrada', 'Deleted'));
       await _cargar();
     } catch (e) {
       _mensaje(textoError(e));
@@ -92,18 +98,18 @@ class _PantallaCalendarioState extends State<PantallaCalendario> {
         shrinkWrap: true,
         padding: conBordeAbajo(context, const EdgeInsets.all(16)),
         children: [
-          Text('$dia de ${_meses[_mes.month - 1]}',
+          Text(enIngles ? '${_meses[_mes.month - 1]} $dia' : '$dia de ${_meses[_mes.month - 1]}',
               style: Theme.of(context).textTheme.titleLarge),
-          if (entradas.isEmpty) const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
-            child: Text('Nada este día 🫥'),
+          if (entradas.isEmpty) Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Text(tr('Nada este día 🫥', 'Nothing this day 🫥')),
           ),
           for (final e in entradas)
             ListTile(
               leading: Emoji(tipoEmoji(e['tipo']), tamano: 32),
               title: Text(TimeOfDay.fromDateTime(DateTime.parse(e['created_at']).toLocal())
                   .format(context)),
-              subtitle: Text(tipos[e['tipo']]?.$2 ?? 'Sin tipo'),
+              subtitle: Text(tipos[e['tipo']]?.$2 ?? tr('Sin tipo', 'No type')),
               trailing: _esMio
                   ? IconButton(
                       icon: const Icon(Icons.delete_outline),
@@ -128,7 +134,7 @@ class _PantallaCalendarioState extends State<PantallaCalendario> {
     final esteMes = _mes.year == hoy.year && _mes.month == hoy.month;
 
     return Scaffold(
-      appBar: AppBar(title: Text(_esMio ? 'MI CALENDARIO' : 'CALENDARIO DE ${widget.nombre.toUpperCase()}')),
+      appBar: AppBar(title: Text(_esMio ? tr('MI CALENDARIO', 'MY CALENDAR') : tr('CALENDARIO DE ${widget.nombre.toUpperCase()}', "${widget.nombre.toUpperCase()}'S CALENDAR"))),
       body: ListView(
         padding: conBordeAbajo(context, const EdgeInsets.all(16)),
         children: [
@@ -148,7 +154,7 @@ class _PantallaCalendarioState extends State<PantallaCalendario> {
           ),
           Row(
             children: [
-              for (final d in ['L', 'M', 'M', 'J', 'V', 'S', 'D'])
+              for (final d in (enIngles ? ['M', 'T', 'W', 'T', 'F', 'S', 'S'] : ['L', 'M', 'M', 'J', 'V', 'S', 'D']))
                 Expanded(child: Center(child: Rotulo(d))),
             ],
           ),
@@ -175,7 +181,7 @@ class _PantallaCalendarioState extends State<PantallaCalendario> {
               ],
             ),
           const SizedBox(height: 12),
-          Text('TOTAL DEL MES: ${total.toString().padLeft(2, '0')}',
+          Text(tr('TOTAL DEL MES: ${total.toString().padLeft(2, '0')}', 'MONTH TOTAL: ${total.toString().padLeft(2, '0')}'),
               textAlign: TextAlign.center, style: numeros(context, tamano: 13, weight: FontWeight.w700)),
         ],
       ),

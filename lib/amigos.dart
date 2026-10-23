@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'accesorios.dart';
 import 'cagadon.dart' show retar;
 import 'emoji.dart';
+import 'idioma.dart';
 import 'main.dart' show conReintento, db, escucharCagadas, textoError;
 import 'perfil.dart' show PantallaPerfil;
 import 'tema.dart';
@@ -141,18 +142,18 @@ class _PantallaAmigosState extends State<PantallaAmigos> with AutomaticKeepAlive
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('¿Bloquear a ${g['username']}?'),
-        content: const Text('Deja de verte y tú dejas de verlo: rankings, chat y follows en los dos sentidos.'),
+        title: Text(tr('¿Bloquear a ${g['username']}?', 'Block ${g['username']}?')),
+        content: Text(tr('Deja de verte y tú dejas de verlo: rankings, chat y follows en los dos sentidos.', "They stop seeing you and you stop seeing them: leaderboards, chat and follows, both ways.")),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('NO')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('BLOQUEAR')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('NO', 'NO'))),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('BLOQUEAR', 'BLOCK'))),
         ],
       ),
     );
     if (ok != true) return;
     try {
       await db.from('bloqueos').insert({'bloqueado': g['id']});
-      _aviso('Bloqueado');
+      _aviso(tr('Bloqueado', 'Blocked'));
       await _cargar();
     } catch (e) {
       _aviso(textoError(e));
@@ -195,7 +196,7 @@ class _PantallaAmigosState extends State<PantallaAmigos> with AutomaticKeepAlive
             textInputAction: TextInputAction.search,
             decoration: InputDecoration(
               prefixIcon: const Icon(Icons.search),
-              hintText: 'Buscar gente por username',
+              hintText: tr('Buscar gente por username', 'Search people by username'),
               isDense: true,
               suffixIcon: _q.isEmpty
                   ? null
@@ -212,12 +213,12 @@ class _PantallaAmigosState extends State<PantallaAmigos> with AutomaticKeepAlive
           if (!buscando) ...[
             Wrap(spacing: 8, runSpacing: 8, children: [
               ChoiceChip(
-                label: Text('SIGUES · ${_sigo.difference(_bloqueados).length}'),
+                label: Text('${tr('SIGUES', 'FOLLOWING')} · ${_sigo.difference(_bloqueados).length}'),
                 selected: _lista == _Lista.sigues,
                 onSelected: (_) => setState(() => _lista = _Lista.sigues),
               ),
               ChoiceChip(
-                label: Text('TE SIGUEN · ${_meSiguen.difference(_bloqueados).length}'),
+                label: Text('${tr('TE SIGUEN', 'FOLLOWERS')} · ${_meSiguen.difference(_bloqueados).length}'),
                 selected: _lista == _Lista.teSiguen,
                 onSelected: (_) => setState(() => _lista = _Lista.teSiguen),
               ),
@@ -227,24 +228,24 @@ class _PantallaAmigosState extends State<PantallaAmigos> with AutomaticKeepAlive
               Expanded(
                 child: Text(
                   _lista == _Lista.teSiguen && sinSeguirDeVuelta > 0
-                      ? '$sinSeguirDeVuelta sin seguir de vuelta'
-                      : '★ = favorito, sale arriba',
+                      ? tr('$sinSeguirDeVuelta sin seguir de vuelta', '$sinSeguirDeVuelta not followed back')
+                      : tr('★ = favorito, sale arriba', '★ = favorite, shows up on top'),
                   style: TextStyle(color: p.textoSuave, fontSize: 12),
                 ),
               ),
               PopupMenuButton<_Orden>(
                 initialValue: _orden,
                 onSelected: (o) => setState(() => _orden = o),
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: _Orden.nombre, child: Text('Por nombre')),
-                  PopupMenuItem(value: _Orden.cagadas, child: Text('Por cagadas')),
+                itemBuilder: (_) => [
+                  PopupMenuItem(value: _Orden.nombre, child: Text(tr('Por nombre', 'By name'))),
+                  PopupMenuItem(value: _Orden.cagadas, child: Text(tr('Por cagadas', 'By poops'))),
                 ],
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
                     Icon(Icons.sort, size: 18, color: p.textoSuave),
                     const SizedBox(width: 4),
-                    Text(_orden == _Orden.nombre ? 'A-Z' : 'MÁS CAGADAS', style: numeros(context, tamano: 12, color: p.textoSuave)),
+                    Text(_orden == _Orden.nombre ? 'A-Z' : tr('MÁS CAGADAS', 'MOST POOPS'), style: numeros(context, tamano: 12, color: p.textoSuave)),
                   ]),
                 ),
               ),
@@ -261,10 +262,10 @@ class _PantallaAmigosState extends State<PantallaAmigos> with AutomaticKeepAlive
                 const SizedBox(height: 8),
                 Text(
                   buscando
-                      ? 'Nadie con ese nombre'
+                      ? tr('Nadie con ese nombre', 'Nobody with that name')
                       : _lista == _Lista.sigues
-                          ? 'No sigues a nadie. Búscalos arriba para competir.'
-                          : 'Nadie te sigue todavía. Pásales tu username.',
+                          ? tr('No sigues a nadie. Búscalos arriba para competir.', "You're not following anyone. Search for them above to compete.")
+                          : tr('Nadie te sigue todavía. Pásales tu username.', 'Nobody follows you yet. Send them your username.'),
                   textAlign: TextAlign.center,
                   style: TextStyle(color: p.textoSuave),
                 ),
@@ -328,7 +329,7 @@ class _FilaAmigo extends StatelessWidget {
                 : IconButton(
                     padding: EdgeInsets.zero,
                     visualDensity: VisualDensity.compact,
-                    tooltip: favorito ? 'Quitar de favoritos' : 'Favorito',
+                    tooltip: favorito ? tr('Quitar de favoritos', 'Remove from favorites') : tr('Favorito', 'Favorite'),
                     onPressed: onFavorito,
                     icon: Icon(favorito ? Icons.star : Icons.star_border, color: favorito ? acento : p.textoSuave),
                   ),
@@ -344,7 +345,7 @@ class _FilaAmigo extends StatelessWidget {
                 style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
               ),
               Text(
-                '$n ${n == 1 ? 'cagada' : 'cagadas'}${loSigo && meSigue ? ' · se siguen' : meSigue ? ' · te sigue' : ''}',
+                '$n ${n == 1 ? tr('cagada', 'poop') : tr('cagadas', 'poops')}${loSigo && meSigue ? tr(' · se siguen', ' · mutuals') : meSigue ? tr(' · te sigue', ' · follows you') : ''}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: numeros(context, tamano: 12, color: p.textoSuave),
@@ -354,16 +355,16 @@ class _FilaAmigo extends StatelessWidget {
           const SizedBox(width: 8),
           if (loSigo)
             PopupMenuButton<String>(
-              tooltip: 'Opciones',
+              tooltip: tr('Opciones', 'Options'),
               onSelected: (a) => switch (a) {
                 'retar' => onRetar(),
                 'dejar' => onSeguir(),
                 _ => onBloquear(),
               },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'retar', child: Text('⚔️  Retar a un Cagadón')),
-                PopupMenuItem(value: 'dejar', child: Text('Dejar de seguir')),
-                PopupMenuItem(value: 'bloquear', child: Text('Bloquear')),
+              itemBuilder: (_) => [
+                PopupMenuItem(value: 'retar', child: Text(tr('⚔️  Retar a un Cagadón', '⚔️  Challenge to a Poop-Off'))),
+                PopupMenuItem(value: 'dejar', child: Text(tr('Dejar de seguir', 'Unfollow'))),
+                PopupMenuItem(value: 'bloquear', child: Text(tr('Bloquear', 'Block'))),
               ],
             )
           else
@@ -372,7 +373,7 @@ class _FilaAmigo extends StatelessWidget {
               child: FilledButton(
                 onPressed: onSeguir,
                 style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 14), minimumSize: Size.zero),
-                child: Text(meSigue ? 'SEGUIR DE VUELTA' : 'SEGUIR'),
+                child: Text(meSigue ? tr('SEGUIR DE VUELTA', 'FOLLOW BACK') : tr('SEGUIR', 'FOLLOW')),
               ),
             ),
         ]),

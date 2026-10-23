@@ -3,12 +3,13 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'emoji.dart';
+import 'idioma.dart';
 import 'tema.dart';
 
 // Apps que vienen: emoji, nombre y el chiste del anuncio.
 const _proximas = [
-  (emoji: '🍺', nombre: 'REY MEÓN', texto: 'Tú no viste nada.'),
-  (emoji: '🚿', nombre: 'REY PULCRO', texto: 'Para medir qué tanto te bañas. Ya sabemos que poco.'),
+  (emoji: '🍺', nombre: 'REY MEÓN', texto: 'Tú no viste nada.', en: 'KING OF THE PEE', textoEn: 'You saw nothing.'),
+  (emoji: '🚿', nombre: 'REY PULCRO', texto: 'Para medir qué tanto te bañas. Ya sabemos que poco.', en: 'KING OF CLEAN', textoEn: 'To track how often you shower. We already know: not much.'),
 ];
 
 /// Easter egg: más o menos una de cada seis veces que se abre la app aparece un "psst" casi
@@ -22,7 +23,7 @@ class Secreto extends StatelessWidget {
   static const _esquinas = [Alignment.topLeft, Alignment.topRight, Alignment.bottomLeft, Alignment.bottomRight];
 
   final Alignment? _esquina;
-  final ({String emoji, String nombre, String texto}) _app;
+  final ({String emoji, String nombre, String texto, String en, String textoEn}) _app;
 
   void _abrir(BuildContext context) => showDialog<void>(
         context: context,
@@ -32,15 +33,15 @@ class Secreto extends StatelessWidget {
             children: [
               Emoji(_app.emoji, tamano: 120),
               const SizedBox(height: 16),
-              Text(_app.nombre, textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineLarge),
+              Text(tr(_app.nombre, _app.en), textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineLarge),
               const SizedBox(height: 4),
               const Rotulo('Coming soon...'),
               const SizedBox(height: 12),
-              Text(_app.texto, textAlign: TextAlign.center),
+              Text(tr(_app.texto, _app.textoEn), textAlign: TextAlign.center),
             ],
           ),
           actions: [
-            FilledButton(onPressed: () => Navigator.pop(context), child: const Text('ME AGUANTO')),
+            FilledButton(onPressed: () => Navigator.pop(context), child: Text(tr('ME AGUANTO', 'I CAN WAIT'))),
           ],
         ),
       );

@@ -3,15 +3,17 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
+import 'idioma.dart';
+
 const _id = 1;
 const _hora = 20;
 final notificaciones = FlutterLocalNotificationsPlugin();
 
-const _detalles = NotificationDetails(
+NotificationDetails get _detalles => NotificationDetails(
   android: AndroidNotificationDetails(
     'recordatorio',
-    'Recordatorio diario',
-    channelDescription: 'Te pregunta si ya cagaste hoy',
+    tr('Recordatorio diario', 'Daily reminder'),
+    channelDescription: tr('Te pregunta si ya cagaste hoy', 'Asks if you already pooped today'),
   ),
 );
 
@@ -45,8 +47,8 @@ Future<void> reprogramarRecordatorio({required bool yaCagoHoy}) async {
   await notificaciones.cancel(id: _id);
   await notificaciones.zonedSchedule(
     id: _id,
-    title: 'Hey, ¿has cagado hoy??? 💩',
-    body: 'Tus amigos te están sacando ventaja en el ranking.',
+    title: tr('Hey, ¿has cagado hoy??? 💩', 'Hey, have you pooped today??? 💩'),
+    body: tr('Tus amigos te están sacando ventaja en el ranking.', 'Your friends are pulling ahead on the leaderboard.'),
     scheduledDate: cuando,
     notificationDetails: _detalles,
     androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,

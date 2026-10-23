@@ -1,29 +1,30 @@
 import 'package:flutter/material.dart';
 
 import 'emoji.dart';
+import 'idioma.dart';
 import 'main.dart' show db;
 import 'placer.dart';
 import 'tema.dart';
 
-const _tips = [
-  ('💧', 'Toma agua', 'La fibra sin agua es cemento. Si tu pipí sale oscuro, te falta agua y a tu cagada también.'),
-  ('🌽', 'Come fibra', 'Fruta, vegetales, granos, avena, caraotas. Sube de a poco o vas a vivir el Volcán en carne propia.'),
-  ('🍑', 'Lechosa, ciruela y kiwi', 'Los clásicos de las abuelas funcionan. Dos kiwis al día tienen hasta estudios.'),
-  ('🏃', 'Muévete', 'Caminar mueve el intestino. Media hora al día y el tráfico fluye.'),
-  ('⏰', 'Hazte una hora', 'El cuerpo ama la rutina. Después del desayuno es la hora pico: el estómago lleno le avisa al intestino.'),
-  ('☕', 'El cafecito ayuda', 'El café estimula el colon en mucha gente. No es casualidad que la cola del baño sea a las 8 a. m.'),
-  ('🚽', 'Ponte en cuclillas', 'Sube los pies en un banquito, rodillas más arriba que las caderas. La tubería se endereza y sale sin pujar.'),
-  ('🙅', 'No la aguantes', 'Si te dieron ganas, ve. Aguantarla la seca y la próxima es Piedritas de conejo.'),
-  ('📱', 'Suelta el teléfono', 'Más de 10 minutos sentado no es cagar, es acampar. Pujar de más da hemorroides.'),
-  ('🧻', 'Límpiate de adelante hacia atrás', 'Y sin frotar como lija. Si te irrita el papel, agua o toallitas sin perfume.'),
+List<(String, String, String)> get _tips => [
+  ('💧', tr('Toma agua', 'Drink water'), tr('La fibra sin agua es cemento. Si tu pipí sale oscuro, te falta agua y a tu cagada también.', 'Fiber without water is cement. If your pee is dark, you need water, and so does your poop.')),
+  ('🌽', tr('Come fibra', 'Eat fiber'), tr('Fruta, vegetales, granos, avena, caraotas. Sube de a poco o vas a vivir el Volcán en carne propia.', 'Fruit, veggies, whole grains, oats, beans. Ramp up slowly or you will meet the Volcano in person.')),
+  ('🍑', tr('Lechosa, ciruela y kiwi', 'Papaya, prunes and kiwi'), tr('Los clásicos de las abuelas funcionan. Dos kiwis al día tienen hasta estudios.', "Grandma's classics work. Two kiwis a day even have studies behind them.")),
+  ('🏃', tr('Muévete', 'Move'), tr('Caminar mueve el intestino. Media hora al día y el tráfico fluye.', 'Walking gets your gut moving. Half an hour a day and traffic flows.')),
+  ('⏰', tr('Hazte una hora', 'Set a time'), tr('El cuerpo ama la rutina. Después del desayuno es la hora pico: el estómago lleno le avisa al intestino.', 'Your body loves routine. After breakfast is rush hour: a full stomach tells the gut to get going.')),
+  ('☕', tr('El cafecito ayuda', 'Coffee helps'), tr('El café estimula el colon en mucha gente. No es casualidad que la cola del baño sea a las 8 a. m.', 'Coffee stimulates the colon in a lot of people. No coincidence the bathroom line is at 8 a.m.')),
+  ('🚽', tr('Ponte en cuclillas', 'Squat'), tr('Sube los pies en un banquito, rodillas más arriba que las caderas. La tubería se endereza y sale sin pujar.', 'Put your feet on a stool, knees above your hips. The pipe straightens out and it comes out without straining.')),
+  ('🙅', tr('No la aguantes', "Don't hold it"), tr('Si te dieron ganas, ve. Aguantarla la seca y la próxima es Piedritas de conejo.', "If you feel the urge, go. Holding it dries it out and the next one is Rabbit pellets.")),
+  ('📱', tr('Suelta el teléfono', 'Put the phone down'), tr('Más de 10 minutos sentado no es cagar, es acampar. Pujar de más da hemorroides.', "More than 10 minutes sitting there isn't pooping, it's camping. Too much straining gives you hemorrhoids.")),
+  ('🧻', tr('Límpiate de adelante hacia atrás', 'Wipe front to back'), tr('Y sin frotar como lija. Si te irrita el papel, agua o toallitas sin perfume.', "And don't scrub like sandpaper. If paper irritates you, use water or unscented wipes.")),
 ];
 
-const _alarmas = [
-  'Sangre en la cagada o cagada negra',
-  'Cambios en tu ritmo que duran más de dos semanas',
-  'Dolor fuerte de barriga, fiebre o vómito',
-  'Diarrea por más de dos días o estreñimiento de más de una semana',
-  'Bajar de peso sin estar intentándolo',
+List<String> get _alarmas => [
+  tr('Sangre en la cagada o cagada negra', 'Blood in your poop or black poop'),
+  tr('Cambios en tu ritmo que duran más de dos semanas', 'Changes in your routine that last more than two weeks'),
+  tr('Dolor fuerte de barriga, fiebre o vómito', 'Severe belly pain, fever or vomiting'),
+  tr('Diarrea por más de dos días o estreñimiento de más de una semana', 'Diarrhea for more than two days or constipation for more than a week'),
+  tr('Bajar de peso sin estar intentándolo', 'Losing weight without trying'),
 ];
 
 class PantallaTips extends StatefulWidget {
@@ -58,7 +59,7 @@ class _PantallaTipsState extends State<PantallaTips> {
     final p = paleta(context);
     final texto = Theme.of(context).textTheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('TIPS PARA CAGAR MEJOR')),
+      appBar: AppBar(title: Text(tr('TIPS PARA CAGAR MEJOR', 'TIPS TO POOP BETTER'))),
       body: Stack(
         children: [
           ListView(
@@ -71,8 +72,9 @@ class _PantallaTipsState extends State<PantallaTips> {
                   color: p.suave,
                   border: Border(left: BorderSide(color: acento, width: 4)),
                 ),
-                child: const Text(
-                  'Esto es entretenimiento, no consejo médico. Son tips generales: si algo te preocupa, habla con un médico.',
+                child: Text(
+                  tr('Esto es entretenimiento, no consejo médico. Son tips generales: si algo te preocupa, habla con un médico.',
+                      "This is entertainment, not medical advice. These are general tips: if something worries you, talk to a doctor."),
                 ),
               ),
               const SizedBox(height: 16),
@@ -114,7 +116,7 @@ class _PantallaTipsState extends State<PantallaTips> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Rotulo('Ve al médico si tienes'),
+                      Rotulo(tr('Ve al médico si tienes', 'See a doctor if you have')),
                       const SizedBox(height: 8),
                       for (final a in _alarmas)
                         Padding(

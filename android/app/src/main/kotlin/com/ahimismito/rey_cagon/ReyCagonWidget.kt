@@ -25,7 +25,7 @@ class ReyCagonWidget : HomeWidgetProvider() {
         // El contador es del día en que se guardó: al cambiar de día vuelve a 0 sin abrir la app.
         val hoy = LocalDate.now(ZoneId.of("America/Caracas")).toString()
         val cuenta = if (widgetData.getString("fecha", null) == hoy) widgetData.getString("hoy", "0") else "0"
-        val estado = widgetData.getString("estado", null) ?: "HOY $cuenta"
+        val estado = widgetData.getString("estado", null) ?: context.getString(R.string.widget_hoy, cuenta)
 
         for (id in appWidgetIds) {
             val views = RemoteViews(context.packageName, R.layout.widget_cague).apply {

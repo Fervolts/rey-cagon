@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'emoji.dart';
+import 'idioma.dart';
 import 'main.dart' show conReintento, db, textoError;
 import 'perfil.dart' show PantallaPerfil;
 import 'popups.dart';
@@ -18,7 +19,7 @@ import 'tema.dart';
 class Ir {
   Ir(this.a);
 
-  /// 'inicio', 'todos', 'amigos', 'soporte' o 'avisos'.
+  /// 'inicio', 'todos' (o una sala: 'global', 'es', 'en'), 'amigos', 'soporte' o 'avisos'.
   final String a;
   bool inicio = false, bano = false;
 }
@@ -39,11 +40,16 @@ Future<void> contarAvisos() async {
     final visto = prefs.getInt(_anuncioVisto) ?? 0;
     final (n, a) = await (
       db.from('notificaciones').count(CountOption.exact).eq('user_id', yo).eq('leida', false),
-      db.from('anuncios').count(CountOption.exact).gt('id', visto),
+      db.from('anuncios').count(CountOption.exact).gt('id', visto).or('idioma.is.null,idioma.eq.${idioma.value}'),
     ).wait;
     avisosSinLeer.value = n + a;
   } catch (_) {}
 }
+
+// El servidor guarda cada aviso en los dos idiomas (titulo_en/cuerpo_en desde la versión con inglés).
+Map<String, dynamic> _enSuIdioma(Map<String, dynamic> n) => enIngles && n['titulo_en'] != null
+    ? {'titulo': n['titulo_en'], 'cuerpo': n['cuerpo_en'] ?? n['cuerpo']}
+    : const {};
 
 var _canales = 0;
 
@@ -87,6 +93,7 @@ Future<void> mostrarAnuncioNuevo(BuildContext context) async {
         .from('anuncios')
         .select()
         .gt('id', visto)
+        .or('idioma.is.null,idioma.eq.${idioma.value}')
         .gt('hasta', DateTime.now().toUtc().toIso8601String())
         .order('id', ascending: false)
         .limit(1)
@@ -116,7 +123,7 @@ class BotonAvisos extends StatelessWidget {
           backgroundColor: const Color(0xFFE5484D),
           offset: const Offset(-2, 2),
           child: IconButton.outlined(
-            tooltip: 'Lectura del baño',
+            tooltip: tr('Lectura del baño', 'Bathroom Reading'),
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaAvisos())),
             icon: const Emoji('🧻', tamano: 22),
           ),
@@ -152,10 +159,10 @@ class _PantallaAvisosState extends State<PantallaAvisos> {
       final visto = prefs.getInt(_anuncioVisto) ?? 0;
       final (notis, anuncios) = await conReintento(() => (
             db.from('notificaciones').select().eq('user_id', _yo).order('created_at', ascending: false).limit(100),
-            db.from('anuncios').select().order('created_at', ascending: false).limit(30),
+            db.from('anuncios').select().or('idioma.is.null,idioma.eq.${idioma.value}').order('created_at', ascending: false).limit(30),
           ).wait);
       final todos = [
-        for (final n in notis) {...n, 'nuevo': n['leida'] != true},
+        for (final n in notis) {...n, ..._enSuIdioma(n), 'nuevo': n['leida'] != true},
         for (final a in anuncios) {...a, 'tipo': 'anuncio', 'cuerpo': a['texto'], 'anuncio': true, 'nuevo': (a['id'] as int) > visto},
       ]..sort((a, b) => (b['created_at'] as String).compareTo(a['created_at'] as String));
       if (!mounted) return;
@@ -179,11 +186,11 @@ class _PantallaAvisosState extends State<PantallaAvisos> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('¿Jalar la cadena? 🚽'),
-        content: const Text('Tus avisos se van por el tubo y no vuelven. Los anuncios del admin se quedan.'),
+        title: Text(tr('¿Jalar la cadena? 🚽', 'Flush it? 🚽')),
+        content: Text(tr('Tus avisos se van por el tubo y no vuelven. Los anuncios del admin se quedan.', 'Your notices go down the pipes and never come back. Admin announcements stay.')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('NO')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('JALAR')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('NO', 'NO'))),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('JALAR', 'FLUSH'))),
         ],
       ),
     );
@@ -200,11 +207,11 @@ class _PantallaAvisosState extends State<PantallaAvisos> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('¿Borrar el anuncio?'),
-        content: const Text('Desaparece para todos. Los push que ya llegaron no se pueden quitar.'),
+        title: Text(tr('¿Borrar el anuncio?', 'Delete the announcement?')),
+        content: Text(tr('Desaparece para todos. Los push que ya llegaron no se pueden quitar.', "It disappears for everyone. Pushes that already went out can't be taken back.")),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('NO')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('BORRAR')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('NO', 'NO'))),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('BORRAR', 'DELETE'))),
         ],
       ),
     );
@@ -226,7 +233,7 @@ class _PantallaAvisosState extends State<PantallaAvisos> {
         Navigator.push(context, MaterialPageRoute(builder: (_) => PantallaPerfil(usuarioId: datos['user_id'])));
       case 'mencion' || 'reporte_chat':
         Navigator.pop(context);
-        ir('todos');
+        ir(datos['sala'] as String? ?? 'todos');
       case 'soporte':
         Navigator.pop(context);
         ir('soporte');
@@ -242,16 +249,16 @@ class _PantallaAvisosState extends State<PantallaAvisos> {
     final avisos = _avisos;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('📰 LECTURA DEL BAÑO'),
+        title: Text(tr('📰 LECTURA DEL BAÑO', '📰 BATHROOM READING')),
         actions: [
           if (_soyAdmin)
             IconButton(
-              tooltip: 'Pop-ups',
+              tooltip: tr('Pop-ups', 'Pop-ups'),
               icon: const Icon(Icons.campaign_outlined),
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaPopups())).then((_) => _cargar()),
             ),
           if (avisos?.any((a) => a['anuncio'] != true) ?? false)
-            TextButton(onPressed: _borrarTodo, child: const Text('🚽 JALAR')),
+            TextButton(onPressed: _borrarTodo, child: Text(tr('🚽 JALAR', '🚽 FLUSH'))),
         ],
       ),
       body: avisos == null
@@ -264,7 +271,7 @@ class _PantallaAvisosState extends State<PantallaAvisos> {
                       const Center(child: Emoji('🧻', tamano: 56)),
                       const SizedBox(height: 12),
                       Center(
-                        child: Text('Nada que leer mientras cagas.\nCuando te sigan, te mencionen o te reten, sale aquí.',
+                        child: Text(tr('Nada que leer mientras cagas.\nCuando te sigan, te mencionen o te reten, sale aquí.', 'Nothing to read while you poop.\nWhen someone follows you, mentions you or challenges you, it shows up here.'),
                             textAlign: TextAlign.center, style: TextStyle(color: p.textoSuave)),
                       ),
                     ])
@@ -329,7 +336,7 @@ class _FilaAviso extends StatelessWidget {
                 ),
               const SizedBox(height: 4),
               Text(
-                '${anuncio ? 'DEL ADMIN · ' : ''}${_cuando(aviso['created_at'] as String)}',
+                '${anuncio ? tr('DEL ADMIN · ', 'FROM THE ADMIN · ') : ''}${_cuando(aviso['created_at'] as String)}',
                 style: numeros(context, tamano: 11, color: p.textoSuave),
               ),
             ]),
@@ -352,9 +359,9 @@ final _emojiInicial = RegExp(r'^[^\p{L}\p{N}@"¿¡]+\s+', unicode: true);
 String _cuando(String iso) {
   final t = DateTime.parse(iso).toLocal();
   final d = DateTime.now().difference(t);
-  if (d.inMinutes < 1) return 'ahora';
-  if (d.inMinutes < 60) return 'hace ${d.inMinutes} min';
-  if (d.inHours < 24) return 'hace ${d.inHours} h';
-  if (d.inDays < 7) return 'hace ${d.inDays} ${d.inDays == 1 ? 'día' : 'días'}';
-  return '${t.day}/${t.month}/${t.year}';
+  if (d.inMinutes < 1) return tr('ahora', 'now');
+  if (d.inMinutes < 60) return tr('hace ${d.inMinutes} min', '${d.inMinutes} min ago');
+  if (d.inHours < 24) return tr('hace ${d.inHours} h', '${d.inHours} h ago');
+  if (d.inDays < 7) return tr('hace ${d.inDays} ${d.inDays == 1 ? 'día' : 'días'}', '${d.inDays} ${d.inDays == 1 ? 'day' : 'days'} ago');
+  return enIngles ? '${t.month}/${t.day}/${t.year}' : '${t.day}/${t.month}/${t.year}';
 }

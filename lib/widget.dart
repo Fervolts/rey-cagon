@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'idioma.dart';
 import 'main.dart' show supabaseKey, supabaseUrl;
 
 const _proveedor = 'com.ahimismito.rey_cagon.ReyCagonWidget';
@@ -26,7 +27,7 @@ Future<void> _pintar({int? hoy, String? estado}) async {
 Future<void> actualizarWidget(int hoy) => _pintar(hoy: hoy);
 
 /// Al cerrar sesión el widget no debe seguir mostrando la cuenta de otro.
-Future<void> limpiarWidget() => _pintar(hoy: 0, estado: 'ABRE LA APP');
+Future<void> limpiarWidget() => _pintar(hoy: 0, estado: tr('ABRE LA APP', 'OPEN THE APP'));
 
 Future<int> _contarHoy(SupabaseClient db) async {
   final filas = await db.rpc('leaderboard', params: {'period': 'day', 'solo_siguiendo': true});
@@ -54,18 +55,21 @@ Future<void> _pintarRanking(SupabaseClient db, {required bool global}) async {
 
   String frase;
   if (filas.length == 1) {
-    frase = global ? 'Eres el único. Invita a alguien' : 'Estás cagando solo. Sigue a tus amigos';
+    frase = global ? tr('Eres el único. Invita a alguien', "You're the only one. Invite someone") : tr('Estás cagando solo. Sigue a tus amigos', "You're pooping alone. Follow your friends");
   } else if (filas.first['total'] == 0) {
-    frase = 'Nadie ha cagado esta semana. Estrena el trono';
+    frase = tr('Nadie ha cagado esta semana. Estrena el trono', 'Nobody has pooped this week. Break in the throne');
   } else if (rey) {
     final segundo = filas[1]['total'] as int;
     frase = mio == segundo
-        ? 'Rey empatado. Una más y es tuyo'
-        : '${global ? 'Rey del mundo' : 'Eres el rey'}. Le llevas ${mio - segundo} al segundo';
+        ? tr('Rey empatado. Una más y es tuyo', 'Tied for king. One more and it is yours')
+        : tr('${global ? 'Rey del mundo' : 'Eres el rey'}. Le llevas ${mio - segundo} al segundo',
+            '${global ? 'King of the world' : "You're the king"}. You lead the runner-up by ${mio - segundo}');
   } else {
     final arriba = filas[i - 1];
     final falta = (arriba['total'] as int) - mio + 1;
-    frase = falta == 1 ? 'Una más y pasas a ${arriba['username']}' : 'Te faltan $falta para pasar a ${arriba['username']}';
+    frase = falta == 1
+        ? tr('Una más y pasas a ${arriba['username']}', 'One more and you pass ${arriba['username']}')
+        : tr('Te faltan $falta para pasar a ${arriba['username']}', 'You need $falta to pass ${arriba['username']}');
   }
 
   // Ventana de hasta 6 filas que siempre te incluye, con más gente arriba que abajo.
@@ -78,7 +82,7 @@ Future<void> _pintarRanking(SupabaseClient db, {required bool global}) async {
   final c = global ? 'rkg' : 'rk';
   await HomeWidget.saveWidgetData<String>(c, jsonEncode(vecinos));
   await HomeWidget.saveWidgetData<String>('${c}_puesto', (i + 1).toString().padLeft(2, '0'));
-  await HomeWidget.saveWidgetData<String>('${c}_de', 'DE ${filas.length} · ${global ? 'TODOS · SEMANA' : 'SEMANA'}');
+  await HomeWidget.saveWidgetData<String>('${c}_de', tr('DE ${filas.length} · ${global ? 'TODOS · SEMANA' : 'SEMANA'}', 'OF ${filas.length} · ${global ? 'EVERYONE · WEEK' : 'WEEK'}'));
   await HomeWidget.saveWidgetData<String>('${c}_frase', frase);
   await HomeWidget.saveWidgetData<bool>('${c}_rey', rey);
   await HomeWidget.updateWidget(qualifiedAndroidName: global ? _proveedorGlobal : _proveedorRanking);
@@ -107,7 +111,7 @@ Future<void> widgetCague(Uri? uri) async {
   WidgetsFlutterBinding.ensureInitialized();
   await _pintar(estado: '...');
   final db = await clienteDeFondo();
-  if (db.auth.currentSession == null) return _pintar(estado: 'ABRE LA APP');
+  if (db.auth.currentSession == null) return _pintar(estado: tr('ABRE LA APP', 'OPEN THE APP'));
 
   String? aviso;
   try {
@@ -116,9 +120,9 @@ Future<void> widgetCague(Uri? uri) async {
   } on PostgrestException catch (e) {
     // El trigger limitar_cagadas indica los minutos que faltan.
     final min = RegExp(r'Espera (\d+) min').firstMatch(e.message)?.group(1);
-    aviso = min == null ? 'ERROR' : 'ESPERA $min MIN';
+    aviso = min == null ? 'ERROR' : tr('ESPERA $min MIN', 'WAIT $min MIN');
   } catch (_) {
-    aviso = 'SIN INTERNET';
+    aviso = tr('SIN INTERNET', 'NO INTERNET');
   }
   int? hoy;
   try {

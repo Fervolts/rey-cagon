@@ -18,7 +18,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:letterSpacing="0.12"
-            android:text="PUESTO"
+            android:text="@string/widget_puesto"
             android:textColor="#8C867E"
             android:textSize="10sp"
             android:textStyle="bold" />
@@ -40,7 +40,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:letterSpacing="0.12"
-            android:text="SEMANA"
+            android:text="@string/widget_semana"
             android:textColor="#F2F0EC"
             android:textSize="10sp"
             android:textStyle="bold" />
@@ -71,7 +71,7 @@
                 android:layout_weight="1"
                 android:ellipsize="end"
                 android:maxLines="2"
-                android:text="Abre Rey Cagón para cargar el ranking"
+                android:text="@string/widget_abrir"
                 android:textColor="#FFFFFF"
                 android:textSize="16sp"
                 android:textStyle="bold" />
