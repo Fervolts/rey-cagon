@@ -4,13 +4,14 @@ import 'package:flutter/material.dart';
 
 import 'accesorios.dart';
 import 'emoji.dart';
+import 'genero.dart';
 import 'idioma.dart';
 import 'main.dart' show db;
 import 'perfil.dart' show PantallaBuscar, avataresGratis;
 import 'tema.dart';
 import 'tipos.dart';
 
-/// Bienvenida para la gente nueva: cinco pantallas que se pasan deslizando. La última trae el
+/// Bienvenida para la gente nueva: seis pantallas que se pasan deslizando. La última trae el
 /// aviso de entretenimiento; al cerrarla se pide el permiso de notificaciones.
 class PantallaBienvenida extends StatefulWidget {
   const PantallaBienvenida({super.key});
@@ -20,10 +21,11 @@ class PantallaBienvenida extends StatefulWidget {
 }
 
 class _PantallaBienvenidaState extends State<PantallaBienvenida> {
-  static const _total = 5;
+  static const _total = 6;
   final _paginas = PageController();
   int _pagina = 0;
   String _avatar = '💩';
+  String? _genero;
 
   @override
   void dispose() {
@@ -35,6 +37,11 @@ class _PantallaBienvenidaState extends State<PantallaBienvenida> {
     if (_pagina < _total - 1) {
       _paginas.nextPage(duration: const Duration(milliseconds: 350), curve: Curves.easeOutCubic);
     } else {
+      // El género se guarda al salir: elegir varias veces aquí no gasta el cambio del año.
+      if (_genero != null) {
+        guardarGenero(_genero);
+        db.from('profiles').update({'genero': _genero}).eq('id', db.auth.currentUser!.id).catchError((_) => null);
+      }
       Navigator.pop(context);
     }
   }
@@ -74,9 +81,16 @@ class _PantallaBienvenidaState extends State<PantallaBienvenida> {
                   children: [
                     _Pagina(
                       visual: const _Rebote(child: Emoji('👑', tamano: 150)),
-                      titulo: tr('Bienvenido, rey', 'Welcome, your majesty'),
+                      titulo: tr(segun('Bienvenido, rey', 'Bienvenida, reina'), 'Welcome, your majesty'),
                       texto: tr('Aquí compites con tus amigos por quién caga más. Semana, mes, trimestre y año.',
                           'Here you compete with your friends over who poops the most. Week, month, quarter and year.'),
+                    ),
+                    _Pagina(
+                      visual: _Rebote(child: Emoji(generos[_genero]?.$1 ?? '🫅', tamano: 150)),
+                      titulo: tr('¿Rey o reina?', 'King or queen?'),
+                      texto: tr('Para saber cómo tratarte en la corte. Lo puedes cambiar en tu perfil una vez al año.',
+                          'So the court knows how to address you. You can change it in your profile once a year.'),
+                      extra: ElegirGenero(valor: _genero, onTap: (g) => setState(() => _genero = miGenero = g)),
                     ),
                     _Pagina(
                       visual: const _BotonDeMuestra(),

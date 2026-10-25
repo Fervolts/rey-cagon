@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'emoji.dart';
+import 'genero.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,7 +20,9 @@ import 'invitar_play.dart';
 import 'config.dart';
 import 'onboarding.dart';
 import 'perfil.dart';
+import 'peso.dart';
 import 'placer.dart';
+import 'racha.dart';
 import 'push.dart';
 import 'recuperar.dart';
 import 'recordatorio.dart';
@@ -43,6 +46,7 @@ Future<void> main() async {
     // Sin notificaciones la app igual sirve.
   }
   await iniciarIdioma();
+  await cargarGenero();
   await elegirNombreSala();
   // Al cambiar de idioma en Perfil: otro nombre de sala y los avisos en el idioma nuevo.
   idioma.addListener(() {
@@ -518,7 +522,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
             db.rpc('leaderboard', params: {'period': _periodo, 'solo_siguiendo': _soloSiguiendo}),
             // El aviso del día compara solo contra la gente que sigues.
             db.rpc('leaderboard', params: {'period': 'day', 'solo_siguiendo': true}),
-            db.from('profiles').select('placer_desbloqueado').eq('id', _yo).maybeSingle(),
+            db.from('profiles').select('placer_desbloqueado, genero').eq('id', _yo).maybeSingle(),
             SharedPreferences.getInstance(),
           ).wait);
       if (!mounted) return;
@@ -526,6 +530,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
         _filas = List<Map<String, dynamic>>.from(data);
         _hoy = List<Map<String, dynamic>>.from(hoy);
         _secretoAbierto = yo?['placer_desbloqueado'] == true;
+        if (yo != null && yo['genero'] != miGenero) guardarGenero(yo['genero']);
         _yaDeslizo = prefs.getBool('placer_deslizo') ?? false;
         _version++;
       });
@@ -549,6 +554,8 @@ class _PantallaRankingState extends State<PantallaRanking> {
       final nueva = await db.from('cagadas').insert({}).select('id').single();
       _mensaje(tr('Registrado 💩', 'Logged 💩'));
       await _cargar(spinner: false);
+      if (!mounted) return;
+      await mostrarRacha(context, _miHoy);
       if (!mounted) return;
       final tipo = await showModalBottomSheet<int>(
         context: context,
@@ -575,7 +582,10 @@ class _PantallaRankingState extends State<PantallaRanking> {
           ],
         ),
       );
-      if (tipo != null) await db.from('cagadas').update({'tipo': tipo}).eq('id', nueva['id']);
+      final peso = mounted ? await preguntarPeso(context) : null;
+      if (tipo != null || peso != null) {
+        await db.from('cagadas').update({'tipo': ?tipo, 'peso': ?peso}).eq('id', nueva['id']);
+      }
       if (_secretoAbierto && mounted) {
         final nota = await preguntarPlacer(context);
         if (nota != null) {

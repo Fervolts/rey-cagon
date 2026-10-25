@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'genero.dart';
 import 'idioma.dart';
 import 'main.dart' show supabaseKey, supabaseUrl;
 
@@ -61,9 +62,9 @@ Future<void> _pintarRanking(SupabaseClient db, {required bool global}) async {
   } else if (rey) {
     final segundo = filas[1]['total'] as int;
     frase = mio == segundo
-        ? tr('Rey empatado. Una más y es tuyo', 'Tied for king. One more and it is yours')
-        : tr('${global ? 'Rey del mundo' : 'Eres el rey'}. Le llevas ${mio - segundo} al segundo',
-            '${global ? 'King of the world' : "You're the king"}. You lead the runner-up by ${mio - segundo}');
+        ? tr('${segun('Rey empatado', 'Reina empatada')}. Una más y es tuyo', 'Tied for ${segun('king', 'queen')}. One more and it is yours')
+        : tr('${global ? segun('Rey del mundo', 'Reina del mundo') : segun('Eres el rey', 'Eres la reina')}. Le llevas ${mio - segundo} al segundo',
+            '${global ? segun('King of the world', 'Queen of the world') : segun("You're the king", "You're the queen")}. You lead the runner-up by ${mio - segundo}');
   } else {
     final arriba = filas[i - 1];
     final falta = (arriba['total'] as int) - mio + 1;
@@ -109,6 +110,7 @@ Future<SupabaseClient> clienteDeFondo() async {
 @pragma('vm:entry-point')
 Future<void> widgetCague(Uri? uri) async {
   WidgetsFlutterBinding.ensureInitialized();
+  await cargarGenero();
   await _pintar(estado: '...');
   final db = await clienteDeFondo();
   if (db.auth.currentSession == null) return _pintar(estado: tr('ABRE LA APP', 'OPEN THE APP'));

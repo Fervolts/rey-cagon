@@ -16,6 +16,8 @@ import 'cagadon.dart' show TarjetaReto;
 import 'popups.dart' show PantallaPopups;
 import 'emoji.dart';
 import 'idioma.dart';
+import 'peso.dart';
+import 'racha.dart';
 import 'main.dart' show db, esDeRed;
 import 'perfil.dart' show PantallaPerfil;
 import 'tema.dart';
@@ -1112,13 +1114,23 @@ class _Tarjeta extends StatelessWidget {
   Widget build(BuildContext context) {
     if (t['tipo'] == 'reto' || t['tipo'] == 'reto_fin') return TarjetaReto(id: t['id'] as int, compacta: true);
     final (emoji, titulo, sub) = switch (t['tipo']) {
-      'hito' => ('👑', tr('LLEGÓ A ${t['n']} CAGADAS', 'HIT ${t['n']} POOPS'), tr('Arrodíllense ante el rey', 'Bow down to the king')),
+      'hito' => ('👑', tr('LLEGÓ A ${t['n']} CAGADAS', 'HIT ${t['n']} POOPS'), t['reina'] == true ? tr('Arrodíllense ante la reina', 'Bow down to the queen') : tr('Arrodíllense ante el rey', 'Bow down to the king')),
       'desbloqueo' => (
           t['emoji'] as String,
           tr('DESBLOQUEÓ ${(desbloqueos.where((d) => d.emoji == t['emoji']).firstOrNull?.nombre ?? '').toUpperCase()}', 'UNLOCKED ${(desbloqueos.where((d) => d.emoji == t['emoji']).firstOrNull?.nombre ?? '').toUpperCase()}'),
           tr('A las ${t['minimo']} cagadas', 'At ${t['minimo']} poops'),
         ),
-      'cagada' => (tipoEmoji(t['mojon'] as int?), tr('CAGADA #${t['n']}', 'POOP #${t['n']}'), tr('Le salió: ${tipos[t['mojon']]?.$2 ?? '?'}', 'Came out as: ${tipos[t['mojon']]?.$2 ?? '?'}')),
+      'cagada' => (
+          tipoEmoji(t['mojon'] as int?),
+          tr('CAGADA #${t['n']}', 'POOP #${t['n']}'),
+          tr('Le salió: ${tipos[t['mojon']]?.$2 ?? '?'}', 'Came out as: ${tipos[t['mojon']]?.$2 ?? '?'}') +
+              (pesos[t['peso']] == null ? '' : ' · ${tr('Peso', 'Weight')}: ${pesos[t['peso']]!.$1} ${pesos[t['peso']]!.$2}'),
+        ),
+      'racha' => (
+          estiloRacha(t['n'] as int).$2,
+          nombreRacha(t['n'] as int) ?? '',
+          tr('Cagó ${t['n']} veces hoy', 'Pooped ${t['n']} times today'),
+        ),
       _ => ('💩', '', ''),
     };
     return Container(
@@ -1129,7 +1141,13 @@ class _Tarjeta extends StatelessWidget {
         const SizedBox(width: 12),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(titulo, style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)),
+            Text(titulo,
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1,
+                  fontStyle: t['tipo'] == 'racha' ? FontStyle.italic : null,
+                  color: t['tipo'] == 'racha' ? estiloRacha(t['n'] as int).$1.last : null,
+                )),
             Text(sub, style: TextStyle(color: paleta(context).textoSuave, fontSize: 12)),
           ]),
         ),

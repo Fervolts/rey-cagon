@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'emoji.dart';
 import 'idioma.dart';
+import 'peso.dart';
 import 'main.dart' show conReintento, db, escucharCagadas, esDeRed, textoError;
 import 'tema.dart';
 import 'tipos.dart';
@@ -54,7 +55,7 @@ class _PantallaCalendarioState extends State<PantallaCalendario> {
     try {
       final rows = await conReintento(() => db
           .from('cagadas')
-          .select('id, created_at, tipo')
+          .select('id, created_at, tipo, peso')
           .eq('user_id', widget.usuarioId)
           .gte('created_at', _mes.toUtc().toIso8601String())
           .lt('created_at', DateTime(_mes.year, _mes.month + 1).toUtc().toIso8601String())
@@ -109,7 +110,8 @@ class _PantallaCalendarioState extends State<PantallaCalendario> {
               leading: Emoji(tipoEmoji(e['tipo']), tamano: 32),
               title: Text(TimeOfDay.fromDateTime(DateTime.parse(e['created_at']).toLocal())
                   .format(context)),
-              subtitle: Text(tipos[e['tipo']]?.$2 ?? tr('Sin tipo', 'No type')),
+              subtitle: Text((tipos[e['tipo']]?.$2 ?? tr('Sin tipo', 'No type')) +
+                  (pesos[e['peso']] == null ? '' : ' · ${pesos[e['peso']]!.$1} ${pesos[e['peso']]!.$2}')),
               trailing: _esMio
                   ? IconButton(
                       icon: const Icon(Icons.delete_outline),

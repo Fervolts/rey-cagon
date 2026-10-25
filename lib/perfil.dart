@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'emoji.dart';
+import 'genero.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'accesorios.dart';
@@ -35,6 +36,9 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
   Map<String, dynamic>? _p;
   bool _ocupado = false;
   bool _bloqueado = false;
+  // Género del perfil propio: no sale en el RPC perfil porque nadie más lo ve.
+  String? _genero;
+  DateTime? _generoCambiado;
   late final VoidCallback _soltar;
 
   bool get _esMio => widget.usuarioId == db.auth.currentUser!.id;
@@ -58,10 +62,13 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
             db.rpc('perfil', params: {'uid': widget.usuarioId}),
             db.from('bloqueos').select('bloqueado').eq('bloqueado', widget.usuarioId).maybeSingle(),
           ).wait);
+      final g = _esMio ? await db.from('profiles').select('genero, genero_cambiado').eq('id', widget.usuarioId).maybeSingle() : null;
       if (mounted) {
         setState(() {
           _p = (rows as List).firstOrNull;
           _bloqueado = bloqueo != null;
+          _genero = g?['genero'];
+          _generoCambiado = DateTime.tryParse(g?['genero_cambiado'] ?? '')?.toLocal();
         });
       }
     } catch (e) {
@@ -148,6 +155,64 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
       ),
     );
     if (valor != null && valor != idiomaElegido) await elegirIdioma(valor);
+  }
+
+  /// Fecha desde la que puede volver a cambiar el género, o null si puede ya.
+  DateTime? get _proximoCambioGenero {
+    final c = _generoCambiado;
+    if (_genero == null || c == null) return null;
+    final proximo = DateTime(c.year + 1, c.month, c.day, c.hour, c.minute);
+    return proximo.isAfter(DateTime.now()) ? proximo : null;
+  }
+
+  Future<void> _elegirGenero() async {
+    final bloqueado = _proximoCambioGenero;
+    final valor = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => ListView(
+        shrinkWrap: true,
+        padding: conBordeAbajo(context, const EdgeInsets.fromLTRB(16, 0, 16, 16)),
+        children: [
+          Text(tr('¿REY O REINA?', 'KING OR QUEEN?'), style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 4),
+          Text(
+            bloqueado != null
+                ? tr('Ya lo cambiaste este año. Próximo cambio: ${_fecha(bloqueado)}', 'You already changed it this year. Next change: ${_fecha(bloqueado)}')
+                : _genero == null
+                    ? tr('Elige uno. Después solo lo puedes cambiar una vez al año.', 'Pick one. After that you can only change it once a year.')
+                    : tr('Solo lo puedes cambiar una vez al año.', 'You can only change it once a year.'),
+            style: TextStyle(color: paleta(context).textoSuave),
+          ),
+          const SizedBox(height: 12),
+          ElegirGenero(valor: _genero, onTap: bloqueado != null ? null : (g) => Navigator.pop(context, g)),
+        ],
+      ),
+    );
+    if (valor == null || valor == _genero || !mounted) return;
+    if (_genero != null) {
+      final hasta = _fecha(DateTime.now().add(const Duration(days: 365)));
+      final si = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(tr('¿Cambiar a ${generos[valor]!.$2}?', 'Change to ${generos[valor]!.$2}?')),
+          content: Text(tr('No lo vas a poder cambiar otra vez hasta el $hasta.', "You won't be able to change it again until $hasta.")),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('CANCELAR', 'CANCEL'))),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('CAMBIAR', 'CHANGE'))),
+          ],
+        ),
+      );
+      if (si != true) return;
+    }
+    try {
+      await db.from('profiles').update({'genero': valor}).eq('id', widget.usuarioId);
+      await guardarGenero(valor);
+      await _cargar();
+    } on PostgrestException catch (e) {
+      _mensaje(trServidor(e.message));
+    } catch (e) {
+      _mensaje(textoError(e));
+    }
   }
 
   Future<void> _editar() async {
@@ -320,6 +385,18 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                     onTap: () => abrirReporteDeError(context),
                   ),
                   const FilaComunidad(),
+                  ListTile(
+                    leading: Emoji(generos[_genero]?.$1 ?? '🫅', tamano: 32),
+                    title: Text(tr('Género', 'Gender')),
+                    subtitle: Text(_genero == null
+                        ? tr('Sin elegir', 'Not chosen')
+                        : _proximoCambioGenero == null
+                            ? '${generos[_genero]!.$2} · ${generos[_genero]!.$3}'
+                            : tr('${generos[_genero]!.$2} · se cambia el ${_fecha(_proximoCambioGenero!)}',
+                                '${generos[_genero]!.$2} · can change on ${_fecha(_proximoCambioGenero!)}')),
+                    trailing: Icon(_proximoCambioGenero == null ? Icons.chevron_right : Icons.lock_outline),
+                    onTap: _elegirGenero,
+                  ),
                   ListTile(
                     leading: const Icon(Icons.translate),
                     title: const Text('Idioma / Language'),

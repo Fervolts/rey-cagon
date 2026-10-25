@@ -67,6 +67,14 @@ const _archivos = {
   '☕': 'hot_beverage',
   '🙅': 'person_gesturing_no',
   '📱': 'mobile_phone',
+  '🪶': 'feather',
+  '🍌': 'banana',
+  '⚓': 'anchor',
+  '🐋': 'whale',
+  '🤴': 'prince',
+  '👸': 'princess',
+  '🫅': 'person_with_crown',
+  '💀': 'skull',
 };
 
 /// Emoji como imagen de [tamano] px. Si no está en el set, usa el emoji del sistema.

@@ -305,7 +305,7 @@ async function avisarReto(id: number, evento: string) {
   const { data: r } = await db.from("retos")
     .select("retador, retado, ganador, marcador_retador, marcador_retado").eq("id", id).single();
   if (!r) return Response.json({ enviados: 0 });
-  const { data: perfiles } = await db.from("profiles").select("id, username").in("id", [r.retador, r.retado]);
+  const { data: perfiles } = await db.from("profiles").select("id, username, genero").in("id", [r.retador, r.retado]);
   const nombre = (u: string) => perfiles?.find((p) => p.id === u)?.username ?? "Alguien";
   const data = { tipo: "reto", id: String(id) };
   if (evento === "nuevo") {
@@ -335,9 +335,10 @@ async function avisarReto(id: number, evento: string) {
     ), data);
   }
   const perdedor = r.ganador === r.retador ? r.retado : r.retador;
+  const reina = perfiles?.find((p) => p.id === r.ganador)?.genero === "mujer";
   await avisarA([r.ganador], aviso(
-    "🏆 ¡Ganaste el Cagadón!", `${marcador(r.ganador)} contra ${nombre(perdedor)}. Rey indiscutible 👑`,
-    "🏆 You won the Poop-Off!", `${marcador(r.ganador)} against ${nombre(perdedor)}. Undisputed king 👑`,
+    "🏆 ¡Ganaste el Cagadón!", `${marcador(r.ganador)} contra ${nombre(perdedor)}. ${reina ? "Reina indiscutible" : "Rey indiscutible"} 👑`,
+    "🏆 You won the Poop-Off!", `${marcador(r.ganador)} against ${nombre(perdedor)}. Undisputed ${reina ? "queen" : "king"} 👑`,
   ), data);
   return avisarA([perdedor], aviso(
     "💀 Perdiste el Cagadón", `${marcador(perdedor)} contra ${nombre(r.ganador)}. Mañana revancha.`,

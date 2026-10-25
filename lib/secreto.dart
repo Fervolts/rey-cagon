@@ -3,13 +3,14 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'emoji.dart';
+import 'genero.dart';
 import 'idioma.dart';
 import 'tema.dart';
 
 // Apps que vienen: emoji, nombre y el chiste del anuncio.
 const _proximas = [
-  (emoji: '🍺', nombre: 'REY MEÓN', texto: 'Tú no viste nada.', en: 'KING OF THE PEE', textoEn: 'You saw nothing.'),
-  (emoji: '🚿', nombre: 'REY PULCRO', texto: 'Para medir qué tanto te bañas. Ya sabemos que poco.', en: 'KING OF CLEAN', textoEn: 'To track how often you shower. We already know: not much.'),
+  (emoji: '🍺', nombre: 'REY MEÓN', reina: 'REINA MEONA', texto: 'Tú no viste nada.', en: 'KING OF THE PEE', enReina: 'QUEEN OF THE PEE', textoEn: 'You saw nothing.'),
+  (emoji: '🚿', nombre: 'REY PULCRO', reina: 'REINA PULCRA', texto: 'Para medir qué tanto te bañas. Ya sabemos que poco.', en: 'KING OF CLEAN', enReina: 'QUEEN OF CLEAN', textoEn: 'To track how often you shower. We already know: not much.'),
 ];
 
 /// Easter egg: más o menos una de cada seis veces que se abre la app aparece un "psst" casi
@@ -23,7 +24,7 @@ class Secreto extends StatelessWidget {
   static const _esquinas = [Alignment.topLeft, Alignment.topRight, Alignment.bottomLeft, Alignment.bottomRight];
 
   final Alignment? _esquina;
-  final ({String emoji, String nombre, String texto, String en, String textoEn}) _app;
+  final ({String emoji, String nombre, String reina, String texto, String en, String enReina, String textoEn}) _app;
 
   void _abrir(BuildContext context) => showDialog<void>(
         context: context,
@@ -33,7 +34,7 @@ class Secreto extends StatelessWidget {
             children: [
               Emoji(_app.emoji, tamano: 120),
               const SizedBox(height: 16),
-              Text(tr(_app.nombre, _app.en), textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineLarge),
+              Text(tr(segun(_app.nombre, _app.reina), segun(_app.en, _app.enReina)), textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineLarge),
               const SizedBox(height: 4),
               const Rotulo('Coming soon...'),
               const SizedBox(height: 12),
