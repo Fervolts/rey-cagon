@@ -42,6 +42,9 @@ Widget iconoPlacer(int valor, {double tamano = 32}) {
   return Emoji('💩', tamano: tamano * .8);
 }
 
+/// Cómo se ve una etiqueta en el idioma de la app.
+String nombreEtiqueta(String e) => enIngles ? (_etiquetasEn[e] ?? e) : e;
+
 const destructivas = ['dolorosa', 'sangrante', 'ardiente'];
 const placenteras = ['virtuosa', 'placentera', 'liberadora'];
 
@@ -73,7 +76,7 @@ class _PreguntaState extends State<_Pregunta> {
         children: [
           for (final e in cuales)
             FilterChip(
-              label: Text(enIngles ? (_etiquetasEn[e] ?? e).toUpperCase() : e.toUpperCase()),
+              label: Text(nombreEtiqueta(e).toUpperCase()),
               selected: _etiquetas.contains(e),
               onSelected: (si) => setState(() => si ? _etiquetas.add(e) : _etiquetas.remove(e)),
             ),

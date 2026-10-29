@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'accesorios.dart';
 import 'animaciones.dart';
+import 'avisos.dart';
 import 'cagadon.dart';
 import 'calendario.dart';
 import 'chat.dart' show abrirReporteDeError;
@@ -17,7 +18,9 @@ import 'main.dart' show conReintento, db, escucharCagadas, esDeRed, textoError;
 import 'push.dart';
 import 'recordatorio.dart';
 import 'tema.dart';
+import 'tips.dart';
 import 'tipos.dart';
+import 'vitrina.dart';
 import 'widget.dart';
 
 const avataresGratis = ['💩', '👑', '🧻', '🚽', '🐻', '🦍', '🐷', '🐸', '🦄', '🤡', '🙂', '👻', '🔥', '🌶️', '🍑', '🦖'];
@@ -40,6 +43,9 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
   // Género del perfil propio: no sale en el RPC perfil porque nadie más lo ve.
   String? _genero;
   DateTime? _generoCambiado;
+  // Solo en el perfil propio: lo que alimenta la vitrina y el mapa del mes.
+  List<({DateTime cuando, int? tipo, int? peso})>? _cagadas;
+  int _victorias = 0;
   late final VoidCallback _soltar;
 
   bool get _esMio => widget.usuarioId == db.auth.currentUser!.id;
@@ -64,8 +70,13 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
             db.from('bloqueos').select('bloqueado').eq('bloqueado', widget.usuarioId).maybeSingle(),
           ).wait);
       final g = _esMio ? await db.from('profiles').select('genero, genero_cambiado').eq('id', widget.usuarioId).maybeSingle() : null;
+      final (cagadas, ganados) = _esMio
+          ? await (cagadasPropias(widget.usuarioId), victorias(widget.usuarioId)).wait
+          : (null, 0);
       if (mounted) {
         setState(() {
+          _cagadas = cagadas;
+          _victorias = ganados;
           _p = (rows as List).firstOrNull;
           _bloqueado = bloqueo != null;
           _genero = g?['genero'];
@@ -323,17 +334,233 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
     }
   }
 
+  /// Abre ajustes: todo lo que antes estaba debajo del perfil propio.
+  void _abrirAjustes() => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => StatefulBuilder(builder: (context, setLocal) {
+            // Después de cambiar algo, el subtítulo de la fila se actualiza.
+            VoidCallback luego(Future<void> Function() f) => () async {
+                  await f();
+                  if (context.mounted) setLocal(() {});
+                };
+            return Scaffold(
+              appBar: AppBar(title: Text(tr('AJUSTES', 'SETTINGS'))),
+              body: ListView(
+                padding: conBordeAbajo(context, const EdgeInsets.symmetric(vertical: 8)),
+                children: [
+                const FilaComunidad(),
+                ListTile(
+                  leading: Emoji(generos[_genero]?.$1 ?? '🫅', tamano: 32),
+                  title: Text(tr('Género', 'Gender')),
+                  subtitle: Text(_genero == null
+                      ? tr('Sin elegir', 'Not chosen')
+                      : _proximoCambioGenero == null
+                          ? '${generos[_genero]!.$2} · ${generos[_genero]!.$3}'
+                          : tr('${generos[_genero]!.$2} · se cambia el ${_fecha(_proximoCambioGenero!)}',
+                              '${generos[_genero]!.$2} · can change on ${_fecha(_proximoCambioGenero!)}')),
+                  trailing: Icon(_proximoCambioGenero == null ? Icons.chevron_right : Icons.lock_outline),
+                  onTap: luego(_elegirGenero),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.translate),
+                  title: const Text('Idioma / Language'),
+                  subtitle: Text(switch (idiomaElegido) {
+                    'es' => 'Español',
+                    'en' => 'English',
+                    _ => tr('El del teléfono', "Phone's language"),
+                  }),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: luego(_elegirIdioma),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.contrast),
+                  title: Text(tr('Tema', 'Theme')),
+                  subtitle: Text(_nombreTema(temaElegido.value)),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: luego(_elegirTema),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.animation),
+                  title: Text(tr('Animaciones', 'Animations')),
+                  subtitle: Text(_nombreMovimientoElegido()),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: luego(_elegirMovimiento),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.open_in_new),
+                  title: Text(tr('Hecho por ahimismito Studios C.A', 'Made by ahimismito Studios C.A')),
+                  subtitle: const Text('ahimismito.com'),
+                  onTap: () => launchUrl(Uri.parse('https://ahimismito.com'), mode: LaunchMode.externalApplication),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.info_outline),
+                  title: Text(tr('Créditos y licencias', 'Credits and licenses')),
+                  onTap: () async {
+                    final info = await PackageInfo.fromPlatform();
+                    if (!context.mounted) return;
+                    showLicensePage(
+                      context: context,
+                      applicationName: tr('Rey Cagón', 'King of the Throne'),
+                      applicationVersion: info.version,
+                      applicationLegalese: '© 2026 ahimismito Studios C.A\nahimismito.com',
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.logout),
+                  title: Text(tr('Cerrar sesión', 'Log out')),
+                  onTap: _salir,
+                ),
+                ListTile(
+                  leading: const Icon(Icons.delete_forever, color: Color(0xFFB3261E)),
+                  title: Text(tr('Borrar mi cuenta', 'Delete my account'), style: const TextStyle(color: Color(0xFFB3261E))),
+                  onTap: _borrarCuenta,
+                ),
+                ],
+              ),
+            );
+          }),
+        ),
+      );
+
+  /// La pestaña YO: quién es, cuánto lleva, sus trofeos y el mes, con Tips y la Lectura a mano.
+  Widget _yo() {
+    final p = _p;
+    final colores = paleta(context);
+    final texto = Theme.of(context).textTheme;
+    final total = p == null ? 0 : (p['cagadas'] as num?)?.toInt() ?? (p['total'] as num).toInt();
+    final d = siguienteDesbloqueo(total);
+    Widget caja(Object? valor, String nombre) => Expanded(
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(color: colores.tarjeta, border: Border.all(color: colores.borde)),
+            child: Column(
+              children: [
+                Text('${valor ?? 0}', style: numeros(context, tamano: 24, weight: FontWeight.w900)),
+                Rotulo(nombre),
+              ],
+            ),
+          ),
+        );
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(tr('YO', 'ME')),
+        actions: [
+          if (p != null) IconButton(icon: const Icon(Icons.edit), tooltip: tr('Editar', 'Edit'), onPressed: _editar),
+          IconButton(icon: const Icon(Icons.settings_outlined), tooltip: tr('Ajustes', 'Settings'), onPressed: _abrirAjustes),
+        ],
+      ),
+      body: p == null
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _cargar,
+              child: ListView(
+                padding: conBordeAbajo(context, const EdgeInsets.fromLTRB(16, 8, 16, 24)),
+                children: [
+                  Row(
+                    children: [
+                      Padding(
+                        // Aire para el sombrero y la mascota, que se salen del círculo.
+                        padding: const EdgeInsets.fromLTRB(16, 32, 16, 16),
+                        child: Avatar(p, tamano: 96),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(p['username'], maxLines: 2, overflow: TextOverflow.ellipsis, style: texto.headlineSmall),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${tituloPorTotal(total)} · ${tr('desde', 'since')} ${_fecha(DateTime.parse(p['desde']).toLocal())}',
+                              style: TextStyle(color: colores.textoSuave, fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              tr('${p['seguidores']} seguidores · ${p['siguiendo']} siguiendo', '${p['seguidores']} followers · ${p['siguiendo']} following'),
+                              style: numeros(context, tamano: 13, weight: FontWeight.w700),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  if ((p['bio'] ?? '').isNotEmpty) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(p['bio'])),
+                  Row(
+                    children: [
+                      caja(p['hoy'], tr('hoy', 'today')),
+                      const SizedBox(width: 6),
+                      caja(p['semana'], tr('semana', 'week')),
+                      const SizedBox(width: 6),
+                      caja(p['mes'], tr('mes', 'month')),
+                      const SizedBox(width: 6),
+                      caja(total, tr('total', 'total')),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  if (_cagadas == null)
+                    const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
+                  else ...[
+                    Vitrina(
+                      trofeos: trofeos(cagadas: _cagadas!, total: total, victorias: _victorias, favorito: p['tipo_favorito']),
+                    ),
+                    const SizedBox(height: 20),
+                    MapaDelMes(
+                      cagadas: _cagadas!,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => PantallaCalendario(usuarioId: widget.usuarioId, nombre: tr('mí', 'me'))),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Emoji('💡', tamano: 32),
+                    title: Text(tr('Tips para cagar mejor', 'Tips to poop better')),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaTips())),
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Emoji('🧻', tamano: 32),
+                    title: Text(tr('Lectura del Baño', 'Bathroom Reading')),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaAvisos())),
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: d == null ? const Emoji('🏆', tamano: 32) : Opacity(opacity: .4, child: Emoji(d.emoji, tamano: 32)),
+                    title: Text(d == null ? tr('Lo desbloqueaste todo', 'You unlocked everything') : tr('Próximo: ${d.nombre}', 'Next: ${d.nombre}')),
+                    subtitle: d == null ? null : Text(d.minimo - total == 1 ? tr('Te falta 1 cagada', 'You need 1 more poop') : tr('Te faltan ${d.minimo - total} cagadas', 'You need ${d.minimo - total} more poops')),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: _editar,
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.bug_report_outlined),
+                    title: Text(tr('Reportar un error', 'Report a bug')),
+                    subtitle: Text(tr('Le llega directo al equipo', 'Goes straight to the team')),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => abrirReporteDeError(context),
+                  ),
+                ],
+              ),
+            ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_esMio) return _yo();
     final p = _p;
     final texto = Theme.of(context).textTheme;
     return Scaffold(
       appBar: AppBar(
-        title: Text(_esMio ? tr('MI PERFIL', 'MY PROFILE') : tr('PERFIL', 'PROFILE')),
+        title: Text(tr('PERFIL', 'PROFILE')),
         actions: [
-          if (_esMio && p != null) IconButton(icon: const Icon(Icons.edit), tooltip: tr('Editar', 'Edit'), onPressed: _editar),
-          if (_esMio) IconButton(icon: const Icon(Icons.logout), tooltip: tr('Cerrar sesión', 'Log out'), onPressed: _salir),
-          if (!_esMio && p != null)
+          if (p != null)
             PopupMenuButton<String>(
               tooltip: tr('Más opciones', 'More options'),
               onSelected: (o) => o == 'reportar' ? _reportar() : _alternarBloqueo(),
@@ -376,7 +603,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                if (!_esMio && !_bloqueado)
+                if (!_bloqueado)
                   Center(
                     child: Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: [
                       p['lo_sigo'] == true
@@ -423,85 +650,6 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                   title: Text(tr('Especialidad de la casa', 'House specialty')),
                   subtitle: Text(tipos[p['tipo_favorito']]?.$2 ?? tr('Todavía no se sabe', 'Nobody knows yet')),
                 ),
-                if (_esMio)
-                  Builder(builder: (context) {
-                    final total = (p['cagadas'] as num?)?.toInt() ?? (p['total'] as num).toInt();
-                    final d = siguienteDesbloqueo(total);
-                    return ListTile(
-                      leading: d == null ? const Emoji('🏆', tamano: 36) : Opacity(opacity: .4, child: Emoji(d.emoji, tamano: 36)),
-                      title: Text(d == null ? tr('Lo desbloqueaste todo', 'You unlocked everything') : tr('Próximo: ${d.nombre}', 'Next: ${d.nombre}')),
-                      subtitle: d == null ? null : Text(d.minimo - total == 1 ? tr('Te falta 1 cagada', 'You need 1 more poop') : tr('Te faltan ${d.minimo - total} cagadas', 'You need ${d.minimo - total} more poops')),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: _editar,
-                    );
-                  }),
-                if (_esMio) ...[
-                  ListTile(
-                    leading: const Icon(Icons.bug_report_outlined),
-                    title: Text(tr('Reportar un error', 'Report a bug')),
-                    subtitle: Text(tr('Le llega directo al equipo', 'Goes straight to the team')),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => abrirReporteDeError(context),
-                  ),
-                  const FilaComunidad(),
-                  ListTile(
-                    leading: Emoji(generos[_genero]?.$1 ?? '🫅', tamano: 32),
-                    title: Text(tr('Género', 'Gender')),
-                    subtitle: Text(_genero == null
-                        ? tr('Sin elegir', 'Not chosen')
-                        : _proximoCambioGenero == null
-                            ? '${generos[_genero]!.$2} · ${generos[_genero]!.$3}'
-                            : tr('${generos[_genero]!.$2} · se cambia el ${_fecha(_proximoCambioGenero!)}',
-                                '${generos[_genero]!.$2} · can change on ${_fecha(_proximoCambioGenero!)}')),
-                    trailing: Icon(_proximoCambioGenero == null ? Icons.chevron_right : Icons.lock_outline),
-                    onTap: _elegirGenero,
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.translate),
-                    title: const Text('Idioma / Language'),
-                    subtitle: Text(switch (idiomaElegido) {
-                      'es' => 'Español',
-                      'en' => 'English',
-                      _ => tr('El del teléfono', "Phone's language"),
-                    }),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: _elegirIdioma,
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.contrast),
-                    title: Text(tr('Tema', 'Theme')),
-                    subtitle: Text(_nombreTema(temaElegido.value)),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: _elegirTema,
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.animation),
-                    title: Text(tr('Animaciones', 'Animations')),
-                    subtitle: Text(_nombreMovimientoElegido()),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: _elegirMovimiento,
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.open_in_new),
-                    title: Text(tr('Hecho por ahimismito Studios C.A', 'Made by ahimismito Studios C.A')),
-                    subtitle: const Text('ahimismito.com'),
-                    onTap: () => launchUrl(Uri.parse('https://ahimismito.com'), mode: LaunchMode.externalApplication),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.info_outline),
-                    title: Text(tr('Créditos y licencias', 'Credits and licenses')),
-                    onTap: () async {
-                      final info = await PackageInfo.fromPlatform();
-                      if (!context.mounted) return;
-                      showLicensePage(
-                        context: context,
-                        applicationName: tr('Rey Cagón', 'King of the Throne'),
-                        applicationVersion: info.version,
-                        applicationLegalese: '© 2026 ahimismito Studios C.A\nahimismito.com',
-                      );
-                    },
-                  ),
-                ],
                 ListTile(
                   leading: const Icon(Icons.calendar_month),
                   title: Text(tr('Ver calendario', 'View calendar')),
@@ -513,12 +661,6 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                     ),
                   ),
                 ),
-                if (_esMio)
-                  ListTile(
-                    leading: const Icon(Icons.delete_forever, color: Color(0xFFB3261E)),
-                    title: Text(tr('Borrar mi cuenta', 'Delete my account'), style: const TextStyle(color: Color(0xFFB3261E))),
-                    onTap: _borrarCuenta,
-                  ),
               ],
             ),
     );

@@ -75,6 +75,15 @@ const _archivos = {
   '👸': 'princess',
   '🫅': 'person_with_crown',
   '💀': 'skull',
+  '🔒': 'locked',
+  '⚔️': 'crossed_swords',
+  '⚔': 'crossed_swords',
+  '🌙': 'crescent_moon',
+  '🌅': 'sunrise',
+  '🗓️': 'spiral_calendar',
+  '🗓': 'spiral_calendar',
+  '🤷': 'person_shrugging',
+  '💡': 'light_bulb',
 };
 
 /// Emoji como imagen de [tamano] px. Si no está en el set, usa el emoji del sistema.

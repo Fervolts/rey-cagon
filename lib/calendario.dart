@@ -7,7 +7,7 @@ import 'main.dart' show conReintento, db, escucharCagadas, esDeRed, textoError;
 import 'tema.dart';
 import 'tipos.dart';
 
-List<String> get _meses => enIngles
+List<String> get meses => enIngles
     ? [
         'January', 'February', 'March', 'April', 'May', 'June',
         'July', 'August', 'September', 'October', 'November', 'December',
@@ -99,7 +99,7 @@ class _PantallaCalendarioState extends State<PantallaCalendario> {
         shrinkWrap: true,
         padding: conBordeAbajo(context, const EdgeInsets.all(16)),
         children: [
-          Text(enIngles ? '${_meses[_mes.month - 1]} $dia' : '$dia de ${_meses[_mes.month - 1]}',
+          Text(enIngles ? '${meses[_mes.month - 1]} $dia' : '$dia de ${meses[_mes.month - 1]}',
               style: Theme.of(context).textTheme.titleLarge),
           if (entradas.isEmpty) Padding(
             padding: const EdgeInsets.symmetric(vertical: 16),
@@ -144,7 +144,7 @@ class _PantallaCalendarioState extends State<PantallaCalendario> {
             children: [
               IconButton(icon: const Icon(Icons.chevron_left), onPressed: () => _moverMes(-1)),
               Expanded(
-                child: Text('${_meses[_mes.month - 1]} ${_mes.year}'.toUpperCase(),
+                child: Text('${meses[_mes.month - 1]} ${_mes.year}'.toUpperCase(),
                     textAlign: TextAlign.center,
                     style: numeros(context, tamano: 15, weight: FontWeight.w800).copyWith(letterSpacing: 1.2)),
               ),

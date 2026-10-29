@@ -22,9 +22,9 @@ import 'inodoro.dart';
 import 'invitar_play.dart';
 import 'config.dart';
 import 'onboarding.dart';
+import 'parte.dart';
 import 'perfil.dart';
 import 'periodos.dart';
-import 'peso.dart';
 import 'placer.dart';
 import 'racha.dart';
 import 'push.dart';
@@ -32,7 +32,6 @@ import 'recuperar.dart';
 import 'recordatorio.dart';
 import 'tema.dart';
 import 'secreto.dart';
-import 'tips.dart';
 import 'tipos.dart';
 import 'widget.dart';
 
@@ -372,9 +371,9 @@ class _PantallaInicioState extends State<PantallaInicio> {
   Widget build(BuildContext context) {
     final yo = _yo;
     final mq = MediaQuery.of(context);
-    // Cinco pestañas en cualquier ancho: la letra se achica para que "CALENDARIO" no salte de línea,
+    // Cuatro pestañas en cualquier ancho: la letra se achica para que "CALENDARIO" no salte de línea,
     // y la barra ignora el tamaño de letra del sistema por encima de 1.0.
-    final tam = ((mq.size.width / 5 - 10) / 7.2).clamp(8.0, 11.0);
+    final tam = ((mq.size.width / 4 - 10) / 7.2).clamp(8.0, 11.0);
     Widget icono(IconData i) => Badge(
           isLabelVisible: _hayNuevo,
           smallSize: 9,
@@ -388,7 +387,6 @@ class _PantallaInicioState extends State<PantallaInicio> {
           const PantallaRanking(),
           PantallaCalendario(usuarioId: yo, nombre: tr('mí', 'me')),
           const PantallaChat(),
-          const PantallaTips(),
           PantallaPerfil(usuarioId: yo),
         ],
       ),
@@ -412,8 +410,7 @@ class _PantallaInicioState extends State<PantallaInicio> {
                 NavigationDestination(icon: const Icon(Icons.emoji_events_outlined), selectedIcon: const Icon(Icons.emoji_events), label: tr('RANKING', 'LEADERBOARD')),
                 NavigationDestination(icon: const Icon(Icons.calendar_month_outlined), selectedIcon: const Icon(Icons.calendar_month), label: tr('CALENDARIO', 'CALENDAR')),
                 NavigationDestination(icon: icono(Icons.wc_outlined), selectedIcon: const Icon(Icons.wc), label: nombreCorto),
-                const NavigationDestination(icon: Icon(Icons.lightbulb_outline), selectedIcon: Icon(Icons.lightbulb), label: 'TIPS'),
-                NavigationDestination(icon: const Icon(Icons.person_outline), selectedIcon: const Icon(Icons.person), label: tr('PERFIL', 'PROFILE')),
+                NavigationDestination(icon: const Icon(Icons.person_outline), selectedIcon: const Icon(Icons.person), label: tr('YO', 'ME')),
               ],
             ),
           ),
@@ -436,6 +433,8 @@ class _PantallaRankingState extends State<PantallaRanking> {
   List<Map<String, dynamic>> _filas = [];
   List<Map<String, dynamic>> _hoy = [];
   bool _cargando = true;
+  // Total histórico propio, para el número del parte y los hitos.
+  int _misCagadas = 0;
   // Ranking secreto: si ya encontró la hoja de Tips, si lo está viendo y si ya aprendió a deslizar.
   bool _secretoAbierto = false;
   bool _yaDeslizo = true;
@@ -522,7 +521,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
             db.rpc('leaderboard', params: {'period': _periodo, 'solo_siguiendo': _soloSiguiendo}),
             // El aviso del día compara solo contra la gente que sigues.
             db.rpc('leaderboard', params: {'period': 'day', 'solo_siguiendo': true}),
-            db.from('profiles').select('placer_desbloqueado, genero').eq('id', _yo).maybeSingle(),
+            db.from('profiles').select('placer_desbloqueado, genero, cagadas').eq('id', _yo).maybeSingle(),
             SharedPreferences.getInstance(),
           ).wait);
       if (!mounted) return;
@@ -530,6 +529,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
         _filas = List<Map<String, dynamic>>.from(data);
         _hoy = List<Map<String, dynamic>>.from(hoy);
         _secretoAbierto = yo?['placer_desbloqueado'] == true;
+        _misCagadas = (yo?['cagadas'] as num?)?.toInt() ?? _misCagadas;
         if (yo != null && yo['genero'] != miGenero) guardarGenero(yo['genero']);
         _yaDeslizo = prefs.getBool('placer_deslizo') ?? false;
         _version++;
@@ -547,7 +547,23 @@ class _PantallaRankingState extends State<PantallaRanking> {
     }
   }
 
-  int get _miHoy => (_hoy.where((r) => r['user_id'] == _yo).firstOrNull?['total'] ?? 0) as int;
+  int get _miHoy => (_miFilaHoy?['total'] ?? 0) as int;
+
+  Map<String, dynamic>? get _miFilaHoy => _hoy.where((r) => r['user_id'] == _yo).firstOrNull;
+
+  int get _miPuesto => _filas.indexWhere((r) => r['user_id'] == _yo);
+
+  /// "#2 de la semana" para la imagen de la racha, según lo que está viendo.
+  String? get _miLugar {
+    final i = _miPuesto;
+    if (i < 0) return null;
+    final cual = switch (_periodo) {
+      'week' => tr('de la semana', 'this week'),
+      'month' => tr('del mes', 'this month'),
+      _ => tr('del año', 'this year'),
+    };
+    return _soloSiguiendo ? tr('#${i + 1} $cual entre amigos', '#${i + 1} $cual among friends') : '#${i + 1} $cual';
+  }
 
   /// [animacion] es la del botón: la racha y las preguntas salen cuando el mojón ya cayó.
   Future<void> _cague(Future<void> animacion) async {
@@ -558,46 +574,20 @@ class _PantallaRankingState extends State<PantallaRanking> {
       await _cargar(spinner: false);
       await animacion;
       if (!mounted) return;
-      await mostrarRacha(context, _miHoy);
+      await mostrarRacha(context, _miHoy, perfil: _miFilaHoy, lugar: _miLugar);
       if (!mounted) return;
-      final tipo = await showModalBottomSheet<int>(
-        context: context,
-        builder: (context) => ListView(
-          shrinkWrap: true,
-          padding: conBordeAbajo(context, const EdgeInsets.fromLTRB(16, 0, 16, 16)),
-          children: [
-            Text(tr('¿QUÉ SALIÓ?', 'WHAT CAME OUT?'), style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 12),
-            GridView.count(
-              crossAxisCount: 4,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 6,
-              crossAxisSpacing: 6,
-              childAspectRatio: 0.85,
-              children: [
-                for (final t in tipos.entries)
-                  _Opcion(emoji: t.value.$1, texto: t.value.$2, onTap: () => Navigator.pop(context, t.key)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('Prefiero no decir', 'Rather not say'))),
-          ],
-        ),
-      );
-      final peso = mounted ? await preguntarPeso(context) : null;
-      if (tipo != null || peso != null) {
-        await db.from('cagadas').update({'tipo': ?tipo, 'peso': ?peso}).eq('id', nueva['id']);
-      }
-      if (_secretoAbierto && mounted) {
-        final nota = await preguntarPlacer(context);
-        if (nota != null) {
-          await db.from('cagadas').update({'placer': nota.placer, 'etiquetas': nota.etiquetas.toList()}).eq('id', nueva['id']);
-        }
+      final parte = await pedirParte(context, numero: _misCagadas, secreto: _secretoAbierto);
+      if (parte != null) {
+        final secreta = _secretoAbierto && (parte.placer != null || parte.etiquetas.isNotEmpty);
+        final cambios = {
+          'tipo': ?parte.tipo,
+          'peso': ?parte.peso,
+          if (secreta) ...{'placer': parte.placer, 'etiquetas': parte.etiquetas.toList()},
+        };
+        if (cambios.isNotEmpty) await db.from('cagadas').update(cambios).eq('id', nueva['id']);
       }
       // Llegó a un hito o desbloqueó algo: ofrece presumirlo en el chat.
-      final yo = await db.from('profiles').select('cagadas').eq('id', _yo).single();
-      if (mounted) await ofrecerPresumir(context, (yo['cagadas'] as num?)?.toInt() ?? 0);
+      if (mounted) await ofrecerPresumir(context, _misCagadas);
     } on PostgrestException catch (e) {
       // El trigger limitar_cagadas devuelve el mensaje listo para mostrar.
       _mensaje(e.hint == 'limite_hora' ? trServidor(e.message) : 'Error: ${trServidor(e.message)}');
@@ -656,11 +646,14 @@ class _PantallaRankingState extends State<PantallaRanking> {
     final aviso = _avisoDelDia;
     final perdiendo = aviso?.endsWith(tr('vas perdiendo', "you're losing")) ?? false;
     final maximo = _filas.isEmpty ? 0 : _filas.first['total'] as int;
+    // Fuera del podio, su puesto queda fijo abajo con cuánto le falta para el de arriba.
+    final puesto = _cargando ? -1 : _miPuesto;
+    final barra = puesto >= 3;
 
-    final normal = RefreshIndicator(
+    final lista = RefreshIndicator(
       onRefresh: _cargar,
       child: ListView(
-        padding: conBordeAbajo(context, const EdgeInsets.fromLTRB(16, 12, 16, 32)),
+        padding: conBordeAbajo(context, EdgeInsets.fromLTRB(16, 12, 16, barra ? 96 : 32)),
         children: [
           Row(
             children: [
@@ -722,51 +715,32 @@ class _PantallaRankingState extends State<PantallaRanking> {
             const PistaSecreta(),
             const SizedBox(height: 12),
           ],
-          Row(
-            children: [
-              Rotulo(tr('Ranking', 'Leaderboard')),
-              const Spacer(),
-              FilterChip(
-                label: Text(tr('SOLO MIS AMIGOS', 'FRIENDS ONLY')),
-                labelStyle: TextStyle(color: _soloSiguiendo ? acentoTexto : null),
-                selected: _soloSiguiendo,
-                visualDensity: VisualDensity.compact,
-                onSelected: (v) {
-                  setState(() => _soloSiguiendo = v);
-                  _cargar();
-                },
-              ),
-            ],
-          ),
+          Rotulo(tr('Ranking', 'Leaderboard')),
           const SizedBox(height: 8),
-          SegmentedButton<String>(
-            segments: [
-              for (final e in periodos.entries)
-                ButtonSegment(value: e.key, label: _UnaLinea(e.value.toUpperCase())),
-            ],
-            selected: {_periodo},
-            showSelectedIcon: false,
-            style: _compacto,
-            onSelectionChanged: (s) {
-              setState(() => _periodo = s.first);
-              _cargar();
-            },
-          ),
+          _periodos(),
+          const SizedBox(height: 8),
+          _alcance(),
           const SizedBox(height: 10),
           ContadorCierre(periodo: _periodo),
-          const SizedBox(height: 12),
           if (_cargando)
             const Padding(
               padding: EdgeInsets.all(32),
               child: Center(child: CircularProgressIndicator()),
             )
           else ...[
-            _Tabla(
-              filas: _filas,
+            _Podio(
+              filas: _filas.take(3).toList(),
               yo: _yo,
-              maximo: maximo,
               onTap: (id) => _abrir(PantallaPerfil(usuarioId: id)),
             ),
+            if (_filas.length > 3)
+              _Tabla(
+                filas: _filas.skip(3).toList(),
+                desde: 4,
+                yo: _yo,
+                maximo: maximo,
+                onTap: (id) => _abrir(PantallaPerfil(usuarioId: id)),
+              ),
             if (_soloSiguiendo && _filas.length <= 1) ...[
               const SizedBox(height: 12),
               Card(
@@ -790,6 +764,19 @@ class _PantallaRankingState extends State<PantallaRanking> {
         ],
       ),
     );
+    final normal = barra
+        ? Stack(
+            children: [
+              lista,
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: _BarraTu(puesto: puesto + 1, fila: _filas[puesto], arriba: _filas[puesto - 1]),
+              ),
+            ],
+          )
+        : lista;
 
     return SafeArea(
       child: Stack(
@@ -802,7 +789,8 @@ class _PantallaRankingState extends State<PantallaRanking> {
             )
           else
             normal,
-          _secreto,
+          // Que el psst no quede tapado por la barra TÚ.
+          Padding(padding: EdgeInsets.only(bottom: barra ? 64 : 0), child: _secreto),
           if (_secretoAbierto)
             Positioned(
               top: 4,
@@ -812,6 +800,43 @@ class _PantallaRankingState extends State<PantallaRanking> {
             ),
         ],
       ),
+    );
+  }
+
+  Widget _periodos() => SegmentedButton<String>(
+        segments: [
+          for (final e in periodos.entries)
+            ButtonSegment(value: e.key, label: _UnaLinea(e.value.toUpperCase())),
+        ],
+        selected: {_periodo},
+        showSelectedIcon: false,
+        style: _compacto,
+        onSelectionChanged: (s) {
+          setState(() => _periodo = s.first);
+          _cargar();
+        },
+      );
+
+  /// SOLO MIS AMIGOS o TODOS.
+  Widget _alcance() {
+    Widget chip(bool solo, String texto) => ChoiceChip(
+          label: Text(texto),
+          labelStyle: TextStyle(color: _soloSiguiendo == solo ? acentoTexto : null, fontWeight: FontWeight.w800, letterSpacing: 1),
+          selected: _soloSiguiendo == solo,
+          showCheckmark: false,
+          visualDensity: VisualDensity.compact,
+          onSelected: (_) {
+            if (_soloSiguiendo == solo) return;
+            setState(() => _soloSiguiendo = solo);
+            _cargar();
+          },
+        );
+    return Row(
+      children: [
+        chip(true, tr('SOLO MIS AMIGOS', 'FRIENDS ONLY')),
+        const SizedBox(width: 8),
+        chip(false, tr('TODOS', 'EVERYONE')),
+      ],
     );
   }
 
@@ -893,36 +918,11 @@ class _PantallaRankingState extends State<PantallaRanking> {
                   ),
                 ),
                 const SizedBox(height: 28),
-                Row(
-                  children: [
-                    Rotulo(tr('Ranking secreto', 'Secret leaderboard')),
-                    const Spacer(),
-                    FilterChip(
-                      label: Text(tr('SOLO MIS AMIGOS', 'FRIENDS ONLY')),
-                      labelStyle: TextStyle(color: _soloSiguiendo ? acentoTexto : null),
-                      selected: _soloSiguiendo,
-                      visualDensity: VisualDensity.compact,
-                      onSelected: (v) {
-                        setState(() => _soloSiguiendo = v);
-                        _cargar();
-                      },
-                    ),
-                  ],
-                ),
+                Rotulo(tr('Ranking secreto', 'Secret leaderboard')),
                 const SizedBox(height: 8),
-                SegmentedButton<String>(
-                  segments: [
-                    for (final e in periodos.entries)
-                      ButtonSegment(value: e.key, label: _UnaLinea(e.value.toUpperCase())),
-                  ],
-                  selected: {_periodo},
-                  showSelectedIcon: false,
-                  style: _compacto,
-                  onSelectionChanged: (s) {
-                    setState(() => _periodo = s.first);
-                    _cargar();
-                  },
-                ),
+                _periodos(),
+                const SizedBox(height: 8),
+                _alcance(),
                 const SizedBox(height: 10),
                 ContadorCierre(periodo: _periodo),
                 const SizedBox(height: 12),
@@ -1093,49 +1093,13 @@ class _BotonCagueState extends State<_BotonCague> with SingleTickerProviderState
   }
 }
 
-class _Opcion extends StatelessWidget {
-  const _Opcion({required this.emoji, required this.texto, required this.onTap});
-
-  final String emoji;
-  final String texto;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = paleta(context);
-    return Material(
-      color: p.tarjeta,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(radio),
-        side: BorderSide(color: p.borde),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(6),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Emoji(emoji, tamano: 38),
-              const SizedBox(height: 4),
-              Text(texto,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelSmall),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Ranking como tabla. El líder va resaltado y cada fila tiene una barra relativa al líder.
+/// Ranking como tabla, del 4 para abajo. Cada fila tiene una barra relativa al líder.
 class _Tabla extends StatelessWidget {
-  const _Tabla({required this.filas, required this.yo, required this.maximo, required this.onTap});
+  const _Tabla({required this.filas, this.desde = 1, required this.yo, required this.maximo, required this.onTap});
 
   final List<Map<String, dynamic>> filas;
+  // Puesto de la primera fila: las de arriba van en el podio.
+  final int desde;
   final String yo;
   final int maximo;
   final void Function(String usuarioId) onTap;
@@ -1162,9 +1126,151 @@ class _Tabla extends StatelessWidget {
             _Entrada(
               key: ValueKey(f['user_id']),
               orden: i,
-              child: _FilaTabla(puesto: i + 1, fila: f, esMio: f['user_id'] == yo, maximo: maximo, onTap: () => onTap(f['user_id'])),
+              child: _FilaTabla(puesto: desde + i, fila: f, esMio: f['user_id'] == yo, maximo: maximo, onTap: () => onTap(f['user_id'])),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Los tres primeros en escalones: el 2 a la izquierda, el 1 en el medio y el 3 a la derecha.
+class _Podio extends StatelessWidget {
+  const _Podio({required this.filas, required this.yo, required this.onTap});
+
+  // Hasta tres, en orden.
+  final List<Map<String, dynamic>> filas;
+  final String yo;
+  final void Function(String usuarioId) onTap;
+
+  static const _alturas = [150.0, 116.0, 88.0];
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paleta(context);
+    final quieto = movimiento(context) == Movimiento.nada;
+    Widget columna(int i) {
+      if (i >= filas.length) return const Expanded(child: SizedBox());
+      final f = filas[i];
+      final uno = i == 0;
+      final mio = f['user_id'] == yo;
+      final colorTexto = uno ? acentoTexto : p.texto;
+      return Expanded(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => onTap(f['user_id']),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Avatar(f, tamano: uno ? 64 : 50),
+              const SizedBox(height: 6),
+              Text(
+                mio ? tr('TÚ', 'YOU') : f['username'],
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: p.texto),
+              ),
+              const SizedBox(height: 6),
+              // El escalón crece desde el piso.
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: _alturas[i]),
+                duration: quieto ? Duration.zero : Duration(milliseconds: 500 + 120 * (2 - i)),
+                curve: Curves.easeOutCubic,
+                builder: (context, alto, child) => Container(
+                  height: alto,
+                  clipBehavior: Clip.hardEdge,
+                  decoration: BoxDecoration(
+                    color: uno ? acento : p.tarjeta,
+                    border: Border(
+                      top: BorderSide(color: p.bordeFuerte, width: uno ? 2 : 1),
+                      left: BorderSide(color: p.bordeFuerte),
+                      right: BorderSide(color: p.bordeFuerte),
+                    ),
+                  ),
+                  child: child,
+                ),
+                child: OverflowBox(
+                  alignment: Alignment.topCenter,
+                  minHeight: 0,
+                  maxHeight: double.infinity,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('#${i + 1}', style: numeros(context, tamano: 13, weight: FontWeight.w900, color: uno ? acentoTexto : p.textoSuave)),
+                        Text('${f['total']}', style: numeros(context, tamano: 30, weight: FontWeight.w900, color: colorTexto)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 36),
+      child: Container(
+        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: p.bordeFuerte, width: 2))),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [columna(1), const SizedBox(width: 8), columna(0), const SizedBox(width: 8), columna(2)],
+        ),
+      ),
+    );
+  }
+}
+
+/// Barra amarilla fija abajo con el puesto propio, cuando no está en el podio.
+class _BarraTu extends StatelessWidget {
+  const _BarraTu({required this.puesto, required this.fila, required this.arriba});
+
+  final int puesto;
+  final Map<String, dynamic> fila;
+  final Map<String, dynamic> arriba;
+
+  @override
+  Widget build(BuildContext context) {
+    final falta = (arriba['total'] as int) - (fila['total'] as int);
+    final quien = arriba['username'];
+    return Container(
+      decoration: const BoxDecoration(
+        color: acento,
+        border: Border(top: BorderSide(color: acentoTexto, width: 2)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 30,
+            child: Text(puesto.toString().padLeft(2, '0'), style: numeros(context, tamano: 16, weight: FontWeight.w900, color: acentoTexto)),
+          ),
+          const SizedBox(width: 6),
+          Avatar(fila, tamano: 32),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${tr('TÚ', 'YOU')} · ${fila['username']}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: acentoTexto, fontWeight: FontWeight.w900, fontSize: 15)),
+                Text(
+                  falta == 0 ? tr('Empatado con $quien', 'Tied with $quien') : tr('A $falta de $quien', '$falta behind $quien'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: acentoTexto, fontWeight: FontWeight.w700, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text('${fila['total']}', style: numeros(context, tamano: 20, weight: FontWeight.w900, color: acentoTexto)),
         ],
       ),
     );
