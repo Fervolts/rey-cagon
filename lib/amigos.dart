@@ -20,7 +20,8 @@ enum _Lista { sigues, teSiguen }
 
 enum _Orden { nombre, cagadas }
 
-/// Lo que abre el botón de agregar amigos del ranking: el buscador listo para escribir.
+/// Lo que abre el botón de agregar amigos: el buscador listo para escribir y, sin texto,
+/// gente nueva para seguir en vez de los que ya sigues.
 class PantallaBuscarAmigos extends StatelessWidget {
   const PantallaBuscarAmigos({super.key});
 
@@ -34,7 +35,7 @@ class PantallaBuscarAmigos extends StatelessWidget {
 class PantallaAmigos extends StatefulWidget {
   const PantallaAmigos({super.key, this.buscar = false});
 
-  /// Abre con el teclado puesto en el buscador.
+  /// Abre con el teclado puesto en el buscador y muestra sugeridos en vez de tus listas.
   final bool buscar;
 
   @override
@@ -53,6 +54,8 @@ class _PantallaAmigosState extends State<PantallaAmigos> with AutomaticKeepAlive
   // Favoritos: solo en este teléfono, para tener arriba a los de siempre.
   Set<String> _favoritos = {};
   List<Map<String, dynamic>>? _resultados;
+  // Sin texto en BUSCAR AMIGOS: los que te siguen sin seguirlos de vuelta y luego los más activos.
+  List<Map<String, dynamic>> _sugeridos = [];
   bool _cargando = true;
   late final VoidCallback _soltar;
 
@@ -90,12 +93,23 @@ class _PantallaAmigosState extends State<PantallaAmigos> with AutomaticKeepAlive
       final m = {for (final f in meSiguen) f['follower'] as String};
       final ids = {...s, ...m}.toList();
       final perfiles = ids.isEmpty ? <Map<String, dynamic>>[] : await db.from('profiles').select(_columnas).inFilter('id', ids);
+      final activos = widget.buscar
+          ? await db.from('profiles').select(_columnas).neq('id', _yo).gt('cagadas', 0).order('cagadas', ascending: false).limit(60)
+          : <Map<String, dynamic>>[];
       if (!mounted) return;
+      final bloqueados = {for (final b in bloqueos) b['bloqueado'] as String};
+      final porId = {for (final p in perfiles) p['id'] as String: p};
       setState(() {
+        _sugeridos = [
+          for (final id in m.difference(s).difference(bloqueados))
+            if (porId[id] != null) porId[id]!,
+          for (final g in activos)
+            if (!s.contains(g['id']) && !m.contains(g['id']) && !bloqueados.contains(g['id'])) g,
+        ];
         _sigo = s;
         _meSiguen = m;
-        _bloqueados = {for (final b in bloqueos) b['bloqueado'] as String};
-        _perfiles = {for (final p in perfiles) p['id'] as String: p};
+        _bloqueados = bloqueados;
+        _perfiles = porId;
         _cargando = false;
       });
       if (_q.isNotEmpty) await _buscar(_q);
@@ -197,7 +211,8 @@ class _PantallaAmigosState extends State<PantallaAmigos> with AutomaticKeepAlive
     final p = paleta(context);
     final resultados = _resultados;
     final buscando = resultados != null;
-    final gente = buscando ? resultados : _visibles;
+    final sugerir = widget.buscar && !buscando;
+    final gente = buscando ? resultados : sugerir ? _sugeridos : _visibles;
     final sinSeguirDeVuelta = _meSiguen.difference(_sigo).difference(_bloqueados).length;
     return RefreshIndicator(
       onRefresh: _cargar,
@@ -225,7 +240,10 @@ class _PantallaAmigosState extends State<PantallaAmigos> with AutomaticKeepAlive
             ),
           ),
           const SizedBox(height: 12),
-          if (!buscando) ...[
+          if (sugerir) ...[
+            Rotulo(tr('Gente para seguir', 'People to follow')),
+            const SizedBox(height: 4),
+          ] else if (!buscando) ...[
             Wrap(spacing: 8, runSpacing: 8, children: [
               ChoiceChip(
                 label: Text('${tr('SIGUES', 'FOLLOWING')} · ${_sigo.difference(_bloqueados).length}'),
@@ -278,7 +296,9 @@ class _PantallaAmigosState extends State<PantallaAmigos> with AutomaticKeepAlive
                 Text(
                   buscando
                       ? tr('Nadie con ese nombre', 'Nobody with that name')
-                      : _lista == _Lista.sigues
+                      : sugerir
+                          ? tr('Ya sigues a todos. Busca por username arriba.', 'You already follow everyone. Search by username above.')
+                          : _lista == _Lista.sigues
                           ? tr('No sigues a nadie. Búscalos arriba para competir.', "You're not following anyone. Search for them above to compete.")
                           : tr('Nadie te sigue todavía. Pásales tu username.', 'Nobody follows you yet. Send them your username.'),
                   textAlign: TextAlign.center,

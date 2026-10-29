@@ -14,7 +14,6 @@ import 'amigos.dart';
 import 'animaciones.dart';
 import 'avisos.dart';
 import 'cagadon.dart';
-import 'calendario.dart';
 import 'chat.dart';
 import 'comunidad.dart';
 import 'idioma.dart';
@@ -272,7 +271,7 @@ class _PantallaEntrarState extends State<PantallaEntrar> {
   }
 }
 
-/// Pestañas de abajo: ranking, mi calendario, mi perfil.
+/// Pestañas de abajo: trono, ranking, el baño y mi perfil (el calendario se abre desde el perfil).
 class PantallaInicio extends StatefulWidget {
   const PantallaInicio({super.key});
 
@@ -371,7 +370,7 @@ class _PantallaInicioState extends State<PantallaInicio> {
   Widget build(BuildContext context) {
     final yo = _yo;
     final mq = MediaQuery.of(context);
-    // Cuatro pestañas en cualquier ancho: la letra se achica para que "CALENDARIO" no salte de línea,
+    // Cuatro pestañas en cualquier ancho: la letra se achica para que "LEADERBOARD" no salte de línea,
     // y la barra ignora el tamaño de letra del sistema por encima de 1.0.
     final tam = ((mq.size.width / 4 - 10) / 7.2).clamp(8.0, 11.0);
     Widget icono(IconData i) => Badge(
@@ -384,8 +383,8 @@ class _PantallaInicioState extends State<PantallaInicio> {
       body: IndexedStack(
         index: _tab,
         children: [
+          PantallaRanking(trono: true, onVerRanking: () => setState(() => _tab = 1)),
           const PantallaRanking(),
-          PantallaCalendario(usuarioId: yo, nombre: tr('mí', 'me')),
           const PantallaChat(),
           PantallaPerfil(usuarioId: yo),
         ],
@@ -407,8 +406,8 @@ class _PantallaInicioState extends State<PantallaInicio> {
                 if (i == _tabBano) _marcarVisto();
               },
               destinations: [
+                NavigationDestination(icon: const Emoji('💩', tamano: 24), label: tr('TRONO', 'THRONE')),
                 NavigationDestination(icon: const Icon(Icons.emoji_events_outlined), selectedIcon: const Icon(Icons.emoji_events), label: tr('RANKING', 'LEADERBOARD')),
-                NavigationDestination(icon: const Icon(Icons.calendar_month_outlined), selectedIcon: const Icon(Icons.calendar_month), label: tr('CALENDARIO', 'CALENDAR')),
                 NavigationDestination(icon: icono(Icons.wc_outlined), selectedIcon: const Icon(Icons.wc), label: nombreCorto),
                 NavigationDestination(icon: const Icon(Icons.person_outline), selectedIcon: const Icon(Icons.person), label: tr('YO', 'ME')),
               ],
@@ -420,8 +419,15 @@ class _PantallaInicioState extends State<PantallaInicio> {
   }
 }
 
+/// Las dos primeras pestañas comparten datos: con [trono] es la pantalla de cagar (botón, racha
+/// del día, Cagadón y tu puesto); sin él, el ranking con podio. Las dos tienen su lado secreto.
 class PantallaRanking extends StatefulWidget {
-  const PantallaRanking({super.key});
+  const PantallaRanking({super.key, this.trono = false, this.onVerRanking});
+
+  final bool trono;
+
+  /// Desde el trono, el toque en "tu puesto" cambia a la pestaña del ranking.
+  final VoidCallback? onVerRanking;
 
   @override
   State<PantallaRanking> createState() => _PantallaRankingState();
@@ -454,14 +460,15 @@ class _PantallaRankingState extends State<PantallaRanking> {
   void initState() {
     super.initState();
     _cargar();
-    _soltar = escucharCagadas('home', () => _cargar(spinner: false));
+    _soltar = escucharCagadas(widget.trono ? 'trono' : 'ranking', () => _cargar(spinner: false));
     // Al volver de Ajustes (permiso de instalar) o de otra app, se vuelve a ofrecer la actualización.
     _ciclo = AppLifecycleListener(onResume: () {
-      revisarActualizacion(context);
+      if (widget.trono) revisarActualizacion(context);
       // La conexión pudo morir en segundo plano: se recarga en silencio.
       Future<void>.delayed(const Duration(milliseconds: 600), () => _cargar(spinner: false));
     });
-    _avisoPrimeraVez();
+    // Bienvenida, permisos y actualización: una sola vez, desde el trono.
+    if (widget.trono) _avisoPrimeraVez();
   }
 
   @override
@@ -535,6 +542,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
         _version++;
       });
       _asomar();
+      if (!widget.trono) return;
       reprogramarRecordatorio(yaCagoHoy: _miHoy > 0).catchError((_) {});
       reprogramarCierres().catchError((_) {});
       actualizarWidget(_miHoy).catchError((_) {});
@@ -643,12 +651,9 @@ class _PantallaRankingState extends State<PantallaRanking> {
   Widget build(BuildContext context) {
     final texto = Theme.of(context).textTheme;
     final p = paleta(context);
-    final aviso = _avisoDelDia;
-    final perdiendo = aviso?.endsWith(tr('vas perdiendo', "you're losing")) ?? false;
-    final maximo = _filas.isEmpty ? 0 : _filas.first['total'] as int;
     // Fuera del podio, su puesto queda fijo abajo con cuánto le falta para el de arriba.
     final puesto = _cargando ? -1 : _miPuesto;
-    final barra = puesto >= 3;
+    final barra = !widget.trono && puesto >= 3;
 
     final lista = RefreshIndicator(
       onRefresh: _cargar,
@@ -657,108 +662,23 @@ class _PantallaRankingState extends State<PantallaRanking> {
         children: [
           Row(
             children: [
-              Expanded(child: Text(tr('Rey Cagón', 'King of the Throne'), style: texto.headlineSmall)),
+              Expanded(
+                child: Text(widget.trono ? tr('Rey Cagón', 'King of the Throne') : tr('Ranking', 'Leaderboard'),
+                    style: texto.headlineSmall),
+              ),
               IconButton.outlined(
                 icon: const Icon(Icons.person_add_alt_1),
                 tooltip: tr('Buscar amigos', 'Find friends'),
                 onPressed: () => _abrir(const PantallaBuscarAmigos()),
               ),
-              const SizedBox(width: 8),
-              const BotonAvisos(),
+              if (widget.trono) ...[
+                const SizedBox(width: 8),
+                const BotonAvisos(),
+              ],
             ],
           ),
           const SizedBox(height: 16),
-          const SizedBox(height: 8),
-          Center(child: _BotonCague(onTap: _cague)),
-          Center(
-            child: TextButton.icon(
-              onPressed: _deshacer,
-              icon: const Icon(Icons.undo, size: 18),
-              label: Text(tr('DESHACER LA ÚLTIMA', 'UNDO THE LAST ONE')),
-            ),
-          ),
-          const SizedBox(height: 8),
-          if (aviso != null) ...[
-            const SizedBox(height: 4),
-            Container(
-              decoration: BoxDecoration(
-                color: p.tarjeta,
-                border: Border.all(color: p.borde),
-              ),
-              child: IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Container(width: 4, color: perdiendo ? const Color(0xFFB3261E) : acento),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Rotulo(tr('Hoy · llevas $_miHoy', 'Today · you have $_miHoy')),
-                            const SizedBox(height: 4),
-                            Text(aviso, style: texto.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-          const SizedBox(height: 12),
-          const RetosDeHoy(),
-          const SizedBox(height: 16),
-          if (_secretoAbierto && !_yaDeslizo) ...[
-            const PistaSecreta(),
-            const SizedBox(height: 12),
-          ],
-          Rotulo(tr('Ranking', 'Leaderboard')),
-          const SizedBox(height: 8),
-          _periodos(),
-          const SizedBox(height: 8),
-          _alcance(),
-          const SizedBox(height: 10),
-          ContadorCierre(periodo: _periodo),
-          if (_cargando)
-            const Padding(
-              padding: EdgeInsets.all(32),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else ...[
-            _Podio(
-              filas: _filas.take(3).toList(),
-              yo: _yo,
-              onTap: (id) => _abrir(PantallaPerfil(usuarioId: id)),
-            ),
-            if (_filas.length > 3)
-              _Tabla(
-                filas: _filas.skip(3).toList(),
-                desde: 4,
-                yo: _yo,
-                maximo: maximo,
-                onTap: (id) => _abrir(PantallaPerfil(usuarioId: id)),
-              ),
-            if (_soloSiguiendo && _filas.length <= 1) ...[
-              const SizedBox(height: 12),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Center(child: Emoji('🚽', tamano: 64)),
-                      const SizedBox(height: 8),
-                      Text(tr('Estás cagando solo. Sigue a tus amigos para competir.',
-                          "You're pooping alone. Follow your friends to compete."), textAlign: TextAlign.center),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ],
+          if (widget.trono) ..._trono(texto) else ..._ranking(),
           const SizedBox(height: 28),
           Text(disclaimer, style: texto.bodySmall?.copyWith(color: p.textoSuave)),
         ],
@@ -789,8 +709,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
             )
           else
             normal,
-          // Que el psst no quede tapado por la barra TÚ.
-          Padding(padding: EdgeInsets.only(bottom: barra ? 64 : 0), child: _secreto),
+          if (widget.trono) _secreto,
           if (_secretoAbierto)
             Positioned(
               top: 4,
@@ -801,6 +720,92 @@ class _PantallaRankingState extends State<PantallaRanking> {
         ],
       ),
     );
+  }
+
+  /// La pantalla de cagar: la racha de hoy, el botón, el Cagadón y tu puesto de la semana.
+  List<Widget> _trono(TextTheme texto) {
+    final aviso = _avisoDelDia;
+    final puesto = _cargando ? -1 : _miPuesto;
+    return [
+      _TarjetaHoy(
+        hoy: _miHoy,
+        aviso: aviso,
+        perdiendo: aviso?.endsWith(tr('vas perdiendo', "you're losing")) ?? false,
+      ),
+      const SizedBox(height: 20),
+      Center(child: _BotonCague(onTap: _cague)),
+      Center(
+        child: TextButton.icon(
+          onPressed: _deshacer,
+          icon: const Icon(Icons.undo, size: 18),
+          label: Text(tr('DESHACER LA ÚLTIMA', 'UNDO THE LAST ONE')),
+        ),
+      ),
+      const SizedBox(height: 8),
+      const RetosDeHoy(),
+      const SizedBox(height: 12),
+      if (puesto >= 0)
+        _TarjetaPuesto(
+          puesto: puesto + 1,
+          fila: _filas[puesto],
+          arriba: puesto == 0 ? null : _filas[puesto - 1],
+          solo: _filas.length <= 1,
+          onTap: _filas.length <= 1 ? () => _abrir(const PantallaBuscarAmigos()) : widget.onVerRanking,
+        ),
+      if (_secretoAbierto && !_yaDeslizo) ...[
+        const SizedBox(height: 16),
+        const PistaSecreta(),
+      ],
+    ];
+  }
+
+  /// El ranking: periodo, alcance, podio y la tabla.
+  List<Widget> _ranking() {
+    final maximo = _filas.isEmpty ? 0 : _filas.first['total'] as int;
+    return [
+      _periodos(),
+      const SizedBox(height: 8),
+      _alcance(),
+      const SizedBox(height: 10),
+      ContadorCierre(periodo: _periodo),
+      if (_cargando)
+        const Padding(
+          padding: EdgeInsets.all(32),
+          child: Center(child: CircularProgressIndicator()),
+        )
+      else ...[
+        _Podio(
+          filas: _filas.take(3).toList(),
+          yo: _yo,
+          onTap: (id) => _abrir(PantallaPerfil(usuarioId: id)),
+        ),
+        if (_filas.length > 3)
+          _Tabla(
+            filas: _filas.skip(3).toList(),
+            desde: 4,
+            yo: _yo,
+            maximo: maximo,
+            onTap: (id) => _abrir(PantallaPerfil(usuarioId: id)),
+          ),
+        if (_soloSiguiendo && _filas.length <= 1) ...[
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Center(child: Emoji('🚽', tamano: 64)),
+                  const SizedBox(height: 8),
+                  Text(tr('Estás cagando solo. Sigue a tus amigos para competir.',
+                      "You're pooping alone. Follow your friends to compete."), textAlign: TextAlign.center),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ],
+    ];
   }
 
   Widget _periodos() => SegmentedButton<String>(
@@ -1226,6 +1231,144 @@ class _Podio extends StatelessWidget {
 }
 
 /// Barra amarilla fija abajo con el puesto propio, cuando no está en el podio.
+/// Arriba del trono: cuántas llevas hoy, cinco barras hasta el RAMPAGE y cuánto falta para la
+/// próxima racha. Abajo, cómo vas contra tus amigos hoy.
+class _TarjetaHoy extends StatelessWidget {
+  const _TarjetaHoy({required this.hoy, required this.aviso, required this.perdiendo});
+
+  static const _rampage = 5;
+
+  final int hoy;
+  final String? aviso;
+  final bool perdiendo;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paleta(context);
+    final texto = Theme.of(context).textTheme;
+    final racha = nombreRacha(hoy);
+    final proxima = hoy < _rampage ? nombreRacha(hoy < 1 ? 2 : hoy + 1)!.replaceAll('!', '') : null;
+    final faltan = hoy < 1 ? 2 : 1;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: p.bordeFuerte, width: 2)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Rotulo(tr('Hoy · $hoy ${hoy == 1 ? 'cagada' : 'cagadas'}', 'Today · $hoy ${hoy == 1 ? 'poop' : 'poops'}'))),
+              Text(
+                hoy >= _rampage ? 'RAMPAGE!' : tr('RAMPAGE A ${_rampage - hoy}', 'RAMPAGE IN ${_rampage - hoy}'),
+                style: numeros(context, tamano: 11, weight: FontWeight.w800, color: p.textoSuave),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              for (var i = 0; i < _rampage; i++) ...[
+                if (i > 0) const SizedBox(width: 4),
+                Expanded(
+                  child: Container(
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: i < hoy ? acento : p.suave,
+                      border: Border.all(color: i < hoy ? acentoTexto : p.borde),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: Text(
+                  racha ?? (hoy == 0 ? tr('Todavía nada', 'Nothing yet') : tr('Primera del día', 'First of the day')),
+                  style: texto.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                ),
+              ),
+              if (proxima != null)
+                Text(tr('a $faltan del $proxima', '$faltan more for $proxima'),
+                    style: numeros(context, tamano: 12, weight: FontWeight.w700, color: p.textoSuave)),
+            ],
+          ),
+          if (aviso != null) ...[
+            const SizedBox(height: 10),
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(width: 4, color: perdiendo ? const Color(0xFFB3261E) : acento),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(aviso!, style: texto.bodyMedium?.copyWith(fontWeight: FontWeight.w600))),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Tu puesto de la semana en el trono. El toque lleva al ranking, o a buscar amigos si estás solo.
+class _TarjetaPuesto extends StatelessWidget {
+  const _TarjetaPuesto({required this.puesto, required this.fila, required this.arriba, required this.solo, required this.onTap});
+
+  final int puesto;
+  final Map<String, dynamic> fila;
+  final Map<String, dynamic>? arriba;
+  final bool solo;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paleta(context);
+    final String detalle;
+    if (solo) {
+      detalle = tr('Estás cagando solo · busca amigos', "You're pooping alone · find friends");
+    } else if (arriba == null) {
+      detalle = tr('Vas ganando la semana', "You're winning the week");
+    } else {
+      final falta = (arriba!['total'] as int) - (fila['total'] as int);
+      final quien = arriba!['username'];
+      detalle = falta == 0 ? tr('Empatado con $quien', 'Tied with $quien') : tr('A $falta de $quien', '$falta behind $quien');
+    }
+    return Material(
+      color: p.tarjeta,
+      shape: Border.all(color: p.borde),
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              const Emoji('👑', tamano: 28),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(tr('#$puesto de la semana', '#$puesto this week'),
+                        style: numeros(context, tamano: 15, weight: FontWeight.w900, color: p.texto)),
+                    Text(detalle,
+                        maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.textoSuave, fontSize: 12, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: p.textoSuave),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _BarraTu extends StatelessWidget {
   const _BarraTu({required this.puesto, required this.fila, required this.arriba});
 
