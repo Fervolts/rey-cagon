@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // Estilo: esquinas de 2px, bordes de 1px, sin sombras ni degradados, letra del sistema
 // con cifras tabulares y un solo color de acento.
@@ -77,6 +78,22 @@ class Rotulo extends StatelessWidget {
         style: numeros(context, tamano: 11, weight: FontWeight.w700, color: paleta(context).textoSuave)
             .copyWith(letterSpacing: 1.2),
       );
+}
+
+/// Claro, oscuro o el del teléfono. Se elige en Perfil.
+final temaElegido = ValueNotifier<ThemeMode>(ThemeMode.system);
+
+Future<void> iniciarTema() async {
+  try {
+    temaElegido.value = ThemeMode.values.byName((await SharedPreferences.getInstance()).getString('tema') ?? 'system');
+  } catch (_) {}
+}
+
+Future<void> elegirTema(ThemeMode modo) async {
+  temaElegido.value = modo;
+  try {
+    await (await SharedPreferences.getInstance()).setString('tema', modo.name);
+  } catch (_) {}
 }
 
 ThemeData tema(Brightness brillo) {

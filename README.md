@@ -2,7 +2,7 @@
 
 ¿Quién de tus amigos caga más esta semana? Ahora hay ranking.
 
-Rey Cagón es una app Android de chiste: cada vez que vas al baño le das al botón, y compites con tus amigos por la corona de la semana, el mes, el trimestre y el año.
+Rey Cagón es una app Android de chiste: cada vez que vas al baño le das al botón, y compites con tus amigos por la corona de la semana, el mes y el año.
 
 > Es solo entretenimiento. No es una app de salud ni da consejos médicos.
 
@@ -31,7 +31,7 @@ Android te va a pedir permiso para instalar apps de fuera de la tienda. Después
 ## Qué trae
 
 - **Un botón:** cagaste, lo tocas. Opcionalmente eliges qué tipo salió (Anaconda, Volcán, Piedritas de conejo…).
-- **Ranking** entre tus amigos o entre todos, por semana, mes, trimestre y año.
+- **Ranking** entre tus amigos o entre todos, por semana, mes y año.
 - **Notificaciones** cuando un amigo caga ("Fulanito cagó 3 veces hoy… vas perdiendo"), cuando alguien te sigue y un recordatorio a las 8 p. m. si no has registrado nada.
 - **Perfiles** con estadísticas, calendario y tu "especialidad de la casa".
 - **Accesorios** para tu avatar (sombreros, lentes, mascotas) que se desbloquean mientras más cagas.

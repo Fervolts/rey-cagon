@@ -6,6 +6,7 @@ import 'genero.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'accesorios.dart';
+import 'animaciones.dart';
 import 'cagadon.dart';
 import 'calendario.dart';
 import 'chat.dart' show abrirReporteDeError;
@@ -155,6 +156,64 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
       ),
     );
     if (valor != null && valor != idiomaElegido) await elegirIdioma(valor);
+  }
+
+  String _nombreTema(ThemeMode m) => switch (m) {
+        ThemeMode.light => tr('Claro', 'Light'),
+        ThemeMode.dark => tr('Oscuro', 'Dark'),
+        ThemeMode.system => tr('El del teléfono', "Phone's setting"),
+      };
+
+  Future<void> _elegirTema() async {
+    final modo = await showModalBottomSheet<ThemeMode>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          for (final m in [ThemeMode.system, ThemeMode.light, ThemeMode.dark])
+            ListTile(
+              title: Text(_nombreTema(m)),
+              trailing: temaElegido.value == m ? const Icon(Icons.check) : null,
+              onTap: () => Navigator.pop(context, m),
+            ),
+        ]),
+      ),
+    );
+    if (modo != null) await elegirTema(modo);
+    if (mounted) setState(() {});
+  }
+
+  String _nombreMovimientoElegido() => switch (movimientoElegido.value) {
+        'completo' => nombreMovimiento(Movimiento.completo),
+        'simple' => nombreMovimiento(Movimiento.simple),
+        'nada' => nombreMovimiento(Movimiento.nada),
+        _ => tr('Automáticas · ${nombreMovimiento(movimientoDelTelefono).toLowerCase()} en este teléfono',
+            'Automatic · ${nombreMovimiento(movimientoDelTelefono).toLowerCase()} on this phone'),
+      };
+
+  Future<void> _elegirMovimiento() async {
+    final valor = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          for (final (v, nombre, detalle) in [
+            ('auto', tr('Automáticas', 'Automatic'), tr('Según lo que aguante el teléfono', 'Depending on what the phone can handle')),
+            ('completo', nombreMovimiento(Movimiento.completo), tr('El mojón vuela al inodoro', 'The poop flies into the toilet')),
+            ('simple', nombreMovimiento(Movimiento.simple), tr('Un brinco, para teléfonos lentos', 'A little hop, for slow phones')),
+            ('nada', nombreMovimiento(Movimiento.nada), tr('Nada se mueve', 'Nothing moves')),
+          ])
+            ListTile(
+              title: Text(nombre),
+              subtitle: Text(detalle),
+              trailing: movimientoElegido.value == v ? const Icon(Icons.check) : null,
+              onTap: () => Navigator.pop(context, v),
+            ),
+        ]),
+      ),
+    );
+    if (valor != null) {
+      await elegirMovimiento(valor);
+      if (mounted) setState(() {});
+    }
   }
 
   /// Fecha desde la que puede volver a cambiar el género, o null si puede ya.
@@ -407,6 +466,20 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                     }),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: _elegirIdioma,
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.contrast),
+                    title: Text(tr('Tema', 'Theme')),
+                    subtitle: Text(_nombreTema(temaElegido.value)),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: _elegirTema,
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.animation),
+                    title: Text(tr('Animaciones', 'Animations')),
+                    subtitle: Text(_nombreMovimientoElegido()),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: _elegirMovimiento,
                   ),
                   ListTile(
                     leading: const Icon(Icons.open_in_new),

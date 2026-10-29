@@ -20,8 +20,22 @@ enum _Lista { sigues, teSiguen }
 
 enum _Orden { nombre, cagadas }
 
+/// Lo que abre el botón de agregar amigos del ranking: el buscador listo para escribir.
+class PantallaBuscarAmigos extends StatelessWidget {
+  const PantallaBuscarAmigos({super.key});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: Text(tr('BUSCAR AMIGOS', 'FIND FRIENDS'))),
+        body: const PantallaAmigos(buscar: true),
+      );
+}
+
 class PantallaAmigos extends StatefulWidget {
-  const PantallaAmigos({super.key});
+  const PantallaAmigos({super.key, this.buscar = false});
+
+  /// Abre con el teclado puesto en el buscador.
+  final bool buscar;
 
   @override
   State<PantallaAmigos> createState() => _PantallaAmigosState();
@@ -192,6 +206,7 @@ class _PantallaAmigosState extends State<PantallaAmigos> with AutomaticKeepAlive
         children: [
           TextField(
             controller: _buscador,
+            autofocus: widget.buscar,
             onChanged: _escribiendo,
             textInputAction: TextInputAction.search,
             decoration: InputDecoration(

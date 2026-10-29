@@ -10,16 +10,20 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'accesorios.dart';
 import 'actualizar.dart';
+import 'amigos.dart';
+import 'animaciones.dart';
 import 'avisos.dart';
 import 'cagadon.dart';
 import 'calendario.dart';
 import 'chat.dart';
 import 'comunidad.dart';
 import 'idioma.dart';
+import 'inodoro.dart';
 import 'invitar_play.dart';
 import 'config.dart';
 import 'onboarding.dart';
 import 'perfil.dart';
+import 'periodos.dart';
 import 'peso.dart';
 import 'placer.dart';
 import 'racha.dart';
@@ -46,6 +50,8 @@ Future<void> main() async {
     // Sin notificaciones la app igual sirve.
   }
   await iniciarIdioma();
+  await iniciarTema();
+  await iniciarMovimiento();
   await cargarGenero();
   await elegirNombreSala();
   // Al cambiar de idioma en Perfil: otro nombre de sala y los avisos en el idioma nuevo.
@@ -148,15 +154,16 @@ class ReyCagonApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder(
-      valueListenable: idioma,
-      builder: (context, valor, _) => MaterialApp(
+    return ListenableBuilder(
+      listenable: Listenable.merge([idioma, temaElegido]),
+      builder: (context, _) => MaterialApp(
         // Cambiar de idioma rearma toda la app con los textos nuevos.
-        key: ValueKey(valor),
+        key: ValueKey(idioma.value),
         title: tr('Rey Cagón', 'King of the Throne'),
         debugShowCheckedModeBanner: false,
         theme: tema(Brightness.light),
         darkTheme: tema(Brightness.dark),
+        themeMode: temaElegido.value,
         home: StreamBuilder<AuthState>(
           stream: db.auth.onAuthStateChange,
           builder: (context, _) =>
@@ -416,13 +423,6 @@ class _PantallaInicioState extends State<PantallaInicio> {
   }
 }
 
-Map<String, String> get periodos => {
-      'week': tr('Semana', 'Week'),
-      'month': tr('Mes', 'Month'),
-      'quarter': tr('Trimestre', 'Quarter'),
-      'year': tr('Año', 'Year'),
-    };
-
 class PantallaRanking extends StatefulWidget {
   const PantallaRanking({super.key});
 
@@ -536,6 +536,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
       });
       _asomar();
       reprogramarRecordatorio(yaCagoHoy: _miHoy > 0).catchError((_) {});
+      reprogramarCierres().catchError((_) {});
       actualizarWidget(_miHoy).catchError((_) {});
       refrescarRanking(db).catchError((_) {});
     } catch (e) {
@@ -548,12 +549,14 @@ class _PantallaRankingState extends State<PantallaRanking> {
 
   int get _miHoy => (_hoy.where((r) => r['user_id'] == _yo).firstOrNull?['total'] ?? 0) as int;
 
-  Future<void> _cague() async {
+  /// [animacion] es la del botón: la racha y las preguntas salen cuando el mojón ya cayó.
+  Future<void> _cague(Future<void> animacion) async {
     HapticFeedback.mediumImpact();
     try {
       final nueva = await db.from('cagadas').insert({}).select('id').single();
       _mensaje(tr('Registrado 💩', 'Logged 💩'));
       await _cargar(spinner: false);
+      await animacion;
       if (!mounted) return;
       await mostrarRacha(context, _miHoy);
       if (!mounted) return;
@@ -665,7 +668,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
               IconButton.outlined(
                 icon: const Icon(Icons.person_add_alt_1),
                 tooltip: tr('Buscar amigos', 'Find friends'),
-                onPressed: () => ir('amigos'),
+                onPressed: () => _abrir(const PantallaBuscarAmigos()),
               ),
               const SizedBox(width: 8),
               const BotonAvisos(),
@@ -749,6 +752,8 @@ class _PantallaRankingState extends State<PantallaRanking> {
               _cargar();
             },
           ),
+          const SizedBox(height: 10),
+          ContadorCierre(periodo: _periodo),
           const SizedBox(height: 12),
           if (_cargando)
             const Padding(
@@ -774,11 +779,6 @@ class _PantallaRankingState extends State<PantallaRanking> {
                       const SizedBox(height: 8),
                       Text(tr('Estás cagando solo. Sigue a tus amigos para competir.',
                           "You're pooping alone. Follow your friends to compete."), textAlign: TextAlign.center),
-                      const SizedBox(height: 12),
-                      FilledButton(
-                        onPressed: () => ir('amigos'),
-                        child: Text(tr('BUSCAR AMIGOS', 'FIND FRIENDS')),
-                      ),
                     ],
                   ),
                 ),
@@ -923,6 +923,8 @@ class _PantallaRankingState extends State<PantallaRanking> {
                     _cargar();
                   },
                 ),
+                const SizedBox(height: 10),
+                ContadorCierre(periodo: _periodo),
                 const SizedBox(height: 12),
                 TablaPlacer(
                   version: _version,
@@ -964,11 +966,13 @@ class _Puntos extends StatelessWidget {
       );
 }
 
-/// Botón redondo principal; al apretarlo se encoge y cambia de color.
+/// Botón redondo principal; al apretarlo se encoge y cambia de color. Según el teléfono el
+/// mojón vuela a un inodoro, da un brinco dentro del botón o no se mueve (ver animaciones.dart).
 class _BotonCague extends StatefulWidget {
   const _BotonCague({required this.onTap, this.secreto = false});
 
-  final VoidCallback onTap;
+  /// Recibe la animación para esperarla antes de abrir lo que sigue.
+  final void Function(Future<void> animacion) onTap;
   // En el lado secreto: negro con aro dorado que brilla y el mojón con alas.
   final bool secreto;
 
@@ -976,8 +980,66 @@ class _BotonCague extends StatefulWidget {
   State<_BotonCague> createState() => _BotonCagueState();
 }
 
-class _BotonCagueState extends State<_BotonCague> {
+class _BotonCagueState extends State<_BotonCague> with SingleTickerProviderStateMixin {
   bool _apretado = false;
+  // Completo: el mojón se esconde mientras vuela y vuelve con rebote. Simple: brinca en su sitio.
+  bool _volando = false;
+  bool _vuelve = false;
+  late final _brinco = AnimationController(vsync: this, duration: const Duration(milliseconds: 450));
+
+  @override
+  void dispose() {
+    _brinco.dispose();
+    super.dispose();
+  }
+
+  Future<void> _rebotar() => _brinco.forward(from: 0).orCancel.catchError((_) {});
+
+  void _tocar() {
+    final caja = context.findRenderObject() as RenderBox?;
+    final nivel = movimiento(context);
+    final Future<void> animacion;
+    if (nivel == Movimiento.nada) {
+      animacion = Future.value();
+    } else if (nivel == Movimiento.completo && caja != null && caja.hasSize && !_volando) {
+      animacion = _alInodoro(caja.localToGlobal(Offset.zero) & caja.size);
+    } else {
+      _vuelve = false;
+      animacion = _rebotar();
+    }
+    widget.onTap(animacion);
+  }
+
+  Future<void> _alInodoro(Rect boton) async {
+    setState(() => _volando = true);
+    await tirarAlInodoro(context, boton: boton, secreto: widget.secreto, alSalpicar: () {
+      if (!mounted) return;
+      setState(() {
+        _volando = false;
+        _vuelve = true;
+      });
+      _rebotar();
+    });
+  }
+
+  /// El mojón del botón con lo que le toque: escondido, volviendo o brincando.
+  Widget _mojon(Widget mojon) {
+    if (_volando) return Opacity(opacity: 0, child: mojon);
+    return AnimatedBuilder(
+      animation: _brinco,
+      child: mojon,
+      builder: (context, child) {
+        final t = _brinco.value;
+        if (_vuelve) return Transform.scale(scale: Curves.elasticOut.transform(t), child: child);
+        final arco = sin(pi * t);
+        // Sube, se estira en el aire y se aplasta un poco al caer.
+        return Transform.translate(
+          offset: Offset(0, -34 * arco),
+          child: Transform.scale(scaleX: 1 - .08 * arco, scaleY: 1 + .1 * arco, child: child),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -989,7 +1051,7 @@ class _BotonCagueState extends State<_BotonCague> {
         onTapDown: (_) => setState(() => _apretado = true),
         onTapUp: (_) => setState(() => _apretado = false),
         onTapCancel: () => setState(() => _apretado = false),
-        onTap: widget.onTap,
+        onTap: _tocar,
         child: AnimatedScale(
           scale: _apretado ? 0.94 : 1,
           duration: const Duration(milliseconds: 100),
@@ -1012,10 +1074,9 @@ class _BotonCagueState extends State<_BotonCague> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (widget.secreto)
-                  Image.asset('assets/img/mojon_angel.png', width: 104, height: 104)
-                else
-                  const Emoji('💩', tamano: 88),
+                _mojon(widget.secreto
+                    ? Image.asset('assets/img/mojon_angel.png', width: 104, height: 104)
+                    : const Emoji('💩', tamano: 88)),
                 Text(tr('CAGUÉ', 'I POOPED'),
                     style: TextStyle(
                       color: _apretado ? acentoTexto : (widget.secreto ? acento : p.sobrePrimario),
@@ -1098,7 +1159,11 @@ class _Tabla extends StatelessWidget {
           ),
           for (final (i, f) in filas.indexed) ...[
             Divider(color: i == 0 ? p.bordeFuerte : p.borde),
-            _FilaTabla(puesto: i + 1, fila: f, esMio: f['user_id'] == yo, maximo: maximo, onTap: () => onTap(f['user_id'])),
+            _Entrada(
+              key: ValueKey(f['user_id']),
+              orden: i,
+              child: _FilaTabla(puesto: i + 1, fila: f, esMio: f['user_id'] == yo, maximo: maximo, onTap: () => onTap(f['user_id'])),
+            ),
           ],
         ],
       ),
@@ -1160,10 +1225,12 @@ class _FilaTabla extends StatelessWidget {
                     LayoutBuilder(
                       builder: (context, c) => Align(
                         alignment: Alignment.centerLeft,
-                        child: Container(
-                          height: 3,
-                          width: maximo == 0 ? 0 : c.maxWidth * total / maximo,
-                          color: lider ? acento : p.texto,
+                        // La barra crece desde cero y se estira o encoge al cambiar de periodo.
+                        child: TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 0, end: maximo == 0 ? 0 : c.maxWidth * total / maximo),
+                          duration: movimiento(context) == Movimiento.nada ? Duration.zero : const Duration(milliseconds: 600),
+                          curve: Curves.easeOutCubic,
+                          builder: (context, ancho, _) => Container(height: 3, width: ancho, color: lider ? acento : p.texto),
                         ),
                       ),
                     ),
@@ -1176,6 +1243,51 @@ class _FilaTabla extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Con animaciones completas, las filas del ranking entran deslizándose una tras otra.
+class _Entrada extends StatefulWidget {
+  const _Entrada({super.key, required this.orden, required this.child});
+
+  final int orden;
+  final Widget child;
+
+  @override
+  State<_Entrada> createState() => _EntradaState();
+}
+
+class _EntradaState extends State<_Entrada> with SingleTickerProviderStateMixin {
+  late final _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 350));
+  late final _t = CurvedAnimation(parent: _c, curve: Curves.easeOutCubic);
+  Timer? _espera;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_c.isAnimating || _c.isCompleted || _espera != null) return;
+    if (movimiento(context) != Movimiento.completo) {
+      _c.value = 1;
+      return;
+    }
+    // Las primeras diez escalonadas; las de abajo ya no se ven al abrir.
+    _espera = Timer(Duration(milliseconds: 45 * min(widget.orden, 10)), () => _c.forward());
+  }
+
+  @override
+  void dispose() {
+    _espera?.cancel();
+    _t.dispose();
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _t,
+      child: SlideTransition(position: Tween(begin: const Offset(.08, 0), end: Offset.zero).animate(_t), child: widget.child),
     );
   }
 }

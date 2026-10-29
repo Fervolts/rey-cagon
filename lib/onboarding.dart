@@ -82,8 +82,8 @@ class _PantallaBienvenidaState extends State<PantallaBienvenida> {
                     _Pagina(
                       visual: const _Rebote(child: Emoji('👑', tamano: 150)),
                       titulo: tr(segun('Bienvenido, rey', 'Bienvenida, reina'), 'Welcome, your majesty'),
-                      texto: tr('Aquí compites con tus amigos por quién caga más. Semana, mes, trimestre y año.',
-                          'Here you compete with your friends over who poops the most. Week, month, quarter and year.'),
+                      texto: tr('Aquí compites con tus amigos por quién caga más. Semana, mes y año.',
+                          'Here you compete with your friends over who poops the most. Week, month and year.'),
                     ),
                     _Pagina(
                       visual: _Rebote(child: Emoji(generos[_genero]?.$1 ?? '🫅', tamano: 150)),
