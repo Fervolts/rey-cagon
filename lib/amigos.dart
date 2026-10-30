@@ -10,6 +10,7 @@ import 'idioma.dart';
 import 'main.dart' show conReintento, db, escucharCagadas, textoError;
 import 'perfil.dart' show PantallaPerfil;
 import 'tema.dart';
+import 'vivo.dart';
 
 // Pestaña AMIGOS del baño: buscar gente, a quién sigues, quién te sigue y tus favoritos arriba.
 
@@ -286,12 +287,12 @@ class _PantallaAmigosState extends State<PantallaAmigos> with AutomaticKeepAlive
             const SizedBox(height: 4),
           ],
           if (_cargando && !buscando)
-            const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator()))
+            const Padding(padding: EdgeInsets.all(32), child: Cargando())
           else if (gente.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 32),
               child: Column(children: [
-                Emoji(buscando ? '🫥' : '🚽', tamano: 48),
+                Respira(child: Emoji(buscando ? '🫥' : '🚽', tamano: 48)),
                 const SizedBox(height: 8),
                 Text(
                   buscando
@@ -307,8 +308,11 @@ class _PantallaAmigosState extends State<PantallaAmigos> with AutomaticKeepAlive
               ]),
             )
           else
-            for (final g in gente)
-              _FilaAmigo(
+            for (final (i, g) in gente.indexed)
+              Aparece(
+                key: ValueKey(g['id']),
+                orden: i,
+                child: _FilaAmigo(
                 key: ValueKey(g['id']),
                 perfil: g,
                 loSigo: _sigo.contains(g['id']),
@@ -322,6 +326,7 @@ class _PantallaAmigosState extends State<PantallaAmigos> with AutomaticKeepAlive
                   context,
                   MaterialPageRoute(builder: (_) => PantallaPerfil(usuarioId: g['id'])),
                 ).then((_) => _cargar()),
+              ),
               ),
         ],
       ),

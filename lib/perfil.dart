@@ -20,6 +20,7 @@ import 'recordatorio.dart';
 import 'tema.dart';
 import 'tips.dart';
 import 'tipos.dart';
+import 'vivo.dart';
 import 'vitrina.dart';
 import 'widget.dart';
 
@@ -437,7 +438,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
             decoration: BoxDecoration(color: colores.tarjeta, border: Border.all(color: colores.borde)),
             child: Column(
               children: [
-                Text('${valor ?? 0}', style: numeros(context, tamano: 24, weight: FontWeight.w900)),
+                Contador(valor is num ? valor.toInt() : 0, estilo: numeros(context, tamano: 24, weight: FontWeight.w900)),
                 Rotulo(nombre),
               ],
             ),
@@ -452,7 +453,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
         ],
       ),
       body: p == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const Cargando()
           : RefreshIndicator(
               onRefresh: _cargar,
               child: ListView(
@@ -463,7 +464,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                       Padding(
                         // Aire para el sombrero y la mascota, que se salen del círculo.
                         padding: const EdgeInsets.fromLTRB(16, 32, 16, 16),
-                        child: Avatar(p, tamano: 96),
+                        child: Balanceo(child: Avatar(p, tamano: 96)),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -500,7 +501,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                   ),
                   const SizedBox(height: 20),
                   if (_cagadas == null)
-                    const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
+                    const Padding(padding: EdgeInsets.all(24), child: Cargando())
                   else ...[
                     Vitrina(
                       trofeos: trofeos(cagadas: _cagadas!, total: total, victorias: _victorias, favorito: p['tipo_favorito']),
@@ -572,13 +573,13 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
         ],
       ),
       body: p == null
-          ? const Center(child: CircularProgressIndicator())
+          ? const Cargando()
           : ListView(
               padding: conBordeAbajo(context, const EdgeInsets.all(16)),
               children: [
                 Padding(
                   padding: const EdgeInsets.only(top: 36, bottom: 8),
-                  child: Center(child: Avatar(p, tamano: 96)),
+                  child: Center(child: Balanceo(child: Avatar(p, tamano: 96))),
                 ),
                 Text(p['username'],
                     textAlign: TextAlign.center,

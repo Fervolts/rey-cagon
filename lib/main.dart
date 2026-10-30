@@ -32,6 +32,7 @@ import 'recordatorio.dart';
 import 'tema.dart';
 import 'secreto.dart';
 import 'tipos.dart';
+import 'vivo.dart';
 import 'widget.dart';
 
 export 'config.dart' show supabaseKey, supabaseUrl;
@@ -406,10 +407,10 @@ class _PantallaInicioState extends State<PantallaInicio> {
                 if (i == _tabBano) _marcarVisto();
               },
               destinations: [
-                NavigationDestination(icon: const Emoji('💩', tamano: 24), label: tr('TRONO', 'THRONE')),
-                NavigationDestination(icon: const Icon(Icons.emoji_events_outlined), selectedIcon: const Icon(Icons.emoji_events), label: tr('RANKING', 'LEADERBOARD')),
-                NavigationDestination(icon: icono(Icons.wc_outlined), selectedIcon: const Icon(Icons.wc), label: nombreCorto),
-                NavigationDestination(icon: const Icon(Icons.person_outline), selectedIcon: const Icon(Icons.person), label: tr('YO', 'ME')),
+                NavigationDestination(icon: IconoRebota(activo: _tab == 0, child: const Emoji('💩', tamano: 24)), label: tr('TRONO', 'THRONE')),
+                NavigationDestination(icon: IconoRebota(activo: _tab == 1, child: Icon(_tab == 1 ? Icons.emoji_events : Icons.emoji_events_outlined)), label: tr('RANKING', 'LEADERBOARD')),
+                NavigationDestination(icon: IconoRebota(activo: _tab == 2, child: icono(_tab == 2 ? Icons.wc : Icons.wc_outlined)), label: nombreCorto),
+                NavigationDestination(icon: IconoRebota(activo: _tab == 3, child: Icon(_tab == 3 ? Icons.person : Icons.person_outline)), label: tr('YO', 'ME')),
               ],
             ),
           ),
@@ -727,13 +728,15 @@ class _PantallaRankingState extends State<PantallaRanking> {
     final aviso = _avisoDelDia;
     final puesto = _cargando ? -1 : _miPuesto;
     return [
-      _TarjetaHoy(
-        hoy: _miHoy,
-        aviso: aviso,
-        perdiendo: aviso?.endsWith(tr('vas perdiendo', "you're losing")) ?? false,
+      Aparece(
+        child: _TarjetaHoy(
+          hoy: _miHoy,
+          aviso: aviso,
+          perdiendo: aviso?.endsWith(tr('vas perdiendo', "you're losing")) ?? false,
+        ),
       ),
       const SizedBox(height: 20),
-      Center(child: _BotonCague(onTap: _cague)),
+      Center(child: Respira(activo: !_cargando && _miHoy == 0, child: _BotonCague(onTap: _cague))),
       Center(
         child: TextButton.icon(
           onPressed: _deshacer,
@@ -745,12 +748,17 @@ class _PantallaRankingState extends State<PantallaRanking> {
       const RetosDeHoy(),
       const SizedBox(height: 12),
       if (puesto >= 0)
-        _TarjetaPuesto(
-          puesto: puesto + 1,
-          fila: _filas[puesto],
-          arriba: puesto == 0 ? null : _filas[puesto - 1],
-          solo: _filas.length <= 1,
-          onTap: _filas.length <= 1 ? () => _abrir(const PantallaBuscarAmigos()) : widget.onVerRanking,
+        Aparece(
+          orden: 3,
+          child: Rebote(
+            child: _TarjetaPuesto(
+              puesto: puesto + 1,
+              fila: _filas[puesto],
+              arriba: puesto == 0 ? null : _filas[puesto - 1],
+              solo: _filas.length <= 1,
+              onTap: _filas.length <= 1 ? () => _abrir(const PantallaBuscarAmigos()) : widget.onVerRanking,
+            ),
+          ),
         ),
       if (_secretoAbierto && !_yaDeslizo) ...[
         const SizedBox(height: 16),
@@ -769,24 +777,31 @@ class _PantallaRankingState extends State<PantallaRanking> {
       const SizedBox(height: 10),
       ContadorCierre(periodo: _periodo),
       if (_cargando)
-        const Padding(
-          padding: EdgeInsets.all(32),
-          child: Center(child: CircularProgressIndicator()),
-        )
+        const Padding(padding: EdgeInsets.all(32), child: Cargando())
       else ...[
-        _Podio(
-          filas: _filas.take(3).toList(),
-          yo: _yo,
-          onTap: (id) => _abrir(PantallaPerfil(usuarioId: id)),
-        ),
-        if (_filas.length > 3)
-          _Tabla(
-            filas: _filas.skip(3).toList(),
-            desde: 4,
-            yo: _yo,
-            maximo: maximo,
-            onTap: (id) => _abrir(PantallaPerfil(usuarioId: id)),
+        // Al cambiar de periodo o de alcance, el podio y la tabla se funden en vez de saltar.
+        AnimatedSwitcher(
+          duration: movimiento(context) == Movimiento.nada ? Duration.zero : const Duration(milliseconds: 260),
+          child: Column(
+            key: ValueKey('$_periodo$_soloSiguiendo'),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _Podio(
+                filas: _filas.take(3).toList(),
+                yo: _yo,
+                onTap: (id) => _abrir(PantallaPerfil(usuarioId: id)),
+              ),
+              if (_filas.length > 3)
+                _Tabla(
+                  filas: _filas.skip(3).toList(),
+                  desde: 4,
+                  yo: _yo,
+                  maximo: maximo,
+                  onTap: (id) => _abrir(PantallaPerfil(usuarioId: id)),
+                ),
+            ],
           ),
+        ),
         if (_soloSiguiendo && _filas.length <= 1) ...[
           const SizedBox(height: 12),
           Card(
@@ -1131,7 +1146,7 @@ class _Tabla extends StatelessWidget {
             _Entrada(
               key: ValueKey(f['user_id']),
               orden: i,
-              child: _FilaTabla(puesto: desde + i, fila: f, esMio: f['user_id'] == yo, maximo: maximo, onTap: () => onTap(f['user_id'])),
+              child: Rebote(escala: .98, child: _FilaTabla(puesto: desde + i, fila: f, esMio: f['user_id'] == yo, maximo: maximo, onTap: () => onTap(f['user_id']))),
             ),
           ],
         ],
@@ -1168,6 +1183,8 @@ class _Podio extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // La corona cae cuando el escalón del 1º ya casi llegó arriba.
+              if (uno) ...[const Cae(retraso: Duration(milliseconds: 550), child: Emoji('👑', tamano: 26)), const SizedBox(height: 2)],
               Avatar(f, tamano: uno ? 64 : 50),
               const SizedBox(height: 6),
               Text(
@@ -1205,7 +1222,7 @@ class _Podio extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text('#${i + 1}', style: numeros(context, tamano: 13, weight: FontWeight.w900, color: uno ? acentoTexto : p.textoSuave)),
-                        Text('${f['total']}', style: numeros(context, tamano: 30, weight: FontWeight.w900, color: colorTexto)),
+                        Contador(f['total'] as int, estilo: numeros(context, tamano: 30, weight: FontWeight.w900, color: colorTexto)),
                       ],
                     ),
                   ),
@@ -1218,7 +1235,7 @@ class _Podio extends StatelessWidget {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(top: 36),
+      padding: const EdgeInsets.only(top: 8),
       child: Container(
         decoration: BoxDecoration(border: Border(bottom: BorderSide(color: p.bordeFuerte, width: 2))),
         child: Row(
@@ -1257,7 +1274,23 @@ class _TarjetaHoy extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Rotulo(tr('Hoy · $hoy ${hoy == 1 ? 'cagada' : 'cagadas'}', 'Today · $hoy ${hoy == 1 ? 'poop' : 'poops'}'))),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Pop(
+                    valor: hoy,
+                    alineacion: Alignment.centerLeft,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Rotulo(tr('Hoy · ', 'Today · ')),
+                        Contador(hoy, estilo: numeros(context, tamano: 11, weight: FontWeight.w700, color: p.textoSuave).copyWith(letterSpacing: 1.2)),
+                        Rotulo(tr(hoy == 1 ? ' cagada' : ' cagadas', hoy == 1 ? ' poop' : ' poops')),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
               Text(
                 hoy >= _rampage ? 'RAMPAGE!' : tr('RAMPAGE A ${_rampage - hoy}', 'RAMPAGE IN ${_rampage - hoy}'),
                 style: numeros(context, tamano: 11, weight: FontWeight.w800, color: p.textoSuave),
@@ -1270,11 +1303,17 @@ class _TarjetaHoy extends StatelessWidget {
               for (var i = 0; i < _rampage; i++) ...[
                 if (i > 0) const SizedBox(width: 4),
                 Expanded(
-                  child: Container(
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: i < hoy ? acento : p.suave,
-                      border: Border.all(color: i < hoy ? acentoTexto : p.borde),
+                  // Cada barra se llena con su retraso; al cagar, se llena la nueva.
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: i < hoy ? 1 : 0),
+                    duration: movimiento(context) == Movimiento.nada ? Duration.zero : Duration(milliseconds: 300 + 90 * i),
+                    curve: Curves.easeOut,
+                    builder: (context, t, _) => Container(
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: Color.lerp(p.suave, acento, t),
+                        border: Border.all(color: Color.lerp(p.borde, acentoTexto, t)!),
+                      ),
                     ),
                   ),
                 ),
@@ -1487,7 +1526,7 @@ class _FilaTabla extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              Text('$total', style: numeros(context, tamano: 20, weight: FontWeight.w800)),
+              Contador(total, estilo: numeros(context, tamano: 20, weight: FontWeight.w800)),
             ],
           ),
         ),
