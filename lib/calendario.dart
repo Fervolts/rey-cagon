@@ -6,6 +6,7 @@ import 'peso.dart';
 import 'main.dart' show conReintento, db, escucharCagadas, esDeRed, textoError;
 import 'tema.dart';
 import 'tipos.dart';
+import 'vivo.dart';
 
 List<String> get meses => enIngles
     ? [
@@ -162,10 +163,7 @@ class _PantallaCalendarioState extends State<PantallaCalendario> {
           ),
           const SizedBox(height: 4),
           if (_cargando)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: CircularProgressIndicator()),
-            )
+            const Padding(padding: EdgeInsets.all(24), child: Cargando())
           else
             GridView.count(
               crossAxisCount: 7,
@@ -174,11 +172,18 @@ class _PantallaCalendarioState extends State<PantallaCalendario> {
               children: [
                 for (var i = 0; i < huecos; i++) const SizedBox(),
                 for (var dia = 1; dia <= diasEnMes; dia++)
-                  _Dia(
-                    dia: dia,
-                    cuantas: _porDia[dia]?.length ?? 0,
-                    esHoy: esteMes && dia == hoy.day,
-                    onTap: () => _verDia(dia),
+                  // Los días aparecen en ola, de izquierda a derecha y de arriba abajo.
+                  Aparece(
+                    orden: huecos + dia,
+                    paso: 14,
+                    tope: 38,
+                    desplazamiento: 6,
+                    child: _Dia(
+                      dia: dia,
+                      cuantas: _porDia[dia]?.length ?? 0,
+                      esHoy: esteMes && dia == hoy.day,
+                      onTap: () => _verDia(dia),
+                    ),
                   ),
               ],
             ),
