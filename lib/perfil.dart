@@ -458,6 +458,10 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
               child: ListView(
                 padding: conBordeAbajo(context, const EdgeInsets.fromLTRB(16, 8, 16, 24)),
                 children: [
+                  // Con 10 o más y sin el secreto, a veces la tarjeta trae una esquina doblada.
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
                   Row(
                     children: [
                       Padding(
@@ -484,6 +488,9 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                           ],
                         ),
                       ),
+                    ],
+                  ),
+                      Positioned(right: -16, bottom: 0, child: EsquinaSecreta(total: total)),
                     ],
                   ),
                   if ((p['bio'] ?? '').isNotEmpty) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(p['bio'])),
@@ -709,7 +716,7 @@ class _EditarPerfilState extends State<_EditarPerfil> {
   static const _ajustes = ['lentes_x', 'lentes_y', 'sombrero_x', 'sombrero_y', 'lentes_escala', 'sombrero_escala'];
   static const _vista = 120.0;
   bool _ocupado = false;
-  bool _secreto = false;
+  bool _secreto = secretoAbierto.value;
 
   @override
   void initState() {
@@ -719,7 +726,7 @@ class _EditarPerfilState extends State<_EditarPerfil> {
         .select('placer_desbloqueado')
         .eq('id', db.auth.currentUser!.id)
         .maybeSingle()
-        .then((r) => mounted ? setState(() => _secreto = r?['placer_desbloqueado'] == true) : null)
+        .then((r) => mounted ? setState(() => _secreto = _secreto || r?['placer_desbloqueado'] == true) : null)
         .catchError((_) => null);
   }
 
@@ -888,7 +895,7 @@ class _EditarPerfilState extends State<_EditarPerfil> {
             _ranura(tr('Sombrero', 'Hat'), 'sombrero'),
             _ranura(tr('Lentes', 'Glasses'), 'lentes'),
             _ranura(tr('Mascota', 'Pet'), 'mascota'),
-            // Solo para quien ya encontró el secreto de Tips.
+            // Solo para quien ya encontró el secreto (en Tips o en la esquina de YO).
             if (_secreto)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),

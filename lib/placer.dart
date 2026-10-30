@@ -1,8 +1,10 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'accesorios.dart';
+import 'animaciones.dart';
 import 'emoji.dart';
 import 'idioma.dart';
 import 'main.dart' show db;
@@ -14,6 +16,41 @@ const minimoSecreto = 10;
 /// Las cuentas creadas antes de esto son early birds: ven la hoja sin el mínimo.
 /// El servidor aplica la misma regla (trigger validar_secreto).
 final finEarlyBirds = DateTime.parse('2026-10-20T00:00:00-04:00');
+
+/// Si esta cuenta ya encontró el secreto. Lo llena el ranking al cargar y lo prende
+/// [desbloquearSecreto]; cualquier módulo (logros, ranking) puede escucharlo.
+final secretoAbierto = ValueNotifier<bool>(false);
+
+/// Abre el secreto: guarda placer_desbloqueado y hace la ceremonia del mojón que felicita.
+/// Con [esquina] (la esquina doblada en pantalla, en coordenadas globales) primero se pasa la
+/// página desde ahí. Devuelve false si el servidor no lo dejó (trigger validar_secreto).
+Future<bool> desbloquearSecreto(BuildContext context, {Rect? esquina}) async {
+  final yo = db.auth.currentUser?.id;
+  if (yo == null) return false;
+  try {
+    await db.from('profiles').update({'placer_desbloqueado': true}).eq('id', yo);
+  } catch (_) {
+    return false;
+  }
+  if (!context.mounted) return true;
+  final navegador = Navigator.of(context);
+  if (esquina != null && movimiento(context) != Movimiento.nada) {
+    await navegador.push(PageRouteBuilder<void>(
+      opaque: false,
+      transitionDuration: Duration.zero,
+      reverseTransitionDuration: Duration.zero,
+      pageBuilder: (_, _, _) => _PasarPagina(esquina: esquina),
+    ));
+  }
+  await navegador.push(PageRouteBuilder<void>(
+    opaque: false,
+    barrierColor: Colors.black54,
+    transitionDuration: Duration.zero,
+    pageBuilder: (_, _, _) => const _Felicidades(),
+  ));
+  secretoAbierto.value = true;
+  return true;
+}
 
 Map<int, String> get _etiquetas => {
   1: tr('Destructiva', 'Destructive'),
@@ -302,140 +339,8 @@ class _MojonDelMomentoState extends State<MojonDelMomento> with SingleTickerProv
   }
 }
 
-/// Ranking secreto: placenteras contra destructivas.
-class TablaPlacer extends StatefulWidget {
-  const TablaPlacer({super.key, this.version = 0, required this.periodo, required this.soloSiguiendo, required this.onTap});
-
-  final int version;
-  final String periodo;
-  final bool soloSiguiendo;
-  final ValueChanged<String> onTap;
-
-  @override
-  State<TablaPlacer> createState() => _TablaPlacerState();
-}
-
-class _TablaPlacerState extends State<TablaPlacer> {
-  List<Map<String, dynamic>>? _filas;
-  bool _placenteras = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _cargar();
-  }
-
-  @override
-  void didUpdateWidget(TablaPlacer viejo) {
-    super.didUpdateWidget(viejo);
-    if (viejo.version != widget.version || viejo.periodo != widget.periodo || viejo.soloSiguiendo != widget.soloSiguiendo) {
-      _cargar();
-    }
-  }
-
-  Future<void> _cargar() async {
-    try {
-      final r = await db.rpc('ranking_placer', params: {'period': widget.periodo, 'solo_siguiendo': widget.soloSiguiendo});
-      if (mounted) setState(() => _filas = List<Map<String, dynamic>>.from(r));
-    } catch (_) {
-      if (mounted) setState(() => _filas = []);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final filas = _filas;
-    if (filas == null) return const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator()));
-    final p = paleta(context);
-    final campo = _placenteras ? 'placenteras' : 'destructivas';
-    final orden = [...filas]..sort((a, b) => (b[campo] as int).compareTo(a[campo] as int));
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SegmentedButton<bool>(
-          segments: [
-            ButtonSegment(value: true, icon: iconoPlacer(7, tamano: 22), label: Text(tr('PLACENTERAS', 'PLEASURABLE'))),
-            ButtonSegment(value: false, icon: iconoPlacer(1, tamano: 22), label: Text(tr('DESTRUCTIVAS', 'DESTRUCTIVE'))),
-          ],
-          selected: {_placenteras},
-          showSelectedIcon: false,
-          onSelectionChanged: (s) => setState(() => _placenteras = s.first),
-        ),
-        const SizedBox(height: 12),
-        DecoratedBox(
-          decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: p.borde)),
-          child: Column(
-            children: [
-              for (final (i, f) in orden.indexed)
-                InkWell(
-                  onTap: () => widget.onTap(f['user_id']),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(border: Border(top: i == 0 ? BorderSide.none : BorderSide(color: p.borde))),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 32,
-                          child: Text((i + 1).toString().padLeft(2, '0'),
-                              style: numeros(context, tamano: 13, weight: FontWeight.w800, color: p.textoSuave)),
-                        ),
-                        const SizedBox(width: 8),
-                        Avatar(f, tamano: 28),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(f['username'],
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(fontWeight: FontWeight.w700, color: p.texto)),
-                              Text(
-                                f['promedio'] == null ? tr('Sin calificar', 'Not rated') : tr('Promedio ${f['promedio']} · ${_etiqueta(f['promedio'])}', 'Average ${f['promedio']} · ${_etiqueta(f['promedio'])}'),
-                                style: TextStyle(fontSize: 12, color: p.textoSuave),
-                              ),
-                            ],
-                          ),
-                        ),
-                        _Conteo(icono: iconoPlacer(7, tamano: 20), valor: f['placenteras'], fuerte: _placenteras),
-                        const SizedBox(width: 10),
-                        _Conteo(icono: iconoPlacer(1, tamano: 20), valor: f['destructivas'], fuerte: !_placenteras),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(tr('Desliza → para volver.', 'Swipe → to go back.'),
-            style: TextStyle(fontSize: 12, color: p.textoSuave)),
-      ],
-    );
-  }
-
-  String _etiqueta(Object promedio) => _etiquetas[(num.parse('$promedio')).round().clamp(1, 7)]!;
-}
-
-class _Conteo extends StatelessWidget {
-  const _Conteo({required this.icono, required this.valor, required this.fuerte});
-
-  final Widget icono;
-  final Object? valor;
-  final bool fuerte;
-
-  @override
-  Widget build(BuildContext context) => Opacity(
-        opacity: fuerte ? 1 : .45,
-        child: Row(
-          children: [
-            icono,
-            const SizedBox(width: 2),
-            Text('$valor', style: numeros(context, tamano: fuerte ? 18 : 14, weight: FontWeight.w800)),
-          ],
-        ),
-      );
-}
+/// La nota promedio en palabras, para el chisme del ranking secreto.
+String etiquetaPromedio(Object promedio) => _etiquetas[(num.parse('$promedio')).round().clamp(1, 7)]!;
 
 /// Esquina doblada al final de Tips. Al arrastrarla hacia arriba se pasa la página y aparece
 /// el mojón que desbloquea el ranking secreto.
@@ -472,15 +377,7 @@ class _HojaSecretaState extends State<HojaSecreta> with SingleTickerProviderStat
     await _vuelta.forward();
     _vuelta.removeListener(crecer);
     if (!mounted) return;
-    await Navigator.of(context).push(PageRouteBuilder<void>(
-      opaque: false,
-      barrierColor: Colors.black54,
-      transitionDuration: Duration.zero,
-      pageBuilder: (_, _, _) => const _Felicidades(),
-    ));
-    final yo = db.auth.currentUser?.id;
-    if (yo != null) await db.from('profiles').update({'placer_desbloqueado': true}).eq('id', yo).catchError((_) => null);
-    widget.onDescubierta?.call();
+    if (await desbloquearSecreto(context)) widget.onDescubierta?.call();
     if (!mounted) return;
     _vuelta.reset();
     setState(() => _doblez = _minima);
@@ -558,7 +455,19 @@ class _Felicidades extends StatefulWidget {
 }
 
 class _FelicidadesState extends State<_Felicidades> with SingleTickerProviderStateMixin {
-  late final _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1800))..forward();
+  late final _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1800));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Sin animaciones sale ya armado: mojón, chispas y el globo.
+    if (_c.isAnimating || _c.isCompleted) return;
+    if (movimiento(context) == Movimiento.nada) {
+      _c.value = 1;
+    } else {
+      _c.forward();
+    }
+  }
 
   @override
   void dispose() {
@@ -618,7 +527,14 @@ class _FelicidadesState extends State<_Felicidades> with SingleTickerProviderSta
                             Text(tr('Descubriste el secreto.\nAhora puedes ver el secreto de los demás.', "You found the secret.\nNow you can see everyone else's secret."),
                                 textAlign: TextAlign.center, style: TextStyle(fontSize: 16, color: Colors.black)),
                             const SizedBox(height: 8),
-                            Text(tr('Ve al ranking y desliza ←', 'Go to the leaderboard and swipe ←'), style: TextStyle(fontSize: 12, color: Colors.black54)),
+                            Text.rich(
+                              TextSpan(children: [
+                                TextSpan(text: tr('En el ranking toca ', 'On the leaderboard tap ')),
+                                const WidgetSpan(alignment: PlaceholderAlignment.middle, child: Emoji('🤫', tamano: 16)),
+                                TextSpan(text: tr(' junto al periodo', ' next to the period')),
+                              ]),
+                              style: TextStyle(fontSize: 12, color: Colors.black54),
+                            ),
                           ],
                         ),
                       ),
@@ -634,49 +550,165 @@ class _FelicidadesState extends State<_Felicidades> with SingleTickerProviderSta
   }
 }
 
-/// Pista del lado secreto en el ranking: flecha grande que empuja hacia la izquierda.
-class PistaSecreta extends StatefulWidget {
-  const PistaSecreta({super.key});
+/// La página que se pasa desde una esquina doblada hasta tapar la pantalla. Se cierra sola.
+class _PasarPagina extends StatefulWidget {
+  const _PasarPagina({required this.esquina});
+
+  final Rect esquina;
 
   @override
-  State<PistaSecreta> createState() => _PistaSecretaState();
+  State<_PasarPagina> createState() => _PasarPaginaState();
 }
 
-class _PistaSecretaState extends State<PistaSecreta> with SingleTickerProviderStateMixin {
-  late final _reloj = AnimationController(vsync: this, duration: const Duration(milliseconds: 1100))..repeat();
+class _PasarPaginaState extends State<_PasarPagina> with SingleTickerProviderStateMixin {
+  late final _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 520))
+    ..forward().whenComplete(() {
+      if (mounted) Navigator.pop(context);
+    });
 
   @override
   void dispose() {
-    _reloj.dispose();
+    _c.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final p = paleta(context);
-    return Row(
-      children: [
-        AnimatedBuilder(
-          animation: _reloj,
-          builder: (context, hijo) {
-            final v = Curves.easeInOut.transform(_reloj.value < .5 ? _reloj.value * 2 : 2 - _reloj.value * 2);
-            return Transform.translate(offset: Offset(-14 * v, 0), child: hijo);
-          },
-          child: const Icon(Icons.arrow_back_rounded, size: 64, color: acento),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    final e = widget.esquina;
+    // El doblez es un triángulo anclado en la punta: con catetos de ancho + alto tapa todo lo de arriba a la izquierda.
+    final hasta = 1.1 * (e.right + e.bottom);
+    return IgnorePointer(
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (context, _) {
+          final lado = e.width + (hasta - e.width) * Curves.easeIn.transform(_c.value);
+          return Stack(
             children: [
-              Text(tr('DESLIZA', 'SWIPE'), style: numeros(context, tamano: 12, weight: FontWeight.w800, color: p.textoSuave)
-                  .copyWith(letterSpacing: 2)),
-              Text(tr('(es un secreto... que tu mamá vende empanadas...)', "(it's a secret... that your mom sells empanadas...)"),
-                  style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: p.textoSuave)),
+              Positioned(
+                left: e.right - lado,
+                top: e.bottom - lado,
+                width: lado,
+                height: lado,
+                child: CustomPaint(painter: _Doblez(paleta(context))),
+              ),
             ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Esquinita doblada que sale a veces en la tarjeta de YO, desde [minimoSecreto] cagadas y
+/// mientras no tenga el secreto. Se toca o se jala hacia arriba para pasar la página.
+class EsquinaSecreta extends StatefulWidget {
+  const EsquinaSecreta({super.key, required this.total});
+
+  /// Cagadas de la cuenta, las mismas que ya muestra la tarjeta.
+  final int total;
+
+  @override
+  State<EsquinaSecreta> createState() => _EsquinaSecretaState();
+}
+
+class _EsquinaSecretaState extends State<EsquinaSecreta> with SingleTickerProviderStateMixin {
+  static const _minima = 26.0;
+  static const _jalon = 64.0;
+  // Una de cada tres veces que se abre YO: tiene que parecer un descuido, no un botón.
+  final _sale = math.Random().nextInt(3) == 0;
+  bool? _abierto;
+  double _doblez = _minima;
+  bool _pasando = false;
+  late final _respira = AnimationController(vsync: this, duration: const Duration(milliseconds: 2400));
+
+  @override
+  void initState() {
+    super.initState();
+    if (!_sale) return;
+    final yo = db.auth.currentUser?.id;
+    if (yo == null) return;
+    db.from('profiles').select('placer_desbloqueado').eq('id', yo).maybeSingle().then((r) {
+      if (mounted) setState(() => _abierto = r?['placer_desbloqueado'] == true);
+    }).catchError((_) => null);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Se levanta un poquito cada tanto, solo con animaciones completas.
+    if (movimiento(context) == Movimiento.completo) {
+      if (!_respira.isAnimating) _respira.repeat();
+    } else {
+      _respira.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _respira.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pasar() async {
+    if (_pasando) return;
+    _pasando = true;
+    final caja = context.findRenderObject() as RenderBox?;
+    final esquina = caja != null && caja.hasSize ? caja.localToGlobal(Offset.zero) & caja.size : null;
+    HapticFeedback.lightImpact();
+    final listo = await desbloquearSecreto(context, esquina: esquina);
+    if (!mounted) return;
+    setState(() {
+      _pasando = false;
+      _doblez = _minima;
+      if (listo) _abierto = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_sale || _abierto != false || widget.total < minimoSecreto) return const SizedBox.shrink();
+    return ValueListenableBuilder<bool>(
+      valueListenable: secretoAbierto,
+      builder: (context, abierto, _) {
+        if (abierto) return const SizedBox.shrink();
+        return Semantics(
+          button: true,
+          label: tr('Esquina doblada', 'Folded corner'),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _pasar,
+            onVerticalDragUpdate: (d) => setState(() => _doblez = (_doblez - d.delta.dy).clamp(_minima, _jalon)),
+            onVerticalDragEnd: (_) {
+              if (_doblez >= _jalon * .7) {
+                _pasar();
+              } else {
+                setState(() => _doblez = _minima);
+              }
+            },
+            // Zona de toque de 48 px con el doblez pegado a la punta de abajo a la derecha.
+            child: SizedBox.square(
+              dimension: 48,
+              child: AnimatedBuilder(
+                animation: _respira,
+                builder: (context, _) {
+                  final v = _respira.value;
+                  // Un levantón corto al principio de cada vuelta y quieto el resto.
+                  final extra = v < .25 ? 6 * math.sin(v / .25 * math.pi) : 0.0;
+                  final lado = _doblez + extra;
+                  return OverflowBox(
+                    alignment: Alignment.bottomRight,
+                    minWidth: 0,
+                    minHeight: 0,
+                    maxWidth: lado,
+                    maxHeight: lado,
+                    child: CustomPaint(size: Size.square(lado), painter: _Doblez(paleta(context))),
+                  );
+                },
+              ),
+            ),
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 }
