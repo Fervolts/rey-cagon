@@ -96,6 +96,8 @@ Future<void> elegirTema(ThemeMode modo) async {
   } catch (_) {}
 }
 
+const _emojisNuevos = ['EmojiNuevos'];
+
 ThemeData tema(Brightness brillo) {
   final p = brillo == Brightness.dark ? Paleta.oscuro : Paleta.claro;
   final scheme = ColorScheme(
@@ -128,8 +130,14 @@ ThemeData tema(Brightness brillo) {
     borderRadius: BorderRadius.circular(radio),
     side: BorderSide(color: p.borde),
   );
-  final base = ThemeData(colorScheme: scheme, useMaterial3: true, splashFactory: InkRipple.splashFactory);
-  final titulo = TextStyle(fontWeight: FontWeight.w800, color: p.texto, fontFeatures: _tabular);
+  final base = ThemeData(
+    colorScheme: scheme,
+    useMaterial3: true,
+    splashFactory: InkRipple.splashFactory,
+    // Emojis nuevos que el teléfono no sabe dibujar (ver pubspec.yaml).
+    fontFamilyFallback: _emojisNuevos,
+  );
+  final titulo = TextStyle(fontWeight: FontWeight.w800, color: p.texto, fontFeatures: _tabular, fontFamilyFallback: _emojisNuevos);
   TextStyle boton(double tamano, {double espacio = 0.6, Color? color}) =>
       TextStyle(fontSize: tamano, fontWeight: FontWeight.w700, letterSpacing: espacio, color: color);
 

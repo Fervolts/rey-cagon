@@ -23,7 +23,8 @@ const _canal = AndroidNotificationChannel(
 Future<void> _alFondo(RemoteMessage m) async {
   if (m.data['tipo'] != 'cagada') return;
   try {
-    await refrescarRanking(await clienteDeFondo());
+    final db = await clienteDeFondo();
+    if (db != null) await refrescarRanking(db);
   } catch (_) {}
 }
 

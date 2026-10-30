@@ -75,6 +75,8 @@ bool esDeRed(Object e) {
   }
   final t = e.toString();
   return e is TimeoutException ||
+      // Falló la renovación de la sesión por red o por el servidor: se puede reintentar.
+      e is AuthRetryableFetchException ||
       t.contains('ClientException') ||
       t.contains('SocketException') ||
       t.contains('connection abort') ||
@@ -116,6 +118,8 @@ VoidCallback escucharCagadas(String nombre, VoidCallback onCambio) {
     espera = Timer(const Duration(milliseconds: 400), onCambio);
   }
 
+  // El canal se vuelve a unir solo tras un error o un corte; en ese hueco pudo perderse algo.
+  var cortado = false;
   final canal = db
       // Nombre único: puede haber dos pantallas iguales apiladas (perfil → buscar → perfil).
       .channel('$nombre-${_canales++}')
@@ -138,7 +142,14 @@ VoidCallback escucharCagadas(String nombre, VoidCallback onCambio) {
         table: 'profiles',
         callback: (_) => avisar(),
       )
-      .subscribe();
+      .subscribe((estado, [_]) {
+        if (estado != RealtimeSubscribeStatus.subscribed) {
+          cortado = true;
+        } else if (cortado) {
+          cortado = false;
+          avisar();
+        }
+      });
   final ciclo = AppLifecycleListener(onResume: avisar);
   return () {
     espera?.cancel();
