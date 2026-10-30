@@ -21,6 +21,7 @@ import 'peso.dart';
 import 'racha.dart';
 import 'main.dart' show db, esDeRed;
 import 'perfil.dart' show PantallaPerfil;
+import 'teclado_emojis.dart';
 import 'tema.dart';
 import 'tipos.dart';
 
@@ -371,7 +372,7 @@ class Sala extends StatefulWidget {
 
 var _canales = 0;
 
-class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
+class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecladoEmojis {
   // Mensajes por id. Se llena con una consulta normal y se mantiene al día con realtime; si
   // realtime se cae (pantalla apagada, cambio de red, token vencido) se reconecta y se vuelve a
   // consultar. Antes era db.from().stream(), que al fallar una vez se quedaba muerto o vacío.
@@ -1273,17 +1274,19 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
           ),
         SafeArea(
           top: false,
-          child: Container(
+          child: conPanelEmojis(context, _texto, Container(
             padding: const EdgeInsets.fromLTRB(4, 6, 8, 6),
             decoration: BoxDecoration(border: Border(top: BorderSide(color: p.borde))),
             child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
               if (!_esSoporte)
                 IconButton(onPressed: _enviando ? null : _compartir, icon: const Icon(Icons.emoji_events_outlined), tooltip: tr('Presumir', 'Show off')),
               if (_esSoporte) const SizedBox(width: 8),
-              IconButton(onPressed: () => ponerEmoji(context, _texto), icon: const Icon(Icons.emoji_emotions_outlined), tooltip: tr('Emojis', 'Emojis')),
+              botonEmojis(),
               Expanded(
                 child: TextField(
                   controller: _texto,
+                  focusNode: focoTexto,
+                  onTap: cerrarEmojis,
                   minLines: 1,
                   maxLines: 5,
                   maxLength: 1000,
@@ -1294,7 +1297,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
               const SizedBox(width: 6),
               IconButton.filled(onPressed: _enviando ? null : () => _enviar(), icon: const Icon(Icons.send)),
             ]),
-          ),
+          )),
         ),
       ],
     );
@@ -1645,7 +1648,7 @@ class _PantallaHilo extends StatefulWidget {
   State<_PantallaHilo> createState() => _PantallaHiloState();
 }
 
-class _PantallaHiloState extends State<_PantallaHilo> {
+class _PantallaHiloState extends State<_PantallaHilo> with ConTecladoEmojis {
   final _texto = TextEditingController();
   final _scroll = ScrollController();
   var _cargando = true;
@@ -1750,14 +1753,16 @@ class _PantallaHiloState extends State<_PantallaHilo> {
         ),
         SafeArea(
           top: false,
-          child: Container(
+          child: conPanelEmojis(context, _texto, Container(
             padding: const EdgeInsets.fromLTRB(4, 6, 8, 6),
             decoration: BoxDecoration(border: Border(top: BorderSide(color: p.borde))),
             child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              IconButton(onPressed: () => ponerEmoji(context, _texto), icon: const Icon(Icons.emoji_emotions_outlined), tooltip: tr('Emojis', 'Emojis')),
+              botonEmojis(),
               Expanded(
                 child: TextField(
                   controller: _texto,
+                  focusNode: focoTexto,
+                  onTap: cerrarEmojis,
                   minLines: 1,
                   maxLines: 5,
                   maxLength: 1000,
@@ -1768,7 +1773,7 @@ class _PantallaHiloState extends State<_PantallaHilo> {
               const SizedBox(width: 6),
               IconButton.filled(onPressed: _sala._enviando ? null : _mandar, icon: const Icon(Icons.send)),
             ]),
-          ),
+          )),
         ),
       ]),
     );
@@ -1871,44 +1876,4 @@ class _TextoConLinks extends StatelessWidget {
     if (desde < texto.length) partes.add(TextSpan(text: texto.substring(desde)));
     return Text.rich(TextSpan(style: base, children: partes));
   }
-}
-
-// Los del teclado de siempre más los del baño. Se pintan con la fuente del sistema y, si es
-// vieja, con la de respaldo del tema (los nuevos también se ven).
-const _emojisChat = [
-  '💩', '🚽', '🧻', '👑', '🤴', '👸', '🔥', '💥', '☢️', '🏆', '🥇', '💪',
-  '😂', '🤣', '😭', '😅', '😎', '🤩', '😳', '🥵', '🤢', '🤮', '😤', '😈',
-  '🙄', '🤔', '🫡', '🫣', '🫠', '🥲', '😏', '🤫', '🤐', '💀', '👀', '🙈',
-  '👍', '👎', '👏', '🙌', '🙏', '🤝', '✌️', '🤞', '🫶', '❤️', '💯', '✨',
-  '🍌', '🌶️', '🌽', '☕', '🍺', '🍔', '🌮', '🍕', '🚿', '🪠', '🧼', '🐋',
-];
-
-/// Hoja con emojis que se insertan donde está el cursor de [texto]. Se queda abierta para poner varios.
-Future<void> ponerEmoji(BuildContext context, TextEditingController texto) {
-  return showModalBottomSheet(
-    context: context,
-    showDragHandle: true,
-    builder: (context) => SafeArea(
-      child: GridView.count(
-        crossAxisCount: 8,
-        shrinkWrap: true,
-        padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
-        children: [
-          for (final e in _emojisChat)
-            InkWell(
-              onTap: () {
-                final sel = texto.selection;
-                final inicio = sel.isValid ? sel.start : texto.text.length;
-                final fin = sel.isValid ? sel.end : texto.text.length;
-                texto.value = TextEditingValue(
-                  text: texto.text.replaceRange(inicio, fin, e),
-                  selection: TextSelection.collapsed(offset: inicio + e.length),
-                );
-              },
-              child: Center(child: Text(e, style: const TextStyle(fontSize: 26))),
-            ),
-        ],
-      ),
-    ),
-  );
 }

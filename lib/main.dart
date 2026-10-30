@@ -1062,9 +1062,11 @@ class _Chisme extends StatelessWidget {
       decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: acento)),
       child: Row(
         children: [
+          // La cara va con lo que se cuenta, no con el promedio general: si no, el mismo líder sale
+          // igual en PLACENTERAS y en DESTRUCTIVAS.
           MojonDelMomento(
-            placer: promedio == null ? (buenas ? 6 : 2) : num.parse('$promedio').round(),
-            etiquetas: buenas ? const {'placentera'} : const {'ardiente'},
+            placer: buenas ? 6 : 2,
+            etiquetas: buenas ? const {'placentera', 'virtuosa'} : const {'ardiente', 'dolorosa'},
             tamano: 56,
           ),
           const SizedBox(width: 12),
@@ -1077,7 +1079,7 @@ class _Chisme extends StatelessWidget {
                 Text(dicho, style: texto.bodyLarge?.copyWith(fontWeight: FontWeight.w700, color: p.texto)),
                 if (promedio != null) ...[
                   const SizedBox(height: 2),
-                  Text(tr('Promedio $promedio: ${etiquetaPromedio(promedio)}', 'Average $promedio: ${etiquetaPromedio(promedio)}'),
+                  Text(tr('Nota general $promedio: ${etiquetaPromedio(promedio)}', 'Overall score $promedio: ${etiquetaPromedio(promedio)}'),
                       style: numeros(context, tamano: 13, weight: FontWeight.w700, color: acento)),
                 ],
               ],
