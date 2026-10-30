@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'accesorios.dart';
 import 'amigos.dart';
+import 'animaciones.dart';
 import 'avisos.dart';
 import 'cagadon.dart' show TarjetaReto;
 import 'popups.dart' show PantallaPopups;
@@ -135,7 +136,18 @@ Future<bool> aceptoReglas(BuildContext context) async {
   return ok == true;
 }
 
-String _error(Object e) => e is PostgrestException ? trServidor(e.message) : '$e';
+// Los del trigger de hilos (supabase/migrations/…_hilos_reacciones.sql).
+const _erroresHilo = {
+  'Ese mensaje ya no existe': 'That message no longer exists',
+  'No se puede responder a una respuesta': "You can't reply to a reply",
+  'La respuesta tiene que ir en la misma sala': 'The reply has to go in the same room',
+};
+
+String _error(Object e) =>
+    e is PostgrestException ? (enIngles ? _erroresHilo[e.message] : null) ?? trServidor(e.message) : '$e';
+
+/// Las reacciones que se pueden poner. Mismos que el check de mensaje_reacciones en la base.
+const _reaccionesRapidas = ['💩', '😂', '🔥', '👑', '🤢', '💀'];
 
 /// Después de registrar: si llegó a un hito o desbloqueó algo, pregunta si lo presume.
 Future<void> ofrecerPresumir(BuildContext context, int total) async {
@@ -383,6 +395,30 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
   List<Map<String, dynamic>> _sugerencias = [];
   bool _enviando = false;
   bool _soyAdmin = false;
+  // Hilos: las respuestas van aparte, por id del mensaje padre, y no salen en el flujo de la sala.
+  // Si la base todavía no tiene la columna responde_a (migración sin aplicar), _hayHilos queda en
+  // false y la sala funciona como antes.
+  final _respuestas = <int, Map<int, Map<String, dynamic>>>{};
+  bool _hayHilos = true;
+  // Ids borrados, para que un hilo abierto sepa que su padre ya no está.
+  final _borrados = <int>{};
+  // Reacciones: id del mensaje → emoji → quiénes la pusieron. Tienen su propio canal de realtime.
+  final _reacciones = <int, Map<String, Set<String>>>{};
+  bool _hayReacciones = true;
+  RealtimeChannel? _canalReacciones;
+  Timer? _reintentoReacciones;
+  // Cuándo llegó cada mensaje nuevo (para animarlo una sola vez) y cuándo puse cada reacción
+  // ("id emoji", para el brinco del chip).
+  final _llegada = <int, DateTime>{};
+  final _rebote = <String, DateTime>{};
+  // La pantalla del hilo es otra ruta: escucha esto para repintarse cuando la sala cambia.
+  final _version = ValueNotifier<int>(0);
+
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    _version.value++;
+  }
 
   String get _yo => db.auth.currentUser!.id;
   bool get _esSoporte => widget.sala == 'soporte';
@@ -427,9 +463,14 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
     _ciclo.dispose();
     _reintentoCarga?.cancel();
     _reintentoCanal?.cancel();
+    _reintentoReacciones?.cancel();
     final canal = _canal;
     _canal = null;
     if (canal != null) db.removeChannel(canal);
+    final reacciones = _canalReacciones;
+    _canalReacciones = null;
+    if (reacciones != null) db.removeChannel(reacciones);
+    // _version no se cierra: un hilo abierto todavía puede quitarse de oyente después.
     _texto.dispose();
     super.dispose();
   }
@@ -445,9 +486,9 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
   Future<void> _cargar({int intento = 0}) async {
     try {
       final base = db.from('mensajes').select();
-      final r = await (_esSoporte ? base.eq('hilo', widget.hilo!) : base.eq('sala', widget.sala))
-          .order('id', ascending: false)
-          .limit(_limite);
+      final deAqui = _esSoporte ? base.eq('hilo', widget.hilo!) : base.eq('sala', widget.sala);
+      // Las respuestas de hilos no van en el flujo: se piden aparte con _cargarRespuestas.
+      final r = await (_hayHilos ? deAqui.isFilter('responde_a', null) : deAqui).order('id', ascending: false).limit(_limite);
       if (!mounted) return;
       final ultimo = r.isEmpty ? 0 : r.first['id'] as int;
       setState(() {
@@ -461,8 +502,16 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
         _errorCarga = null;
       });
       _cargarFijados();
+      final ids = [for (final m in r) m['id'] as int];
+      _cargarReacciones(ids);
+      _cargarRespuestas(ids);
     } catch (e) {
       if (!mounted) return;
+      // Sin la migración de hilos la columna no existe: se pide como antes.
+      if (_hayHilos && e is PostgrestException && (e.code == '42703' || e.message.contains('responde_a'))) {
+        _hayHilos = false;
+        return _cargar(intento: intento);
+      }
       // Sin red: se reintenta solo. Mientras, se sigue mostrando lo que ya había.
       if (intento < 4) {
         _reintentoCarga?.cancel();
@@ -486,6 +535,56 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
       if (!mounted) return;
       _pedirPerfiles(r.map((m) => m['user_id'] as String));
       setState(() => _fijados = List<Map<String, dynamic>>.from(r));
+    } catch (_) {}
+  }
+
+  // Respuestas de estos mensajes (todas, hasta 1000), y sus reacciones. Lo que llegó por realtime
+  // mientras se consultaba se queda.
+  Future<void> _cargarRespuestas(List<int> padres) async {
+    if (!_hayHilos || padres.isEmpty) return;
+    try {
+      final todas = <Map<String, dynamic>>[];
+      for (var i = 0; i < padres.length; i += 150) {
+        final tanda = padres.sublist(i, min(i + 150, padres.length));
+        todas.addAll(await db.from('mensajes').select().inFilter('responde_a', tanda).order('id', ascending: false).limit(1000));
+      }
+      if (!mounted) return;
+      final ultimo = todas.fold<int>(0, (a, m) => max(a, m['id'] as int));
+      final nuevas = <int, Map<int, Map<String, dynamic>>>{};
+      for (final m in todas) {
+        (nuevas[m['responde_a'] as int] ??= {})[m['id'] as int] = m;
+      }
+      _pedirPerfiles(todas.map((m) => m['user_id'] as String));
+      setState(() {
+        for (final padre in padres) {
+          final recientes = _respuestas[padre]?.entries.where((e) => e.key > ultimo).toList() ?? const [];
+          _respuestas[padre] = {...?nuevas[padre]}..addEntries(recientes);
+        }
+      });
+      _cargarReacciones([for (final m in todas) m['id'] as int]);
+    } catch (_) {}
+  }
+
+  Future<void> _cargarReacciones(List<int> ids) async {
+    if (!_hayReacciones || ids.isEmpty) return;
+    try {
+      final todas = <Map<String, dynamic>>[];
+      for (var i = 0; i < ids.length; i += 150) {
+        final tanda = ids.sublist(i, min(i + 150, ids.length));
+        todas.addAll(await db.from('mensaje_reacciones').select('mensaje_id, user_id, emoji').inFilter('mensaje_id', tanda).limit(1000));
+      }
+      if (!mounted) return;
+      setState(() {
+        for (final id in ids) {
+          _reacciones.remove(id);
+        }
+        for (final x in todas) {
+          ((_reacciones[x['mensaje_id'] as int] ??= {})[x['emoji'] as String] ??= {}).add(x['user_id'] as String);
+        }
+      });
+    } on PostgrestException catch (e) {
+      // Sin la migración la tabla no existe: no se muestran reacciones.
+      if (e.code == '42P01' || e.code == 'PGRST205' || e.code == 'PGRST200') _hayReacciones = false;
     } catch (_) {}
   }
 
@@ -531,7 +630,11 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
           table: 'mensajes',
           callback: (c) {
             final id = c.oldRecord['id'];
-            if (mounted && _porId.containsKey(id)) setState(() => _porId.remove(id));
+            if (id is! int) return;
+            _borrados.add(id);
+            if (mounted && (_porId.containsKey(id) || _respuestas.containsKey(id) || _respuestas.values.any((r) => r.containsKey(id)))) {
+              setState(() => _quitar(id));
+            }
             if (_fijados.any((f) => f['id'] == id)) _cargarFijados();
           },
         )
@@ -554,11 +657,107 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
           }
         });
     _canal = canal;
+    _conectarReacciones();
+  }
+
+  // Reacciones de todos los mensajes (la tabla no tiene sala): las de mensajes que no están en
+  // pantalla se ignoran. Los borrados llegan con la llave completa (mensaje, usuario, emoji).
+  void _conectarReacciones() {
+    final viejo = _canalReacciones;
+    _canalReacciones = null;
+    if (viejo != null) db.removeChannel(viejo);
+    if (!_hayReacciones) return;
+    late final RealtimeChannel canal;
+    canal = db
+        .channel('reacciones-${widget.sala}-${_canales++}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'mensaje_reacciones',
+          callback: (c) => _cambiarReaccion(c.newRecord, poner: true),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.delete,
+          schema: 'public',
+          table: 'mensaje_reacciones',
+          callback: (c) => _cambiarReaccion(c.oldRecord, poner: false),
+        )
+        .subscribe((estado, [_]) {
+          if (!mounted || _canalReacciones != canal) return;
+          if (estado == RealtimeSubscribeStatus.channelError || estado == RealtimeSubscribeStatus.timedOut || estado == RealtimeSubscribeStatus.closed) {
+            _reintentoReacciones?.cancel();
+            _reintentoReacciones = Timer(const Duration(seconds: 10), () {
+              if (mounted && _canalReacciones == canal) _conectarReacciones();
+            });
+          }
+        });
+    _canalReacciones = canal;
+  }
+
+  bool _esConocido(int id) => _porId.containsKey(id) || _respuestas.values.any((r) => r.containsKey(id));
+
+  void _cambiarReaccion(Map<String, dynamic> r, {required bool poner}) {
+    final id = r['mensaje_id'], quien = r['user_id'], emoji = r['emoji'];
+    if (!mounted || id is! int || quien is! String || emoji is! String) return;
+    final ya = _reacciones[id]?[emoji]?.contains(quien) ?? false;
+    if (ya == poner || (poner && !_esConocido(id))) return;
+    setState(() => _marcarReaccion(id, emoji, quien, poner));
+  }
+
+  void _marcarReaccion(int id, String emoji, String quien, bool poner) {
+    final del = _reacciones[id] ??= {};
+    if (poner) {
+      (del[emoji] ??= {}).add(quien);
+    } else {
+      del[emoji]?.remove(quien);
+      if (del[emoji]?.isEmpty ?? false) del.remove(emoji);
+    }
+  }
+
+  // Tocar una reacción: si es mía la quita, si no la pone. Se pinta antes de que conteste la base.
+  Future<void> _reaccionar(Map<String, dynamic> m, String emoji) async {
+    final id = m['id'] as int;
+    final quitar = _reacciones[id]?[emoji]?.contains(_yo) ?? false;
+    setState(() {
+      _marcarReaccion(id, emoji, _yo, !quitar);
+      if (!quitar) _rebote['$id $emoji'] = DateTime.now();
+    });
+    try {
+      if (quitar) {
+        await db.from('mensaje_reacciones').delete().eq('mensaje_id', id).eq('user_id', _yo).eq('emoji', emoji);
+      } else {
+        await db.from('mensaje_reacciones').insert({'mensaje_id': id, 'emoji': emoji});
+      }
+    } catch (e) {
+      // Ya estaba puesta (otro teléfono, doble toque): da igual.
+      if (e is PostgrestException && e.code == '23505') return;
+      if (!mounted) return;
+      setState(() => _marcarReaccion(id, emoji, _yo, quitar));
+      _aviso(context, _error(e));
+    }
+  }
+
+  void _quitar(int id) {
+    _porId.remove(id);
+    _respuestas.remove(id);
+    for (final r in _respuestas.values) {
+      r.remove(id);
+    }
+    _reacciones.remove(id);
   }
 
   void _poner(Map<String, dynamic> m) {
     if (!mounted || m['id'] == null || !_esDeAqui(m)) return;
-    setState(() => _porId[m['id'] as int] = m);
+    final id = m['id'] as int;
+    final padre = m['responde_a'] as int?;
+    setState(() {
+      if (_cargado && !_esConocido(id)) _llegada[id] = DateTime.now();
+      if (padre == null) {
+        _porId[id] = m;
+      } else {
+        (_respuestas[padre] ??= {})[id] = m;
+      }
+    });
   }
 
   Future<void> _cargarAmigos() async {
@@ -617,10 +816,14 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
     }).whenComplete(() => _pidiendo.removeAll(faltan));
   }
 
-  Future<void> _enviar({Map<String, dynamic>? tarjeta, bool bug = false, String? texto}) async {
+  // [respondeA]: id del mensaje padre si es una respuesta en hilo. [desde]: el context de la
+  // pantalla del hilo, para que las reglas y los avisos salgan ahí. Devuelve si se mandó.
+  Future<bool> _enviar({Map<String, dynamic>? tarjeta, bool bug = false, String? texto, int? respondeA, BuildContext? desde}) async {
     final t = (texto ?? _texto.text).trim();
-    if (t.isEmpty && tarjeta == null) return;
-    if (!_esSoporte && !await aceptoReglas(context)) return;
+    final donde = desde ?? context;
+    if (t.isEmpty && tarjeta == null) return false;
+    if (!_esSoporte && !await aceptoReglas(donde)) return false;
+    if (!mounted) return false;
     setState(() => _enviando = true);
     try {
       final nuevo = await db
@@ -631,14 +834,17 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
             'texto': t,
             'tarjeta': ?tarjeta,
             'es_bug': bug,
+            'responde_a': ?respondeA,
           })
           .select()
           .single();
       // Se pinta ya, sin esperar a realtime.
       _poner(nuevo);
       if (texto == null && tarjeta == null) _texto.clear();
+      return true;
     } catch (e) {
-      if (mounted) _aviso(context, _error(e));
+      if (donde.mounted) _aviso(donde, _error(e));
+      return false;
     } finally {
       if (mounted) setState(() => _enviando = false);
     }
@@ -725,19 +931,46 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
     await _enviar(bug: true, texto: '${que.text.trim()}\n\n— $equipo');
   }
 
-  Future<void> _opciones(Map<String, dynamic> m) async {
+  // [enHilo]: el menú se abre desde la pantalla de un hilo (ahí no se menciona ni se abre otro hilo).
+  Future<void> _opciones(Map<String, dynamic> m, {bool enHilo = false}) async {
     final suyo = m['user_id'] == _yo;
+    final esRespuesta = m['responde_a'] != null;
+    final mias = {for (final e in _reaccionesRapidas) if (_reacciones[m['id']]?[e]?.contains(_yo) ?? false) e};
     final accion = await showModalBottomSheet<String>(
       context: context,
       builder: (context) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          if (!suyo && !_esSoporte && _amigos.any((a) => a['id'] == m['user_id']))
+          if (_hayReacciones && m['id'] is int)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+              child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                for (final e in _reaccionesRapidas)
+                  InkWell(
+                    borderRadius: BorderRadius.circular(radio),
+                    onTap: () => Navigator.pop(context, 'reaccion:$e'),
+                    child: Container(
+                      width: 46,
+                      height: 46,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: mias.contains(e) ? acento.withValues(alpha: .18) : null,
+                        border: Border.all(color: mias.contains(e) ? acento : paleta(context).borde),
+                        borderRadius: BorderRadius.circular(radio),
+                      ),
+                      child: Emoji(e, tamano: 26),
+                    ),
+                  ),
+              ]),
+            ),
+          if (_hayHilos && !enHilo && !esRespuesta && m['id'] is int)
+            ListTile(leading: const Icon(Icons.forum_outlined), title: Text(tr('Responder en hilo', 'Reply in thread')), onTap: () => Navigator.pop(context, 'hilo')),
+          if (!enHilo && !suyo && !_esSoporte && _amigos.any((a) => a['id'] == m['user_id']))
             ListTile(leading: const Icon(Icons.alternate_email), title: Text(tr('Mencionar', 'Mention')), onTap: () => Navigator.pop(context, 'mencionar')),
           if (!suyo && !_esSoporte)
             ListTile(leading: const Icon(Icons.flag_outlined), title: Text(tr('Reportar mensaje', 'Report message')), onTap: () => Navigator.pop(context, 'reportar')),
           if (!suyo && !_esSoporte && !_admins.contains(m['user_id']))
             ListTile(leading: const Icon(Icons.block), title: Text(tr('Bloquear a esta persona', 'Block this person')), onTap: () => Navigator.pop(context, 'bloquear')),
-          if (_soyAdmin && !_esSoporte)
+          if (_soyAdmin && !_esSoporte && !esRespuesta)
             _estaFijado(m)
                 ? ListTile(leading: const Icon(Icons.push_pin_outlined), title: Text(tr('Desfijar', 'Unpin')), onTap: () => Navigator.pop(context, 'desfijar'))
                 : ListTile(leading: const Icon(Icons.push_pin), title: Text(tr('Fijar arriba como anuncio', 'Pin on top as announcement')), onTap: () => Navigator.pop(context, 'fijar')),
@@ -753,8 +986,11 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
       ),
     );
     if (accion == null || !mounted) return;
+    if (accion.startsWith('reaccion:')) return _reaccionar(m, accion.substring('reaccion:'.length));
     try {
       switch (accion) {
+        case 'hilo':
+          _abrirHilo(m);
         case 'mencionar':
           _texto.selection = TextSelection.collapsed(offset: _texto.text.length);
           _mencionar(_amigos.firstWhere((a) => a['id'] == m['user_id']));
@@ -803,11 +1039,98 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
           await _fijar(m, null);
         case 'borrar':
           await db.from('mensajes').delete().eq('id', m['id']);
-          if (mounted) setState(() => _porId.remove(m['id']));
+          _borrados.add(m['id'] as int);
+          if (mounted) setState(() => _quitar(m['id'] as int));
       }
     } on PostgrestException catch (e) {
-      if (mounted) _aviso(context, e.code == '23505' ? tr('Ya lo habías reportado', "You've already reported it") : trServidor(e.message));
+      if (mounted) _aviso(context, e.code == '23505' ? tr('Ya lo habías reportado', "You've already reported it") : _error(e));
     }
+  }
+
+  void _abrirHilo(Map<String, dynamic> m) {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => _PantallaHilo(sala: this, padre: m)));
+  }
+
+  // Un mensaje de la lista (de la sala o de un hilo) con su menú, su animación de llegada, sus
+  // reacciones y, si es padre, el resumen del hilo. [anterior]: el mensaje de arriba, para pegar
+  // burbujas seguidas de la misma persona.
+  Widget _mensaje(Map<String, dynamic> m, {Map<String, dynamic>? anterior, bool enHilo = false}) {
+    final id = m['id'] as int;
+    final mio = m['user_id'] == _yo;
+    final llego = _llegada[id];
+    final hora = DateTime.tryParse('${m['created_at']}'), horaAnterior = DateTime.tryParse('${anterior?['created_at']}');
+    final seguido = anterior != null &&
+        anterior['user_id'] == m['user_id'] &&
+        m['tarjeta'] == null &&
+        anterior['tarjeta'] == null &&
+        hora != null &&
+        horaAnterior != null &&
+        hora.difference(horaAnterior).abs() < const Duration(minutes: 5);
+    return GestureDetector(
+      key: ValueKey<int>(id),
+      onLongPress: () => _opciones(m, enHilo: enHilo),
+      child: _Aparecer(
+        animar: llego != null && DateTime.now().difference(llego) < const Duration(seconds: 1),
+        desdeDerecha: mio,
+        child: _Burbuja(
+          mensaje: m,
+          perfil: _perfiles[m['user_id']],
+          mio: mio,
+          admin: _admins.contains(m['user_id']),
+          meMencionan: _mencionaA(m['texto'] as String?),
+          seguido: seguido,
+          pie: _pie(m, mio: mio, conHilo: !enHilo),
+        ),
+      ),
+    );
+  }
+
+  // Lo de abajo de la burbuja: chips de reacciones y, si tiene respuestas, el resumen del hilo.
+  Widget? _pie(Map<String, dynamic> m, {required bool mio, required bool conHilo}) {
+    final id = m['id'] as int;
+    final del = _reacciones[id] ?? const {};
+    final chips = [
+      for (final e in _reaccionesRapidas)
+        if ((del[e]?.length ?? 0) > 0)
+          _ChipReaccion(
+            key: ValueKey(e),
+            emoji: e,
+            cuantos: del[e]!.length,
+            mia: del[e]!.contains(_yo),
+            rebote: _rebote['$id $e'],
+            onTap: () => _reaccionar(m, e),
+          ),
+    ];
+    final respuestas = conHilo ? (_respuestas[id]?.values.toList() ?? const <Map<String, dynamic>>[]) : const <Map<String, dynamic>>[];
+    if (chips.isEmpty && respuestas.isEmpty) return null;
+    final quienes = <String>[];
+    for (final r in respuestas.toList()..sort((a, b) => (b['id'] as int).compareTo(a['id'] as int))) {
+      final u = r['user_id'] as String;
+      if (!quienes.contains(u)) quienes.add(u);
+      if (quienes.length == 3) break;
+    }
+    _pedirPerfiles(quienes);
+    final tarjeta = m['tarjeta'] != null;
+    final alinear = tarjeta ? WrapAlignment.center : (mio ? WrapAlignment.end : WrapAlignment.start);
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Column(
+        crossAxisAlignment: tarjeta ? CrossAxisAlignment.center : (mio ? CrossAxisAlignment.end : CrossAxisAlignment.start),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (chips.isNotEmpty) Wrap(alignment: alinear, spacing: 4, runSpacing: 4, children: chips),
+          if (respuestas.isNotEmpty)
+            Padding(
+              padding: EdgeInsets.only(top: chips.isEmpty ? 0 : 4),
+              child: _ResumenHilo(
+                cuantas: respuestas.length,
+                perfiles: [for (final u in quienes) _perfiles[u]],
+                onTap: () => _abrirHilo(m),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   Future<void> _fijar(Map<String, dynamic> m, DateTime? hasta) async {
@@ -917,19 +1240,13 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
                 reverse: true,
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 itemCount: lista.length,
-                itemBuilder: (context, i) {
-                  final m = lista[i];
-                  return GestureDetector(
-                    onLongPress: () => _opciones(m),
-                    child: _Burbuja(
-                      mensaje: m,
-                      perfil: _perfiles[m['user_id']],
-                      mio: m['user_id'] == _yo,
-                      admin: _admins.contains(m['user_id']),
-                      meMencionan: _mencionaA(m['texto'] as String?),
-                    ),
-                  );
+                // Con llaves por id, un mensaje nuevo abajo no rehace (ni re-anima) los de arriba.
+                findChildIndexCallback: (llave) {
+                  if (llave is! ValueKey<int>) return null;
+                  final i = lista.indexWhere((m) => m['id'] == llave.value);
+                  return i < 0 ? null : i;
                 },
+                itemBuilder: (context, i) => _mensaje(lista[i], anterior: i + 1 < lista.length ? lista[i + 1] : null),
               );
             },
           ),
@@ -1027,80 +1344,431 @@ class _BarraFijada extends StatelessWidget {
 }
 
 class _Burbuja extends StatelessWidget {
-  const _Burbuja({required this.mensaje, required this.perfil, required this.mio, required this.admin, this.meMencionan = false});
+  const _Burbuja({
+    required this.mensaje,
+    required this.perfil,
+    required this.mio,
+    required this.admin,
+    this.meMencionan = false,
+    this.seguido = false,
+    this.pie,
+  });
 
   final Map<String, dynamic> mensaje;
   final Map<String, dynamic>? perfil;
   final bool mio;
   final bool admin;
   final bool meMencionan;
+  // Mismo autor que el de arriba hace poco: sin avatar ni nombre, pegado al anterior.
+  final bool seguido;
+  // Reacciones y resumen del hilo, debajo de la burbuja.
+  final Widget? pie;
+
+  void _verPerfil(BuildContext context) =>
+      Navigator.push(context, MaterialPageRoute(builder: (_) => PantallaPerfil(usuarioId: mensaje['user_id'])));
+
+  Widget _avatar(BuildContext context, double tamano) => GestureDetector(
+        onTap: () => _verPerfil(context),
+        child: perfil == null ? Emoji('💩', tamano: tamano) : Avatar(perfil!, tamano: tamano),
+      );
+
+  Widget _nombre(BuildContext context, {Color? color}) => Row(mainAxisSize: MainAxisSize.min, children: [
+        Flexible(
+          child: GestureDetector(
+            onTap: () => _verPerfil(context),
+            child: Text(perfil?['username'] ?? '…',
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800, color: color)),
+          ),
+        ),
+        if (admin) ...[
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+            color: acento,
+            child: const Text('ADMIN', style: TextStyle(color: acentoTexto, fontSize: 9, fontWeight: FontWeight.w900)),
+          ),
+        ],
+      ]);
 
   @override
   Widget build(BuildContext context) {
     final p = paleta(context);
-    final texto = Theme.of(context).textTheme;
     final tarjeta = mensaje['tarjeta'] as Map<String, dynamic>?;
     final cuerpo = (mensaje['texto'] as String?) ?? '';
-    return Opacity(
-      opacity: mensaje['oculto'] == true ? .4 : 1,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            GestureDetector(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => PantallaPerfil(usuarioId: mensaje['user_id'])),
-              ),
-              child: SizedBox(width: 40, child: perfil == null ? const Emoji('💩', tamano: 30) : Avatar(perfil!, tamano: 32)),
+    final bug = mensaje['es_bug'] == true;
+    final fijado = mensaje['fijado_hasta'] != null && (DateTime.tryParse('${mensaje['fijado_hasta']}')?.isAfter(DateTime.now()) ?? false);
+    final oculto = mensaje['oculto'] == true;
+    final etiquetaOculto = Text(tr('Oculto por reportes', 'Hidden due to reports'), style: TextStyle(color: mio ? acentoTexto.withValues(alpha: .7) : p.textoSuave, fontSize: 11));
+
+    // Las tarjetas (hitos, rachas, retos…) van al centro y a lo ancho, de quien sea.
+    if (tarjeta != null) {
+      return Opacity(
+        opacity: oculto ? .4 : 1,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Column(children: [
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              _avatar(context, 18),
+              const SizedBox(width: 6),
+              Flexible(child: _nombre(context)),
+              const SizedBox(width: 8),
+              Text(_hora(mensaje['created_at']), style: numeros(context, tamano: 10, color: p.textoSuave)),
+            ]),
+            const SizedBox(height: 6),
+            _Tarjeta(tarjeta),
+            if (cuerpo.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: _TextoConLinks(cuerpo)),
+            if (oculto) etiquetaOculto,
+            ?pie,
+          ]),
+        ),
+      );
+    }
+
+    final tinta = mio ? acentoTexto : p.texto;
+    final borde = bug
+        ? Border.all(color: const Color(0xFFB3261E), width: 2)
+        : meMencionan
+            ? Border.all(color: acento, width: 2)
+            : Border.all(color: mio ? acento : p.borde);
+    final conCabecera = (!mio && !seguido) || bug || fijado;
+    final burbuja = Container(
+      padding: const EdgeInsets.fromLTRB(10, 6, 8, 5),
+      decoration: BoxDecoration(color: mio ? acento : p.tarjeta, borderRadius: BorderRadius.circular(radio), border: borde),
+      child: DefaultTextStyle.merge(
+        style: TextStyle(color: tinta),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          if (conCabecera)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (!mio) Flexible(child: _nombre(context, color: tinta)),
+                if (bug) const Padding(padding: EdgeInsets.only(left: 6), child: Emoji('🐞', tamano: 14)),
+                if (fijado) const Padding(padding: EdgeInsets.only(left: 6), child: Emoji('📌', tamano: 14)),
+              ]),
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(10, 7, 10, 8),
-                decoration: BoxDecoration(
-                  color: mio ? p.suave : p.tarjeta,
-                  borderRadius: BorderRadius.circular(radio),
-                  border: Border.all(
-                    color: mensaje['es_bug'] == true ? const Color(0xFFB3261E) : meMencionan ? acento : p.borde,
-                    width: meMencionan ? 2 : 1,
+          // La hora va pegada al final del texto, y baja de renglón si no cabe (como en WhatsApp).
+          Wrap(alignment: WrapAlignment.end, crossAxisAlignment: WrapCrossAlignment.end, spacing: 8, children: [
+            if (cuerpo.isNotEmpty) _TextoConLinks(cuerpo, colorLink: mio ? acentoTexto : null),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 1),
+              child: Text(_hora(mensaje['created_at']), style: numeros(context, tamano: 10, color: mio ? acentoTexto.withValues(alpha: .65) : p.textoSuave)),
+            ),
+          ]),
+          if (oculto) etiquetaOculto,
+        ]),
+      ),
+    );
+
+    final arriba = seguido ? 1.0 : 6.0;
+    return Opacity(
+      opacity: oculto ? .4 : 1,
+      child: mio
+          ? Padding(
+              padding: EdgeInsets.fromLTRB(56, arriba, 10, 1),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [burbuja, ?pie]),
+            )
+          : Padding(
+              padding: EdgeInsets.fromLTRB(8, arriba, 48, 1),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                SizedBox(width: 36, child: seguido ? null : Align(alignment: Alignment.topLeft, child: _avatar(context, 30))),
+                const SizedBox(width: 6),
+                Flexible(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [burbuja, ?pie])),
+              ]),
+            ),
+    );
+  }
+}
+
+/// Un mensaje recién llegado entra deslizándose desde su lado (o solo aparece, según el movimiento).
+class _Aparecer extends StatefulWidget {
+  const _Aparecer({required this.animar, required this.desdeDerecha, required this.child});
+
+  final bool animar;
+  final bool desdeDerecha;
+  final Widget child;
+
+  @override
+  State<_Aparecer> createState() => _AparecerState();
+}
+
+class _AparecerState extends State<_Aparecer> with SingleTickerProviderStateMixin {
+  AnimationController? _control;
+  Animation<double>? _curva;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.animar) return;
+    final c = _control = AnimationController(vsync: this, duration: const Duration(milliseconds: 220));
+    _curva = CurvedAnimation(parent: c, curve: Curves.easeOutCubic);
+    c.forward();
+  }
+
+  @override
+  void dispose() {
+    _control?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final curva = _curva;
+    if (curva == null) return widget.child;
+    return switch (movimiento(context)) {
+      Movimiento.nada => widget.child,
+      Movimiento.simple => FadeTransition(opacity: curva, child: widget.child),
+      Movimiento.completo => SlideTransition(
+          position: Tween(begin: Offset(widget.desdeDerecha ? .08 : -.08, .15), end: Offset.zero).animate(curva),
+          child: FadeTransition(opacity: curva, child: widget.child),
+        ),
+    };
+  }
+}
+
+/// Chip de una reacción: emoji y cuántos. Si es mía va con el acento y tocarla la quita.
+/// Brinca cuando la acabo de poner (solo con movimiento completo).
+class _ChipReaccion extends StatefulWidget {
+  const _ChipReaccion({super.key, required this.emoji, required this.cuantos, required this.mia, required this.onTap, this.rebote});
+
+  final String emoji;
+  final int cuantos;
+  final bool mia;
+  final VoidCallback onTap;
+  // Cuándo la puse yo; si fue hace un momento, brinca.
+  final DateTime? rebote;
+
+  @override
+  State<_ChipReaccion> createState() => _ChipReaccionState();
+}
+
+class _ChipReaccionState extends State<_ChipReaccion> with SingleTickerProviderStateMixin {
+  late final _control = AnimationController(vsync: this, duration: const Duration(milliseconds: 380));
+  var _completo = false;
+
+  bool get _reciente => widget.rebote != null && DateTime.now().difference(widget.rebote!) < const Duration(milliseconds: 800);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _completo && _reciente) _control.forward(from: 0);
+    });
+  }
+
+  @override
+  void didUpdateWidget(_ChipReaccion viejo) {
+    super.didUpdateWidget(viejo);
+    if (_completo && _reciente && (widget.rebote != viejo.rebote || widget.cuantos != viejo.cuantos)) _control.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _control.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _completo = movimiento(context) == Movimiento.completo;
+    final p = paleta(context);
+    final chip = InkWell(
+      onTap: widget.onTap,
+      borderRadius: BorderRadius.circular(radio),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        decoration: BoxDecoration(
+          color: widget.mia ? acento.withValues(alpha: .18) : p.tarjeta,
+          border: Border.all(color: widget.mia ? acento : p.borde),
+          borderRadius: BorderRadius.circular(radio),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Emoji(widget.emoji, tamano: 16),
+          const SizedBox(width: 4),
+          Text('${widget.cuantos}', style: numeros(context, tamano: 12, weight: FontWeight.w800, color: p.texto)),
+        ]),
+      ),
+    );
+    return AnimatedBuilder(
+      animation: _control,
+      builder: (context, child) => Transform.scale(scale: 1 + .3 * sin(pi * _control.value), child: child),
+      child: chip,
+    );
+  }
+}
+
+/// "N respuestas" con las caras de los últimos que respondieron. Abre el hilo.
+class _ResumenHilo extends StatelessWidget {
+  const _ResumenHilo({required this.cuantas, required this.perfiles, required this.onTap});
+
+  final int cuantas;
+  final List<Map<String, dynamic>?> perfiles;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paleta(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(radio),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(6, 3, 4, 3),
+        decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: p.borde), borderRadius: BorderRadius.circular(radio)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          for (final perfil in perfiles)
+            Padding(
+              padding: const EdgeInsets.only(right: 3),
+              child: perfil == null ? const Emoji('💩', tamano: 18) : Avatar(perfil, tamano: 18),
+            ),
+          const SizedBox(width: 3),
+          Text(
+            cuantas == 1 ? tr('1 respuesta', '1 reply') : tr('$cuantas respuestas', '$cuantas replies'),
+            style: TextStyle(color: p.texto, fontSize: 12, fontWeight: FontWeight.w800),
+          ),
+          Icon(Icons.chevron_right, size: 16, color: p.textoSuave),
+        ]),
+      ),
+    );
+  }
+}
+
+/// Un hilo: el mensaje de arriba, sus respuestas en orden y su propia caja de texto. Los datos
+/// son de la sala (realtime, reacciones, perfiles); esta pantalla solo los pinta.
+class _PantallaHilo extends StatefulWidget {
+  const _PantallaHilo({required this.sala, required this.padre});
+
+  final _SalaState sala;
+  final Map<String, dynamic> padre;
+
+  @override
+  State<_PantallaHilo> createState() => _PantallaHiloState();
+}
+
+class _PantallaHiloState extends State<_PantallaHilo> {
+  final _texto = TextEditingController();
+  final _scroll = ScrollController();
+  var _cargando = true;
+  var _cerrado = false;
+  var _cuantas = 0;
+
+  _SalaState get _sala => widget.sala;
+  int get _id => widget.padre['id'] as int;
+
+  @override
+  void initState() {
+    super.initState();
+    _sala._version.addListener(_cambio);
+    _cuantas = _sala._respuestas[_id]?.length ?? 0;
+    _sala._cargarRespuestas([_id]).whenComplete(() {
+      if (!mounted) return;
+      setState(() => _cargando = false);
+      _alFinal();
+    });
+  }
+
+  @override
+  void dispose() {
+    _sala._version.removeListener(_cambio);
+    _texto.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _cambio() {
+    if (!mounted || _cerrado) return;
+    // Borraron el mensaje de arriba (o se cerró la sala): el hilo ya no existe.
+    if (_sala._borrados.contains(_id) || !_sala.mounted) {
+      _cerrado = true;
+      Navigator.of(context).maybePop();
+      return;
+    }
+    final n = _sala._respuestas[_id]?.length ?? 0;
+    final abajo = !_scroll.hasClients || _scroll.position.extentAfter < 80;
+    final bajar = n > _cuantas && abajo;
+    _cuantas = n;
+    setState(() {});
+    if (bajar) _alFinal();
+  }
+
+  void _alFinal() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scroll.hasClients) _scroll.jumpTo(_scroll.position.maxScrollExtent);
+    });
+  }
+
+  Future<void> _mandar() async {
+    final texto = _texto.text.trim();
+    if (texto.isEmpty) return;
+    final ok = await _sala._enviar(texto: texto, respondeA: _id, desde: context);
+    if (!mounted) return;
+    if (ok) {
+      _texto.clear();
+      _alFinal();
+    }
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paleta(context);
+    final padre = _sala._porId[_id] ?? widget.padre;
+    final respuestas = (_sala._respuestas[_id]?.values.toList() ?? <Map<String, dynamic>>[])..sort((a, b) => (a['id'] as int).compareTo(b['id'] as int));
+    _sala._pedirPerfiles([padre['user_id'] as String, ...respuestas.map((m) => m['user_id'] as String)]);
+    return Scaffold(
+      appBar: AppBar(title: Text(tr('HILO', 'THREAD'))),
+      body: Column(children: [
+        Expanded(
+          child: ListView(
+            controller: _scroll,
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            children: [
+              _sala._mensaje(padre, enHilo: true),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+                child: Row(children: [
+                  Text(
+                    respuestas.length == 1 ? tr('1 RESPUESTA', '1 REPLY') : tr('${respuestas.length} RESPUESTAS', '${respuestas.length} REPLIES'),
+                    style: numeros(context, tamano: 11, weight: FontWeight.w800, color: p.textoSuave),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(child: Divider(color: p.borde, height: 1)),
+                ]),
+              ),
+              if (respuestas.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
+                  child: Center(
+                    child: _cargando
+                        ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
+                        : Text(tr('Nadie ha respondido todavía. Sé el primero.', 'No replies yet. Be the first.'), textAlign: TextAlign.center, style: TextStyle(color: p.textoSuave)),
                   ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(children: [
-                      Flexible(
-                        child: Text(perfil?['username'] ?? '…',
-                            overflow: TextOverflow.ellipsis,
-                            style: texto.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
-                      ),
-                      if (admin) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                          color: acento,
-                          child: const Text('ADMIN', style: TextStyle(color: acentoTexto, fontSize: 9, fontWeight: FontWeight.w900)),
-                        ),
-                      ],
-                      if (mensaje['es_bug'] == true) const Text('  🐞'),
-                      if (mensaje['fijado_hasta'] != null && DateTime.parse(mensaje['fijado_hasta'] as String).isAfter(DateTime.now()))
-                        const Text('  📌'),
-                      const Spacer(),
-                      Text(_hora(mensaje['created_at']), style: numeros(context, tamano: 11, color: p.textoSuave)),
-                    ]),
-                    if (tarjeta != null) ...[const SizedBox(height: 6), _Tarjeta(tarjeta)],
-                    if (cuerpo.isNotEmpty) ...[const SizedBox(height: 3), _TextoConLinks(cuerpo)],
-                    if (mensaje['oculto'] == true)
-                      Text(tr('Oculto por reportes', 'Hidden due to reports'), style: TextStyle(color: p.textoSuave, fontSize: 11)),
-                  ],
+              for (var i = 0; i < respuestas.length; i++) _sala._mensaje(respuestas[i], anterior: i > 0 ? respuestas[i - 1] : null, enHilo: true),
+            ],
+          ),
+        ),
+        SafeArea(
+          top: false,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
+            decoration: BoxDecoration(border: Border(top: BorderSide(color: p.borde))),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Expanded(
+                child: TextField(
+                  controller: _texto,
+                  minLines: 1,
+                  maxLines: 5,
+                  maxLength: 1000,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: InputDecoration(hintText: tr('Responder en el hilo…', 'Reply in thread…'), counterText: '', isDense: true),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(width: 6),
+              IconButton.filled(onPressed: _sala._enviando ? null : _mandar, icon: const Icon(Icons.send)),
+            ]),
+          ),
         ),
-      ),
+      ]),
     );
   }
 }
@@ -1160,9 +1828,11 @@ final _link = RegExp(r'((https?://|www\.)[^\s<>"]+)', caseSensitive: false);
 
 /// Texto con los links tocables. Antes de abrir, muestra a qué dominio vas.
 class _TextoConLinks extends StatelessWidget {
-  const _TextoConLinks(this.texto);
+  const _TextoConLinks(this.texto, {this.colorLink});
 
   final String texto;
+  // Sobre la burbuja amarilla el azul no se lee: ahí los links van del color del texto.
+  final Color? colorLink;
 
   Future<void> _abrir(BuildContext context, String url) async {
     final uri = Uri.tryParse(url.startsWith('http') ? url : 'https://$url');
@@ -1191,7 +1861,7 @@ class _TextoConLinks extends StatelessWidget {
       final url = m.group(0)!;
       partes.add(TextSpan(
         text: url,
-        style: const TextStyle(decoration: TextDecoration.underline, color: Color(0xFF4DA3FF)),
+        style: TextStyle(decoration: TextDecoration.underline, color: colorLink ?? const Color(0xFF4DA3FF)),
         recognizer: TapGestureRecognizer()..onTap = () => _abrir(context, url),
       ));
       desde = m.end;
