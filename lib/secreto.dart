@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'emoji.dart';
 import 'genero.dart';
 import 'idioma.dart';
+import 'logros.dart';
 import 'tema.dart';
 
 // Apps que vienen: emoji, nombre y el chiste del anuncio.
@@ -45,7 +46,11 @@ class Secreto extends StatelessWidget {
             FilledButton(onPressed: () => Navigator.pop(context), child: Text(tr('ME AGUANTO', 'I CAN WAIT'))),
           ],
         ),
-      );
+      ).then((_) {
+        // Logro secreto por haber visto esta app (y "todas las que vienen" al ver las dos).
+        final clave = const {'🍺': 'psst_meon', '🚿': 'psst_pulcro'}[_app.emoji];
+        if (clave != null && context.mounted) ganarLogro(context, clave);
+      });
 
   @override
   Widget build(BuildContext context) {

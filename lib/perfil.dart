@@ -13,6 +13,7 @@ import 'calendario.dart';
 import 'chat.dart' show abrirReporteDeError;
 import 'comunidad.dart';
 import 'idioma.dart';
+import 'logros.dart';
 import 'placer.dart';
 import 'main.dart' show conReintento, db, escucharCagadas, esDeRed, textoError;
 import 'push.dart';
@@ -44,9 +45,14 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
   // Género del perfil propio: no sale en el RPC perfil porque nadie más lo ve.
   String? _genero;
   DateTime? _generoCambiado;
-  // Solo en el perfil propio: lo que alimenta la vitrina y el mapa del mes.
+  // Lo que alimenta la vitrina (y el mapa del mes en el propio).
   List<({DateTime cuando, int? tipo, int? peso})>? _cagadas;
   int _victorias = 0;
+  // Logros de eventos guardados, si el dueño y quien mira tienen el lado secreto, y los
+  // secretos recién ganados que la vitrina revela con animación (solo en el propio).
+  Set<String> _claves = {};
+  bool _ladoSecreto = false, _verLadoSecreto = false;
+  Set<String> _nuevos = {};
   late final VoidCallback _soltar;
 
   bool get _esMio => widget.usuarioId == db.auth.currentUser!.id;
@@ -70,14 +76,22 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
             db.rpc('perfil', params: {'uid': widget.usuarioId}),
             db.from('bloqueos').select('bloqueado').eq('bloqueado', widget.usuarioId).maybeSingle(),
           ).wait);
-      final g = _esMio ? await db.from('profiles').select('genero, genero_cambiado').eq('id', widget.usuarioId).maybeSingle() : null;
-      final (cagadas, ganados) = _esMio
-          ? await (cagadasPropias(widget.usuarioId), victorias(widget.usuarioId)).wait
-          : (null, 0);
+      final g = _esMio
+          ? await db.from('profiles').select('genero, genero_cambiado, placer_desbloqueado').eq('id', widget.usuarioId).maybeSingle()
+          : null;
+      final (cagadas, ganados) = _esMio ? await (cagadasPropias(widget.usuarioId), victorias(widget.usuarioId)).wait : await _vitrinaAjena();
+      // logrosDe no falla: si la tabla no existe todavía, vuelve con lo del teléfono.
+      final claves = cagadas == null ? <String>{} : await logrosDe(widget.usuarioId);
+      final (lado, verLado) = await _ladosSecretos(g);
+      final nuevos = cagadas != null && _esMio ? await _secretosNuevos(cagadas, ganados, claves, lado) : <String>{};
       if (mounted) {
         setState(() {
           _cagadas = cagadas;
           _victorias = ganados;
+          _claves = claves;
+          _ladoSecreto = lado;
+          _verLadoSecreto = verLado;
+          _nuevos = nuevos;
           _p = (rows as List).firstOrNull;
           _bloqueado = bloqueo != null;
           _genero = g?['genero'];
@@ -87,6 +101,58 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
     } catch (e) {
       if (_p == null || !esDeRed(e)) _mensaje(textoError(e));
     }
+  }
+
+  /// La vitrina de otro: si falla, el perfil sale igual, sin vitrina.
+  Future<(List<({DateTime cuando, int? tipo, int? peso})>?, int)> _vitrinaAjena() async {
+    try {
+      return await (cagadasPropias(widget.usuarioId), victorias(widget.usuarioId)).wait;
+    } catch (_) {
+      return (null, 0);
+    }
+  }
+
+  /// Si el dueño tiene el lado secreto y si quien mira también. Si falla, ninguno: así no se
+  /// enseña de más a quien no lo tiene.
+  Future<(bool, bool)> _ladosSecretos(Map<String, dynamic>? g) async {
+    if (_esMio) {
+      final lado = g?['placer_desbloqueado'] == true;
+      return (lado, lado);
+    }
+    try {
+      final yo = db.auth.currentUser!.id;
+      final filas = await db.from('profiles').select('id, placer_desbloqueado').inFilter('id', [yo, widget.usuarioId]);
+      bool tiene(String id) => filas.any((f) => f['id'] == id && f['placer_desbloqueado'] == true);
+      return (tiene(widget.usuarioId), tiene(yo));
+    } catch (_) {
+      return (false, false);
+    }
+  }
+
+  /// Los secretos propios: avisa con el toast los que no avisaron y devuelve los que faltan por
+  /// revelar en la vitrina.
+  Future<Set<String>> _secretosNuevos(
+      List<({DateTime cuando, int? tipo, int? peso})> cagadas, int ganados, Set<String> claves, bool lado) async {
+    final secretos = [
+      for (final t in trofeos(cagadas: cagadas, total: 0, victorias: ganados, favorito: null, claves: claves, ladoSecreto: lado))
+        if (t.grupo == Grupo.secreto) t.clave,
+    ];
+    _avisarCuandoSeVea(await porAvisar(secretos));
+    return porRevelar(secretos);
+  }
+
+  /// YO se arma al abrir la app aunque esté en otra pestaña: el toast espera a que se vea.
+  void _avisarCuandoSeVea(List<String> claves) {
+    if (claves.isEmpty || !mounted) return;
+    final visible = TickerMode.getValuesNotifier(context);
+    if (visible.value.enabled) return avisarLogrosSecretos(context, claves);
+    void ver() {
+      if (!visible.value.enabled) return;
+      visible.removeListener(ver);
+      if (mounted) avisarLogrosSecretos(context, claves);
+    }
+
+    visible.addListener(ver);
   }
 
   void _mensaje(String texto) {
@@ -464,7 +530,8 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                       Padding(
                         // Aire para el sombrero y la mascota, que se salen del círculo.
                         padding: const EdgeInsets.fromLTRB(16, 32, 16, 16),
-                        child: Balanceo(child: Avatar(p, tamano: 96)),
+                        // Easter egg: 10 toques seguidos y protesta (logro secreto).
+                        child: CoronaTocable(alGanar: _cargar, child: Balanceo(child: Avatar(p, tamano: 96))),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -503,9 +570,19 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                   if (_cagadas == null)
                     const Padding(padding: EdgeInsets.all(24), child: Cargando())
                   else ...[
-                    Vitrina(
-                      trofeos: trofeos(cagadas: _cagadas!, total: total, victorias: _victorias, favorito: p['tipo_favorito']),
-                    ),
+                    Builder(builder: (context) {
+                      final lista = trofeos(
+                        cagadas: _cagadas!,
+                        total: total,
+                        victorias: _victorias,
+                        favorito: p['tipo_favorito'],
+                        seguidores: (p['seguidores'] as num?)?.toInt() ?? 0,
+                        siguiendo: (p['siguiendo'] as num?)?.toInt() ?? 0,
+                        claves: _claves,
+                        ladoSecreto: _ladoSecreto,
+                      );
+                      return Vitrina(trofeos: lista, nuevos: _nuevos, porEncontrar: secretosPorEncontrar(lista));
+                    }),
                     const SizedBox(height: 20),
                     MapaDelMes(
                       cagadas: _cagadas!,
@@ -651,6 +728,25 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                   title: Text(tr('Especialidad de la casa', 'House specialty')),
                   subtitle: Text(tipos[p['tipo_favorito']]?.$2 ?? tr('Todavía no se sabe', 'Nobody knows yet')),
                 ),
+                // Su vitrina, sin los "secretos por encontrar" (eso es cosa suya). Los del lado
+                // secreto solo salen si quien mira también lo tiene.
+                if (_cagadas != null && !_bloqueado) ...[
+                  const SizedBox(height: 8),
+                  Vitrina(
+                    trofeos: trofeos(
+                      cagadas: _cagadas!,
+                      total: (p['total'] as num?)?.toInt() ?? 0,
+                      victorias: _victorias,
+                      favorito: p['tipo_favorito'],
+                      seguidores: (p['seguidores'] as num?)?.toInt() ?? 0,
+                      siguiendo: (p['siguiendo'] as num?)?.toInt() ?? 0,
+                      claves: _claves,
+                      ladoSecreto: _ladoSecreto,
+                      verLadoSecreto: _verLadoSecreto,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 ListTile(
                   leading: const Icon(Icons.calendar_month),
                   title: Text(tr('Ver calendario', 'View calendar')),
