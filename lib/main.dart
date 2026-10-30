@@ -20,6 +20,7 @@ import 'idioma.dart';
 import 'inodoro.dart';
 import 'invitar_play.dart';
 import 'config.dart';
+import 'nuclear.dart';
 import 'onboarding.dart';
 import 'parte.dart';
 import 'perfil.dart';
@@ -291,6 +292,8 @@ class _PantallaInicioState extends State<PantallaInicio> {
   int get _ultimoBano => max(_ultimoGeneral, _ultimoIdioma);
 
   late final VoidCallback _soltarAvisos;
+  // HEXA POOP de otros: se revisa al abrir y al volver a la app (lib/nuclear.dart).
+  late final AppLifecycleListener _cicloHexa;
 
   String get _yo => db.auth.currentUser!.id;
   bool get _hayNuevo => _ultimoBano > _vistoBano || _ultimoSoporte > _vistoSoporte;
@@ -299,11 +302,19 @@ class _PantallaInicioState extends State<PantallaInicio> {
   void initState() {
     super.initState();
     _soltarAvisos = escucharAvisos(onAnuncio: () {
-      if (mounted) mostrarAnuncioNuevo(context);
+      esperarExplosion().then((_) {
+        if (mounted) mostrarAnuncioNuevo(context);
+      });
     });
     irA.addListener(_irA);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // La alerta nuclear va primero: arranca aquí, antes que el trono (actualización, permisos),
+    // y el anuncio nuevo y los avisos del trono esperan a que se cierre (esperarExplosion).
+    // Se registra antes que el AppLifecycleListener del trono, así que al volver también va primero.
+    revisarHazanas(context);
+    _cicloHexa = AppLifecycleListener(onResume: () => revisarHazanas(context));
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       _irA();
+      await esperarExplosion();
       if (mounted) mostrarAnuncioNuevo(context);
     });
     SharedPreferences.getInstance().then((prefs) {
@@ -359,6 +370,7 @@ class _PantallaInicioState extends State<PantallaInicio> {
   @override
   void dispose() {
     _soltarAvisos();
+    _cicloHexa.dispose();
     irA.removeListener(_irA);
     for (final s in _subs) {
       s.cancel();
@@ -463,7 +475,12 @@ class _PantallaRankingState extends State<PantallaRanking> {
     _soltar = escucharCagadas(widget.trono ? 'trono' : 'ranking', () => _cargar(spinner: false));
     // Al volver de Ajustes (permiso de instalar) o de otra app, se vuelve a ofrecer la actualización.
     _ciclo = AppLifecycleListener(onResume: () {
-      if (widget.trono) revisarActualizacion(context);
+      // Después de la alerta nuclear si PantallaInicio sacó una al volver.
+      if (widget.trono) {
+        esperarExplosion().then((_) {
+          if (mounted) revisarActualizacion(context);
+        });
+      }
       // La conexión pudo morir en segundo plano: se recarga en silencio.
       Future<void>.delayed(const Duration(milliseconds: 600), () => _cargar(spinner: false));
     });
@@ -480,6 +497,9 @@ class _PantallaRankingState extends State<PantallaRanking> {
   }
 
   Future<void> _avisoPrimeraVez() async {
+    // Si al abrir hay alerta nuclear, la bienvenida y los permisos van después.
+    await esperarExplosion();
+    if (!mounted) return;
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool('disclaimer_ok') ?? false) {
       await pedirPermisoNotificaciones().catchError((_) {});
@@ -1239,6 +1259,8 @@ class _TarjetaHoy extends StatelessWidget {
   static const _rampage = 5;
 
   final int hoy;
+  // Con 6 o más la tarjeta entra en modo nuclear (HEXA POOP, lib/nuclear.dart).
+  bool get _nuclear => hoy >= rachaHexa;
   final String? aviso;
   final bool perdiendo;
 
@@ -1247,34 +1269,40 @@ class _TarjetaHoy extends StatelessWidget {
     final p = paleta(context);
     final texto = Theme.of(context).textTheme;
     final racha = nombreRacha(hoy);
-    final proxima = hoy < _rampage ? nombreRacha(hoy < 1 ? 2 : hoy + 1)!.replaceAll('!', '') : null;
+    final proxima = hoy < rachaHexa ? nombreRacha(hoy < 1 ? 2 : hoy + 1)!.replaceAll('!', '') : null;
     final faltan = hoy < 1 ? 2 : 1;
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: p.bordeFuerte, width: 2)),
+      decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: _nuclear ? verdeNuclear : p.bordeFuerte, width: 2)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
               Expanded(child: Rotulo(tr('Hoy · $hoy ${hoy == 1 ? 'cagada' : 'cagadas'}', 'Today · $hoy ${hoy == 1 ? 'poop' : 'poops'}'))),
+              if (_nuclear) ...[const Emoji('☢️', tamano: 14), const SizedBox(width: 4)],
               Text(
-                hoy >= _rampage ? 'RAMPAGE!' : tr('RAMPAGE A ${_rampage - hoy}', 'RAMPAGE IN ${_rampage - hoy}'),
-                style: numeros(context, tamano: 11, weight: FontWeight.w800, color: p.textoSuave),
+                _nuclear
+                    ? 'HEXA POOP!'
+                    : hoy >= _rampage
+                        ? tr('HEXA A ${rachaHexa - hoy}', 'HEXA IN ${rachaHexa - hoy}')
+                        : tr('RAMPAGE A ${_rampage - hoy}', 'RAMPAGE IN ${_rampage - hoy}'),
+                style: numeros(context, tamano: 11, weight: FontWeight.w800, color: _nuclear ? verdeNuclear : p.textoSuave),
               ),
             ],
           ),
           const SizedBox(height: 8),
+          // Cinco barras hasta RAMPAGE y una sexta, la nuclear, con borde verde aunque esté vacía.
           Row(
             children: [
-              for (var i = 0; i < _rampage; i++) ...[
-                if (i > 0) const SizedBox(width: 4),
+              for (var i = 0; i < rachaHexa; i++) ...[
+                if (i > 0) SizedBox(width: i == _rampage ? 8 : 4),
                 Expanded(
                   child: Container(
                     height: 10,
                     decoration: BoxDecoration(
-                      color: i < hoy ? acento : p.suave,
-                      border: Border.all(color: i < hoy ? acentoTexto : p.borde),
+                      color: _nuclear ? (i == _rampage ? verdeNuclear : amarilloNuclear) : i < hoy ? acento : p.suave,
+                      border: Border.all(color: _nuclear || i == _rampage ? verdeNuclear : i < hoy ? acentoTexto : p.borde, width: i == _rampage ? 2 : 1),
                     ),
                   ),
                 ),

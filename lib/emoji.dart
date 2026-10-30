@@ -84,6 +84,9 @@ const _archivos = {
   '🗓': 'spiral_calendar',
   '🤷': 'person_shrugging',
   '💡': 'light_bulb',
+  '☢️': 'radioactive',
+  '☢': 'radioactive',
+  '💥': 'collision',
 };
 
 /// Emoji como imagen de [tamano] px. Si no está en el set, usa el emoji del sistema.

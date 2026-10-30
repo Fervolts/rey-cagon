@@ -7,8 +7,10 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'accesorios.dart';
+import 'animaciones.dart';
 import 'emoji.dart';
 import 'idioma.dart';
+import 'nuclear.dart';
 import 'tema.dart';
 
 /// Rachas del día al estilo del anunciador de DotA. Siempre en inglés, en los dos idiomas: es el chiste.
@@ -18,7 +20,8 @@ String? nombreRacha(int n) => switch (n) {
       2 => 'DOUBLE POOP!',
       3 => 'TRIPLE POOP!',
       4 => 'ULTRA POOP!',
-      _ => 'RAMPAGE!',
+      5 => 'RAMPAGE!',
+      _ => 'HEXA POOP!',
     };
 
 /// Colores del texto y emoji que vuela, por nivel.
@@ -26,11 +29,15 @@ String? nombreRacha(int n) => switch (n) {
       2 => (const [Color(0xFFFFE259), Color(0xFFFF9F1C)], '💩'),
       3 => (const [Color(0xFFFFB347), Color(0xFFFF3B30)], '💩'),
       4 => (const [Color(0xFFFF6FD8), Color(0xFF7B2FF7)], '🔥'),
-      _ => (const [Color(0xFFFF3B30), Color(0xFF5A0000)], '💀'),
+      5 => (const [Color(0xFFFF3B30), Color(0xFF5A0000)], '💀'),
+      _ => (const [amarilloNuclear, verdeNuclear], '☢️'),
     };
 
 /// Desde TRIPLE la racha se queda en pantalla con COMPARTIR.
 const rachaCompartible = 3;
+
+/// Desde la sexta del día: HEXA POOP, con explosión nuclear (lib/nuclear.dart) y alerta para todos.
+const rachaHexa = 6;
 
 /// El anuncio a pantalla completa. La doble se cierra sola; desde la triple espera a que
 /// la comparta o siga. [perfil] (fila con username y avatar) y [lugar] ("#2 de la semana")
@@ -38,33 +45,41 @@ const rachaCompartible = 3;
 Future<void> mostrarRacha(BuildContext context, int n, {Map<String, dynamic>? perfil, String? lugar}) async {
   if (nombreRacha(n) == null) return;
   HapticFeedback.heavyImpact();
+  final modo = movimiento(context);
   // El audio del anunciador va aquí cuando exista.
   await showGeneralDialog(
     context: context,
     barrierDismissible: false,
     barrierColor: Colors.transparent,
     transitionDuration: Duration.zero,
-    pageBuilder: (context, _, _) => Material(type: MaterialType.transparency, child: _Anuncio(n, perfil: perfil, lugar: lugar)),
+    pageBuilder: (context, _, _) => Material(type: MaterialType.transparency, child: _Anuncio(n, perfil: perfil, lugar: lugar, modo: modo)),
   );
 }
 
 class _Anuncio extends StatefulWidget {
-  const _Anuncio(this.n, {this.perfil, this.lugar});
+  const _Anuncio(this.n, {this.perfil, this.lugar, this.modo = Movimiento.completo});
 
   final int n;
   final Map<String, dynamic>? perfil;
   final String? lugar;
+  // Solo la HEXA lo respeta: con nada sale quieta, con simple solo destello y texto.
+  final Movimiento modo;
 
   @override
   State<_Anuncio> createState() => _AnuncioState();
 }
 
-class _AnuncioState extends State<_Anuncio> with SingleTickerProviderStateMixin {
+class _AnuncioState extends State<_Anuncio> with TickerProviderStateMixin {
   late final _compartible = widget.n >= rachaCompartible;
-  late final _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 2600))
-    ..forward().whenComplete(() {
+  late final _hexa = widget.n >= rachaHexa;
+  late final _bestia = _hexa && widget.modo == Movimiento.completo;
+  late final _c = AnimationController(vsync: this, duration: Duration(milliseconds: _hexa ? 3600 : 2600))
+    ..forward(from: _hexa && widget.modo == Movimiento.nada ? 1 : 0).whenComplete(() {
       if (!_compartible) _cerrar();
     });
+  // HEXA completa: el texto no deja de temblar y el teléfono retumba con la explosión.
+  AnimationController? _tiembla;
+  final _retumbos = Retumbos();
   final _azar = math.Random();
   late final _particulas = [
     for (var i = 0; i < 18; i++) (angulo: i / 18 * 2 * math.pi + _azar.nextDouble() * .3, distancia: 140 + _azar.nextDouble() * 160, giro: _azar.nextDouble() * 4 - 2),
@@ -118,8 +133,18 @@ class _AnuncioState extends State<_Anuncio> with SingleTickerProviderStateMixin 
   }
 
   @override
+  void initState() {
+    super.initState();
+    if (_bestia) {
+      _c.addListener(() => _retumbos.seguir(_c.value));
+      _tiembla = AnimationController(vsync: this, duration: const Duration(seconds: 1))..repeat();
+    }
+  }
+
+  @override
   void dispose() {
     _c.dispose();
+    _tiembla?.dispose();
     super.dispose();
   }
 
@@ -135,20 +160,23 @@ class _AnuncioState extends State<_Anuncio> with SingleTickerProviderStateMixin 
     return GestureDetector(
       onTap: _tocar,
       child: AnimatedBuilder(
-        animation: _c,
+        animation: Listenable.merge([_c, _tiembla]),
         builder: (context, _) {
           final entrada = _tramo(0, .28, Curves.elasticOut);
           // La compartible no se desvanece: se queda con sus botones.
           final salida = _compartible ? 0.0 : _tramo(.85, 1);
           final quieta = _compartible ? _tramo(.6, .85) : 0.0;
-          final temblor = (1 - _tramo(.08, .45)) * (rampage ? 14 : 8);
-          final dx = math.sin(_c.value * 120) * temblor;
-          final dy = math.cos(_c.value * 97) * temblor * .6;
-          final destello = 1 - _tramo(0, .12);
+          final temblor = _hexa && !_bestia ? 0.0 : math.max((1 - _tramo(.08, .45)) * (rampage ? 14 : 8), _bestia ? 3.0 : 0.0);
+          final fase = _c.value * 120 + (_tiembla?.value ?? 0) * 2 * math.pi * 9;
+          final dx = math.sin(fase) * temblor;
+          final dy = math.cos(fase * .8) * temblor * .6;
+          // La HEXA trae su propio destello blanco dentro de la explosión.
+          final destello = _hexa ? 0.0 : 1 - _tramo(0, .12);
           final vuelo = _tramo(.05, .7, Curves.easeOutCubic);
           return Opacity(
             opacity: 1 - salida,
-            child: Stack(
+            // La HEXA completa sacude la pantalla entera.
+            child: Transform.translate(offset: _bestia ? sacudidaNuclear(_c.value, fuerza: 22) : Offset.zero, child: Stack(
               alignment: Alignment.center,
               children: [
                 // La imagen para historias se arma fuera de la pantalla para poder capturarla.
@@ -177,19 +205,21 @@ class _AnuncioState extends State<_Anuncio> with SingleTickerProviderStateMixin 
                       ),
                     ),
                   ),
+                if (_hexa) Positioned.fill(child: Explosion(t: _c.value, modo: widget.modo)),
                 Positioned.fill(child: ColoredBox(color: colores.first.withValues(alpha: destello * .55))),
                 if (_compartible)
-                  for (final r in _regados)
+                  for (final (i, r) in _regados.indexed)
                     Positioned(
                       left: r.x * pantalla.width - r.tamano / 2,
                       top: 40 + r.y * pantalla.height,
                       child: Opacity(
                         opacity: r.opacidad * quieta,
-                        child: Transform.rotate(angle: r.giro, child: Emoji(emoji, tamano: r.tamano)),
+                        child: Transform.rotate(angle: r.giro, child: Emoji(_hexa ? const ['💩', '☢️', '💥'][i % 3] : emoji, tamano: r.tamano)),
                       ),
                     ),
-                // Emojis que salen disparados desde el centro.
-                for (final p in _particulas)
+                // Emojis que salen disparados desde el centro. La HEXA ya los tira con la explosión.
+                if (!_hexa)
+                  for (final p in _particulas)
                   Transform.translate(
                     offset: Offset(math.cos(p.angulo), math.sin(p.angulo)) * p.distancia * vuelo,
                     child: Transform.rotate(
@@ -206,7 +236,7 @@ class _AnuncioState extends State<_Anuncio> with SingleTickerProviderStateMixin 
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          _Letrero(nombre, colores: colores, tamano: rampage ? 64 : 52),
+                          _Letrero(nombre, colores: colores, tamano: _hexa ? 70 : rampage ? 64 : 52),
                           const SizedBox(height: 8),
                           Text(
                             '${widget.n} POOPS TODAY',
@@ -264,7 +294,7 @@ class _AnuncioState extends State<_Anuncio> with SingleTickerProviderStateMixin 
                     ),
                   ),
               ],
-            ),
+            )),
           );
         },
       ),
