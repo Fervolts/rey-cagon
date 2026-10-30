@@ -454,14 +454,14 @@ class _PantallaRankingState extends State<PantallaRanking> {
   bool _cargando = true;
   // Total histórico propio, para el número del parte y los hitos.
   int _misCagadas = 0;
-  // Ranking secreto: si ya encontró la hoja de Tips, si lo está viendo y si ya aprendió a deslizar.
+  // Ranking secreto: si ya encontró el secreto, si el ranking está en ese modo y qué cuenta.
   bool _secretoAbierto = false;
-  bool _yaDeslizo = true;
-  // Con el secreto abierto la pantalla es un PageView: 0 normal, 1 el lado secreto.
-  final _paginas = PageController();
-  bool _asomado = false;
-  // Sube con cada recarga para que el ranking secreto también se refresque.
-  int _version = 0;
+  bool _modoSecreto = false;
+  String _cuenta = 'placenteras';
+  List<Map<String, dynamic>> _filasSecretas = [];
+  // Cambios de modo: el podio se voltea una vez por cambio, no cada vez que recarga.
+  int _vueltas = 0;
+  int _vueltasVistas = 0;
   late final VoidCallback _soltar;
   late final AppLifecycleListener _ciclo;
   // Se decide una vez por apertura de la app: aparece o no, y en qué esquina.
@@ -473,6 +473,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
   void initState() {
     super.initState();
     _cargar();
+    secretoAbierto.addListener(_alAbrirSecreto);
     _soltar = escucharCagadas(widget.trono ? 'trono' : 'ranking', () => _cargar(spinner: false));
     // Al volver de Ajustes (permiso de instalar) o de otra app, se vuelve a ofrecer la actualización.
     _ciclo = AppLifecycleListener(onResume: () {
@@ -491,7 +492,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
 
   @override
   void dispose() {
-    _paginas.dispose();
+    secretoAbierto.removeListener(_alAbrirSecreto);
     _ciclo.dispose();
     _soltar();
     super.dispose();
@@ -545,24 +546,28 @@ class _PantallaRankingState extends State<PantallaRanking> {
     if (!mounted) return;
     if (spinner) setState(() => _cargando = true);
     try {
-      final (data, hoy, yo, prefs) = await conReintento(() => (
+      final (data, hoy, yo) = await conReintento(() => (
             db.rpc('leaderboard', params: {'period': _periodo, 'solo_siguiendo': _soloSiguiendo}),
             // El aviso del día compara solo contra la gente que sigues.
             db.rpc('leaderboard', params: {'period': 'day', 'solo_siguiendo': true}),
             db.from('profiles').select('placer_desbloqueado, genero, cagadas').eq('id', _yo).maybeSingle(),
-            SharedPreferences.getInstance(),
           ).wait);
+      final abierto = yo?['placer_desbloqueado'] == true;
+      // El ranking secreto solo se pide en su modo; el servidor igual lo niega sin el secreto.
+      final secretas = abierto && _modoSecreto && !widget.trono
+          ? await conReintento(() => db.rpc('ranking_placer', params: {'period': _periodo, 'solo_siguiendo': _soloSiguiendo}))
+          : null;
       if (!mounted) return;
       setState(() {
         _filas = List<Map<String, dynamic>>.from(data);
         _hoy = List<Map<String, dynamic>>.from(hoy);
-        _secretoAbierto = yo?['placer_desbloqueado'] == true;
+        _secretoAbierto = abierto;
+        if (!abierto) _modoSecreto = false;
+        if (secretas != null) _filasSecretas = List<Map<String, dynamic>>.from(secretas);
         _misCagadas = (yo?['cagadas'] as num?)?.toInt() ?? _misCagadas;
         if (yo != null && yo['genero'] != miGenero) guardarGenero(yo['genero']);
-        _yaDeslizo = prefs.getBool('placer_deslizo') ?? false;
-        _version++;
       });
-      _asomar();
+      if (abierto) secretoAbierto.value = true;
       if (!widget.trono) return;
       reprogramarRecordatorio(yaCagoHoy: _miHoy > 0).catchError((_) {});
       reprogramarCierres().catchError((_) {});
@@ -668,13 +673,42 @@ class _PantallaRankingState extends State<PantallaRanking> {
   void _abrir(Widget pantalla) =>
       Navigator.push(context, MaterialPageRoute(builder: (_) => pantalla)).then((_) => _cargar(spinner: false));
 
+  /// Lo encontró en otra pantalla (la esquina de YO): aparece el 🤫 sin esperar a recargar.
+  void _alAbrirSecreto() {
+    if (mounted && secretoAbierto.value && !_secretoAbierto) setState(() => _secretoAbierto = true);
+  }
+
+  void _cambiarModo() {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _modoSecreto = !_modoSecreto;
+      _vueltas++;
+    });
+    if (_modoSecreto) _cargar(spinner: _filasSecretas.isEmpty);
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.trono) return _cuerpo(context);
+    // El modo secreto pone toda la pestaña en negro y dorado, con un fundido al cambiar.
+    return AnimatedSwitcher(
+      duration: movimiento(context) == Movimiento.nada ? Duration.zero : const Duration(milliseconds: 280),
+      child: _modoSecreto
+          ? Theme(
+              key: const ValueKey('secreto'),
+              data: tema(Brightness.dark),
+              child: Builder(builder: (context) => ColoredBox(color: paleta(context).fondo, child: _cuerpo(context))),
+            )
+          : KeyedSubtree(key: const ValueKey('normal'), child: _cuerpo(context)),
+    );
+  }
+
+  Widget _cuerpo(BuildContext context) {
     final texto = Theme.of(context).textTheme;
     final p = paleta(context);
     // Fuera del podio, su puesto queda fijo abajo con cuánto le falta para el de arriba.
     final puesto = _cargando ? -1 : _miPuesto;
-    final barra = !widget.trono && puesto >= 3;
+    final barra = !widget.trono && !_modoSecreto && puesto >= 3;
 
     final lista = RefreshIndicator(
       onRefresh: _cargar,
@@ -722,22 +756,8 @@ class _PantallaRankingState extends State<PantallaRanking> {
     return SafeArea(
       child: Stack(
         children: [
-          if (_secretoAbierto)
-            PageView(
-              controller: _paginas,
-              onPageChanged: _alCambiarPagina,
-              children: [normal, _ladoSecreto()],
-            )
-          else
-            normal,
+          normal,
           if (widget.trono) _secreto,
-          if (_secretoAbierto)
-            Positioned(
-              top: 4,
-              left: 0,
-              right: 0,
-              child: IgnorePointer(child: _Puntos(paginas: _paginas)),
-            ),
         ],
       ),
     );
@@ -780,10 +800,6 @@ class _PantallaRankingState extends State<PantallaRanking> {
             ),
           ),
         ),
-      if (_secretoAbierto && !_yaDeslizo) ...[
-        const SizedBox(height: 16),
-        const PistaSecreta(),
-      ],
     ];
   }
 
@@ -791,13 +807,28 @@ class _PantallaRankingState extends State<PantallaRanking> {
   List<Widget> _ranking() {
     final maximo = _filas.isEmpty ? 0 : _filas.first['total'] as int;
     return [
-      _periodos(),
+      Row(
+        children: [
+          Expanded(child: _periodos()),
+          // Solo lo ve quien tiene el secreto.
+          if (_secretoAbierto) ...[
+            const SizedBox(width: 8),
+            _BotonSecreto(activo: _modoSecreto, onTap: _cambiarModo),
+          ],
+        ],
+      ),
       const SizedBox(height: 8),
       _alcance(),
       const SizedBox(height: 10),
       ContadorCierre(periodo: _periodo),
+      if (_modoSecreto) ...[
+        const SizedBox(height: 10),
+        _cuentas(),
+      ],
       if (_cargando)
         const Padding(padding: EdgeInsets.all(32), child: Cargando())
+      else if (_modoSecreto)
+        ..._rankingSecreto()
       else ...[
         // Al cambiar de periodo o de alcance, el podio y la tabla se funden en vez de saltar.
         AnimatedSwitcher(
@@ -806,11 +837,11 @@ class _PantallaRankingState extends State<PantallaRanking> {
             key: ValueKey('$_periodo$_soloSiguiendo'),
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _Podio(
+              _volteo(_Podio(
                 filas: _filas.take(3).toList(),
                 yo: _yo,
                 onTap: (id) => _abrir(PantallaPerfil(usuarioId: id)),
-              ),
+              )),
               if (_filas.length > 3)
                 _Tabla(
                   filas: _filas.skip(3).toList(),
@@ -880,141 +911,180 @@ class _PantallaRankingState extends State<PantallaRanking> {
     );
   }
 
-  Future<void> _alCambiarPagina(int pagina) async {
-    if (pagina == 1 && !_yaDeslizo) {
-      setState(() => _yaDeslizo = true);
-      (await SharedPreferences.getInstance()).setBool('placer_deslizo', true);
-    }
-  }
-
-  /// La primera vez que se abre con el secreto desbloqueado, la página se asoma un poco
-  /// hacia la izquierda para que se note que hay algo al lado.
-  Future<void> _asomar() async {
-    if (_asomado || _yaDeslizo || !_secretoAbierto) return;
-    _asomado = true;
-    await Future<void>.delayed(const Duration(milliseconds: 600));
-    if (!mounted || !_paginas.hasClients) return;
-    await _paginas.animateTo(90, duration: const Duration(milliseconds: 450), curve: Curves.easeOut);
-    if (!mounted || !_paginas.hasClients) return;
-    await _paginas.animateTo(0, duration: const Duration(milliseconds: 600), curve: Curves.bounceOut);
-  }
-
-  /// El lado secreto: otra pantalla, en oscuro y dorado, con su propio botón y el ranking
-  /// de placenteras contra destructivas.
-  Widget _ladoSecreto() => Theme(
-        data: tema(Brightness.dark),
-        child: Builder(builder: (context) {
-          final texto = Theme.of(context).textTheme;
-          final p = paleta(context);
-          return ColoredBox(
-            color: p.fondo,
-            child: ListView(
-              padding: conBordeAbajo(context, const EdgeInsets.fromLTRB(16, 12, 16, 48)),
-              children: [
-                // Mismas medidas que el lado normal: fila de 48, botón, deshacer y una tarjeta.
-                SizedBox(
-                  height: 48,
-                  child: Row(
-                    children: [
-                      const Icon(Icons.lock_open, color: acento),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text(tr('El lado secreto', 'The secret side'), style: texto.headlineSmall)),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Center(child: _BotonCague(onTap: _cague, secreto: true)),
-                Center(
-                  child: TextButton.icon(
-                    onPressed: _deshacer,
-                    icon: const Icon(Icons.undo, size: 18),
-                    label: Text(tr('DESHACER LA ÚLTIMA', 'UNDO THE LAST ONE')),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: p.borde)),
-                  child: IntrinsicHeight(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Container(width: 4, color: acento),
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Rotulo(tr('Solo para los que saben', 'Only for those in the know')),
-                                const SizedBox(height: 4),
-                                Text(tr('Aquí cada cagada se califica', 'Here every poop gets a grade'),
-                                    style: texto.bodyLarge?.copyWith(fontWeight: FontWeight.w600, color: p.texto)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 28),
-                Rotulo(tr('Ranking secreto', 'Secret leaderboard')),
-                const SizedBox(height: 8),
-                _periodos(),
-                const SizedBox(height: 8),
-                _alcance(),
-                const SizedBox(height: 10),
-                ContadorCierre(periodo: _periodo),
-                const SizedBox(height: 12),
-                TablaPlacer(
-                  version: _version,
-                  periodo: _periodo,
-                  soloSiguiendo: _soloSiguiendo,
-                  onTap: (id) => _abrir(PantallaPerfil(usuarioId: id)),
-                ),
-              ],
-            ),
-          );
+  /// PLACENTERAS o DESTRUCTIVAS: lo que cuenta el ranking secreto.
+  Widget _cuentas() => SegmentedButton<String>(
+        segments: [
+          ButtonSegment(value: 'placenteras', icon: iconoPlacer(7, tamano: 20), label: _UnaLinea(tr('PLACENTERAS', 'PLEASURABLE'))),
+          ButtonSegment(value: 'destructivas', icon: iconoPlacer(1, tamano: 20), label: _UnaLinea(tr('DESTRUCTIVAS', 'DESTRUCTIVE'))),
+        ],
+        selected: {_cuenta},
+        showSelectedIcon: false,
+        style: _compacto,
+        onSelectionChanged: (s) => setState(() {
+          _cuenta = s.first;
+          _vueltas++;
         }),
       );
+
+  /// El mismo podio y la misma tabla, ordenados por cagadas calificadas, con el chisme del líder.
+  List<Widget> _rankingSecreto() {
+    final filas = [
+      for (final f in _filasSecretas) {...f, 'total': ((f[_cuenta] as num?) ?? 0).toInt()},
+    ]..sort((a, b) {
+        final orden = (b['total'] as int).compareTo(a['total'] as int);
+        return orden != 0 ? orden : ((b['calificadas'] as num?) ?? 0).compareTo((a['calificadas'] as num?) ?? 0);
+      });
+    final maximo = filas.isEmpty ? 0 : filas.first['total'] as int;
+    final lider = filas.firstOrNull;
+    return [
+      if (lider != null && (lider['total'] as int) > 0) ...[
+        const SizedBox(height: 12),
+        _Chisme(fila: lider, cuenta: _cuenta, esMio: lider['user_id'] == _yo),
+      ],
+      _volteo(_Podio(
+        filas: filas.take(3).toList(),
+        yo: _yo,
+        onTap: (id) => _abrir(PantallaPerfil(usuarioId: id)),
+      )),
+      if (filas.length > 3)
+        _Tabla(
+          filas: filas.skip(3).toList(),
+          desde: 4,
+          yo: _yo,
+          maximo: maximo,
+          onTap: (id) => _abrir(PantallaPerfil(usuarioId: id)),
+        ),
+      if (filas.length <= 1) ...[
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              tr('Aquí solo salen los que también saben el secreto. No lo cuentes por ahí.',
+                  "Only people who know the secret show up here. Don't spread it."),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ],
+    ];
+  }
+
+  /// Después de cambiar de modo (o de cuenta) el podio entra dando media vuelta, una sola vez.
+  Widget _volteo(Widget podio) {
+    final voltear = _vueltas != _vueltasVistas;
+    if (voltear) WidgetsBinding.instance.addPostFrameCallback((_) => _vueltasVistas = _vueltas);
+    if (movimiento(context) != Movimiento.completo) return podio;
+    return TweenAnimationBuilder<double>(
+      key: ValueKey('podio-$_modoSecreto-$_cuenta'),
+      tween: Tween(begin: voltear ? pi / 2 : 0, end: 0),
+      duration: const Duration(milliseconds: 520),
+      curve: Curves.easeOutBack,
+      child: podio,
+      builder: (context, angulo, child) => Transform(
+        alignment: Alignment.bottomCenter,
+        transform: Matrix4.identity()
+          ..setEntry(3, 2, .0012)
+          ..rotateX(angulo),
+        child: child,
+      ),
+    );
+  }
 }
 
-/// Dos cuadritos arriba que siguen el dedo entre la página normal y la secreta.
-class _Puntos extends StatelessWidget {
-  const _Puntos({required this.paginas});
+/// El 🤫 junto al periodo: cuadrado, borde fino, negro y dorado cuando está prendido.
+class _BotonSecreto extends StatelessWidget {
+  const _BotonSecreto({required this.activo, required this.onTap});
 
-  final PageController paginas;
+  final bool activo;
+  final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-        animation: paginas,
-        builder: (context, _) {
-          final pos = paginas.hasClients && paginas.position.haveDimensions ? (paginas.page ?? 0) : 0.0;
-          return Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              for (var i = 0; i < 2; i++)
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  width: 8 + 14 * (1 - (pos - i).abs()).clamp(0.0, 1.0),
-                  height: 8,
-                  color: i == 1 ? acento : paleta(context).texto,
-                ),
-            ],
-          );
-        },
-      );
+  Widget build(BuildContext context) {
+    final p = paleta(context);
+    return Tooltip(
+      message: tr('Ranking secreto', 'Secret leaderboard'),
+      child: Semantics(
+        button: true,
+        toggled: activo,
+        label: tr('Ranking secreto', 'Secret leaderboard'),
+        child: Material(
+          color: activo ? acentoTexto : Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(radio),
+            side: BorderSide(color: activo ? acento : p.bordeFuerte),
+          ),
+          child: InkWell(
+            onTap: onTap,
+            customBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radio)),
+            child: const SizedBox.square(dimension: 40, child: Center(child: Emoji('🤫', tamano: 20))),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Lo que se dice del primero del ranking secreto: su mojón, cuántas lleva y su promedio.
+class _Chisme extends StatelessWidget {
+  const _Chisme({required this.fila, required this.cuenta, required this.esMio});
+
+  final Map<String, dynamic> fila;
+  final String cuenta;
+  final bool esMio;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paleta(context);
+    final texto = Theme.of(context).textTheme;
+    final n = fila['total'] as int;
+    final promedio = fila['promedio'];
+    final buenas = cuenta == 'placenteras';
+    final cosa = buenas
+        ? tr(n == 1 ? 'placentera' : 'placenteras', n == 1 ? 'pleasurable one' : 'pleasurable ones')
+        : tr(n == 1 ? 'destructiva' : 'destructivas', n == 1 ? 'destructive one' : 'destructive ones');
+    final dicho = esMio
+        ? tr('Dicen que vas punteando con $n $cosa', "Word is you're leading with $n $cosa")
+        : tr('Dicen que ${fila['username']} va punteando con $n $cosa', "Word is ${fila['username']} is leading with $n $cosa");
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: acento)),
+      child: Row(
+        children: [
+          MojonDelMomento(
+            placer: promedio == null ? (buenas ? 6 : 2) : num.parse('$promedio').round(),
+            etiquetas: buenas ? const {'placentera'} : const {'ardiente'},
+            tamano: 56,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Rotulo(tr('El chisme', 'The gossip')),
+                const SizedBox(height: 4),
+                Text(dicho, style: texto.bodyLarge?.copyWith(fontWeight: FontWeight.w700, color: p.texto)),
+                if (promedio != null) ...[
+                  const SizedBox(height: 2),
+                  Text(tr('Promedio $promedio: ${etiquetaPromedio(promedio)}', 'Average $promedio: ${etiquetaPromedio(promedio)}'),
+                      style: numeros(context, tamano: 13, weight: FontWeight.w700, color: acento)),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Botón redondo principal; al apretarlo se encoge y cambia de color. Según el teléfono el
 /// mojón vuela a un inodoro, da un brinco dentro del botón o no se mueve (ver animaciones.dart).
 class _BotonCague extends StatefulWidget {
-  const _BotonCague({required this.onTap, this.secreto = false});
+  const _BotonCague({required this.onTap});
 
   /// Recibe la animación para esperarla antes de abrir lo que sigue.
   final void Function(Future<void> animacion) onTap;
-  // En el lado secreto: negro con aro dorado que brilla y el mojón con alas.
-  final bool secreto;
 
   @override
   State<_BotonCague> createState() => _BotonCagueState();
@@ -1052,7 +1122,7 @@ class _BotonCagueState extends State<_BotonCague> with SingleTickerProviderState
 
   Future<void> _alInodoro(Rect boton) async {
     setState(() => _volando = true);
-    await tirarAlInodoro(context, boton: boton, secreto: widget.secreto, alSalpicar: () {
+    await tirarAlInodoro(context, boton: boton, secreto: false, alSalpicar: () {
       if (!mounted) return;
       setState(() {
         _volando = false;
@@ -1100,26 +1170,17 @@ class _BotonCagueState extends State<_BotonCague> with SingleTickerProviderState
             width: 200,
             height: 200,
             // Al apretar: en claro pasa de negro a amarillo; en oscuro, de amarillo a blanco.
-            decoration: widget.secreto
-                ? BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _apretado ? acento : const Color(0xFF1B1407),
-                    border: Border.all(color: acento, width: 4),
-                    boxShadow: [BoxShadow(color: acento.withValues(alpha: _apretado ? .9 : .5), blurRadius: 36, spreadRadius: 2)],
-                  )
-                : BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _apretado ? (p.primario == acento ? p.texto : acento) : p.primario,
-                  ),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _apretado ? (p.primario == acento ? p.texto : acento) : p.primario,
+            ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _mojon(widget.secreto
-                    ? Image.asset('assets/img/mojon_angel.png', width: 104, height: 104)
-                    : const Emoji('💩', tamano: 88)),
+                _mojon(const Emoji('💩', tamano: 88)),
                 Text(tr('CAGUÉ', 'I POOPED'),
                     style: TextStyle(
-                      color: _apretado ? acentoTexto : (widget.secreto ? acento : p.sobrePrimario),
+                      color: _apretado ? acentoTexto : p.sobrePrimario,
                       fontSize: 24,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 2,
