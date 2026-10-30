@@ -72,6 +72,14 @@ flutter:
   assets:
     - assets/emoji/
     - assets/img/
+    - assets/fonts/LICENSE-OFL.txt
+
+  # Solo los emojis de Unicode 14.0 en adelante (Noto Color Emoji recortada). Android 13 o
+  # anterior no los trae y salían como cuadritos; los demás siguen saliendo de la fuente del teléfono.
+  fonts:
+    - family: EmojiNuevos
+      fonts:
+        - asset: assets/fonts/NotoEmojiNuevos.ttf
 
   # To add assets to your application, add an assets section, like this:
   # assets:

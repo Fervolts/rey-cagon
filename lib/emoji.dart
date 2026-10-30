@@ -89,6 +89,9 @@ const _archivos = {
   '💥': 'collision',
 };
 
+// Las mismas claves sin FE0F, para encontrar '🌶' igual que '🌶️'.
+final _sinVariacion = {for (final e in _archivos.entries) e.key.replaceAll('\u{FE0F}', ''): e.value};
+
 /// Emoji como imagen de [tamano] px. Si no está en el set, usa el emoji del sistema.
 class Emoji extends StatelessWidget {
   const Emoji(this.emoji, {super.key, this.tamano = 24});
@@ -98,7 +101,8 @@ class Emoji extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final archivo = _archivos[emoji];
+    // El teclado a veces manda el selector de variación (FE0F) y a veces no: vale igual.
+    final archivo = _archivos[emoji] ?? _sinVariacion[emoji.replaceAll('\u{FE0F}', '')];
     if (archivo == null) {
       return SizedBox(
         width: tamano,
@@ -126,6 +130,10 @@ void registrarLicencias() {
       [tr('Noto Emoji (Google), ícono de la app', 'Noto Emoji (Google), app icon')],
       '${tr('Noto Emoji © Google LLC. Licencia Apache 2.0 / CC BY 4.0.', 'Noto Emoji © Google LLC. Apache 2.0 / CC BY 4.0 license.')}\n'
       'https://github.com/googlefonts/noto-emoji',
+    );
+    yield LicenseEntryWithLineBreaks(
+      [tr('Noto Color Emoji (Google), emojis nuevos', 'Noto Color Emoji (Google), newer emojis')],
+      await rootBundle.loadString('assets/fonts/LICENSE-OFL.txt'),
     );
   });
 }

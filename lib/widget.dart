@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/widgets.dart';
 import 'package:home_widget/home_widget.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'genero.dart';
@@ -90,19 +91,59 @@ Future<void> _pintarRanking(SupabaseClient db, {required bool global}) async {
 }
 
 /// Supabase para código que corre sin la app abierta (widget, push en segundo plano).
-Future<SupabaseClient> clienteDeFondo() async {
+///
+/// Este motor y el de la app comparten la sesión guardada en el teléfono, pero no la memoria.
+/// Si los dos renuevan el token por su cuenta, uno termina usando un token viejo y el servidor
+/// lo toma como robado: revoca la sesión y la app pide iniciar sesión otra vez. Por eso aquí no
+/// se renueva solo ni se guarda nada: solo la app escribe la sesión, y este motor la relee.
+/// Devuelve null si no hay una sesión vigente con la que consultar.
+Future<SupabaseClient?> clienteDeFondo() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
     await Supabase.initialize(
       url: supabaseUrl,
       publishableKey: supabaseKey,
-      // Sin actividad no hay deep links que escuchar.
-      authOptions: const FlutterAuthClientOptions(detectSessionInUri: false),
+      authOptions: const FlutterAuthClientOptions(
+        // Sin actividad no hay deep links que escuchar.
+        detectSessionInUri: false,
+        autoRefreshToken: false,
+        persistSession: false,
+      ),
     );
   } catch (_) {
     // Ya estaba inicializado en este motor.
   }
-  return Supabase.instance.client;
+  final db = Supabase.instance.client;
+  await _tomarSesion(db);
+  // Con una sesión vencida cualquier consulta intentaría renovarla con el token en memoria,
+  // que puede ser viejo: mejor no consultar.
+  final sesion = db.auth.currentSession;
+  return sesion == null || sesion.isExpired ? null : db;
+}
+
+/// Carga la sesión que guardó la app si la de este motor falta o ya venció.
+Future<void> _tomarSesion(SupabaseClient db) async {
+  final actual = db.auth.currentSession;
+  if (actual != null && !actual.isExpired) return;
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    // La app pudo escribirla en otro motor después de abrir este: hay que releer el disco.
+    await prefs.reload();
+    // Misma clave que usa supabase_flutter al guardar la sesión.
+    final guardada = prefs.getString('sb-${Uri.parse(supabaseUrl).host.split('.').first}-auth-token');
+    if (guardada == null) return;
+    final sesion = Session.fromJson(jsonDecode(guardada) as Map<String, dynamic>);
+    if (sesion == null) return;
+    if (!sesion.isExpired) {
+      await db.auth.recoverSession(guardada);
+    } else if (sesion.refreshToken != null) {
+      // Renueva solo en memoria a partir del último token de la app. El servidor acepta que la
+      // app vuelva a usar ese mismo token después (le devuelve el nuevo), así que no hay choque.
+      await db.auth.setSession(sesion.refreshToken!);
+    }
+  } catch (_) {
+    // Sin internet o sesión inválida: el que llama ve que no hay sesión.
+  }
 }
 
 /// Toque en el botón del widget. Corre en un motor de Flutter aparte, sin la app abierta,
@@ -113,7 +154,7 @@ Future<void> widgetCague(Uri? uri) async {
   await cargarGenero();
   await _pintar(estado: '...');
   final db = await clienteDeFondo();
-  if (db.auth.currentSession == null) return _pintar(estado: tr('ABRE LA APP', 'OPEN THE APP'));
+  if (db == null) return _pintar(estado: tr('ABRE LA APP', 'OPEN THE APP'));
 
   String? aviso;
   try {
