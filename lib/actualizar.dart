@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show appFlavor;
 import 'package:in_app_update/in_app_update.dart';
 import 'package:ota_update/ota_update.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -15,8 +16,9 @@ const _manifiesto = '$supabaseUrl/storage/v1/object/public/releases/version.json
 var _abierto = false;
 int? _pospuesta;
 
-/// La versión de Play se compila con --dart-define=CANAL=play: ahí las actualizaciones llegan por la tienda.
-const esDePlay = String.fromEnvironment('CANAL') == 'play';
+/// La versión de Play (flavor `play`): ahí las actualizaciones llegan por la tienda. Sale del flavor
+/// para no depender de acordarse del --dart-define=CANAL=play, que ya se olvidó una vez.
+const esDePlay = appFlavor == 'play' || String.fromEnvironment('CANAL') == 'play';
 
 /// Al abrir la app y al volver a ella: si hay una versión con build mayor que la instalada,
 /// ofrece bajarla e instalarla. "Después" la calla hasta el próximo arranque.
