@@ -1280,6 +1280,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin {
               if (!_esSoporte)
                 IconButton(onPressed: _enviando ? null : _compartir, icon: const Icon(Icons.emoji_events_outlined), tooltip: tr('Presumir', 'Show off')),
               if (_esSoporte) const SizedBox(width: 8),
+              IconButton(onPressed: () => ponerEmoji(context, _texto), icon: const Icon(Icons.emoji_emotions_outlined), tooltip: tr('Emojis', 'Emojis')),
               Expanded(
                 child: TextField(
                   controller: _texto,
@@ -1750,9 +1751,10 @@ class _PantallaHiloState extends State<_PantallaHilo> {
         SafeArea(
           top: false,
           child: Container(
-            padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
+            padding: const EdgeInsets.fromLTRB(4, 6, 8, 6),
             decoration: BoxDecoration(border: Border(top: BorderSide(color: p.borde))),
             child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              IconButton(onPressed: () => ponerEmoji(context, _texto), icon: const Icon(Icons.emoji_emotions_outlined), tooltip: tr('Emojis', 'Emojis')),
               Expanded(
                 child: TextField(
                   controller: _texto,
@@ -1869,4 +1871,44 @@ class _TextoConLinks extends StatelessWidget {
     if (desde < texto.length) partes.add(TextSpan(text: texto.substring(desde)));
     return Text.rich(TextSpan(style: base, children: partes));
   }
+}
+
+// Los del teclado de siempre más los del baño. Se pintan con la fuente del sistema y, si es
+// vieja, con la de respaldo del tema (los nuevos también se ven).
+const _emojisChat = [
+  '💩', '🚽', '🧻', '👑', '🤴', '👸', '🔥', '💥', '☢️', '🏆', '🥇', '💪',
+  '😂', '🤣', '😭', '😅', '😎', '🤩', '😳', '🥵', '🤢', '🤮', '😤', '😈',
+  '🙄', '🤔', '🫡', '🫣', '🫠', '🥲', '😏', '🤫', '🤐', '💀', '👀', '🙈',
+  '👍', '👎', '👏', '🙌', '🙏', '🤝', '✌️', '🤞', '🫶', '❤️', '💯', '✨',
+  '🍌', '🌶️', '🌽', '☕', '🍺', '🍔', '🌮', '🍕', '🚿', '🪠', '🧼', '🐋',
+];
+
+/// Hoja con emojis que se insertan donde está el cursor de [texto]. Se queda abierta para poner varios.
+Future<void> ponerEmoji(BuildContext context, TextEditingController texto) {
+  return showModalBottomSheet(
+    context: context,
+    showDragHandle: true,
+    builder: (context) => SafeArea(
+      child: GridView.count(
+        crossAxisCount: 8,
+        shrinkWrap: true,
+        padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
+        children: [
+          for (final e in _emojisChat)
+            InkWell(
+              onTap: () {
+                final sel = texto.selection;
+                final inicio = sel.isValid ? sel.start : texto.text.length;
+                final fin = sel.isValid ? sel.end : texto.text.length;
+                texto.value = TextEditingValue(
+                  text: texto.text.replaceRange(inicio, fin, e),
+                  selection: TextSelection.collapsed(offset: inicio + e.length),
+                );
+              },
+              child: Center(child: Text(e, style: const TextStyle(fontSize: 26))),
+            ),
+        ],
+      ),
+    ),
+  );
 }
