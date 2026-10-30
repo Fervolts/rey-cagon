@@ -30,6 +30,10 @@ Future<void> _alFondo(RemoteMessage m) async {
 
 /// Tocaron el push: abrir donde corresponde. Las cagadas y las versiones abren la app y ya.
 void _alTocar(RemoteMessage m) {
+  if (m.data['tipo'] == 'respuesta') {
+    ir(m.data['sala'] ?? 'todos', hilo: int.tryParse('${m.data['hilo']}'));
+    return;
+  }
   final destino = switch (m.data['tipo']) {
     'mencion' || 'reporte_chat' => m.data['sala'] ?? 'todos',
     'soporte' => 'soporte',

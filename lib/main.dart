@@ -30,6 +30,7 @@ import 'racha.dart';
 import 'push.dart';
 import 'recuperar.dart';
 import 'recordatorio.dart';
+import 'teclado_emojis.dart' show panelEmojisAbierto;
 import 'tema.dart';
 import 'secreto.dart';
 import 'tipos.dart';
@@ -413,28 +414,33 @@ class _PantallaInicioState extends State<PantallaInicio> {
           PantallaPerfil(usuarioId: yo),
         ],
       ),
-      bottomNavigationBar: DecoratedBox(
-        decoration: BoxDecoration(border: Border(top: BorderSide(color: paleta(context).borde))),
-        child: MediaQuery(
-          data: mq.copyWith(textScaler: mq.textScaler.clamp(maxScaleFactor: 1.0)),
-          child: NavigationBarTheme(
-            data: NavigationBarTheme.of(context).copyWith(
-              labelTextStyle: WidgetStatePropertyAll(
-                TextStyle(fontSize: tam, fontWeight: FontWeight.w700, letterSpacing: tam < 10 ? 0.2 : 0.6),
+      // Con el panel de emojis abierto la barra se va, igual que la tapa el teclado.
+      bottomNavigationBar: ValueListenableBuilder(
+        valueListenable: panelEmojisAbierto,
+        builder: (context, abierto, barra) => abierto ? const SizedBox.shrink() : barra!,
+        child: DecoratedBox(
+          decoration: BoxDecoration(border: Border(top: BorderSide(color: paleta(context).borde))),
+          child: MediaQuery(
+            data: mq.copyWith(textScaler: mq.textScaler.clamp(maxScaleFactor: 1.0)),
+            child: NavigationBarTheme(
+              data: NavigationBarTheme.of(context).copyWith(
+                labelTextStyle: WidgetStatePropertyAll(
+                  TextStyle(fontSize: tam, fontWeight: FontWeight.w700, letterSpacing: tam < 10 ? 0.2 : 0.6),
+                ),
               ),
-            ),
-            child: NavigationBar(
-              selectedIndex: _tab,
-              onDestinationSelected: (i) {
-                setState(() => _tab = i);
-                if (i == _tabBano) _marcarVisto();
-              },
-              destinations: [
-                NavigationDestination(icon: IconoRebota(activo: _tab == 0, child: const Emoji('💩', tamano: 24)), label: tr('TRONO', 'THRONE')),
-                NavigationDestination(icon: IconoRebota(activo: _tab == 1, child: Icon(_tab == 1 ? Icons.emoji_events : Icons.emoji_events_outlined)), label: tr('RANKING', 'LEADERBOARD')),
-                NavigationDestination(icon: IconoRebota(activo: _tab == 2, child: icono(_tab == 2 ? Icons.wc : Icons.wc_outlined)), label: nombreCorto),
-                NavigationDestination(icon: IconoRebota(activo: _tab == 3, child: Icon(_tab == 3 ? Icons.person : Icons.person_outline)), label: tr('YO', 'ME')),
-              ],
+              child: NavigationBar(
+                selectedIndex: _tab,
+                onDestinationSelected: (i) {
+                  setState(() => _tab = i);
+                  if (i == _tabBano) _marcarVisto();
+                },
+                destinations: [
+                  NavigationDestination(icon: IconoRebota(activo: _tab == 0, child: const Emoji('💩', tamano: 24)), label: tr('TRONO', 'THRONE')),
+                  NavigationDestination(icon: IconoRebota(activo: _tab == 1, child: Icon(_tab == 1 ? Icons.emoji_events : Icons.emoji_events_outlined)), label: tr('RANKING', 'LEADERBOARD')),
+                  NavigationDestination(icon: IconoRebota(activo: _tab == 2, child: icono(_tab == 2 ? Icons.wc : Icons.wc_outlined)), label: nombreCorto),
+                  NavigationDestination(icon: IconoRebota(activo: _tab == 3, child: Icon(_tab == 3 ? Icons.person : Icons.person_outline)), label: tr('YO', 'ME')),
+                ],
+              ),
             ),
           ),
         ),

@@ -62,6 +62,9 @@ const _claveRecientes = 'emojis_recientes';
 // Alto del teclado del sistema la última vez que se vio, para que el panel ocupe lo mismo.
 double _altoTeclado = 0;
 
+/// Panel abierto en alguna pantalla: la barra de pestañas se esconde, como con el teclado.
+final panelEmojisAbierto = ValueNotifier<bool>(false);
+
 /// Recuerda el alto del teclado del sistema. Llamarlo en el build de la pantalla del chat.
 void recordarAltoTeclado(BuildContext context) {
   final alto = MediaQuery.viewInsetsOf(context).bottom;
@@ -174,7 +177,11 @@ class _TecladoEmojisState extends State<TecladoEmojis> {
   Widget build(BuildContext context) {
     final p = paleta(context);
     final pantalla = MediaQuery.sizeOf(context).height;
-    final alto = (_altoTeclado > 0 ? _altoTeclado : pantalla * .36).clamp(240.0, pantalla * .45);
+    // El teclado tapa también la barra de gestos del sistema; el panel va encima de ella (SafeArea),
+    // así que se le resta para que la caja quede a la misma altura con uno u otro.
+    final vista = View.of(context);
+    final gestos = vista.viewPadding.bottom / vista.devicePixelRatio;
+    final alto = ((_altoTeclado > 0 ? _altoTeclado : pantalla * .36) - gestos).clamp(240.0, pantalla * .45);
     final secciones = _secciones;
     final estilo = DefaultTextStyle.of(context).style.copyWith(fontSize: 28, height: 1.15);
     return Container(
@@ -275,26 +282,53 @@ mixin ConTecladoEmojis<T extends StatefulWidget> on State<T> {
   final focoTexto = FocusNode();
   bool emojisAbiertos = false;
 
+  // Si otra pantalla lo cierra (cambiar de sala, por ejemplo), este también se cierra.
+  void _alCerrarAfuera() {
+    if (!panelEmojisAbierto.value && emojisAbiertos && mounted) setState(() => emojisAbiertos = false);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    panelEmojisAbierto.addListener(_alCerrarAfuera);
+  }
+
+  void _abiertos(bool v) {
+    setState(() => emojisAbiertos = v);
+    panelEmojisAbierto.value = v;
+  }
+
   void alternarEmojis() {
     if (emojisAbiertos) {
-      setState(() => emojisAbiertos = false);
+      _abiertos(false);
       focoTexto.requestFocus();
       return;
     }
     focoTexto.unfocus();
     SystemChannels.textInput.invokeMethod('TextInput.hide');
-    setState(() => emojisAbiertos = true);
+    _abiertos(true);
   }
 
   void cerrarEmojis() {
-    if (emojisAbiertos) setState(() => emojisAbiertos = false);
+    if (emojisAbiertos) _abiertos(false);
   }
 
   /// Botón de la caja de texto: carita para abrir los emojis, teclado para volver.
   Widget botonEmojis() => IconButton(
+        visualDensity: VisualDensity.compact,
         onPressed: alternarEmojis,
         icon: Icon(emojisAbiertos ? Icons.keyboard_outlined : Icons.emoji_emotions_outlined),
         tooltip: emojisAbiertos ? tr('Teclado', 'Keyboard') : tr('Emojis', 'Emojis'),
+      );
+
+  /// Decoración de la caja de texto: una sola línea de pista y el botón de emojis adentro.
+  InputDecoration decoracionConEmojis(String pista) => InputDecoration(
+        hintText: pista,
+        hintMaxLines: 1,
+        counterText: '',
+        isDense: true,
+        contentPadding: const EdgeInsets.fromLTRB(12, 10, 0, 10),
+        suffixIcon: botonEmojis(),
       );
 
   /// La caja de texto con el panel debajo. Atrás cierra el panel antes de salir.
@@ -314,6 +348,8 @@ mixin ConTecladoEmojis<T extends StatefulWidget> on State<T> {
 
   @override
   void dispose() {
+    panelEmojisAbierto.removeListener(_alCerrarAfuera);
+    if (emojisAbiertos) panelEmojisAbierto.value = false;
     focoTexto.dispose();
     super.dispose();
   }

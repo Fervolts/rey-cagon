@@ -194,7 +194,8 @@ class PantallaChat extends StatefulWidget {
 class _PantallaChatState extends State<PantallaChat> with SingleTickerProviderStateMixin {
   // Salas en public.mensajes: 'global' es la general, 'es' y 'en' las de cada idioma.
   final _pestanas = ['global', idioma.value, if (enIngles) 'es' else 'en', 'amigos'];
-  late final _tabs = TabController(length: _pestanas.length, vsync: this);
+  // Cambiar de sala cierra el panel de emojis de la anterior (si no, la barra de abajo se queda escondida).
+  late final _tabs = TabController(length: _pestanas.length, vsync: this)..addListener(() => panelEmojisAbierto.value = false);
   bool _soyAdmin = false;
 
   @override
@@ -446,6 +447,10 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
     }).catchError((_) {});
     if (widget.abrirBug) WidgetsBinding.instance.addPostFrameCallback((_) => _reportarError());
     if (!_esSoporte) {
+      irA.addListener(_irAlHilo);
+      WidgetsBinding.instance.addPostFrameCallback((_) => _irAlHilo());
+    }
+    if (!_esSoporte) {
       _cargarAmigos();
       _texto.addListener(_buscarMencion);
     }
@@ -457,10 +462,25 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
     });
   }
 
+  // Un toque en un aviso de respuesta: abrir ese hilo encima de esta sala.
+  Future<void> _irAlHilo() async {
+    final destino = irA.value;
+    final sala = destino?.a == 'todos' ? 'global' : destino?.a;
+    if (destino == null || destino.hilo == null || destino.enHilo || sala != widget.sala || !mounted) return;
+    destino.enHilo = true;
+    try {
+      final padre = await db.from('mensajes').select().eq('id', destino.hilo!).maybeSingle();
+      if (padre != null && mounted) _abrirHilo(padre);
+    } catch (e) {
+      if (mounted) _aviso(context, _error(e));
+    }
+  }
+
   String get _claveBorrador => 'borrador_${widget.sala}_${widget.hilo ?? ''}';
 
   @override
   void dispose() {
+    irA.removeListener(_irAlHilo);
     _ciclo.dispose();
     _reintentoCarga?.cancel();
     _reintentoCanal?.cancel();
@@ -1281,7 +1301,6 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
               if (!_esSoporte)
                 IconButton(onPressed: _enviando ? null : _compartir, icon: const Icon(Icons.emoji_events_outlined), tooltip: tr('Presumir', 'Show off')),
               if (_esSoporte) const SizedBox(width: 8),
-              botonEmojis(),
               Expanded(
                 child: TextField(
                   controller: _texto,
@@ -1291,7 +1310,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
                   maxLines: 5,
                   maxLength: 1000,
                   textCapitalization: TextCapitalization.sentences,
-                  decoration: InputDecoration(hintText: _esSoporte ? tr('Escribe algo…', 'Write something…') : tr('Escribe algo… (@ para mencionar a un amigo)', 'Write something… (@ to mention a friend)'), counterText: '', isDense: true),
+                  decoration: decoracionConEmojis(_esSoporte ? tr('Escribe algo…', 'Write something…') : tr('Escribe… (@ para mencionar)', 'Write… (@ to mention)')),
                 ),
               ),
               const SizedBox(width: 6),
@@ -1757,7 +1776,7 @@ class _PantallaHiloState extends State<_PantallaHilo> with ConTecladoEmojis {
             padding: const EdgeInsets.fromLTRB(4, 6, 8, 6),
             decoration: BoxDecoration(border: Border(top: BorderSide(color: p.borde))),
             child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              botonEmojis(),
+              const SizedBox(width: 4),
               Expanded(
                 child: TextField(
                   controller: _texto,
@@ -1767,7 +1786,7 @@ class _PantallaHiloState extends State<_PantallaHilo> with ConTecladoEmojis {
                   maxLines: 5,
                   maxLength: 1000,
                   textCapitalization: TextCapitalization.sentences,
-                  decoration: InputDecoration(hintText: tr('Responder en el hilo…', 'Reply in thread…'), counterText: '', isDense: true),
+                  decoration: decoracionConEmojis(tr('Responder en el hilo…', 'Reply in thread…')),
                 ),
               ),
               const SizedBox(width: 6),

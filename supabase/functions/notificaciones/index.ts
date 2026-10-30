@@ -7,6 +7,7 @@
 //   - trigger mensajes_avisar_soporte: { tipo: "soporte" } → mensaje de soporte al otro lado del hilo.
 //   - trigger mensaje_reportes_contar: { tipo: "reporte_chat" } → aviso a los admins.
 //   - trigger mensajes_avisar_mencion: { tipo: "mencion" } → aviso a quien mencionaron con @.
+//   - trigger mensajes_avisar_respuesta: { tipo: "respuesta" } → respuesta en un hilo de una sala pública.
 //   - retos (Cagadón): { tipo: "reto", evento } → nuevo, aceptado, rechazado o fin del día.
 //   - trigger anuncios_avisar: { tipo: "anuncio" } → anuncio de un admin a todos los teléfonos.
 // Lo que va a una persona también se guarda en public.notificaciones (centro de avisos de la app).
@@ -270,6 +271,27 @@ async function avisarSoporte(id: number) {
   });
 }
 
+// Respuesta en un hilo: el dueño del mensaje padre lo lee distinto que los demás del hilo.
+async function avisarRespuesta(id: number, para: string[]) {
+  const { data: m } = await db.from("mensajes").select("user_id, texto, sala, responde_a").eq("id", id).single();
+  if (!m?.responde_a) return Response.json({ enviados: 0 });
+  const [{ data: perfil }, { data: padre }] = await Promise.all([
+    db.from("profiles").select("username").eq("id", m.user_id).single(),
+    db.from("mensajes").select("user_id").eq("id", m.responde_a).single(),
+  ]);
+  const quien = perfil?.username ?? "Alguien";
+  const cuerpo = recortar(m.texto || "(tarjeta)");
+  const datos = { tipo: "respuesta", id: String(id), sala: m.sala, hilo: String(m.responde_a) };
+  const dueno = para.filter((u) => u === padre?.user_id);
+  const otros = para.filter((u) => u !== padre?.user_id);
+  const [a, b] = await Promise.all([
+    avisarA(dueno, aviso(`💬 ${quien} respondió tu mensaje`, cuerpo, `💬 ${quien} replied to your message`, cuerpo), datos),
+    avisarA(otros, aviso(`💬 ${quien} respondió en un hilo`, cuerpo, `💬 ${quien} replied in a thread`, cuerpo), datos),
+  ]);
+  const enviados = ((await a.json()).enviados ?? 0) + ((await b.json()).enviados ?? 0);
+  return Response.json({ enviados });
+}
+
 // Mensaje reportado en La Letrina: aviso a los admins.
 async function avisarReporteChat(mensajeId: number, motivo: string) {
   const [{ data: admins }, { data: m }] = await Promise.all([
@@ -377,6 +399,7 @@ Deno.serve(async (req) => {
   if (cuerpo.tipo === "placer") return avisarPlacer(cuerpo.id);
   if (cuerpo.tipo === "soporte") return avisarSoporte(cuerpo.id);
   if (cuerpo.tipo === "mencion") return avisarMencion(cuerpo.id, cuerpo.para);
+  if (cuerpo.tipo === "respuesta") return avisarRespuesta(cuerpo.id, cuerpo.para);
   if (cuerpo.tipo === "reto") return avisarReto(cuerpo.id, cuerpo.evento);
   if (cuerpo.tipo === "anuncio") return avisarAnuncio(cuerpo.id);
   if (cuerpo.tipo === "reporte_chat") return avisarReporteChat(cuerpo.mensaje_id, cuerpo.motivo);

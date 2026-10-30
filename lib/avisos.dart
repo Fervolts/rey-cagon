@@ -17,15 +17,18 @@ import 'tema.dart';
 /// A dónde mandar a la persona: un toque en un push o en un aviso. Cada pantalla que sabe
 /// llegar ahí marca su parte como hecha (la de abajo cambia de pestaña, el baño elige su pestaña).
 class Ir {
-  Ir(this.a);
+  Ir(this.a, {this.hilo});
 
   /// 'inicio', 'todos' (o una sala: 'global', 'es', 'en'), 'amigos', 'soporte' o 'avisos'.
   final String a;
-  bool inicio = false, bano = false;
+
+  /// Id del mensaje padre: la sala abre ese hilo encima.
+  final int? hilo;
+  bool inicio = false, bano = false, enHilo = false;
 }
 
 final irA = ValueNotifier<Ir?>(null);
-void ir(String a) => irA.value = Ir(a);
+void ir(String a, {int? hilo}) => irA.value = Ir(a, hilo: hilo);
 
 /// Avisos sin leer más anuncios sin ver. Lo pinta la campana y el puntito de la pestaña.
 final avisosSinLeer = ValueNotifier<int>(0);
@@ -141,6 +144,17 @@ class PantallaAvisos extends StatefulWidget {
 class _PantallaAvisosState extends State<PantallaAvisos> {
   List<Map<String, dynamic>>? _avisos;
   bool _soyAdmin = false;
+  String? _filtro;
+
+  void _filtrar(String? f) => setState(() => _filtro = f);
+
+  // Filtros de arriba: cada uno junta varios tipos de aviso.
+  static Map<String, (String, Set<String>)> get _filtros => {
+    'chat': (tr('💬 CHAT', '💬 CHAT'), {'mencion', 'respuesta'}),
+    'amigos': (tr('👀 AMIGOS', '👀 FRIENDS'), {'follow', 'placer'}),
+    'retos': (tr('⚔️ RETOS', '⚔️ CHALLENGES'), {'reto'}),
+    'admin': (tr('📢 ADMIN', '📢 ADMIN'), {'anuncio', 'soporte', 'reporte_chat'}),
+  };
 
   String get _yo => db.auth.currentUser!.id;
 
@@ -234,6 +248,9 @@ class _PantallaAvisosState extends State<PantallaAvisos> {
       case 'mencion' || 'reporte_chat':
         Navigator.pop(context);
         ir(datos['sala'] as String? ?? 'todos');
+      case 'respuesta':
+        Navigator.pop(context);
+        ir(datos['sala'] as String? ?? 'todos', hilo: int.tryParse('${datos['hilo']}'));
       case 'soporte':
         Navigator.pop(context);
         ir('soporte');
@@ -275,19 +292,65 @@ class _PantallaAvisosState extends State<PantallaAvisos> {
                             textAlign: TextAlign.center, style: TextStyle(color: p.textoSuave)),
                       ),
                     ])
-                  : ListView.separated(
-                      padding: conBordeAbajo(context, EdgeInsets.zero),
-                      itemCount: avisos.length,
-                      separatorBuilder: (_, _) => Divider(height: 1, color: p.borde),
-                      itemBuilder: (context, i) => _FilaAviso(
-                        aviso: avisos[i],
-                        onTap: () => _abrir(avisos[i]),
-                        onBorrar: _soyAdmin && avisos[i]['anuncio'] == true ? () => _borrarAnuncio(avisos[i]) : null,
-                      ),
-                    ),
+                  : _lista(context, avisos),
             ),
     );
   }
+}
+
+extension on _PantallaAvisosState {
+  // Filtros arriba (solo los que tienen algo) y los avisos por día: hoy, ayer, esta semana, antes.
+  Widget _lista(BuildContext context, List<Map<String, dynamic>> avisos) {
+    final p = paleta(context);
+    final hay = {for (final a in avisos) a['tipo']};
+    final filtros = [for (final f in _PantallaAvisosState._filtros.entries) if (f.value.$2.any(hay.contains)) f];
+    final tipos = _PantallaAvisosState._filtros[_filtro]?.$2;
+    final vistos = tipos == null ? avisos : [for (final a in avisos) if (tipos.contains(a['tipo'])) a];
+    final hijos = <Widget>[
+      if (filtros.length > 1)
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Row(children: [
+            for (final (clave, nombre) in [(null, tr('TODO', 'ALL')), for (final f in filtros) (f.key, f.value.$1)])
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(label: Text(nombre), selected: _filtro == clave, onSelected: (_) => _filtrar(clave)),
+              ),
+          ]),
+        ),
+    ];
+    String? seccion;
+    for (final a in vistos) {
+      final s = _seccion(a['created_at'] as String);
+      if (s != seccion) {
+        seccion = s;
+        hijos.add(Container(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
+          decoration: BoxDecoration(border: Border(bottom: BorderSide(color: p.borde))),
+          child: Rotulo(s),
+        ));
+      } else {
+        hijos.add(Divider(height: 1, color: p.borde));
+      }
+      hijos.add(_FilaAviso(
+        aviso: a,
+        onTap: () => _abrir(a),
+        onBorrar: _soyAdmin && a['anuncio'] == true ? () => _borrarAnuncio(a) : null,
+      ));
+    }
+    return ListView(padding: conBordeAbajo(context, EdgeInsets.zero), children: hijos);
+  }
+}
+
+String _seccion(String iso) {
+  final t = DateTime.parse(iso).toLocal();
+  final hoy = DateUtils.dateOnly(DateTime.now());
+  final dias = hoy.difference(DateUtils.dateOnly(t)).inDays;
+  if (dias <= 0) return tr('Hoy', 'Today');
+  if (dias == 1) return tr('Ayer', 'Yesterday');
+  if (dias < 7) return tr('Esta semana', 'This week');
+  return tr('Antes', 'Earlier');
 }
 
 class _FilaAviso extends StatelessWidget {
@@ -301,6 +364,7 @@ class _FilaAviso extends StatelessWidget {
     'anuncio': '📢',
     'follow': '👀',
     'mencion': '📣',
+    'respuesta': '💬',
     'reto': '⚔️',
     'soporte': '🛠️',
     'placer': '🤫',
