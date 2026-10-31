@@ -217,6 +217,7 @@ ThemeData tema(Brightness brillo) {
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
+      dismissDirection: DismissDirection.horizontal, // se quitan deslizando hacia un lado
       backgroundColor: p.texto,
       contentTextStyle: TextStyle(fontSize: 14, color: p.fondo),
       shape: cuadrado,
