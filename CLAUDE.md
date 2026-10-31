@@ -20,7 +20,8 @@ Repo público: nada de refs de proyecto, keys, correos ni usernames reales en c�
 
 | Archivo | Qué tiene |
 |---|---|
-| `main.dart` | `main()` (init de Supabase, push, widget, idioma, tema), `db`, `esDeRed`, `conReintento`, `escucharCagadas` (Realtime), `PantallaEntrar`, `PantallaInicio` (barra de 4 pestañas TRONO/RANKING/BAÑO/YO), `PantallaRanking` (`trono: true` = pestaña TRONO con tarjeta HOY y CAGUÉ; `trono: false` = RANKING con podio; también el PageView al lado secreto) |
+| `main.dart` | `main()` (init de Supabase, push, widget, idioma, tema), `db`, `esDeRed`, `conReintento`, `escucharCagadas` (Realtime), `PantallaEntrar`, `PantallaInicio` (barra de 5 pestañas TRONO/RANKING/IMPERIO/BAÑO/YO), `PantallaRanking` (`trono: true` = pestaña TRONO con tarjeta HOY y CAGUÉ; `trono: false` = RANKING con podio; también el PageView al lado secreto) |
+| `imperio/` | Modo clicker Imperio: motor puro en `motor.dart`/`catalogo.dart`/`estado.dart`, nube en `nube.dart`, pantalla en `pantalla.dart` |
 | `chat.dart` | Baño: `PantallaChat` (pestañas), sala general y DMs sobre la tabla `mensajes`, reportar/bloquear/ocultar/fijar, `ofrecerPresumir`, hitos |
 | `amigos.dart` | `PantallaAmigos` (listas sigues/te siguen) y `PantallaBuscarAmigos` |
 | `perfil.dart` | `PantallaPerfil` (YO y perfil de otros), `_EditarPerfil`, `PantallaBuscar`, ajustes en la tuerca |

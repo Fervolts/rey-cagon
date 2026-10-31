@@ -31,6 +31,7 @@ import 'push.dart';
 import 'recuperar.dart';
 import 'recordatorio.dart';
 import 'teclado_emojis.dart' show panelEmojisAbierto;
+import 'imperio/pantalla.dart';
 import 'tema.dart';
 import 'secreto.dart';
 import 'tipos.dart';
@@ -294,7 +295,7 @@ class PantallaInicio extends StatefulWidget {
 }
 
 class _PantallaInicioState extends State<PantallaInicio> {
-  static const _tabBano = 2;
+  static const _tabBano = 3;
   int _tab = 0;
 
   // Puntito en la pestaña del baño: hay mensajes de otros desde la última vez que entraste.
@@ -395,9 +396,9 @@ class _PantallaInicioState extends State<PantallaInicio> {
   Widget build(BuildContext context) {
     final yo = _yo;
     final mq = MediaQuery.of(context);
-    // Cuatro pestañas en cualquier ancho: la letra se achica para que "LEADERBOARD" no salte de línea,
+    // Cinco pestañas en cualquier ancho: la letra se achica para que "LEADERBOARD" no salte de línea,
     // y la barra ignora el tamaño de letra del sistema por encima de 1.0.
-    final tam = ((mq.size.width / 4 - 10) / 7.2).clamp(8.0, 11.0);
+    final tam = ((mq.size.width / 5 - 10) / 7.2).clamp(7.5, 11.0);
     Widget icono(IconData i) => Badge(
           isLabelVisible: _hayNuevo,
           smallSize: 9,
@@ -410,6 +411,7 @@ class _PantallaInicioState extends State<PantallaInicio> {
         children: [
           PantallaRanking(trono: true, onVerRanking: () => setState(() => _tab = 1)),
           const PantallaRanking(),
+          const PantallaImperio(),
           const PantallaChat(),
           PantallaPerfil(usuarioId: yo),
         ],
@@ -437,8 +439,9 @@ class _PantallaInicioState extends State<PantallaInicio> {
                 destinations: [
                   NavigationDestination(icon: IconoRebota(activo: _tab == 0, child: const Emoji('💩', tamano: 24)), label: tr('TRONO', 'THRONE')),
                   NavigationDestination(icon: IconoRebota(activo: _tab == 1, child: Icon(_tab == 1 ? Icons.emoji_events : Icons.emoji_events_outlined)), label: tr('RANKING', 'LEADERBOARD')),
-                  NavigationDestination(icon: IconoRebota(activo: _tab == 2, child: icono(_tab == 2 ? Icons.wc : Icons.wc_outlined)), label: nombreCorto),
-                  NavigationDestination(icon: IconoRebota(activo: _tab == 3, child: Icon(_tab == 3 ? Icons.person : Icons.person_outline)), label: tr('YO', 'ME')),
+                  NavigationDestination(icon: IconoRebota(activo: _tab == 2, child: const Emoji('🏭', tamano: 24)), label: tr('IMPERIO', 'EMPIRE')),
+                  NavigationDestination(icon: IconoRebota(activo: _tab == 3, child: icono(_tab == 3 ? Icons.wc : Icons.wc_outlined)), label: nombreCorto),
+                  NavigationDestination(icon: IconoRebota(activo: _tab == 4, child: Icon(_tab == 4 ? Icons.person : Icons.person_outline)), label: tr('YO', 'ME')),
                 ],
               ),
             ),
