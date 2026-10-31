@@ -483,7 +483,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     final moneda = monedaActual().abreviatura;
     final atasco = im.atasco;
     if (!im.edificioAbierto(e.id)) {
-      return _fila(context, emoji: '🔒', titulo: tr('Caga ${e.candado} veces', 'Poop ${e.candado} times'), apagada: true);
+      return _fila(context, emoji: '🔒', titulo: _cagaVeces(e.candado), apagada: true);
     }
     if (atasco != null && atasco.edificio == e.id) {
       return GestureDetector(
@@ -617,10 +617,10 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Emoji(emoji, tamano: 24),
-                    const SizedBox(height: 2),
+                    Emoji(emoji, tamano: nota == null ? 24 : 20),
+                    if (nota == null) const SizedBox(height: 2),
                     Text(texto, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11, letterSpacing: 0.6, color: p.texto)),
-                    if (nota != null) Text(nota, textAlign: TextAlign.center, style: TextStyle(fontSize: 8, color: p.textoSuave)),
+                    if (nota != null) Text(nota, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: TextStyle(fontSize: 8, color: p.textoSuave)),
                   ],
                 ),
               ),
@@ -633,7 +633,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
         children: [
           boton('🧴', tr('OBJETOS', 'ITEMS'), () => _abrirObjetos(context)),
           boton('🏆', tr('LOGROS', 'ACHIEVEMENTS'), () => Navigator.push(context, MaterialPageRoute(builder: (_) => _PantallaLogros(control: _c)))),
-          boton('🚽', tr('JALAR', 'FLUSH'), null, nota: tr('PRÓXIMAMENTE · 15 cagadas', 'SOON · 15 poops')),
+          boton('🚽', tr('JALAR', 'FLUSH'), null, nota: tr('CON 15 CAGADAS', 'AT 15 POOPS')),
           boton('🕹️', tr('SALA', 'ARCADE'), () {
             _c.anotar('sala_abre');
             Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaSala()));
@@ -745,7 +745,7 @@ class _HojaObjetos extends StatelessWidget {
     final precio = im.precioObjeto(o.id, ahora);
     final esFicha = o.tipo == TipoObjeto.ficha;
     final candado = im.cagadas < o.candado
-        ? tr('Caga ${o.candado} veces', 'Poop ${o.candado} times')
+        ? _cagaVeces(o.candado)
         : tr('Sale con tu primer Atasco', 'Unlocks with your first Clog');
     final botones = <Widget>[
       if (esFicha) FilledButton(onPressed: abierto && im.fichas > 0 ? () => _cagadaFresca(context) : null, child: Text(tr('USAR', 'USE'))),
@@ -871,3 +871,5 @@ class _PantallaLogros extends StatelessWidget {
     );
   }
 }
+
+String _cagaVeces(int n) => n == 1 ? tr('Caga 1 vez', 'Poop once') : tr('Caga $n veces', 'Poop $n times');
