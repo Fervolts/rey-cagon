@@ -411,7 +411,7 @@ class _PantallaInicioState extends State<PantallaInicio> {
         children: [
           PantallaRanking(trono: true, onVerRanking: () => setState(() => _tab = 1)),
           const PantallaRanking(),
-          const PantallaImperio(),
+          PantallaImperio(activo: _tab == 2),
           const PantallaChat(),
           PantallaPerfil(usuarioId: yo),
         ],
