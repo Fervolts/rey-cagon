@@ -47,6 +47,20 @@ subir "$TMP" version.json application/json
 rm -f "$TMP"
 [ "${SIN_LINK:-}" = 1 ] || cp "$APK" ~/Desktop/rey-cagon.apk
 
+# Limpieza: el plan Free tiene 1 GB de storage. Quedan solo esta versión y la anterior (n-1) en el bucket.
+curl -s -X POST -H "Authorization: Bearer $K" -H "apikey: $K" -H 'Content-Type: application/json' \
+  -d '{"prefix":"","limit":1000}' "https://$REF.supabase.co/storage/v1/object/list/releases" |
+  python3 -c '
+import json, re, sys
+v = sorted((int(m.group(1)), o["name"]) for o in json.load(sys.stdin) if (m := re.fullmatch(r"rey-cagon-.+\+(\d+)\.apk", o["name"])))
+print("\n".join(n for _, n in v[:-2]))' |
+  while read -r VIEJA; do
+    curl -sf -X DELETE -H "Authorization: Bearer $K" -H "apikey: $K" \
+      "https://$REF.supabase.co/storage/v1/object/releases/$VIEJA" >/dev/null && echo "Borrada $VIEJA"
+  done
+# Igual en local: AABs de Play guardados en ~/Desktop/rey-cagon-play, quedan los 2 más nuevos.
+ls -t ~/Desktop/rey-cagon-play/*-play.aab 2>/dev/null | tail -n +3 | while read -r VIEJA; do rm -f "$VIEJA"; done
+
 # Release en GitHub: el README descarga releases/latest/download/rey-cagon.apk.
 if [ "${SIN_LINK:-}" != 1 ] && command -v gh >/dev/null; then
   D=$(mktemp -d) && cp "$APK" "$D/rey-cagon.apk"
