@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../chat.dart' show aceptoReglas, nombreSala;
-import '../emoji.dart';
 import '../idioma.dart';
 import '../main.dart' show conReintento, db, textoError;
-import '../tema.dart';
+import '../vitrina.dart' show PantallaVitrina;
 import 'catalogo.dart';
 import 'control.dart';
 import 'nube.dart';
@@ -37,131 +36,23 @@ Future<Set<String>> cargarLogrosImperio() async {
 
 Set<String> _ids(Object? v) => v is List ? {for (final x in v) '$x'} : <String>{};
 
-/// Los logros del Imperio: conseguidos arriba con PRESUMIR, por conseguir abajo con candado.
+/// Los logros del Imperio: abre la vitrina en la sección IMPERIO (con PRESUMIR en los ganados).
 /// Con [control] (el Imperio en marcha) se actualiza solo; sin él, carga la partida guardada.
-class PantallaLogrosImperio extends StatefulWidget {
+class PantallaLogrosImperio extends StatelessWidget {
   const PantallaLogrosImperio({super.key, this.control});
   final ControlImperio? control;
 
   @override
-  State<PantallaLogrosImperio> createState() => _PantallaLogrosImperioState();
-}
-
-class _PantallaLogrosImperioState extends State<PantallaLogrosImperio> {
-  Set<String>? _ids;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.control == null) _cargar();
-  }
-
-  Future<void> _cargar() async {
-    setState(() => _error = null);
-    try {
-      final ids = await cargarLogrosImperio();
-      if (mounted) setState(() => _ids = ids);
-    } catch (e) {
-      if (mounted) setState(() => _error = textoError(e));
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final p = paleta(context);
-    final c = widget.control;
-    return Scaffold(
-      backgroundColor: p.fondo,
-      appBar: AppBar(title: Text(tr('LOGROS DEL IMPERIO', 'EMPIRE ACHIEVEMENTS'))),
-      body: c != null
-          ? ListenableBuilder(listenable: c, builder: (context, _) => _lista(context, (id) => c.imperio.tieneLogro(id)))
-          : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      Text(_error!, textAlign: TextAlign.center),
-                      const SizedBox(height: 12),
-                      OutlinedButton(onPressed: _cargar, child: Text(tr('REINTENTAR', 'RETRY'))),
-                    ]),
-                  ),
-                )
-              : _ids == null
-                  ? const Center(child: CircularProgressIndicator())
-                  : RefreshIndicator(onRefresh: _cargar, child: _lista(context, _ids!.contains)),
-    );
-  }
-
-  Widget _lista(BuildContext context, bool Function(String id) tiene) {
-    final hechos = logros.where((l) => tiene(l.id)).toList();
-    final faltan = logros.where((l) => !tiene(l.id)).toList();
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(16),
-      children: [
-        Row(children: [Rotulo(tr('Desbloqueados', 'Unlocked')), const Spacer(), Text('${hechos.length}/${logros.length}', style: numeros(context))]),
-        const SizedBox(height: 8),
-        if (hechos.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text(tr('Todavía ninguno. ¡A pujar!', 'None yet. Start pushing!'), style: TextStyle(color: paleta(context).textoSuave)),
-          ),
-        for (final l in hechos) _Fila(logro: l, tiene: true),
-        if (faltan.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          Rotulo(tr('Por conseguir', 'To unlock')),
-          const SizedBox(height: 8),
-          for (final l in faltan) _Fila(logro: l, tiene: false),
-        ],
-      ],
-    );
-  }
-}
-
-class _Fila extends StatelessWidget {
-  const _Fila({required this.logro, required this.tiene});
-  final Logro logro;
-  final bool tiene;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = paleta(context);
-    return Opacity(
-      opacity: tiene ? 1 : 0.45,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: p.tarjeta,
-          border: Border.all(color: tiene ? p.primario : p.borde),
-          borderRadius: BorderRadius.circular(radio),
-        ),
-        child: Row(children: [
-          Emoji(tiene ? '🏆' : '🔒', tamano: 30),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(tr(logro.nombreEs, logro.nombreEn), maxLines: 2, overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: p.texto)),
-              const SizedBox(height: 2),
-              Text(tr(logro.descEs, logro.descEn), maxLines: 2, overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 12, color: p.textoSuave)),
-            ]),
-          ),
-          if (tiene) ...[
-            const SizedBox(width: 8),
-            OutlinedButton(
-              onPressed: () => presumirLogroImperio(context, logro.id),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                visualDensity: VisualDensity.compact,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radio)),
-              ),
-              child: Text(tr('PRESUMIR', 'SHOW OFF'), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
-            ),
-          ],
-        ]),
+    final c = control;
+    if (c == null) return const PantallaVitrina(trofeos: [], conImperio: true, irAImperio: true);
+    return ListenableBuilder(
+      listenable: c,
+      builder: (context, _) => PantallaVitrina(
+        trofeos: const [],
+        conImperio: true,
+        irAImperio: true,
+        imperio: {for (final l in logros) if (c.imperio.tieneLogro(l.id)) l.id},
       ),
     );
   }

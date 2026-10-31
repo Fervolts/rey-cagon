@@ -13,8 +13,7 @@ import 'calendario.dart';
 import 'chat.dart' show abrirReporteDeError;
 import 'comunidad.dart';
 import 'idioma.dart';
-import 'imperio/catalogo.dart' as imperio show logros;
-import 'imperio/logros.dart' show PantallaLogrosImperio, cargarLogrosImperio;
+import 'imperio/logros.dart' show cargarLogrosImperio;
 import 'logros.dart';
 import 'placer.dart';
 import 'main.dart' show conReintento, db, escucharCagadas, esDeRed, textoError;
@@ -56,8 +55,8 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
   bool _ladoSecreto = false, _verLadoSecreto = false;
   Set<String> _nuevos = {};
   late final VoidCallback _soltar;
-  // Logros del Imperio conseguidos (solo en el propio); null mientras carga o si falló.
-  int? _logrosImperio;
+  // Ids de logros del Imperio conseguidos (solo en el propio), para la vitrina; null mientras carga o si falló.
+  Set<String>? _imperio;
 
   bool get _esMio => widget.usuarioId == db.auth.currentUser!.id;
 
@@ -66,14 +65,13 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
     super.initState();
     _cargar();
     _soltar = escucharCagadas('perfil', _cargar);
-    if (_esMio) _contarLogrosImperio();
+    if (_esMio) _cargarImperio();
   }
 
-  Future<void> _contarLogrosImperio() async {
+  Future<void> _cargarImperio() async {
     try {
       final ids = await cargarLogrosImperio();
-      final n = imperio.logros.where((l) => ids.contains(l.id)).length;
-      if (mounted) setState(() => _logrosImperio = n);
+      if (mounted) setState(() => _imperio = ids);
     } catch (_) {}
   }
 
@@ -602,7 +600,19 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                         claves: _claves,
                         ladoSecreto: _ladoSecreto,
                       );
-                      return Vitrina(trofeos: lista, nuevos: _nuevos, porEncontrar: secretosPorEncontrar(lista));
+                      // La vitrina completa trae también la sección IMPERIO. Al volver, los nuevos ya se vieron.
+                      return Vitrina(
+                        trofeos: lista,
+                        nuevos: _nuevos,
+                        porEncontrar: secretosPorEncontrar(lista),
+                        propio: true,
+                        imperio: _imperio,
+                        alVolver: () {
+                          if (!mounted) return;
+                          setState(() => _nuevos = {});
+                          _cargarImperio();
+                        },
+                      );
                     }),
                     const SizedBox(height: 20),
                     MapaDelMes(
@@ -627,17 +637,6 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                     title: Text(tr('Lectura del Baño', 'Bathroom Reading')),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaAvisos())),
-                  ),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Emoji('🏆', tamano: 32),
-                    title: Text(tr('LOGROS DEL IMPERIO', 'EMPIRE ACHIEVEMENTS')),
-                    subtitle: _logrosImperio == null ? null : Text('$_logrosImperio/${imperio.logros.length}', style: numeros(context)),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () async {
-                      await Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaLogrosImperio()));
-                      if (mounted) _contarLogrosImperio();
-                    },
                   ),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
