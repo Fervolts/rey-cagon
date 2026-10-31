@@ -291,8 +291,39 @@ Candado? siguienteCandado(int cagadas) {
   return null;
 }
 
-/// Multiplicador permanente por cagadas reales: +2% hasta 150 (x4), luego +0,5% cada una.
-double multiplicadorPorCagadas(int cagadas) {
+/// Multiplicador permanente por cagadas reales: +[pct]% hasta 150 (x4 con 2%), luego +0,5% cada una.
+double multiplicadorPorCagadas(int cagadas, [double pct = 2]) {
   final c = cagadas < 0 ? 0 : cagadas;
-  return c <= 150 ? 1 + 0.02 * c : 4 + 0.005 * (c - 150);
+  return c <= 150 ? 1 + pct / 100 * c : 1 + pct * 1.5 + 0.005 * (c - 150);
+}
+
+/// Números del juego que se pueden mover desde el servidor (flags). Los defaults son los de siempre.
+/// Dart puro: el controlador la arma desde `FlagsImperio.ajustes`.
+class Ajustes {
+  /// Minutos activos entre mojones dorados (sin Imán ni tipo 5).
+  final double doradoMinMin, doradoMaxMin;
+
+  /// Parte del MJ/s que cuenta offline sin válvulas, y tope offline sin tanques (horas).
+  /// Las válvulas (50%, 75%) y los tanques (4 h, 8 h) siguen siendo esos valores, pero nunca menos que la base.
+  final double offlinePorcentaje, offlineTopeH;
+
+  /// Cada unidad de un edificio cuesta esto por la anterior.
+  final double precioCrecimiento;
+  final double precioGuantes, precioFaja;
+
+  /// Producción extra por cagada real hasta 150, en % (2 = +2%).
+  final double cagadaBonoPct;
+
+  const Ajustes({
+    this.doradoMinMin = 5,
+    this.doradoMaxMin = 15,
+    this.offlinePorcentaje = 0.25,
+    this.offlineTopeH = 2,
+    this.precioCrecimiento = 1.15,
+    this.precioGuantes = 100,
+    this.precioFaja = 500,
+    this.cagadaBonoPct = 2,
+  });
+
+  static const Ajustes porDefecto = Ajustes();
 }

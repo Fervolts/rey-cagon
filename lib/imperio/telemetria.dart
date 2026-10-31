@@ -20,7 +20,7 @@ Future<int> _enviarPorRpc(List<Map<String, Object?>> lote) async {
 /// Telemetría del Imperio. Usar `Telemetria.instancia`; en las pruebas se crea una con `enviar` falso.
 ///
 /// CATÁLOGO DE EVENTOS (nombre {campos de datos}). Lo emite el controlador; `seg_partida` = segundos de juego activo de
-/// la partida guardada (el motor todavía no lo cuenta: hay que agregarlo a `Partida` y sumarlo en `tick`).
+/// la partida guardada (`Partida.segPartida`, lo suma `tick`).
 ///
 /// - `sesion_inicio` {cagadas, mj_total, mps, offline_s, variantes} (variantes = `FlagsImperio.variantes`, clave→variante)
 /// - `sesion_fin` {segundos, pujos, mj_ganados, compras}

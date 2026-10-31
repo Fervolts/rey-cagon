@@ -109,6 +109,9 @@ class Partida {
   /// Momentos (ms) de los últimos pujos, el más viejo primero.
   List<int> pujosRecientes;
 
+  /// Segundos de juego activo de esta partida (solo `tick`, no el tiempo offline).
+  double segPartida;
+
   Partida({
     this.saldo = 0,
     this.mjTotal = 0,
@@ -137,6 +140,7 @@ class Partida {
     this.offlineBonus = false,
     this.ultimaVez = 0,
     List<int>? pujosRecientes,
+    this.segPartida = 0,
   })  : edificios = edificios ?? {},
         mejoras = mejoras ?? {},
         logros = logros ?? {},
@@ -174,6 +178,7 @@ class Partida {
         'offline_bonus': offlineBonus,
         'ultima_vez': ultimaVez,
         'pujos_recientes': pujosRecientes,
+        'seg_partida': segPartida,
       };
 
   /// Lee una partida guardada. Aguanta claves que faltan, sobran o vienen con otro tipo.
@@ -183,6 +188,7 @@ class Partida {
     final total = _dbl(j['mj_total']);
     final recientes = j['pujos_recientes'] is List ? [for (final x in j['pujos_recientes'] as List) _ent(x)] : <int>[];
     final tipo = _entN(j['tipo_buff']);
+    final segPartida = _dbl(j['seg_partida']);
     return Partida(
       saldo: saldo < 0 ? 0 : saldo,
       mjTotal: total < saldo ? saldo : total,
@@ -211,6 +217,7 @@ class Partida {
       offlineBonus: _bool(j['offline_bonus']),
       ultimaVez: _ent(j['ultima_vez']),
       pujosRecientes: recientes.length > maxPujosRecientes ? recientes.sublist(recientes.length - maxPujosRecientes) : recientes,
+      segPartida: segPartida < 0 ? 0 : segPartida,
     );
   }
 }

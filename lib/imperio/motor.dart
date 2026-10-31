@@ -151,15 +151,18 @@ class Imperio {
 
   /// Fichas de cagada (las cuenta el servidor). La pone el controlador.
   int fichas;
+
+  /// Números que vienen de los flags remotos (por defecto, los de siempre).
+  final Ajustes ajustes;
   final Random _azar;
 
-  Imperio({Partida? partida, this.cagadas = 0, this.fichas = 0, Random? azar})
+  Imperio({Partida? partida, this.cagadas = 0, this.fichas = 0, Random? azar, this.ajustes = Ajustes.porDefecto})
       : partida = partida ?? Partida(),
         _azar = azar ?? Random();
 
   /// Arranca desde lo guardado en la nube.
-  factory Imperio.desdeJson(Map<String, dynamic>? json, {int cagadas = 0, int fichas = 0, Random? azar}) =>
-      Imperio(partida: Partida.desdeJson(json), cagadas: cagadas, fichas: fichas, azar: azar);
+  factory Imperio.desdeJson(Map<String, dynamic>? json, {int cagadas = 0, int fichas = 0, Random? azar, Ajustes ajustes = Ajustes.porDefecto}) =>
+      Imperio(partida: Partida.desdeJson(json), cagadas: cagadas, fichas: fichas, azar: azar, ajustes: ajustes);
 
   /// Estado para guardar (`'v': 1`).
   Map<String, dynamic> toJson() => partida.toJson();
@@ -198,8 +201,8 @@ class Imperio {
 
   // ---------- Multiplicadores ----------
 
-  /// +2% por cagada hasta 150 (x4), luego +0,5% cada una.
-  double get multiplicadorCagadas => multiplicadorPorCagadas(cagadas);
+  /// +2% por cagada hasta 150 (x4), luego +0,5% cada una (el 2% sale de los ajustes).
+  double get multiplicadorCagadas => multiplicadorPorCagadas(cagadas, ajustes.cagadaBonoPct);
 
   /// +1% por logro (+1,5% con Incienso de lavanda).
   double get multiplicadorLogros {
@@ -329,7 +332,7 @@ class Imperio {
     final tiene = cantidad(id);
     var s = 0.0;
     for (var k = 0; k < n; k++) {
-      s += (e.precioBase * pow(1.15, tiene + k) * f).ceilToDouble();
+      s += (e.precioBase * pow(ajustes.precioCrecimiento, tiene + k) * f).ceilToDouble();
     }
     return s;
   }
@@ -342,7 +345,7 @@ class Imperio {
     final e = edificioPorId(id)!;
     final f = factorPrecioEdificios(ahora);
     while (n < 10000) {
-      final p = (e.precioBase * pow(1.15, cantidad(id) + n) * f).ceilToDouble();
+      final p = (e.precioBase * pow(ajustes.precioCrecimiento, cantidad(id) + n) * f).ceilToDouble();
       if (s + p > _p.saldo) break;
       s += p;
       n++;
@@ -367,12 +370,20 @@ class Imperio {
   bool _mejoraPuedeSalir(Mejora m) => !mejoraComprada(m.id) && (m.edificio == null || edificioAbierto(m.edificio!)) && m.condicion(_p);
 
   /// Mejoras que se pueden comprar (condición cumplida, no compradas, edificio abierto), de la más barata a la más cara.
-  List<Mejora> mejorasDisponibles() => mejoras.where(_mejoraPuedeSalir).toList()..sort((a, b) => a.precio.compareTo(b.precio));
+  List<Mejora> mejorasDisponibles() =>
+      mejoras.where(_mejoraPuedeSalir).toList()..sort((a, b) => precioMejora(a).compareTo(precioMejora(b)));
+
+  /// Precio de una mejora: el del catálogo, salvo Guantes y Faja que salen de los ajustes.
+  double precioMejora(Mejora m) => switch (m.id) {
+        'guantes' => ajustes.precioGuantes,
+        'faja' => ajustes.precioFaja,
+        _ => m.precio,
+      };
 
   bool comprarMejora(String id) {
     final m = mejoraPorId(id);
-    if (m == null || !_mejoraPuedeSalir(m) || m.precio > _p.saldo) return false;
-    _p.saldo -= m.precio;
+    if (m == null || !_mejoraPuedeSalir(m) || precioMejora(m) > _p.saldo) return false;
+    _p.saldo -= precioMejora(m);
     _p.mejoras.add(id);
     return true;
   }
@@ -488,6 +499,7 @@ class Imperio {
   List<Logro> tick(int ahora, double segundos) {
     final s = segundos.isNaN ? 0.0 : segundos.clamp(0.0, 1.0).toDouble();
     if (s > 0) _ganar(mps(ahora) * s);
+    _p.segPartida += s;
 
     _p.efectos.removeWhere((_, fin) => fin <= ahora);
     if (_p.tipoBuff != null && _p.tipoBuffHasta <= ahora) _p.tipoBuff = null;
@@ -524,7 +536,8 @@ class Imperio {
 
   void _programarDorado(int ahora) {
     final rapido = mejoraComprada('iman') || tipoActivo(ahora) == 5;
-    _p.segHastaDorado = (300 + 600 * _azar.nextDouble()) / (rapido ? 2 : 1);
+    final a = ajustes.doradoMinMin * 60, b = ajustes.doradoMaxMin * 60;
+    _p.segHastaDorado = (a + (b - a) * _azar.nextDouble()) / (rapido ? 2 : 1);
   }
 
   /// Marca los logros que se cumplen y devuelve los nuevos.
@@ -606,12 +619,15 @@ class Imperio {
 
   // ---------- Offline ----------
 
-  /// Tope offline: 2 h, 4 h o 8 h según los tanques.
-  Duration get topeOffline =>
-      mejoraComprada('tanque_8') ? const Duration(hours: 8) : (mejoraComprada('tanque_4') ? const Duration(hours: 4) : const Duration(hours: 2));
+  /// Tope offline: 2 h (la base de los ajustes), 4 h o 8 h según los tanques. Nunca menos que la base.
+  Duration get topeOffline {
+    final h = mejoraComprada('tanque_8') ? 8.0 : (mejoraComprada('tanque_4') ? 4.0 : 0.0);
+    return Duration(seconds: (max(h, ajustes.offlineTopeH) * 3600).round());
+  }
 
-  /// Qué parte cuenta offline: 25%, 50% o 75% según las válvulas.
-  double get porcentajeOffline => mejoraComprada('valvula_75') ? 0.75 : (mejoraComprada('valvula_50') ? 0.5 : 0.25);
+  /// Qué parte cuenta offline: 25% (la base de los ajustes), 50% o 75% según las válvulas. Nunca menos que la base.
+  double get porcentajeOffline =>
+      max(mejoraComprada('valvula_75') ? 0.75 : (mejoraComprada('valvula_50') ? 0.5 : 0.0), ajustes.offlinePorcentaje).toDouble();
 
   /// Cobra el tiempo fuera (sin efectos temporales, sin Atascos ni dorados). x1,5 si quedó el buff del tipo 6 (y se gasta).
   ResultadoOffline aplicarOffline(int desdeMs, int ahoraMs) {

@@ -32,6 +32,25 @@ String _duracionLarga(double segundos) {
   return m == 0 ? '$h h' : '$h h $m min';
 }
 
+/// Aviso cuando el flag `imperio_activo` está apagado.
+Widget _mantenimiento(BuildContext context) {
+  final p = paleta(context);
+  return Container(
+    margin: const EdgeInsets.all(24),
+    padding: const EdgeInsets.all(20),
+    decoration: _caja(context, borde: p.bordeFuerte),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Emoji('🚧', tamano: 48),
+        const SizedBox(height: 12),
+        Text(tr('El Imperio está en mantenimiento', 'The Empire is under maintenance'),
+            textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: p.texto)),
+      ],
+    ),
+  );
+}
+
 BoxDecoration _caja(BuildContext context, {Color? borde, Color? fondo}) {
   final p = paleta(context);
   return BoxDecoration(color: fondo ?? p.tarjeta, border: Border.all(color: borde ?? p.borde), borderRadius: BorderRadius.circular(radio));
@@ -231,6 +250,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
   Widget build(BuildContext context) {
     final p = paleta(context);
     if (_c.cargando) return Scaffold(backgroundColor: p.fondo, body: const Center(child: CircularProgressIndicator()));
+    if (_c.apagado) return Scaffold(backgroundColor: p.fondo, body: Center(child: _mantenimiento(context)));
     final ahora = _c.ahora;
     final dorado = _c.imperio.dorado(ahora);
     final mov = movimiento(context);
@@ -555,7 +575,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       itemCount: lista.length,
       itemBuilder: (context, i) {
         final m = lista[i];
-        final alcanza = m.precio <= im.saldo;
+        final alcanza = im.precioMejora(m) <= im.saldo;
         return Container(
           margin: const EdgeInsets.only(bottom: 6),
           padding: const EdgeInsets.all(10),
@@ -570,7 +590,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                   children: [
                     Text(tr(m.nombreEs, m.nombreEn), style: TextStyle(fontWeight: FontWeight.w800, color: p.texto)),
                     Text(tr(m.efectoEs, m.efectoEn), style: TextStyle(fontSize: 12, color: p.textoSuave)),
-                    Text('${_mj(m.precio)} $moneda', style: numeros(context, tamano: 12, weight: FontWeight.w800)),
+                    Text('${_mj(im.precioMejora(m))} $moneda', style: numeros(context, tamano: 12, weight: FontWeight.w800)),
                   ],
                 ),
               ),
@@ -614,7 +634,10 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
           boton('🧴', tr('OBJETOS', 'ITEMS'), () => _abrirObjetos(context)),
           boton('🏆', tr('LOGROS', 'ACHIEVEMENTS'), () => Navigator.push(context, MaterialPageRoute(builder: (_) => _PantallaLogros(control: _c)))),
           boton('🚽', tr('JALAR', 'FLUSH'), null, nota: tr('PRÓXIMAMENTE · 15 cagadas', 'SOON · 15 poops')),
-          boton('🕹️', tr('SALA', 'ARCADE'), () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaSala()))),
+          boton('🕹️', tr('SALA', 'ARCADE'), () {
+            _c.anotar('sala_abre');
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaSala()));
+          }),
         ],
       ),
     );

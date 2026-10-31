@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../main.dart';
+import 'catalogo.dart';
 
 /// Pide `{clave: {valor, variante}}` al servidor.
 typedef PedirFlags = Future<Object?> Function();
@@ -51,6 +52,18 @@ class FlagsImperio {
   static const FlagsImperio porDefecto = FlagsImperio();
 
   static const Duration espera = Duration(seconds: 8);
+
+  /// Los números que usa el motor ([Imperio.ajustes]).
+  Ajustes get ajustes => Ajustes(
+        doradoMinMin: doradoIntervaloMin.isNotEmpty ? doradoIntervaloMin[0].toDouble() : 5,
+        doradoMaxMin: doradoIntervaloMin.length > 1 ? doradoIntervaloMin[1].toDouble() : 15,
+        offlinePorcentaje: offlinePorcentaje,
+        offlineTopeH: offlineTopeH,
+        precioCrecimiento: precioCrecimiento,
+        precioGuantes: precioGuantes,
+        precioFaja: precioFaja,
+        cagadaBonoPct: cagadaBonoPct,
+      );
 
   static String claveCache(String? usuario) => 'imperio_flags_${usuario ?? 'anon'}';
 
