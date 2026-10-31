@@ -13,6 +13,8 @@ import 'calendario.dart';
 import 'chat.dart' show abrirReporteDeError;
 import 'comunidad.dart';
 import 'idioma.dart';
+import 'imperio/catalogo.dart' as imperio show logros;
+import 'imperio/logros.dart' show PantallaLogrosImperio, cargarLogrosImperio;
 import 'logros.dart';
 import 'placer.dart';
 import 'main.dart' show conReintento, db, escucharCagadas, esDeRed, textoError;
@@ -54,6 +56,8 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
   bool _ladoSecreto = false, _verLadoSecreto = false;
   Set<String> _nuevos = {};
   late final VoidCallback _soltar;
+  // Logros del Imperio conseguidos (solo en el propio); null mientras carga o si falló.
+  int? _logrosImperio;
 
   bool get _esMio => widget.usuarioId == db.auth.currentUser!.id;
 
@@ -62,6 +66,15 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
     super.initState();
     _cargar();
     _soltar = escucharCagadas('perfil', _cargar);
+    if (_esMio) _contarLogrosImperio();
+  }
+
+  Future<void> _contarLogrosImperio() async {
+    try {
+      final ids = await cargarLogrosImperio();
+      final n = imperio.logros.where((l) => ids.contains(l.id)).length;
+      if (mounted) setState(() => _logrosImperio = n);
+    } catch (_) {}
   }
 
   @override
@@ -454,6 +467,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: luego(_elegirMovimiento),
                 ),
+                const FilaAvisosPoceta(),
                 ListTile(
                   leading: const Icon(Icons.open_in_new),
                   title: Text(tr('Hecho por ahimismito Studios C.A', 'Made by ahimismito Studios C.A')),
@@ -613,6 +627,17 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                     title: Text(tr('Lectura del Baño', 'Bathroom Reading')),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaAvisos())),
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Emoji('🏆', tamano: 32),
+                    title: Text(tr('LOGROS DEL IMPERIO', 'EMPIRE ACHIEVEMENTS')),
+                    subtitle: _logrosImperio == null ? null : Text('$_logrosImperio/${imperio.logros.length}', style: numeros(context)),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () async {
+                      await Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaLogrosImperio()));
+                      if (mounted) _contarLogrosImperio();
+                    },
                   ),
                   ListTile(
                     contentPadding: EdgeInsets.zero,

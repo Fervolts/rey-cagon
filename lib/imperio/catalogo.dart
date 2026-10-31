@@ -3,7 +3,7 @@
 
 import 'estado.dart';
 
-/// Edificio que produce MJ por segundo.
+/// Edificio que produce MJ por segundo (o, como el Dedo, MJ por pujo).
 class Edificio {
   final String id;
   final String emoji;
@@ -12,6 +12,9 @@ class Edificio {
   final double precioBase;
   final double mpsBase;
 
+  /// MJ que cada unidad suma a cada pujo (solo el Dedo; el motor lo toma de `Ajustes.dedoPujo`). 0 = no puja.
+  final double pujoBase;
+
   /// Cagadas reales que pide para poder comprarlo.
   final int candado;
 
@@ -19,11 +22,12 @@ class Edificio {
   final bool fase1;
 
   const Edificio(this.id, this.emoji, this.nombreEs, this.nombreEn, this.chisteEs, this.chisteEn, this.precioBase, this.mpsBase, this.candado,
-      {this.fase1 = true});
+      {this.fase1 = true, this.pujoBase = 0});
 }
 
 const List<Edificio> edificios = [
-  Edificio('dedo', '👆', 'Dedo que puja', 'Pushing finger', 'Puja por ti, cada 10 s', 'Pushes for you, every 10 s', 15, 0.1, 0),
+  // El Dedo no produce MJ/s: suma MJ a cada pujo.
+  Edificio('dedo', '👆', 'Dedo que puja', 'Pushing finger', 'Puja contigo: +1 por pujo', 'Pushes with you: +1 per push', 15, 0, 0, pujoBase: 1),
   Edificio('ciruela', '🫐', 'Ciruela pasa', 'Prune', 'Lo natural', 'All natural', 100, 1, 0),
   Edificio('cafe', '☕', 'Café negro', 'Black coffee', 'El de las 7 am', 'The 7 a.m. one', 1100, 8, 0),
   Edificio('arepa', '🫓', 'Arepa con caraotas', 'Arepa with beans', 'Combustible nacional', 'National fuel', 12000, 47, 0),
@@ -74,22 +78,56 @@ class Mejora {
 
 int _n(Partida p, String id) => p.edificios[id] ?? 0;
 
-/// Niveles de las mejoras por edificio y cuántas veces el precio base cuestan.
-const List<(int, double)> nivelesMejoraEdificio = [(1, 10), (5, 50), (25, 500)];
+/// Niveles de las mejoras por edificio y cuántas veces el precio base cuestan. Cada una da x2 a ese edificio
+/// (al Dedo: x2 a lo que suma por pujo). 1, 5 y 25 son los de siempre (hay partidas guardadas con esos ids y precios).
+/// Los nuevos siguen la curva de los clickers: 10 queda entre 50 y 500; desde 50 cada nivel cuesta x100 el anterior.
+const List<(int, double)> nivelesMejoraEdificio = [(1, 10), (5, 50), (10, 150), (25, 500), (50, 5e4), (100, 5e6), (150, 5e8), (200, 5e10)];
 
-// Nombres de las 3 mejoras de cada edificio (al tener 1, 5 y 25).
+// Nombres de las 8 mejoras de cada edificio, en el orden de `nivelesMejoraEdificio` (1, 5, 10, 25, 50, 100, 150, 200).
 const Map<String, List<(String, String)>> _nombresMejoraEdificio = {
-  'dedo': [('Uña larga', 'Long nail'), ('Dedo enguantado', 'Gloved finger'), ('Dedos ambidiestros', 'Ambidextrous fingers')],
-  'ciruela': [('Ciruela remojada', 'Soaked prune'), ('Jugo de ciruela', 'Prune juice'), ('Ciruela de la abuela', "Grandma's prunes")],
-  'cafe': [('Doble carga', 'Double shot'), ('Café de bodega', 'Corner store coffee'), ('Guayoyo', 'Watery joe')],
-  'arepa': [('Arepa con queso', 'Cheese arepa'), ('Arepa rellena', 'Stuffed arepa'), ('Arepera 24 horas', '24-hour arepa joint')],
-  'inodoro': [('Tapa acolchada', 'Padded lid'), ('Asiento caliente', 'Heated seat'), ('Bidet', 'Bidet')],
-  'bano': [('Papel en todos los cubículos', 'Paper in every stall'), ('Señora de la limpieza', 'The cleaning lady'), ('Baño de terminal', 'Bus station restroom')],
-  'camion': [('Manguera larga', 'Extra long hose'), ('Ruta nocturna', 'Night route'), ('Flota municipal', 'City fleet')],
-  'planta': [('Filtro de arena', 'Sand filter'), ('Bacterias obreras', 'Worker bacteria'), ('Planta modelo', 'Model plant')],
+  'dedo': [
+    ('Uña larga', 'Long nail'), ('Dedo enguantado', 'Gloved finger'), ('Dedo con anillo', 'Ringed finger'),
+    ('Dedos ambidiestros', 'Ambidextrous fingers'), ('Dedo del pie', 'Big toe helps too'), ('Dedo biónico', 'Bionic finger'),
+    ('Mano entera', 'The whole hand'), ('Dedo de Rey', "The King's finger"),
+  ],
+  'ciruela': [
+    ('Ciruela remojada', 'Soaked prune'), ('Jugo de ciruela', 'Prune juice'), ('Ciruela con linaza', 'Prune with flaxseed'),
+    ('Ciruela de la abuela', "Grandma's prunes"), ('Mermelada de ciruela', 'Prune jam'), ('Ciruelo en el patio', 'Prune tree out back'),
+    ('Ciruela transgénica', 'GMO prune'), ('Ciruela nuclear', 'Nuclear prune'),
+  ],
+  'cafe': [
+    ('Doble carga', 'Double shot'), ('Café de bodega', 'Corner store coffee'), ('Café con leche de magnesia', 'Milk of magnesia latte'),
+    ('Guayoyo', 'Watery joe'), ('Cafetera industrial', 'Industrial coffee maker'), ('Café en vena', 'Coffee IV drip'),
+    ('Hacienda cafetalera', 'Coffee plantation'), ('Expreso del infierno', 'Espresso from hell'),
+  ],
+  'arepa': [
+    ('Arepa con queso', 'Cheese arepa'), ('Arepa rellena', 'Stuffed arepa'), ('Arepa con picante', 'Spicy arepa'),
+    ('Arepera 24 horas', '24-hour arepa joint'), ('Budare gigante', 'Giant griddle'), ('Reina pepiada XL', 'XL reina pepiada'),
+    ('Arepa de cuatro pisos', 'Four-story arepa'), ('Arepa cósmica', 'Cosmic arepa'),
+  ],
+  'inodoro': [
+    ('Tapa acolchada', 'Padded lid'), ('Asiento caliente', 'Heated seat'), ('Descarga doble', 'Dual flush'),
+    ('Bidet', 'Bidet'), ('Inodoro con wifi', 'Wi-Fi toilet'), ('Trono de mármol', 'Marble throne'),
+    ('Inodoro japonés', 'Japanese smart toilet'), ('Inodoro de oro', 'Solid gold toilet'),
+  ],
+  'bano': [
+    ('Papel en todos los cubículos', 'Paper in every stall'), ('Señora de la limpieza', 'The cleaning lady'), ('Cobrador en la puerta', 'Paid entry'),
+    ('Baño de terminal', 'Bus station restroom'), ('Baño de estadio', 'Stadium restroom'), ('Baño de concierto', 'Festival portapotties'),
+    ('Cadena nacional de baños', 'National restroom chain'), ('Baño sin cola', 'Restroom with no line'),
+  ],
+  'camion': [
+    ('Manguera larga', 'Extra long hose'), ('Ruta nocturna', 'Night route'), ('Turbo en la bomba', 'Turbo pump'),
+    ('Flota municipal', 'City fleet'), ('Camión cisterna doble', 'Double tanker'), ('Gandola del mojón', 'Poop semi truck'),
+    ('Convoy nacional', 'National convoy'), ('Camión volador', 'Flying truck'),
+  ],
+  'planta': [
+    ('Filtro de arena', 'Sand filter'), ('Bacterias obreras', 'Worker bacteria'), ('Turno de noche', 'Night shift'),
+    ('Planta modelo', 'Model plant'), ('Bacterias sindicalizadas', 'Unionized bacteria'), ('Planta con ISO 9001', 'ISO 9001 plant'),
+    ('Planta exportadora', 'Export plant'), ('Planta en órbita', 'Plant in orbit'),
+  ],
 };
 
-/// Id de la mejora de un edificio para un nivel (1, 5 o 25): 'dedo_1', 'cafe_25'.
+/// Id de la mejora de un edificio para un nivel de `nivelesMejoraEdificio`: 'dedo_1', 'cafe_25', 'planta_200'.
 String idMejoraEdificio(String edificio, int nivel) => '${edificio}_$nivel';
 
 List<Mejora> _mejorasDeEdificios() => [
@@ -100,8 +138,8 @@ List<Mejora> _mejorasDeEdificios() => [
             e.emoji,
             _nombresMejoraEdificio[e.id]![i].$1,
             _nombresMejoraEdificio[e.id]![i].$2,
-            '${e.nombreEs} produce x2',
-            '${e.nombreEn} makes x2',
+            e.pujoBase > 0 ? '${e.nombreEs}: pujo x2' : '${e.nombreEs} produce x2',
+            e.pujoBase > 0 ? '${e.nombreEn}: push x2' : '${e.nombreEn} makes x2',
             e.precioBase * nivelesMejoraEdificio[i].$2,
             FamiliaMejora.edificio,
             (p) => _n(p, e.id) >= nivelesMejoraEdificio[i].$1,
@@ -109,9 +147,29 @@ List<Mejora> _mejorasDeEdificios() => [
           ),
     ];
 
-/// Las 36 mejoras de la fase 1.
+/// Mejoras de clic de los edificios millonarios: (edificio, nivel, %, precio en veces el precio base, emoji, nombres).
+/// Cada una convierte ese % de tu MJ/s en MJ por pujo.
+const List<(String, int, int, double, String, String, String)> _mejorasPujoMillonarias = [
+  ('bano', 5, 1, 20, '📣', 'Pujo en coro', 'Choir push'),
+  ('bano', 25, 2, 1000, '📣', 'Eco del cubículo', 'Stall echo'),
+  ('camion', 5, 1, 20, '📯', 'Bocina al pujar', 'Push horn'),
+  ('camion', 25, 2, 1000, '📯', 'Succión al pujo', 'Push-powered suction'),
+  ('planta', 5, 1, 20, '⚡', 'Turbina de pujo', 'Push turbine'),
+  ('planta', 25, 2, 1000, '⚡', 'Reactor de pujo', 'Push reactor'),
+];
+
+/// Id de una mejora de pujo de un edificio millonario: 'bano_pujo_1' (+1%), 'bano_pujo_2' (+2%).
+String idMejoraPujo(String edificio, int pct) => '${edificio}_pujo_$pct';
+
+List<Mejora> _mejorasPujo() => [
+      for (final (id, nivel, pct, veces, emoji, es, en) in _mejorasPujoMillonarias)
+        Mejora(idMejoraPujo(id, pct), emoji, es, en, 'Cada pujo suma $pct% de tu MJ/s', 'Each push adds $pct% of your MJ/s',
+            edificioPorId(id)!.precioBase * veces, FamiliaMejora.clic, (p) => _n(p, id) >= nivel, edificio: id),
+    ];
+
+/// Las 82 mejoras de la fase 1.
 final List<Mejora> mejoras = [
-  // Clic (5)
+  // Clic (5 del Dedo + 6 de los millonarios)
   Mejora('guantes', '🧤', 'Guantes de látex', 'Latex gloves', 'Pujo x2', 'Push x2', 100, FamiliaMejora.clic, (p) => _n(p, 'dedo') >= 1, edificio: 'dedo'),
   Mejora('faja', '🩲', 'Faja de pujo', 'Pushing belt', 'Pujo x2', 'Push x2', 500, FamiliaMejora.clic, (p) => _n(p, 'dedo') >= 1, edificio: 'dedo'),
   Mejora('dedo_acero', '🦾', 'Dedo de acero', 'Steel finger', 'Pujo x2', 'Push x2', 10000, FamiliaMejora.clic, (p) => _n(p, 'dedo') >= 10,
@@ -120,7 +178,8 @@ final List<Mejora> mejoras = [
       100000, FamiliaMejora.clic, (p) => _n(p, 'dedo') >= 25, edificio: 'dedo'),
   Mejora('mano_dios', '🙌', 'Mano de dios', 'Hand of god', 'Cada pujo suma otro 1% de tu MJ/s', 'Each push adds another 1% of your MJ/s', 10e6,
       FamiliaMejora.clic, (p) => _n(p, 'dedo') >= 50, edificio: 'dedo'),
-  // Por edificio (24)
+  ..._mejorasPujo(),
+  // Por edificio (64)
   ..._mejorasDeEdificios(),
   // Idle (4)
   Mejora('tanque_4', '🛢️', 'Tanque de 4 horas', '4-hour tank', 'Tope offline 4 h', 'Offline cap 4 h', 50000, FamiliaMejora.idle, (p) => _n(p, 'cafe') >= 1),
@@ -147,8 +206,12 @@ Mejora? mejoraPorId(String id) => _mejoraPorId[id];
 /// Mejoras de clic que duplican el pujo base.
 const Set<String> mejorasClicX2 = {'guantes', 'faja', 'dedo_acero'};
 
-/// Mejoras de clic que suman 1% del MJ/s a cada pujo.
-const Set<String> mejorasClicPct = {'respiracion', 'mano_dios'};
+/// Mejoras de clic que suman un % del MJ/s a cada pujo: id → parte (0,01 = 1%).
+final Map<String, double> mejorasClicPct = {
+  'respiracion': 0.01,
+  'mano_dios': 0.01,
+  for (final (id, _, pct, _, _, _, _) in _mejorasPujoMillonarias) idMejoraPujo(id, pct): pct / 100,
+};
 
 /// Cómo se consigue o usa un objeto.
 enum TipoObjeto { ficha, consumible, alquilable }
@@ -256,7 +319,7 @@ class BuffTipo {
 const Duration duracionBuffTipo = Duration(hours: 1);
 
 const Map<int, BuffTipo> buffsTipo = {
-  1: BuffTipo(1, '🪨', 'Piedritas de conejo', 'Rabbit pellets', 'Pujo épico 2% a 8%', 'Epic push 2% to 8%'),
+  1: BuffTipo(1, '🪨', 'Piedritas de conejo', 'Rabbit pellets', 'Pujos épicos x3 de seguido', 'Epic pushes x3 as often'),
   2: BuffTipo(2, '🧱', 'Ladrillo', 'Brick', 'Pujos x2', 'Pushes x2'),
   3: BuffTipo(3, '🌽', 'Mazorca', 'Corn cob', 'Edificios 10% más baratos', 'Buildings 10% cheaper'),
   4: BuffTipo(4, '🐍', 'Anaconda', 'Anaconda', 'Todo x2', 'Everything x2'),
@@ -314,6 +377,12 @@ class Ajustes {
   /// Producción extra por cagada real hasta 150, en % (2 = +2%).
   final double cagadaBonoPct;
 
+  /// MJ que suma cada Dedo a cada pujo (antes de sus mejoras de nivel).
+  final double dedoPujo;
+
+  /// Pujo épico: probabilidad base, cuánto suma cada Dedo, tope; el buff tipo 1 la multiplica (con tope x2); y lo que vale (x10).
+  final double epicoBase, epicoPorDedo, epicoTope, epicoTipo1, epicoMultiplicador;
+
   const Ajustes({
     this.doradoMinMin = 5,
     this.doradoMaxMin = 15,
@@ -323,6 +392,12 @@ class Ajustes {
     this.precioGuantes = 100,
     this.precioFaja = 500,
     this.cagadaBonoPct = 2,
+    this.dedoPujo = 1,
+    this.epicoBase = 0.005,
+    this.epicoPorDedo = 0.0003,
+    this.epicoTope = 0.03,
+    this.epicoTipo1 = 3,
+    this.epicoMultiplicador = 10,
   });
 
   static const Ajustes porDefecto = Ajustes();

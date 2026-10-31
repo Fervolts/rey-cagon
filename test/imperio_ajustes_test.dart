@@ -35,7 +35,13 @@ void main() {
     test('por defecto son los números de siempre', () {
       const a = Ajustes.porDefecto;
       expect([a.doradoMinMin, a.doradoMaxMin, a.offlinePorcentaje, a.offlineTopeH], [5, 15, 0.25, 2]);
-      expect([a.precioCrecimiento, a.precioGuantes, a.precioFaja, a.cagadaBonoPct], [1.15, 100, 500, 2]);
+      expect([a.precioCrecimiento, a.precioGuantes, a.precioFaja, a.cagadaBonoPct], [1.15, 100, 500, 2]);      expect([a.dedoPujo, a.epicoBase, a.epicoPorDedo, a.epicoTope, a.epicoTipo1, a.epicoMultiplicador], [1, 0.005, 0.0003, 0.03, 3, 10]);
+    });
+
+    test('dedo_pujo cambia lo que suma cada Dedo', () {
+      final imp = Imperio(ajustes: const Ajustes(dedoPujo: 3));
+      imp.partida.edificios['dedo'] = 4;
+      expect(imp.valorPujo(0), 13);
     });
 
     test('intervalo del dorado', () {
@@ -138,5 +144,19 @@ void main() {
       'precio_faja': {'valor': 700},
     }).ajustes;
     expect([a.doradoMinMin, a.doradoMaxMin, a.precioFaja, a.precioGuantes], [2, 8, 700, 100]);
+  });
+
+  test('flags del Dedo y del pujo épico, recortadas a un rango sano', () {
+    final a = FlagsImperio.desdeJson({
+      'dedo_pujo': {'valor': 2},
+      'epico_base': {'valor': 0.01},
+      'epico_por_dedo': {'valor': 5},
+      'epico_tope': {'valor': 0.05},
+      'epico_tipo1_x': {'valor': 0},
+      'epico_x': {'valor': '20'},
+    }).ajustes;
+    expect([a.dedoPujo, a.epicoBase, a.epicoPorDedo, a.epicoTope, a.epicoTipo1, a.epicoMultiplicador], [2, 0.01, 0.01, 0.05, 1, 20]);
+    final d = FlagsImperio.desdeJson(const {}).ajustes;
+    expect([d.dedoPujo, d.epicoBase, d.epicoTope, d.epicoMultiplicador], [1, 0.005, 0.03, 10]);
   });
 }

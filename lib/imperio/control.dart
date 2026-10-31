@@ -474,7 +474,8 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
         if (sinConexion) return;
         _guardandoNube = true;
       }
-      final r = await nube.guardar(imperio.toJson(), imperio.mjTotal, imperio.mpsSinEfectos());
+      // Ritmo efectivo (MJ/s o pujos del Dedo, lo mayor): el antitrampa del servidor lo usa como techo.
+      final r = await nube.guardar({...imperio.toJson(), '_mps_edificios': imperio.mpsSinEfectos()}, imperio.mjTotal, imperio.ritmoEfectivo());
       if (r.recortado) aceptarRecorte(imperio.partida, r.mjTotal);
     } catch (_) {
       _error('guardar_nube');

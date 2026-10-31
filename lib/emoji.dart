@@ -123,6 +123,10 @@ const _archivos = {
   '❓': 'red_question_mark',
   '🎣': 'fishing_pole',
   '🛁': 'bathtub',
+  // Poceta del Imperio: el dinero que sale al pujar.
+  '💰': 'money_bag',
+  '💸': 'money_with_wings',
+  '🪙': 'coin',
 };
 
 // Las mismas claves sin FE0F, para encontrar '🌶' igual que '🌶️'.

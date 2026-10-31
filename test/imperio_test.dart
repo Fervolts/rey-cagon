@@ -107,11 +107,94 @@ void main() {
       expect(imp.comprarMejora('faja'), isTrue);
       expect(imp.comprarMejora('dedo_acero'), isTrue);
       final m = imp.mps(t0);
-      expect(imp.valorPujo(t0), closeTo(8, 1e-9));
+      expect(imp.valorPujo(t0), closeTo((1 + 50) * 8, 1e-9)); // 50 dedos suman 50 por pujo, y los x2 de clic los doblan
       expect(imp.comprarMejora('respiracion'), isTrue);
-      expect(imp.valorPujo(t0), closeTo(8 + 0.01 * m, 1e-6));
+      expect(imp.valorPujo(t0), closeTo(408 + 0.01 * m, 1e-6));
       expect(imp.comprarMejora('mano_dios'), isTrue);
-      expect(imp.valorPujo(t0), closeTo(8 + 0.02 * m, 1e-6));
+      expect(imp.valorPujo(t0), closeTo(408 + 0.02 * m, 1e-6));
+    });
+
+    test('dedos: suman por pujo, sus mejoras de nivel los doblan y no dan MJ/s', () {
+      final imp = Imperio(partida: Partida(saldo: 1e12, mjTotal: 1e12));
+      imp.partida.edificios['dedo'] = 10;
+      expect(imp.mps(t0), 0);
+      expect(imp.mpsSinEfectos(), 0);
+      expect(imp.aporteDedos, 10);
+      expect(imp.valorPujo(t0), 11);
+      expect(imp.comprarMejora('dedo_1'), isTrue);
+      expect(imp.comprarMejora('dedo_5'), isTrue);
+      expect(imp.comprarMejora('dedo_10'), isTrue);
+      expect(imp.comprarMejora('dedo_25'), isFalse); // pide 25
+      expect(imp.aporteDedos, 80);
+      expect(imp.valorPujo(t0), 81);
+      expect(imp.comprarMejora('guantes'), isTrue);
+      expect(imp.valorPujo(t0), 162);
+      expect(imp.pujoEdificio('dedo', t0), 160);
+      expect(imp.pujoEdificio('ciruela', t0), 0);
+      imp.partida.efectos['laxante'] = t0 + hora;
+      expect(imp.valorPujo(t0), 324);
+      expect(imp.pujoEdificio('dedo', t0), 320);
+      expect(imp.pujar(t0).ganado, anyOf(324, 3240));
+    });
+
+    test('baño, camión y planta: % de su MJ/s en cada pujo', () {
+      final imp = Imperio(cagadas: 10, partida: Partida(saldo: 1e15, mjTotal: 1e15));
+      imp.partida.edificios.addAll({'bano': 4, 'planta': 25});
+      expect(imp.mejorasDeEdificio('bano').map((m) => m.id), isNot(contains('bano_pujo_1'))); // pide 5
+      imp.partida.edificios['bano'] = 5;
+      expect(imp.comprarMejora('bano_pujo_1'), isTrue);
+      expect(imp.comprarMejora('bano_pujo_2'), isFalse); // pide 25
+      expect(imp.comprarMejora('planta_pujo_1'), isTrue);
+      expect(imp.comprarMejora('planta_pujo_2'), isTrue);
+      final m = imp.mps(t0);
+      expect(imp.valorPujo(t0), closeTo(1 + 0.04 * m, 1e-6));
+      expect(imp.pujoEdificio('bano', t0), closeTo(0.01 * m, 1e-6));
+      expect(imp.pujoEdificio('planta', t0), closeTo(0.03 * m, 1e-6));
+      expect(imp.pujoEdificio('camion', t0), 0);
+      // Las filas más el pujo base dan el valor del pujo.
+      final filas = [for (final e in edificiosFase1) imp.pujoEdificio(e.id, t0)].fold(0.0, (a, b) => a + b);
+      expect(filas + 1, closeTo(imp.valorPujo(t0), 1e-6));
+      expect(mejorasClicPct['respiracion'], 0.01);
+      expect(mejorasClicPct['planta_pujo_2'], 0.02);
+    });
+
+    test('mejoras por edificio y de la poceta', () {
+      final imp = Imperio();
+      imp.partida.edificios.addAll({'dedo': 1, 'cafe': 1, 'ciruela': 4});
+      expect(imp.mejorasDeEdificio('dedo').map((m) => m.id), ['guantes', 'dedo_1', 'faja']);
+      expect(imp.mejorasDeEdificio('cafe').map((m) => m.id), ['cafe_1']);
+      expect(imp.mejorasDeEdificio('ciruela').map((m) => m.id), ['ciruela_1']);
+      expect(imp.mejorasDeEdificio('planta'), isEmpty);
+      expect(imp.mejorasPoceta().map((m) => m.id), ['tanque_4']);
+      expect(imp.siguienteMejora('ciruela')?.id, 'ciruela_5');
+      expect(imp.siguienteMejora('dedo')?.id, 'dedo_5');
+      imp.partida.mejoras.addAll({'ciruela_1'});
+      imp.partida.edificios['ciruela'] = 5;
+      expect(imp.mejorasDeEdificio('ciruela').map((m) => m.id), ['ciruela_5']);
+      expect(imp.siguienteMejora('ciruela')?.id, 'ciruela_10');
+      // Sin el edificio abierto, nada sale; la siguiente es la primera.
+      expect(imp.siguienteMejora('planta')?.id, 'planta_1');
+      // Todas las disponibles son las de los edificios más las de la poceta.
+      final todas = {for (final e in edificiosFase1) ...imp.mejorasDeEdificio(e.id).map((m) => m.id), ...imp.mejorasPoceta().map((m) => m.id)};
+      expect(todas, imp.mejorasDisponibles().map((m) => m.id).toSet());
+    });
+
+    test('niveles nuevos: 8 por edificio, 1/5/25 con los precios de siempre', () {
+      expect(nivelesMejoraEdificio.map((n) => n.$1), [1, 5, 10, 25, 50, 100, 150, 200]);
+      expect(mejoraPorId('dedo_1')!.precio, 150);
+      expect(mejoraPorId('dedo_5')!.precio, 750);
+      expect(mejoraPorId('dedo_25')!.precio, 7500);
+      expect(mejoraPorId('cafe_25')!.precio, 1100 * 500);
+      expect(mejoraPorId('planta_200')!.precio, 330e6 * 5e10);
+      for (final e in edificiosFase1) {
+        for (final (nivel, _) in nivelesMejoraEdificio) {
+          final m = mejoraPorId(idMejoraEdificio(e.id, nivel))!;
+          expect(m.nombreEs, isNotEmpty);
+          expect(m.nombreEn, isNotEmpty);
+        }
+      }
+      expect(mejoras.length, 82);
+      expect(mejoras.map((m) => m.id).toSet().length, mejoras.length);
     });
   });
 
@@ -166,17 +249,43 @@ void main() {
       expect(imp.valorPujo(t0), 0.5);
     });
 
-    test('pujo épico x10, 8% con tipo 1', () {
-      final azar = _AzarFijo(d: 0.05);
+    test('pujo épico x10: 0,5% + 0,03% por dedo, tope 3%; tipo 1 x3 con tope 6%', () {
+      final azar = _AzarFijo(d: 0.01);
       final imp = Imperio(azar: azar);
-      expect(imp.pujar(t0).epico, isFalse); // 0,05 >= 0,02
+      expect(imp.probabilidadEpicoActual(t0), closeTo(0.005, 1e-12));
+      expect(imp.pujar(t0).epico, isFalse); // 0,01 >= 0,005
       imp.partida.tipoBuff = 1;
       imp.partida.tipoBuffHasta = t0 + hora;
+      expect(imp.probabilidadEpicoActual(t0), closeTo(0.015, 1e-12));
       final r = imp.pujar(t0);
       expect(r.epico, isTrue);
       expect(r.ganado, 10);
       expect(imp.saldo, 11);
       expect(imp.partida.epicos, 1);
+      imp.partida.tipoBuff = null;
+      imp.partida.edificios['dedo'] = 50;
+      expect(imp.probabilidadEpicoActual(t0), closeTo(0.02, 1e-12));
+      imp.partida.edificios['dedo'] = 500;
+      expect(imp.probabilidadEpicoActual(t0), closeTo(0.03, 1e-12));
+      imp.partida.tipoBuff = 1;
+      expect(imp.probabilidadEpicoActual(t0), closeTo(0.06, 1e-12));
+    });
+
+    test('pujo épico con semilla: la frecuencia sale cerca de la probabilidad', () {
+      final imp = Imperio(azar: Random(7));
+      imp.partida.edificios['dedo'] = 50; // 2%
+      for (var k = 0; k < 20000; k++) {
+        imp.pujar(t0 + k * 1000); // un pujo por segundo: sin nalgazos
+      }
+      expect(imp.partida.epicos / imp.partida.pujos, closeTo(0.02, 0.004));
+    });
+
+    test('épico desde los ajustes', () {
+      const a = Ajustes(epicoBase: 0.5, epicoPorDedo: 0, epicoMultiplicador: 3, epicoTope: 1);
+      final imp = Imperio(azar: _AzarFijo(d: 0.4), ajustes: a);
+      final r = imp.pujar(t0);
+      expect(r.epico, isTrue);
+      expect(r.ganado, 3);
     });
   });
 
@@ -443,15 +552,15 @@ void main() {
   group('Atascos', () {
     test('salen en un edificio con 25 o más y lo dejan en 0', () {
       final imp = Imperio(azar: _AzarFijo(d: 0.0));
-      imp.partida.edificios.addAll({'dedo': 25, 'ciruela': 3});
+      imp.partida.edificios.addAll({'dedo': 99, 'cafe': 25, 'ciruela': 3});
       imp.partida.segHastaDorado = 99999;
       imp.tick(t0, 1);
-      expect(imp.atasco?.edificio, 'dedo');
+      expect(imp.atasco?.edificio, 'cafe'); // el Dedo no se atasca: no da MJ/s
       expect(imp.partida.vioPrimerAtasco, isTrue);
-      expect(imp.mpsEdificio('dedo', t0), 0);
+      expect(imp.mpsEdificio('cafe', t0), 0);
       expect(imp.mps(t0), closeTo(3 * imp.multiplicadorPermanente, 1e-9)); // el tick ya dio el logro gotea
       final otro = Imperio(azar: _AzarFijo(d: 0.0));
-      otro.partida.edificios['dedo'] = 24;
+      otro.partida.edificios.addAll({'dedo': 99, 'cafe': 24});
       otro.tick(t0, 1);
       expect(otro.atasco, isNull);
     });
@@ -516,7 +625,7 @@ void main() {
     imp.partida
       ..saldo = 1234.5
       ..mjTotal = 99999
-      ..edificios.addAll({'dedo': 26, 'cafe': 2})
+      ..edificios.addAll({'dedo': 26, 'cafe': 25})
       ..mejoras.addAll({'guantes', 'tanque_4'})
       ..inventario['laxante'] = 2
       ..efectos['ambientador'] = t0 + hora
@@ -533,9 +642,39 @@ void main() {
     final otro = Imperio.desdeJson(jsonDecode(texto) as Map<String, dynamic>, cagadas: 12, fichas: 3);
     expect(jsonEncode(otro.toJson()), texto);
     expect(otro.toJson()['v'], 1);
-    expect(otro.atasco?.edificio, 'dedo');
+    expect(otro.atasco?.edificio, 'cafe');
     expect(otro.mps(t0 + seg), imp.mps(t0 + seg));
     expect(otro.valorPujo(t0), imp.valorPujo(t0));
+  });
+
+  test('partida vieja con dedos y sus mejoras carga y ahora puja', () {
+    // Como la guardaba la versión anterior: dedos que daban MJ/s, mejoras de nivel 1/5/25 y un atasco en el Dedo.
+    final vieja = {
+      'v': 1,
+      'saldo': 5000,
+      'mj_total': 90000,
+      'edificios': {'dedo': 30, 'ciruela': 2},
+      'mejoras': ['dedo_1', 'dedo_5', 'dedo_25', 'guantes', 'ciruela_1'],
+      'atasco': {'e': 'dedo', 'd': t0 - seg, 't': 0},
+    };
+    final imp = Imperio.desdeJson(jsonDecode(jsonEncode(vieja)) as Map<String, dynamic>);
+    expect(imp.cantidad('dedo'), 30);
+    expect(imp.mejoraComprada('dedo_25'), isTrue);
+    expect(imp.aporteDedos, 30 * 8);
+    expect(imp.valorPujo(t0), (1 + 240) * 2);
+    expect(imp.mpsSinEfectos(), closeTo(2 * 2 * imp.multiplicadorPermanente, 1e-9)); // solo las ciruelas
+    expect(imp.mejorasDeEdificio('dedo').map((m) => m.id), containsAll(['dedo_10', 'faja']));
+    expect(imp.ritmoEfectivo(), closeTo(imp.valorPujo(t0) * 15, 1e-9));
+    imp.pujar(t0);
+    imp.tick(t0, 1);
+    expect(jsonDecode(jsonEncode(imp.toJson())), isA<Map>());
+  });
+
+  test('ritmo al guardar: lo mayor entre MJ/s y 15 pujos', () {
+    final imp = Imperio();
+    expect(imp.ritmoEfectivo(), 15); // pujo de 1
+    imp.partida.edificios['planta'] = 1;
+    expect(imp.ritmoEfectivo(), imp.mpsSinEfectos());
   });
 
   test('JSON roto o vacío no revienta', () {

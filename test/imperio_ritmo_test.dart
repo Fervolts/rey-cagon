@@ -1,6 +1,8 @@
 // Simulación de un jugador codicioso para medir el ritmo del Imperio.
 // Pujo 5 veces por segundo, 3 sesiones de 10 min al día, 0,7 cagadas reales al día.
 // Compra lo que se paga más rápido (espera + recuperación). Las aserciones son flojas a propósito.
+// Con el Dedo que puja (+1 por pujo) el arranque va mucho más rápido que cuando daba 0,1 MJ/s: con semilla 7 el Café sale
+// al minuto y la Arepa poco después; el medio del juego lo siguen frenando los candados de cagadas (Inodoro día 5, Baño día 8).
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -153,7 +155,8 @@ void main() {
       'Camión: ${_cuando(sim.primeros['camion'])}',
       'Planta: ${_cuando(sim.primeros['planta'])}',
       'Guantes: ${_cuando(sim.primeros['guantes'])}; Faja: ${_cuando(sim.primeros['faja'])}; mejoras en 1 h activa: ${sim.mejorasEnUnaHora}',
-      'Al día $_dias: ${imp.cagadas} cagadas, ${imp.mps(0).toStringAsFixed(0)} MJ/s, ${imp.mjTotal.toStringAsExponential(2)} MJ, '
+      'Al día $_dias: ${imp.cagadas} cagadas, ${imp.mps(0).toStringAsFixed(0)} MJ/s, ${imp.valorPujo(0).toStringAsFixed(0)} MJ/pujo, '
+          '${imp.mjTotal.toStringAsExponential(2)} MJ, '
           '${imp.partida.edificios}, ${imp.partida.mejoras.length} mejoras, ${imp.partida.logros.length} logros',
     ].join('\n'));
 
@@ -166,5 +169,14 @@ void main() {
     expect(cafe!.$1, lessThanOrEqualTo(25 * 60)); // ~15 min, con holgura
     expect(inodoro, isNotNull);
     expect(inodoro!.$2, lessThan(7)); // semana 1
+    // El Dedo es lo primero que conviene: hace más que una Ciruela mientras se puja.
+    expect(dedo.$1, lessThanOrEqualTo(sim.primeros['ciruela']!.$1));
+    expect(imp.mps(0), greaterThan(0));
+    // Al final pujar todavía pesa (5 pujos/s ≥ 10% del MJ/s) pero no reemplaza a los edificios.
+    final porPujos = 5 * imp.valorPujo(0);
+    expect(porPujos, greaterThan(0.1 * imp.mpsSinEfectos()));
+    expect(porPujos, lessThan(imp.mpsSinEfectos()));
+    // Dos semanas no rompen la escala: entre 1e11 y 1e14 MJ (antes del Dedo que puja daba ~4e11).
+    expect(imp.mjTotal, inInclusiveRange(1e11, 1e14));
   });
 }

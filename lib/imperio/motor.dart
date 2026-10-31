@@ -122,8 +122,12 @@ const int minimoParaAtasco = 25;
 
 /// Segundos de juego activo por Atasco, en promedio.
 const double segundosPorAtasco = 2 * 3600;
-const double probabilidadEpico = 0.02, probabilidadEpicoTipo1 = 0.08;
-const double multiplicadorEpico = 10, multiplicadorFiebre = 7, multiplicadorPujoLoco = 777;
+// La probabilidad y el valor del pujo épico salen de los ajustes (`epicoBase`, `epicoPorDedo`, `epicoTope`, `epicoTipo1`, `epicoMultiplicador`).
+const double multiplicadorFiebre = 7, multiplicadorPujoLoco = 777;
+
+/// Pujos por segundo que se suponen al calcular el ritmo que se manda al guardar. Generoso a propósito: el antitrampa
+/// del servidor no debe rechazar a nadie que puje rápido.
+const double pujosPorSegundoRitmo = 15;
 
 /// Tope de la suma de efectos de objetos y del tipo de mojón.
 const double topeEfectos = 4;
@@ -253,7 +257,7 @@ class Imperio {
     return _produccionCruda(id) * multiplicadorPermanente * multiplicadorProduccionTemporal(ahora) * (enFiebre(ahora) ? multiplicadorFiebre : 1);
   }
 
-  /// MJ/s total con todos los efectos (lo que se suma en cada tick).
+  /// MJ/s total con todos los efectos (lo que se suma en cada tick). No incluye al Dedo: él suma por pujo.
   double mps(int ahora) {
     var s = 0.0;
     for (final e in edificiosFase1) {
@@ -273,22 +277,73 @@ class Imperio {
     return s * multiplicadorPermanente;
   }
 
-  /// MJ de un pujo normal (sin épico).
-  double valorPujo(int ahora) {
-    var base = 1.0;
+  /// x2 por cada mejora de clic x2 comprada (Guantes, Faja, Dedo de acero).
+  double get _multiplicadorClic {
+    var x = 1.0;
     for (final id in mejorasClicX2) {
-      if (mejoraComprada(id)) base *= 2;
+      if (mejoraComprada(id)) x *= 2;
     }
-    final pct = 0.01 * mejorasClicPct.where(mejoraComprada).length;
-    final v = (base + pct * mps(ahora)) * multiplicadorPujoTemporal(ahora);
-    return _activo('pujo_loco', ahora) ? v * multiplicadorPujoLoco : v;
+    return x;
   }
 
-  /// Un toque al Mojón. 2% de pujo épico (8% con buff tipo 1), que vale x10.
+  /// MJ que suman los Dedos a cada pujo, sin x2 de clic ni efectos: dedos × `ajustes.dedoPujo` × 2 por cada mejora de nivel del Dedo.
+  double get aporteDedos {
+    final n = cantidad('dedo');
+    if (n <= 0) return 0;
+    var x = 1.0;
+    for (final (nivel, _) in nivelesMejoraEdificio) {
+      if (mejoraComprada(idMejoraEdificio('dedo', nivel))) x *= 2;
+    }
+    return n * ajustes.dedoPujo * x;
+  }
+
+  /// Parte del MJ/s que suman al pujo las mejoras de % compradas; con `edificio`, solo las de ese edificio.
+  double _pctPujo([String? edificio]) {
+    var s = 0.0;
+    for (final MapEntry(key: id, value: pct) in mejorasClicPct.entries) {
+      if (!mejoraComprada(id)) continue;
+      if (edificio == null || mejoraPorId(id)?.edificio == edificio) s += pct;
+    }
+    return s;
+  }
+
+  double _conEfectosPujo(double v, int ahora) {
+    final t = v * multiplicadorPujoTemporal(ahora);
+    return _activo('pujo_loco', ahora) ? t * multiplicadorPujoLoco : t;
+  }
+
+  /// MJ de un pujo normal (sin épico): ((1 + aporteDedos) × 2^x2 de clic + % × MJ/s) × efectos temporales, x777 en Pujo loco.
+  double valorPujo(int ahora) => _conEfectosPujo((1 + aporteDedos) * _multiplicadorClic + _pctPujo() * mps(ahora), ahora);
+
+  /// Lo que un edificio suma a cada pujo, con los mismos efectos que `valorPujo` (para el "+N /pujo" de su fila).
+  /// Dedo: sus dedos (con los x2 de clic) y Respiración/Mano de Dios. Baño, camión, planta: sus mejoras de %. La suma de
+  /// todas las filas más el pujo base (1 × 2^x2) da `valorPujo`.
+  double pujoEdificio(String id, int ahora) {
+    var v = _pctPujo(id) * mps(ahora);
+    if (id == 'dedo') v += aporteDedos * _multiplicadorClic;
+    return v == 0 ? 0 : _conEfectosPujo(v, ahora);
+  }
+
+  /// Probabilidad de que un pujo sea épico: base + un poco por Dedo, con tope. El buff tipo 1 la multiplica (x3) y dobla el tope.
+  double probabilidadEpicoActual(int ahora) {
+    final a = ajustes;
+    final p = a.epicoBase + a.epicoPorDedo * max(0, cantidad('dedo'));
+    if (tipoActivo(ahora) == 1) return min(p * a.epicoTipo1, a.epicoTope * 2);
+    return min(p, a.epicoTope);
+  }
+
+  /// Ritmo que se manda al guardar (`p_mps`, lo usa el servidor para el antitrampa): lo mayor entre el MJ/s sin efectos y
+  /// 15 pujos por segundo sin efectos. Así quien vive del Dedo no queda con un ritmo de 0 que le rechace el guardado.
+  double ritmoEfectivo() {
+    final m = mpsSinEfectos();
+    final pujo = (1 + aporteDedos) * _multiplicadorClic + _pctPujo() * m;
+    return max(m, pujo * pujosPorSegundoRitmo);
+  }
+
+  /// Un toque al Mojón. Puede salir épico (`probabilidadEpicoActual`), que vale `ajustes.epicoMultiplicador` (x10).
   ResultadoPujo pujar(int ahora) {
-    final prob = tipoActivo(ahora) == 1 ? probabilidadEpicoTipo1 : probabilidadEpico;
-    final epico = _azar.nextDouble() < prob;
-    final ganado = valorPujo(ahora) * (epico ? multiplicadorEpico : 1);
+    final epico = _azar.nextDouble() < probabilidadEpicoActual(ahora);
+    final ganado = valorPujo(ahora) * (epico ? ajustes.epicoMultiplicador : 1);
     _ganar(ganado);
     _p.pujos++;
     if (epico) _p.epicos++;
@@ -370,8 +425,21 @@ class Imperio {
   bool _mejoraPuedeSalir(Mejora m) => !mejoraComprada(m.id) && (m.edificio == null || edificioAbierto(m.edificio!)) && m.condicion(_p);
 
   /// Mejoras que se pueden comprar (condición cumplida, no compradas, edificio abierto), de la más barata a la más cara.
-  List<Mejora> mejorasDisponibles() =>
-      mejoras.where(_mejoraPuedeSalir).toList()..sort((a, b) => precioMejora(a).compareTo(precioMejora(b)));
+  List<Mejora> mejorasDisponibles() => _ordenadas(mejoras.where(_mejoraPuedeSalir));
+
+  List<Mejora> _ordenadas(Iterable<Mejora> ms) => ms.toList()..sort((a, b) => precioMejora(a).compareTo(precioMejora(b)));
+
+  /// Mejoras comprables de un edificio (las del Dedo incluyen las de clic), de la más barata a la más cara.
+  List<Mejora> mejorasDeEdificio(String id) => _ordenadas(mejoras.where((m) => m.edificio == id && _mejoraPuedeSalir(m)));
+
+  /// Mejoras comprables que no son de ningún edificio (tanques, válvulas, imán, brillo, lavanda), de la más barata a la más cara.
+  List<Mejora> mejorasPoceta() => _ordenadas(mejoras.where((m) => m.edificio == null && _mejoraPuedeSalir(m)));
+
+  /// La próxima mejora de un edificio que todavía no se puede comprar (la más barata no comprada que aún no sale), o null.
+  Mejora? siguienteMejora(String id) {
+    final r = _ordenadas(mejoras.where((m) => m.edificio == id && !mejoraComprada(m.id) && !_mejoraPuedeSalir(m)));
+    return r.isEmpty ? null : r.first;
+  }
 
   /// Precio de una mejora: el del catálogo, salvo Guantes y Faja que salen de los ajustes.
   double precioMejora(Mejora m) => switch (m.id) {
@@ -519,7 +587,8 @@ class Imperio {
 
     // Atascos: ~1 cada 2 h activas, uno a la vez, en un edificio con 25 o más.
     if (_p.atasco == null && s > 0) {
-      final candidatos = [for (final e in edificiosFase1) if (cantidad(e.id) >= minimoParaAtasco) e.id];
+      // El Dedo no produce MJ/s: atascarlo no haría nada.
+      final candidatos = [for (final e in edificiosFase1) if (e.mpsBase > 0 && cantidad(e.id) >= minimoParaAtasco) e.id];
       if (candidatos.isNotEmpty && _azar.nextDouble() < s / segundosPorAtasco) {
         _p.atasco = Atasco(candidatos[_azar.nextInt(candidatos.length)], ahora);
         _p.vioPrimerAtasco = true;

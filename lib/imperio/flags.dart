@@ -34,6 +34,13 @@ class FlagsImperio {
   /// Producción extra por cagada real hasta 150, en % (2 = +2%).
   final double cagadaBonoPct;
 
+  /// MJ que suma cada Dedo a cada pujo (`dedo_pujo`).
+  final double dedoPujo;
+
+  /// Pujo épico: probabilidad base (`epico_base`), lo que suma cada Dedo (`epico_por_dedo`), tope (`epico_tope`),
+  /// multiplicador del buff tipo 1 (`epico_tipo1_x`) y lo que vale un épico (`epico_x`).
+  final double epicoBase, epicoPorDedo, epicoTope, epicoTipo1, epicoMultiplicador;
+
   /// clave → variante asignada (solo las flags con variantes). Va en `sesion_inicio`.
   final Map<String, String> variantes;
 
@@ -46,6 +53,12 @@ class FlagsImperio {
     this.precioGuantes = 100,
     this.precioFaja = 500,
     this.cagadaBonoPct = 2,
+    this.dedoPujo = 1,
+    this.epicoBase = 0.005,
+    this.epicoPorDedo = 0.0003,
+    this.epicoTope = 0.03,
+    this.epicoTipo1 = 3,
+    this.epicoMultiplicador = 10,
     this.variantes = const {},
   });
 
@@ -63,6 +76,12 @@ class FlagsImperio {
         precioGuantes: precioGuantes,
         precioFaja: precioFaja,
         cagadaBonoPct: cagadaBonoPct,
+        dedoPujo: dedoPujo,
+        epicoBase: epicoBase,
+        epicoPorDedo: epicoPorDedo,
+        epicoTope: epicoTope,
+        epicoTipo1: epicoTipo1,
+        epicoMultiplicador: epicoMultiplicador,
       );
 
   static String claveCache(String? usuario) => 'imperio_flags_${usuario ?? 'anon'}';
@@ -103,6 +122,12 @@ class FlagsImperio {
       precioGuantes: numero('precio_guantes', d.precioGuantes, 1, 1e6),
       precioFaja: numero('precio_faja', d.precioFaja, 1, 1e7),
       cagadaBonoPct: numero('cagada_bono_pct', d.cagadaBonoPct, 0, 10),
+      dedoPujo: numero('dedo_pujo', d.dedoPujo, 0, 100),
+      epicoBase: numero('epico_base', d.epicoBase, 0, 0.5),
+      epicoPorDedo: numero('epico_por_dedo', d.epicoPorDedo, 0, 0.01),
+      epicoTope: numero('epico_tope', d.epicoTope, 0, 0.5),
+      epicoTipo1: numero('epico_tipo1_x', d.epicoTipo1, 1, 10),
+      epicoMultiplicador: numero('epico_x', d.epicoMultiplicador, 1, 100),
       variantes: {
         for (final e in m.entries)
           if (e.key is String && e.value is Map && (e.value as Map)['variante'] is String) e.key as String: (e.value as Map)['variante'] as String,

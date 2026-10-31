@@ -17,9 +17,11 @@ import 'cagadon.dart' show TarjetaReto;
 import 'popups.dart' show PantallaPopups;
 import 'emoji.dart';
 import 'idioma.dart';
+import 'imperio/catalogo.dart' as imperio show logros;
 import 'peso.dart';
 import 'racha.dart';
 import 'main.dart' show db, esDeRed;
+import 'panel.dart';
 import 'perfil.dart' show PantallaPerfil;
 import 'teclado_emojis.dart';
 import 'tema.dart';
@@ -255,6 +257,12 @@ class _PantallaChatState extends State<PantallaChat> with SingleTickerProviderSt
                 tooltip: 'Pop-ups',
                 icon: const Icon(Icons.campaign_outlined),
                 onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaPopups())),
+              ),
+            if (_soyAdmin)
+              IconButton(
+                tooltip: tr('Panel', 'Dashboard'),
+                icon: const Icon(Icons.insights_outlined),
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaPanel())),
               ),
             IconButton(
               tooltip: tr('Soporte', 'Support'),
@@ -1922,6 +1930,13 @@ class _PantallaHiloState extends State<_PantallaHilo> with ConTecladoEmojis {
   }
 }
 
+/// Tarjeta de logro del Imperio. Si el id no está en el catálogo de esta versión, una genérica.
+(String, String, String) _logroImperio(Object? id) {
+  final l = imperio.logros.where((x) => x.id == '$id').firstOrNull;
+  if (l == null) return ('🏆', tr('LOGRO DEL IMPERIO', 'EMPIRE ACHIEVEMENT'), tr('Desbloqueado en el Imperio', 'Unlocked in the Empire'));
+  return ('🏆', tr('LOGRO: ${l.nombreEs.toUpperCase()}', 'ACHIEVEMENT: ${l.nombreEn.toUpperCase()}'), tr(l.descEs, l.descEn));
+}
+
 class _Tarjeta extends StatelessWidget {
   const _Tarjeta(this.t);
 
@@ -1948,6 +1963,7 @@ class _Tarjeta extends StatelessWidget {
           nombreRacha(t['n'] as int) ?? '',
           tr('Cagó ${t['n']} veces hoy', 'Pooped ${t['n']} times today'),
         ),
+      'logro_imperio' => _logroImperio(t['id']),
       _ => ('💩', '', ''),
     };
     return Container(

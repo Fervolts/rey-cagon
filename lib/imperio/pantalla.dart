@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 
@@ -11,8 +10,10 @@ import '../tema.dart';
 import 'bienvenida.dart';
 import 'control.dart';
 import 'formato.dart';
+import 'logros.dart' show presumirLogroImperio;
 import 'moneda_app.dart';
 import 'motor.dart';
+import 'poceta.dart';
 import 'sala.dart';
 
 String _mj(double v) => formatoMj(v, ingles: enIngles);
@@ -68,17 +69,17 @@ class PantallaImperio extends StatefulWidget {
 
 class _PantallaImperioState extends State<PantallaImperio> with TickerProviderStateMixin {
   final _c = ControlImperio();
-  late final AnimationController _rebote = AnimationController(vsync: this, duration: const Duration(milliseconds: 140));
   late final AnimationController _pulso = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
-  final _azar = Random();
+  bool _porDiez = false, _dialogoAbierto = false;
 
-  bool _mejorasTab = false, _porDiez = false, _dialogoAbierto = false;
-  final _flotantes = <_DatosFlotante>[];
-  int _idFlotante = 0;
-  String? _ultimoPujo; // con movimiento "nada": se ve fijo debajo del mojón
+  // Desplegables de mejoras abiertos: id del edificio o 'poceta'.
+  final _abiertos = <String>{};
+  // Con cuántos de ese edificio sale la siguiente mejora (null = no depende de eso). Clave: 'edificio/mejora'.
+  final _umbrales = <String, int?>{};
 
-  final _cola = <(String, String)>[];
-  (String, String)? _aviso;
+  // (emoji, texto, id del logro para PRESUMIR o null)
+  final _cola = <(String, String, String?)>[];
+  (String, String, String?)? _aviso;
   Timer? _timerAviso;
 
   @override
@@ -103,7 +104,6 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     _timerAviso?.cancel();
     _c.removeListener(_alCambiar);
     _c.dispose();
-    _rebote.dispose();
     _pulso.dispose();
     super.dispose();
   }
@@ -113,7 +113,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     if (widget.activo) {
       while (_c.logrosNuevos.isNotEmpty) {
         final l = _c.logrosNuevos.removeAt(0);
-        _avisar('🏆', tr('Logro: ${l.nombreEs}', 'Achievement: ${l.nombreEn}'));
+        _avisar('🏆', tr('Logro: ${l.nombreEs}', 'Achievement: ${l.nombreEn}'), logro: l.id);
       }
       _mostrarDialogos();
     }
@@ -122,8 +122,8 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
 
   // ---------- Avisos de arriba ----------
 
-  void _avisar(String emoji, String texto) {
-    _cola.add((emoji, texto));
+  void _avisar(String emoji, String texto, {String? logro}) {
+    _cola.add((emoji, texto, logro));
     if (_aviso == null) _siguienteAviso();
   }
 
@@ -131,7 +131,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     _timerAviso?.cancel();
     if (!mounted) return;
     setState(() => _aviso = _cola.isEmpty ? null : _cola.removeAt(0));
-    if (_aviso != null) _timerAviso = Timer(const Duration(milliseconds: 2400), _siguienteAviso);
+    if (_aviso != null) _timerAviso = Timer(Duration(milliseconds: _aviso!.$3 == null ? 2400 : 4500), _siguienteAviso);
   }
 
   // ---------- Diálogos al cargar (en orden, una vez cada uno) ----------
@@ -212,17 +212,10 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
 
   // ---------- Acciones ----------
 
-  void _pujar() {
+  ToquePoceta _pujar() {
     final r = _c.pujar();
-    final mov = movimiento(context);
     final texto = r.epico ? tr('¡ÉPICO! +${_mj(r.ganado)}', 'EPIC! +${_mj(r.ganado)}') : '+${_mj(r.ganado)}';
-    if (mov == Movimiento.completo) _rebote.forward(from: 0);
-    if (mov == Movimiento.nada) {
-      _ultimoPujo = texto;
-      return;
-    }
-    if (_flotantes.length > 14) _flotantes.removeAt(0);
-    _flotantes.add(_DatosFlotante(_idFlotante++, texto, r.epico, _azar.nextDouble() * 120 - 60));
+    return (texto: texto, epico: r.epico);
   }
 
   void _tocarDorado() {
@@ -269,10 +262,10 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                 children: [
                   _cabecera(context, ahora),
                   if (_c.sinConexion) _sinConexion(context),
-                  _mojon(context, mov),
+                  _poceta(ahora),
                   _barraEfectos(context, ahora),
                   _pestanas(context),
-                  Expanded(child: _mejorasTab ? _listaMejoras(context) : _listaEdificios(context, ahora)),
+                  Expanded(child: _listaEdificios(context, ahora)),
                   _botonesAbajo(context),
                 ],
               ),
@@ -296,7 +289,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     );
   }
 
-  Widget _banner(BuildContext context, (String, String) a) {
+  Widget _banner(BuildContext context, (String, String, String?) a) {
     final p = paleta(context);
     return GestureDetector(
       onTap: _siguienteAviso,
@@ -308,6 +301,14 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
             Emoji(a.$1, tamano: 22),
             const SizedBox(width: 10),
             Expanded(child: Text(a.$2, style: TextStyle(fontWeight: FontWeight.w800, color: p.texto))),
+            if (a.$3 != null)
+              TextButton(
+                onPressed: () {
+                  _siguienteAviso();
+                  presumirLogroImperio(context, a.$3!);
+                },
+                child: Text(tr('PRESUMIR', 'SHOW OFF')),
+              ),
           ],
         ),
       ),
@@ -347,7 +348,13 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                     alignment: Alignment.centerLeft,
                     child: Text('${_mj(im.saldo)} ${moneda.abreviatura}', style: numeros(context, tamano: 32, weight: FontWeight.w900)),
                   ),
-                  Text('${_mj(im.mps(ahora))} /s', style: numeros(context, tamano: 14, color: p.textoSuave)),
+                  Wrap(
+                    spacing: 12,
+                    children: [
+                      Text('${_mj(im.mps(ahora))} /s', style: numeros(context, tamano: 14, color: p.textoSuave)),
+                      Text('${_mj(im.valorPujo(ahora))} /pujo', style: numeros(context, tamano: 14, color: p.textoSuave)),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -374,44 +381,28 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
         ),
       );
 
-  Widget _mojon(BuildContext context, Movimiento mov) {
-    final p = paleta(context);
-    const lado = 168.0;
-    final escala = TweenSequence([
-      TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.92), weight: 1),
-      TweenSequenceItem(tween: Tween(begin: 0.92, end: 1.0), weight: 1),
-    ]).animate(_rebote);
-    return SizedBox(
-      height: lado + 36,
-      child: Stack(
-        alignment: Alignment.center,
-        clipBehavior: Clip.none,
-        children: [
-          Listener(
-            behavior: HitTestBehavior.opaque,
-            onPointerDown: (_) => _pujar(),
-            child: ScaleTransition(
-              scale: escala,
-              child: Container(
-                width: lado,
-                height: lado,
-                decoration: BoxDecoration(shape: BoxShape.circle, color: p.tarjeta, border: Border.all(color: p.primario, width: 3)),
-                child: const Center(child: Emoji('💩', tamano: 104)),
-              ),
-            ),
-          ),
-          if (mov == Movimiento.nada && _ultimoPujo != null)
-            Positioned(bottom: 0, child: Text(_ultimoPujo!, style: numeros(context, tamano: 16, weight: FontWeight.w900))),
-          for (final f in _flotantes)
-            _Flotante(
-              key: ValueKey(f.id),
-              datos: f,
-              alTerminar: () {
-                if (mounted) setState(() => _flotantes.remove(f));
-              },
-            ),
-        ],
-      ),
+  Widget _poceta(int ahora) {
+    final im = _c.imperio;
+    final efectos = im.efectosActivos(ahora);
+    // Mejoras compradas que no son de un edificio (tanque, válvula, imán, brillo, incienso) y las de pujo (guantes...).
+    final accesorios = <String>[];
+    for (final m in mejoras) {
+      if ((m.edificio == null || m.familia == FamiliaMejora.clic) && im.mejoraComprada(m.id) && !accesorios.contains(m.emoji)) accesorios.add(m.emoji);
+    }
+    const conDibujo = {'fiebre_dorada', 'fiebre_trono', 'pujo_loco'};
+    final otros = <String>[];
+    for (final e in efectos) {
+      if (!conDibujo.contains(e.id) && !otros.contains(e.emoji)) otros.add(e.emoji);
+    }
+    return Poceta(
+      alTocar: _pujar,
+      mps: im.mps(ahora),
+      fiebre: im.enFiebre(ahora),
+      pujoLoco: efectos.any((e) => e.id == 'pujo_loco'),
+      efectos: otros,
+      accesorios: accesorios,
+      dedos: im.cantidad('dedo'),
+      activo: widget.activo,
     );
   }
 
@@ -454,15 +445,11 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
         child: Row(
           children: [
-            _opcion(context, tr('EDIFICIOS', 'BUILDINGS'), !_mejorasTab, () => setState(() => _mejorasTab = false)),
-            const SizedBox(width: 6),
-            _opcion(context, tr('MEJORAS', 'UPGRADES'), _mejorasTab, () => setState(() => _mejorasTab = true)),
+            Rotulo(tr('EDIFICIOS', 'BUILDINGS')),
             const Spacer(),
-            if (!_mejorasTab) ...[
-              _opcion(context, 'x1', !_porDiez, () => setState(() => _porDiez = false)),
-              const SizedBox(width: 4),
-              _opcion(context, 'x10', _porDiez, () => setState(() => _porDiez = true)),
-            ],
+            _opcion(context, 'x1', !_porDiez, () => setState(() => _porDiez = false)),
+            const SizedBox(width: 4),
+            _opcion(context, 'x10', _porDiez, () => setState(() => _porDiez = true)),
           ],
         ),
       );
@@ -472,8 +459,8 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     final lista = [for (final e in edificiosFase1) if (im.edificioVisible(e.id)) e];
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      itemCount: lista.length,
-      itemBuilder: (context, i) => _filaEdificio(context, lista[i], ahora),
+      itemCount: lista.length + 1,
+      itemBuilder: (context, i) => i == 0 ? _filaPoceta(context) : _filaEdificio(context, lista[i - 1], ahora),
     );
   }
 
@@ -515,22 +502,209 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     final precio = im.precioEdificioVarios(e.id, n, ahora);
     final alcanza = precio <= im.saldo;
     final misterio = im.edificioMisterioso(e.id);
-    return GestureDetector(
+    // El Dedo no produce por segundo: suma a cada pujo. Los millonarios con mejoras de pujo muestran las dos cosas.
+    final pujo = im.pujoEdificio(e.id, ahora);
+    final porSegundo = '${_mj(im.mpsEdificio(e.id, ahora))} /s';
+    final detalle = e.pujoBase > 0 ? '+${_mj(pujo)} /pujo' : (pujo > 0 ? '$porSegundo · +${_mj(pujo)} /pujo' : porSegundo);
+    final abierto = _abiertos.contains(e.id);
+    final ofertas = misterio ? const <Mejora>[] : im.mejorasDeEdificio(e.id);
+    final siguiente = misterio ? null : im.siguienteMejora(e.id);
+    final fila = GestureDetector(
       onTap: alcanza ? () => _c.comprarEdificio(e.id, n) : null,
       child: _fila(
         context,
         emoji: misterio ? '❓' : e.emoji,
         titulo: misterio ? '???' : tr(e.nombreEs, e.nombreEn),
-        detalle: '${_mj(im.mpsEdificio(e.id, ahora))} /s',
+        detalle: detalle,
         derecha: '${_mj(precio)} $moneda',
         contador: im.cantidad(e.id),
         resaltada: alcanza,
+        extra: misterio || (ofertas.isEmpty && siguiente == null) ? null : _flecha(context, e.id, ofertas),
+      ),
+    );
+    if (!abierto || misterio) return fila;
+    return Column(children: [fila, _desplegable(context, ofertas, siguiente: siguiente, edificio: e)]);
+  }
+
+  // ---------- Desplegables de mejoras ----------
+
+  /// Cuántas de estas mejoras alcanzan con el saldo de ahora.
+  int _alcanzan(List<Mejora> ms) => ms.where((m) => _c.imperio.precioMejora(m) <= _c.imperio.saldo).length;
+
+  void _alternar(String clave) {
+    setState(() {
+      if (!_abiertos.remove(clave)) {
+        _abiertos.add(clave);
+        _c.anotar('mejoras_abre', {'edificio': clave});
+      }
+    });
+  }
+
+  /// La ▼ de la derecha de una fila. Con borde de acento y número si hay mejoras que alcanzan.
+  Widget _flecha(BuildContext context, String clave, List<Mejora> ofertas) {
+    final p = paleta(context);
+    final listas = _alcanzan(ofertas);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _alternar(clave),
+      child: Container(
+        width: 40,
+        height: 40,
+        margin: const EdgeInsets.only(left: 8),
+        decoration: _caja(context, borde: listas > 0 ? p.primario : p.borde, fondo: listas > 0 ? p.primario : null),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AnimatedRotation(
+              turns: _abiertos.contains(clave) ? .5 : 0,
+              duration: movimiento(context) == Movimiento.nada ? Duration.zero : const Duration(milliseconds: 150),
+              child: Icon(Icons.keyboard_arrow_down, size: 20, color: listas > 0 ? p.sobrePrimario : p.texto),
+            ),
+            if (listas > 0) Text('$listas', style: numeros(context, tamano: 10, weight: FontWeight.w900, color: p.sobrePrimario)),
+          ],
+        ),
       ),
     );
   }
 
+  /// Primera fila de la lista: las mejoras de la poceta (tanque, válvula, imán, brillo, incienso...).
+  Widget _filaPoceta(BuildContext context) {
+    final im = _c.imperio;
+    final ofertas = im.mejorasPoceta();
+    final listas = _alcanzan(ofertas);
+    final fila = GestureDetector(
+      onTap: () => _alternar('poceta'),
+      child: _fila(
+        context,
+        emoji: '🚽',
+        titulo: tr('TU POCETA', 'YOUR TOILET'),
+        detalle: ofertas.isEmpty
+            ? tr('Sin mejoras por ahora', 'No upgrades for now')
+            : tr('${ofertas.length} ${ofertas.length == 1 ? 'mejora' : 'mejoras'}', '${ofertas.length} ${ofertas.length == 1 ? 'upgrade' : 'upgrades'}'),
+        resaltada: listas > 0,
+        extra: _flecha(context, 'poceta', ofertas),
+      ),
+    );
+    if (!_abiertos.contains('poceta')) return fila;
+    return Column(children: [fila, _desplegable(context, ofertas)]);
+  }
+
+  Widget _desplegable(BuildContext context, List<Mejora> ofertas, {Mejora? siguiente, Edificio? edificio}) {
+    final p = paleta(context);
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(14, 0, 0, 6),
+      padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
+      decoration: _caja(context, fondo: p.suave),
+      child: Column(
+        children: [
+          if (ofertas.isEmpty && siguiente == null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(tr('Nada por ahora. Sigue pujando.', 'Nothing yet. Keep pushing.'), style: TextStyle(fontSize: 12, color: p.textoSuave)),
+            ),
+          for (final m in ofertas) _filaMejora(context, m),
+          if (siguiente != null && edificio != null) _filaSiguiente(context, siguiente, edificio),
+        ],
+      ),
+    );
+  }
+
+  Widget _filaMejora(BuildContext context, Mejora m) {
+    final p = paleta(context);
+    final im = _c.imperio;
+    final precio = im.precioMejora(m);
+    final alcanza = precio <= im.saldo;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Emoji(m.emoji, tamano: 26),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(tr(m.nombreEs, m.nombreEn), style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: p.texto)),
+                Text(tr(m.efectoEs, m.efectoEn), style: TextStyle(fontSize: 11, color: p.textoSuave)),
+                Text('${_mj(precio)} ${monedaActual().abreviatura}', style: numeros(context, tamano: 12, weight: FontWeight.w800)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton(
+            style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+            onPressed: alcanza ? () => _c.comprarMejora(m.id) : null,
+            child: Text(tr('COMPRAR', 'BUY')),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// La que viene después, con candado y cuándo sale.
+  Widget _filaSiguiente(BuildContext context, Mejora m, Edificio e) {
+    final p = paleta(context);
+    final im = _c.imperio;
+    final hoy = im.cantidad(e.id);
+    final n = _umbrales.putIfAbsent('${e.id}/${m.id}/$hoy', () => _umbral(m, e.id));
+    final cuando = n == null
+        ? tr('Sigue jugando para que salga', 'Keep playing to unlock it')
+        : tr('Sale con $n ${e.nombreEs} (tienes $hoy)', 'Unlocks at $n ${e.nombreEn} (you have $hoy)');
+    return Opacity(
+      opacity: .6,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            const Emoji('🔒', tamano: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(tr(m.nombreEs, m.nombreEn), style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: p.texto)),
+                  Text(cuando, style: TextStyle(fontSize: 11, color: p.textoSuave)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Con cuántos de ese edificio se cumple la condición de la mejora, probando sobre una copia de la partida.
+  /// null si no depende de la cantidad (o ya se cumple y falta otra cosa).
+  int? _umbral(Mejora m, String id) {
+    final copia = Partida.desdeJson(_c.imperio.partida.toJson());
+    bool sale(int n) {
+      copia.edificios[id] = n;
+      return m.condicion(copia);
+    }
+
+    var bajo = copia.edificios[id] ?? 0, alto = 1000;
+    if (sale(bajo) || !sale(alto)) return null;
+    while (alto - bajo > 1) {
+      final medio = (bajo + alto) ~/ 2;
+      if (sale(medio)) {
+        alto = medio;
+      } else {
+        bajo = medio;
+      }
+    }
+    return alto;
+  }
+
   Widget _fila(BuildContext context,
-      {required String emoji, required String titulo, String? detalle, String? derecha, int? contador, bool resaltada = false, bool apagada = false}) {
+      {required String emoji,
+      required String titulo,
+      String? detalle,
+      String? derecha,
+      int? contador,
+      Widget? extra,
+      bool resaltada = false,
+      bool apagada = false}) {
     final p = paleta(context);
     return Opacity(
       opacity: apagada ? 0.5 : 1,
@@ -556,50 +730,10 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
               const SizedBox(width: 10),
               SizedBox(width: 34, child: Text('$contador', textAlign: TextAlign.right, style: numeros(context, tamano: 20, weight: FontWeight.w900))),
             ],
+            ?extra,
           ],
         ),
       ),
-    );
-  }
-
-  Widget _listaMejoras(BuildContext context) {
-    final p = paleta(context);
-    final im = _c.imperio;
-    final lista = im.mejorasDisponibles();
-    final moneda = monedaActual().abreviatura;
-    if (lista.isEmpty) {
-      return Center(child: Text(tr('Nada por ahora. Sigue pujando.', 'Nothing yet. Keep pushing.'), style: TextStyle(color: p.textoSuave)));
-    }
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      itemCount: lista.length,
-      itemBuilder: (context, i) {
-        final m = lista[i];
-        final alcanza = im.precioMejora(m) <= im.saldo;
-        return Container(
-          margin: const EdgeInsets.only(bottom: 6),
-          padding: const EdgeInsets.all(10),
-          decoration: _caja(context, borde: alcanza ? p.primario : p.borde),
-          child: Row(
-            children: [
-              Emoji(m.emoji, tamano: 30),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(tr(m.nombreEs, m.nombreEn), style: TextStyle(fontWeight: FontWeight.w800, color: p.texto)),
-                    Text(tr(m.efectoEs, m.efectoEn), style: TextStyle(fontSize: 12, color: p.textoSuave)),
-                    Text('${_mj(im.precioMejora(m))} $moneda', style: numeros(context, tamano: 12, weight: FontWeight.w800)),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton(onPressed: alcanza ? () => _c.comprarMejora(m.id) : null, child: Text(tr('COMPRAR', 'BUY'))),
-            ],
-          ),
-        );
-      },
     );
   }
 
@@ -632,7 +766,6 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       child: Row(
         children: [
           boton('🧴', tr('OBJETOS', 'ITEMS'), () => _abrirObjetos(context)),
-          boton('🏆', tr('LOGROS', 'ACHIEVEMENTS'), () => Navigator.push(context, MaterialPageRoute(builder: (_) => _PantallaLogros(control: _c)))),
           boton('🚽', tr('JALAR', 'FLUSH'), null, nota: tr('CON 15 CAGADAS', 'AT 15 POOPS')),
           boton('🕹️', tr('SALA', 'ARCADE'), () {
             _c.anotar('sala_abre');
@@ -654,55 +787,6 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
         ),
       );
 }
-
-// ---------- "+N" que sube y se apaga ----------
-
-class _DatosFlotante {
-  _DatosFlotante(this.id, this.texto, this.epico, this.dx);
-  final int id;
-  final String texto;
-  final bool epico;
-  final double dx;
-}
-
-class _Flotante extends StatefulWidget {
-  const _Flotante({super.key, required this.datos, required this.alTerminar});
-  final _DatosFlotante datos;
-  final VoidCallback alTerminar;
-
-  @override
-  State<_Flotante> createState() => _FlotanteState();
-}
-
-class _FlotanteState extends State<_Flotante> with SingleTickerProviderStateMixin {
-  late final AnimationController _a = AnimationController(vsync: this, duration: Duration(milliseconds: widget.datos.epico ? 1200 : 800))
-    ..forward().whenComplete(widget.alTerminar);
-
-  @override
-  void dispose() {
-    _a.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final d = widget.datos;
-    final p = paleta(context);
-    return AnimatedBuilder(
-      animation: _a,
-      builder: (context, hijo) => Positioned(
-        top: 60 - 70 * _a.value,
-        child: Transform.translate(offset: Offset(d.dx, 0), child: Opacity(opacity: 1 - _a.value, child: hijo)),
-      ),
-      child: IgnorePointer(
-        child: Text(d.texto,
-            style: numeros(context, tamano: d.epico ? 28 : 18, weight: FontWeight.w900, color: d.epico ? p.primario : p.texto)),
-      ),
-    );
-  }
-}
-
-// ---------- Objetos ----------
 
 class _HojaObjetos extends StatelessWidget {
   const _HojaObjetos({required this.control, required this.avisar});
@@ -806,67 +890,6 @@ class _HojaObjetos extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ---------- Logros ----------
-
-class _PantallaLogros extends StatelessWidget {
-  const _PantallaLogros({required this.control});
-  final ControlImperio control;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = paleta(context);
-    return Scaffold(
-      backgroundColor: p.fondo,
-      appBar: AppBar(title: Text(tr('LOGROS', 'ACHIEVEMENTS'))),
-      body: ListenableBuilder(
-        listenable: control,
-        builder: (context, _) {
-          final im = control.imperio;
-          final hechos = logros.where((l) => im.tieneLogro(l.id)).length;
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                child: Row(children: [Rotulo(tr('Desbloqueados', 'Unlocked')), const Spacer(), Text('$hechos/${logros.length}', style: numeros(context))]),
-              ),
-              Expanded(
-                child: GridView.builder(
-                  padding: const EdgeInsets.all(16),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, mainAxisSpacing: 8, crossAxisSpacing: 8, childAspectRatio: 1.25),
-                  itemCount: logros.length,
-                  itemBuilder: (context, i) {
-                    final l = logros[i];
-                    final tiene = im.tieneLogro(l.id);
-                    return Opacity(
-                      opacity: tiene ? 1 : 0.4,
-                      child: Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: _caja(context, borde: tiene ? p.primario : p.borde),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Emoji(tiene ? '🏆' : '🔒', tamano: 30),
-                            const SizedBox(height: 6),
-                            Text(tr(l.nombreEs, l.nombreEn), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: p.texto)),
-                            const SizedBox(height: 2),
-                            Text(tr(l.descEs, l.descEn), textAlign: TextAlign.center, maxLines: 3, overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontSize: 11, color: p.textoSuave)),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          );
-        },
       ),
     );
   }

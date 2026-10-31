@@ -33,6 +33,7 @@ Future<void> elegirIdioma(String valor) async {
 /// Los errores que manda la base de datos vienen en español: aquí su versión en inglés.
 const _errores = {
   'Accesorio desconocido': 'Unknown accessory',
+  'Todavía no tienes ese logro del Imperio': "You don't have that Empire achievement yet",
   'Esa cagada no es racha': "That poop isn't a streak",
   'Esa racha ya salió en el chat': 'That streak is already in the chat',
   'Esa cagada no existe o no dijiste qué salió': "That poop doesn't exist or you didn't say what came out",

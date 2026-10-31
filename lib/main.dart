@@ -364,7 +364,11 @@ class _PantallaInicioState extends State<PantallaInicio> {
     if (destino == null || destino.inicio || !mounted) return;
     destino.inicio = true;
     Navigator.of(context).popUntil((r) => r.isFirst);
-    setState(() => _tab = destino.a == 'inicio' || destino.a == 'avisos' ? 0 : _tabBano);
+    setState(() => _tab = switch (destino.a) {
+          'inicio' || 'avisos' => 0,
+          'imperio' => 2,
+          _ => _tabBano,
+        });
     if (_tab == _tabBano) _marcarVisto();
     if (destino.a == 'avisos') {
       Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaAvisos()));

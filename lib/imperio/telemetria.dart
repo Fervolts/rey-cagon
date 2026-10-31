@@ -42,6 +42,7 @@ Future<int> _enviarPorRpc(List<Map<String, Object?>> lote) async {
 /// - `sala_abre` {}
 /// - `minijuego_toca` {id} (los "próximamente")
 /// - `pestana_abre` {}
+/// - `mejoras_abre` {edificio}: desplegó las mejoras de un edificio (`poceta` = las de TU POCETA)
 /// - `error` {donde}
 ///
 /// Nombres: `[a-z0-9_]`, hasta 40. Datos: JSON plano, hasta ~3,5 KB (si no, se manda `{recortado: true}`).

@@ -83,6 +83,59 @@ async function enviar(token: string, title: string, body: string, data: Record<s
   });
 }
 
+// Un teléfono a avisar y lo que le toca.
+type Destino = { token: string; user_id?: string | null; idioma?: string | null };
+type Mensaje = { titulo: string; cuerpo: string; data: Record<string, string>; subtipo?: string; variante?: string };
+
+// Manda un push a cada destino, registra cada envío en push_envios (su id va en data.envio),
+// borra los tokens muertos y marca ok = false lo que FCM rechazó. Si push_envios no existe
+// todavía (migración sin aplicar) manda igual, sin envio.
+async function repartir(tipo: string, destinos: Destino[], armar: (d: Destino) => Mensaje) {
+  const lista = destinos.map((d) => ({ d, m: armar(d), envio: null as number | null }));
+  const registrables = lista.filter((x) => x.d.user_id);
+  for (let i = 0; i < registrables.length; i += 500) {
+    const tanda = registrables.slice(i, i + 500);
+    const { data: filas, error } = await db.from("push_envios").insert(tanda.map((x) => ({
+      user_id: x.d.user_id,
+      tipo,
+      subtipo: x.m.subtipo ?? null,
+      variante: x.m.variante ?? null,
+    }))).select("id");
+    if (error) {
+      console.error("push_envios", error.message);
+      break;
+    }
+    // Los ids salen de una identidad: en orden ascendente quedan en el orden de la tanda.
+    const ids = (filas ?? []).map((f) => Number(f.id)).sort((a, b) => a - b);
+    if (ids.length === tanda.length) tanda.forEach((x, j) => (x.envio = ids[j]));
+  }
+  const muertos: string[] = [];
+  const fallidos: number[] = [];
+  if (lista.length) await accessToken(); // calienta la caché antes de mandar en paralelo
+  await Promise.all(lista.map(async (x) => {
+    const data = x.envio == null ? x.m.data : { ...x.m.data, envio: String(x.envio) };
+    const res = await enviar(x.d.token, x.m.titulo, x.m.cuerpo, data);
+    if (!res.ok) {
+      if (x.envio != null) fallidos.push(x.envio);
+      const err = await res.text();
+      // Token de una app desinstalada: se borra.
+      if (res.status === 404 || err.includes("UNREGISTERED")) muertos.push(x.d.token);
+      else console.error("FCM", res.status, err);
+    }
+  }));
+  if (muertos.length) await db.from("push_tokens").delete().in("token", muertos);
+  for (let i = 0; i < fallidos.length; i += 500) {
+    await db.from("push_envios").update({ ok: false }).in("id", fallidos.slice(i, i + 500));
+  }
+  return { enviados: lista.length - muertos.length, borrados: muertos.length };
+}
+
+// Mismo aviso para todos, cada uno en su idioma.
+const fijo = (a: Aviso, data: Record<string, string>) => (d: Destino): Mensaje => {
+  const [titulo, cuerpo] = enSuIdioma(a, d.idioma);
+  return { titulo, cuerpo, data };
+};
+
 // Copia del aviso en el centro de avisos de cada usuario, tenga o no teléfono registrado.
 async function guardar(usuarios: string[], a: Aviso, datos: Record<string, string>) {
   if (!usuarios.length) return;
@@ -104,7 +157,7 @@ async function guardar(usuarios: string[], a: Aviso, datos: Record<string, strin
 async function avisarFollow(follower: string, followed: string) {
   const [{ data: perfil }, { data: tokens }, { data: devuelta }] = await Promise.all([
     db.from("profiles").select("username").eq("id", follower).single(),
-    db.from("push_tokens").select("token, idioma").eq("user_id", followed),
+    db.from("push_tokens").select("token, user_id, idioma").eq("user_id", followed),
     db.from("follows").select("follower").eq("follower", followed).eq("followed", follower).maybeSingle(),
   ]);
   if (!perfil) return Response.json({ enviados: 0 });
@@ -116,46 +169,25 @@ async function avisarFollow(follower: string, followed: string) {
   const datos = { tipo: "follow", user_id: follower };
   await guardar([followed], a, datos);
   if (!tokens?.length) return Response.json({ enviados: 0 });
-  const muertos: string[] = [];
-  await Promise.all(tokens.map(async (t) => {
-    const res = await enviar(t.token, ...enSuIdioma(a, t.idioma), datos);
-    if (!res.ok) {
-      const err = await res.text();
-      if (res.status === 404 || err.includes("UNREGISTERED")) muertos.push(t.token);
-      else console.error("FCM", res.status, err);
-    }
-  }));
-  if (muertos.length) await db.from("push_tokens").delete().in("token", muertos);
-  return Response.json({ enviados: tokens.length - muertos.length });
+  const { enviados } = await repartir("follow", tokens, fijo(a, datos));
+  return Response.json({ enviados });
 }
 
 // Aviso de versión nueva a los teléfonos con un build menor. app_build lo reporta la app
 // desde la 1.8.2; las versiones anteriores (null) no saben actualizarse y se omiten.
 async function avisarVersion(version: string, build: number) {
   // Los de Play se actualizan por la tienda: solo avisa a la APK directa (null = versión vieja sin canal).
-  const { data: tokens } = await db.from("push_tokens").select("token, idioma").lt("app_build", build)
+  const { data: tokens } = await db.from("push_tokens").select("token, user_id, idioma").lt("app_build", build)
     .or("canal.is.null,canal.eq.directo");
   if (!tokens?.length) return Response.json({ enviados: 0 });
-  const muertos: string[] = [];
-  await Promise.all(tokens.map(async (t) => {
-    const res = await enviar(
-      t.token,
-      ...enSuIdioma(aviso(
-        "Actualízame, mojón 💩",
-        `La versión ${version} ya está lista. Toca para instalarla.`,
-        "Update me, you turd 💩",
-        `Version ${version} is ready. Tap to install it.`,
-      ), t.idioma),
-      { tipo: "version", version },
-    );
-    if (!res.ok) {
-      const err = await res.text();
-      if (res.status === 404 || err.includes("UNREGISTERED")) muertos.push(t.token);
-      else console.error("FCM", res.status, err);
-    }
-  }));
-  if (muertos.length) await db.from("push_tokens").delete().in("token", muertos);
-  return Response.json({ enviados: tokens.length - muertos.length });
+  const a = aviso(
+    "Actualízame, mojón 💩",
+    `La versión ${version} ya está lista. Toca para instalarla.`,
+    "Update me, you turd 💩",
+    `Version ${version} is ready. Tap to install it.`,
+  );
+  const { enviados } = await repartir("version", tokens, fijo(a, { tipo: "version", version }));
+  return Response.json({ enviados });
 }
 
 const malas = ["dolorosa", "sangrante", "ardiente"];
@@ -211,38 +243,20 @@ async function avisarPlacer(id: string) {
     .in("id", (seguidores ?? []).map((s) => s.follower));
   if (!abiertos?.length) return Response.json({ enviados: 0 });
   await guardar(abiertos.map((a) => a.id), texto, { tipo: "placer", user_id: c.user_id });
-  const { data: tokens } = await db.from("push_tokens").select("token, idioma").in("user_id", abiertos.map((a) => a.id));
+  const { data: tokens } = await db.from("push_tokens").select("token, user_id, idioma").in("user_id", abiertos.map((a) => a.id));
   if (!tokens?.length) return Response.json({ enviados: 0 });
-  const muertos: string[] = [];
-  await Promise.all(tokens.map(async (t) => {
-    const res = await enviar(t.token, ...enSuIdioma(texto, t.idioma), { tipo: "placer", user_id: c.user_id });
-    if (!res.ok) {
-      const err = await res.text();
-      if (res.status === 404 || err.includes("UNREGISTERED")) muertos.push(t.token);
-      else console.error("FCM", res.status, err);
-    }
-  }));
-  if (muertos.length) await db.from("push_tokens").delete().in("token", muertos);
-  return Response.json({ enviados: tokens.length - muertos.length });
+  const { enviados } = await repartir("placer", tokens, fijo(texto, { tipo: "placer", user_id: c.user_id }));
+  return Response.json({ enviados });
 }
 
 // Manda el mismo aviso a todos los teléfonos de esos usuarios y limpia los tokens muertos.
 async function avisarA(usuarios: string[], a: Aviso, data: Record<string, string>) {
   if (!usuarios.length) return Response.json({ enviados: 0 });
   await guardar(usuarios, a, data);
-  const { data: tokens } = await db.from("push_tokens").select("token, idioma").in("user_id", usuarios);
+  const { data: tokens } = await db.from("push_tokens").select("token, user_id, idioma").in("user_id", usuarios);
   if (!tokens?.length) return Response.json({ enviados: 0 });
-  const muertos: string[] = [];
-  await Promise.all(tokens.map(async (t) => {
-    const res = await enviar(t.token, ...enSuIdioma(a, t.idioma), data);
-    if (!res.ok) {
-      const err = await res.text();
-      if (res.status === 404 || err.includes("UNREGISTERED")) muertos.push(t.token);
-      else console.error("FCM", res.status, err);
-    }
-  }));
-  if (muertos.length) await db.from("push_tokens").delete().in("token", muertos);
-  return Response.json({ enviados: tokens.length - muertos.length });
+  const { enviados } = await repartir(data.tipo ?? "otro", tokens, fijo(a, data));
+  return Response.json({ enviados });
 }
 
 const recortar = (t: string, n = 120) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
@@ -373,20 +387,100 @@ async function avisarReto(id: number, evento: string) {
 async function avisarAnuncio(id: number) {
   const { data: a } = await db.from("anuncios").select("titulo, texto, emoji, idioma").eq("id", id).single();
   if (!a) return Response.json({ enviados: 0 });
-  const consulta = db.from("push_tokens").select("token");
+  const consulta = db.from("push_tokens").select("token, user_id");
   const { data: tokens } = await (a.idioma ? consulta.eq("idioma", a.idioma) : consulta);
   if (!tokens?.length) return Response.json({ enviados: 0 });
-  const muertos: string[] = [];
-  await Promise.all(tokens.map(async (t) => {
-    const res = await enviar(t.token, `${a.emoji ?? "📢"} ${a.titulo}`, recortar(a.texto, 160), { tipo: "anuncio", id: String(id) });
-    if (!res.ok) {
-      const err = await res.text();
-      if (res.status === 404 || err.includes("UNREGISTERED")) muertos.push(t.token);
-      else console.error("FCM", res.status, err);
-    }
-  }));
-  if (muertos.length) await db.from("push_tokens").delete().in("token", muertos);
-  return Response.json({ enviados: tokens.length - muertos.length });
+  const mensaje = { titulo: `${a.emoji ?? "📢"} ${a.titulo}`, cuerpo: recortar(a.texto, 160), data: { tipo: "anuncio", id: String(id) } };
+  const { enviados } = await repartir("anuncio", tokens, () => mensaje);
+  return Response.json({ enviados });
+}
+
+// ---- Poceta (Imperio) ----
+
+// Copia de formatoMj (lib/imperio/formato.dart): "12,5", "999", "1,23 M", "15 K", "1,23e21".
+const sufijos = ["K", "M", "B", "T", "Qa", "Qi"];
+const sinCeros = (s: string) => (s.includes(".") ? s.replace(/0+$/, "").replace(/\.$/, "") : s);
+function formatoMj(v: number, ingles = false): string {
+  const fin = (s: string) => (ingles ? s : s.replaceAll(".", ","));
+  if (Number.isNaN(v)) return "0";
+  if (!Number.isFinite(v)) return v < 0 ? "-∞" : "∞";
+  if (v < 1000) {
+    if (v < 100) return fin(sinCeros(v.toFixed(1)));
+    return String(Math.round(v));
+  }
+  let exp = 0;
+  let x = v;
+  while (x >= 1000 && exp < sufijos.length) {
+    x /= 1000;
+    exp++;
+  }
+  if (x >= 1000) {
+    const [mant, e] = v.toExponential(2).split("e");
+    return fin(`${sinCeros(mant)}e${parseInt(e, 10)}`);
+  }
+  let t = sinCeros(x.toFixed(2));
+  if (t === "1000" && exp < sufijos.length) {
+    t = "1";
+    exp++;
+  }
+  return fin(`${t} ${sufijos[exp - 1]}`);
+}
+
+// "30 h" o "3 días".
+const tiempo = (h: number, en: boolean) =>
+  h >= 48 ? `${Math.floor(h / 24)} ${en ? "days" : "días"}` : `${h} h`;
+
+type Poceta = { user_id: string; subtipo: string; mj?: number; horas?: number };
+
+// Variantes A/B/C por subtipo. Cada una devuelve el aviso con los números de esa persona.
+const textosPoceta: Record<string, ((p: Poceta) => Aviso)[]> = {
+  ganancia: [
+    (p) => aviso(`💸 Tu poceta hizo ${formatoMj(p.mj ?? 0)} mojonólares`, "Siguió produciendo mientras no estabas. Ven a cobrar 🚽",
+      `💸 Your toilet made ${formatoMj(p.mj ?? 0, true)} Poopbucks`, "It kept producing while you were away. Come collect 🚽"),
+    (p) => aviso("🚽 La poceta no descansa", `Te juntó ${formatoMj(p.mj ?? 0)} mojonólares. Están calienticos 💩`,
+      "🚽 The toilet never rests", `It piled up ${formatoMj(p.mj ?? 0, true)} Poopbucks for you. Still warm 💩`),
+    (p) => aviso(`💰 ${formatoMj(p.mj ?? 0)} mojonólares te esperan`, "Tu imperio sigue cagando plata. Ven antes de que se tapen las tuberías 🪠",
+      `💰 ${formatoMj(p.mj ?? 0, true)} Poopbucks are waiting`, "Your empire keeps pooping money. Come before the pipes clog 🪠"),
+  ],
+  extrana: [
+    (p) => aviso("Tu poceta te extraña 🚽🥺", `Hace ${tiempo(p.horas ?? 24, false)} que no te sientas en ella. Está fría y sola.`,
+      "Your toilet misses you 🚽🥺", `You haven't sat on it in ${tiempo(p.horas ?? 24, true)}. It's cold and lonely.`),
+    (_) => aviso("🥺 La poceta pregunta por ti", "Dice que ya no la quieres. Demuéstrale lo contrario.",
+      "🥺 The toilet asked about you", "It thinks you don't love it anymore. Prove it wrong."),
+    (_) => aviso("🚽 ¿Y tu imperio?", "Tus empleados de la poceta están de brazos cruzados. Ven a ponerlos a pujar 💩",
+      "🚽 What about your empire?", "Your toilet crew is just sitting around. Come make them push 💩"),
+  ],
+  constipado: [
+    (p) => aviso("¿Estás constipado? 💩", `${tiempo(p.horas ?? 10, false)} sin cagar... ¿estítico? Toma agüita y vuelve al trono.`,
+      "Are you constipated? 💩", `${tiempo(p.horas ?? 10, true)} without pooping... backed up? Drink some water and get back on the throne.`),
+    (p) => aviso("🧐 ¿Todo bien allá abajo?", `Llevas ${tiempo(p.horas ?? 10, false)} sin cagar. El ranking no se defiende solo.`,
+      "🧐 Everything OK down there?", `${tiempo(p.horas ?? 10, true)} without a poop. The ranking won't defend itself.`),
+    (p) => aviso("🪨 ¿Estítico?", `${tiempo(p.horas ?? 10, false)} de sequía. Una papaya y al trono 👑`,
+      "🪨 Backed up?", `${tiempo(p.horas ?? 10, true)} dry spell. Eat a prune and hit the throne 👑`),
+  ],
+};
+const letras = ["a", "b", "c"];
+
+// Lista que arma push_poceta_revisar(): un aviso por persona, variante al azar (la misma en
+// todos sus teléfonos). No se guarda en notificaciones: es un empujón, no un aviso para leer.
+async function avisarPoceta(lista: Poceta[]) {
+  const validos = lista.filter((p) => p?.user_id && textosPoceta[p.subtipo]);
+  if (!validos.length) return Response.json({ enviados: 0 });
+  const elegido = new Map<string, { p: Poceta; i: number }>();
+  for (const p of validos) elegido.set(p.user_id, { p, i: Math.floor(Math.random() * textosPoceta[p.subtipo].length) });
+  const usuarios = [...elegido.keys()];
+  const tokens: Destino[] = [];
+  for (let i = 0; i < usuarios.length; i += 200) {
+    const { data } = await db.from("push_tokens").select("token, user_id, idioma").in("user_id", usuarios.slice(i, i + 200));
+    tokens.push(...(data ?? []));
+  }
+  if (!tokens.length) return Response.json({ enviados: 0 });
+  const r = await repartir("poceta", tokens, (t) => {
+    const { p, i } = elegido.get(t.user_id ?? "")!;
+    const [titulo, cuerpo] = enSuIdioma(textosPoceta[p.subtipo][i](p), t.idioma);
+    return { titulo, cuerpo, subtipo: p.subtipo, variante: letras[i], data: { tipo: "poceta", subtipo: p.subtipo, variante: letras[i] } };
+  });
+  return Response.json(r);
 }
 
 Deno.serve(async (req) => {
@@ -403,6 +497,7 @@ Deno.serve(async (req) => {
   if (cuerpo.tipo === "reto") return avisarReto(cuerpo.id, cuerpo.evento);
   if (cuerpo.tipo === "anuncio") return avisarAnuncio(cuerpo.id);
   if (cuerpo.tipo === "reporte_chat") return avisarReporteChat(cuerpo.mensaje_id, cuerpo.motivo);
+  if (cuerpo.tipo === "poceta") return avisarPoceta(cuerpo.lista ?? []);
   const { user_id } = cuerpo;
 
   const { data: seguidores } = await db.from("follows").select("follower").eq("followed", user_id);
@@ -419,37 +514,17 @@ Deno.serve(async (req) => {
   for (const c of hoy ?? []) cuenta.set(c.user_id, (cuenta.get(c.user_id) ?? 0) + 1);
   const n = cuenta.get(user_id) ?? 0;
 
-  const bearer = await accessToken();
-  const muertos: string[] = [];
-  await Promise.all(tokens.map(async (t) => {
-    const mio = cuenta.get(t.user_id) ?? 0;
+  const data = { tipo: "cagada", user_id };
+  const r = await repartir("cagada", tokens, (t) => {
+    const mio = cuenta.get(t.user_id ?? "") ?? 0;
     const en = t.idioma === "en";
     const cola = en
       ? (mio < n ? "you're losing 😬" : mio === n ? "you're tied 👀" : "you're still winning 👑")
       : (mio < n ? "vas perdiendo 😬" : mio === n ? "van empatados 👀" : "todavía le ganas 👑");
-    const notification = en
-      ? { title: `💩 ${perfil.username} pooped`, body: `${perfil.username} pooped ${n} ${n === 1 ? "time" : "times"} today... ${cola}` }
-      : { title: `💩 ${perfil.username} cagó`, body: `${perfil.username} cagó ${n} ${n === 1 ? "vez" : "veces"} hoy... ${cola}` };
-    const res = await fetch(`https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${bearer}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message: {
-          token: t.token,
-          notification,
-          data: { tipo: "cagada", user_id },
-          android: { notification: { channel_id: "cagadas" } },
-        },
-      }),
-    });
-    if (!res.ok) {
-      const err = await res.text();
-      // Token de una app desinstalada: se borra.
-      if (res.status === 404 || err.includes("UNREGISTERED")) muertos.push(t.token);
-      else console.error("FCM", res.status, err);
-    }
-  }));
-  if (muertos.length) await db.from("push_tokens").delete().in("token", muertos);
+    return en
+      ? { titulo: `💩 ${perfil.username} pooped`, cuerpo: `${perfil.username} pooped ${n} ${n === 1 ? "time" : "times"} today... ${cola}`, data }
+      : { titulo: `💩 ${perfil.username} cagó`, cuerpo: `${perfil.username} cagó ${n} ${n === 1 ? "vez" : "veces"} hoy... ${cola}`, data };
+  });
 
-  return Response.json({ enviados: tokens.length - muertos.length, borrados: muertos.length });
+  return Response.json(r);
 });
