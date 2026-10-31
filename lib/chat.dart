@@ -382,8 +382,12 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
   bool _cargado = false;
   Object? _errorCarga;
   bool _reconectando = false;
+  // La consulta falló por red y se está reintentando: sale el mismo aviso de reconectando.
+  bool _cargaFallando = false;
   RealtimeChannel? _canal;
-  Timer? _reintentoCarga, _reintentoCanal;
+  Timer? _reintentoCarga, _reintentoCanal, _vigia;
+  // Fallos seguidos del canal, para espaciar los reintentos.
+  int _fallosCanal = 0;
   // Anuncios fijados arriba de la sala global (los fija un admin por un tiempo).
   List<Map<String, dynamic>> _fijados = [];
   int _verFijado = 0;
@@ -433,9 +437,21 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
     super.initState();
     _cargar();
     _conectar();
+    // Al volver a la app, supabase_flutter reconecta el socket y vuelve a unir los canales que
+    // estaban unidos. Antes aquí se rehacía el canal de una vez: se unía sobre el socket viejo,
+    // ese intento se perdía en la reconexión y quedaba "Reconectando…" unos 13 segundos (o más).
+    // Ahora solo se consulta y, si al rato el canal sigue sin unirse, se rehace.
     _ciclo = AppLifecycleListener(onResume: () {
-      _conectar();
       _cargar();
+      _vigia?.cancel();
+      _vigia = Timer(const Duration(seconds: 8), () {
+        if (!mounted) return;
+        if (!_unido(_canal)) {
+          _conectar();
+        } else if (_hayReacciones && !_unido(_canalReacciones)) {
+          _conectarReacciones();
+        }
+      });
     });
     db.rpc('admins_ids').then((r) {
       final ids = {for (final x in r as List) x as String};
@@ -485,6 +501,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
     _reintentoCarga?.cancel();
     _reintentoCanal?.cancel();
     _reintentoReacciones?.cancel();
+    _vigia?.cancel();
     final canal = _canal;
     _canal = null;
     if (canal != null) db.removeChannel(canal);
@@ -505,11 +522,14 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
   bool _esDeAqui(Map<String, dynamic> m) => _esSoporte ? m['hilo'] == widget.hilo : m['sala'] == widget.sala;
 
   Future<void> _cargar({int intento = 0}) async {
+    _reintentoCarga?.cancel();
     try {
       final base = db.from('mensajes').select();
       final deAqui = _esSoporte ? base.eq('hilo', widget.hilo!) : base.eq('sala', widget.sala);
       // Las respuestas de hilos no van en el flujo: se piden aparte con _cargarRespuestas.
-      final r = await (_hayHilos ? deAqui.isFilter('responde_a', null) : deAqui).order('id', ascending: false).limit(_limite);
+      final r = await (_hayHilos ? deAqui.isFilter('responde_a', null) : deAqui).order('id', ascending: false).limit(_limite)
+          // Sin esto, una consulta colgada (red que no responde) dejaba la rueda girando para siempre.
+          .timeout(const Duration(seconds: 12));
       if (!mounted) return;
       final ultimo = r.isEmpty ? 0 : r.first['id'] as int;
       setState(() {
@@ -521,6 +541,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
           ..addEntries(recientes);
         _cargado = true;
         _errorCarga = null;
+        _cargaFallando = false;
       });
       _cargarFijados();
       final ids = [for (final m in r) m['id'] as int];
@@ -533,12 +554,18 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
         _hayHilos = false;
         return _cargar(intento: intento);
       }
-      // Sin red: se reintenta solo. Mientras, se sigue mostrando lo que ya había.
-      if (intento < 4) {
-        _reintentoCarga?.cancel();
-        _reintentoCarga = Timer(Duration(seconds: 2 * (intento + 1)), () => _cargar(intento: intento + 1));
+      // Sin red: se reintenta solo, cada vez más espaciado (tope 30 s) y sin rendirse mientras la
+      // sala esté abierta. Mientras, se sigue mostrando lo que ya había con el aviso arriba.
+      final red = esDeRed(e);
+      if (red || intento < 4) {
+        _reintentoCarga = Timer(Duration(seconds: min(2 * (intento + 1), 30)), () {
+          if (mounted) _cargar(intento: intento + 1);
+        });
       }
-      if (!_cargado || !esDeRed(e)) setState(() => _errorCarga = e);
+      setState(() {
+        if (!_cargado || !red) _errorCarga = e;
+        _cargaFallando = red;
+      });
     }
   }
 
@@ -615,8 +642,16 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
   bool _estaFijado(Map<String, dynamic> m) =>
       m['fijado_hasta'] != null && DateTime.parse(m['fijado_hasta'] as String).isAfter(DateTime.now());
 
+  // Si el canal está unido ahora mismo. isJoined es interno de realtime_client, pero es lo mismo
+  // que usa supabase_flutter para decidir qué canales vuelve a unir.
+  // ignore: invalid_use_of_internal_member
+  bool _unido(RealtimeChannel? c) => c != null && c.isJoined;
+
   void _conectar() {
     final viejo = _canal;
+    // Se suelta antes de quitarlo: así el "closed" del canal viejo no prende el aviso.
+    _canal = null;
+    _reintentoCanal?.cancel();
     if (viejo != null) db.removeChannel(viejo);
     final filtro = _esSoporte
         ? PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'hilo', value: widget.hilo)
@@ -666,14 +701,21 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
               // Al unirse (o volver a unirse) se consulta de nuevo: pudo perderse algo en el hueco.
               if (unido || _reconectando) _cargar();
               unido = true;
+              _fallosCanal = 0;
+              _reintentoCanal?.cancel();
               if (_reconectando) setState(() => _reconectando = false);
             case RealtimeSubscribeStatus.channelError:
             case RealtimeSubscribeStatus.timedOut:
             case RealtimeSubscribeStatus.closed:
               setState(() => _reconectando = true);
+              // realtime_client ya reintenta unirse solo. Si en un rato no lo logró, se rehace el
+              // canal desde cero; cada fallo seguido espera más (3, 6, 12, 24, 30 s).
               _reintentoCanal?.cancel();
-              _reintentoCanal = Timer(const Duration(seconds: 3), () {
-                if (mounted && _canal == canal) _conectar();
+              _reintentoCanal = Timer(Duration(seconds: min(3 << min(_fallosCanal, 4), 30)), () {
+                if (mounted && _canal == canal && _reconectando && !_unido(canal)) {
+                  _fallosCanal++;
+                  _conectar();
+                }
               });
           }
         });
@@ -708,7 +750,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
           if (estado == RealtimeSubscribeStatus.channelError || estado == RealtimeSubscribeStatus.timedOut || estado == RealtimeSubscribeStatus.closed) {
             _reintentoReacciones?.cancel();
             _reintentoReacciones = Timer(const Duration(seconds: 10), () {
-              if (mounted && _canalReacciones == canal) _conectarReacciones();
+              if (mounted && _canalReacciones == canal && !_unido(canal)) _conectarReacciones();
             });
           }
         });
@@ -736,6 +778,81 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
   }
 
   // Tocar una reacción: si es mía la quita, si no la pone. Se pinta antes de que conteste la base.
+  // Quién reaccionó a un mensaje, por emoji. [primero]: el emoji del chip que se mantuvo apretado,
+  // que sale arriba. Se repinta solo si llegan perfiles o cambian las reacciones mientras está abierta.
+  Future<void> _verReacciones(Map<String, dynamic> m, {String? primero}) async {
+    final id = m['id'];
+    if (id is! int) return;
+    final usuario = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * .7),
+        child: SafeArea(
+          child: ValueListenableBuilder<int>(
+            valueListenable: _version,
+            builder: (context, _, _) {
+              final p = paleta(context);
+              final del = _reacciones[id] ?? const <String, Set<String>>{};
+              final emojis = [
+                if (primero != null && (del[primero]?.isNotEmpty ?? false)) primero,
+                for (final e in _reaccionesRapidas)
+                  if (e != primero && (del[e]?.isNotEmpty ?? false)) e,
+                for (final e in del.keys)
+                  if (e != primero && !_reaccionesRapidas.contains(e) && del[e]!.isNotEmpty) e,
+              ];
+              _pedirPerfiles({for (final e in emojis) ...del[e]!});
+              if (emojis.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(tr('Nadie ha reaccionado todavía.', 'No reactions yet.'), textAlign: TextAlign.center, style: TextStyle(color: p.textoSuave)),
+                );
+              }
+              return ListView(shrinkWrap: true, padding: const EdgeInsets.only(bottom: 8), children: [
+                Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 4), child: Rotulo(tr('Reacciones', 'Reactions'))),
+                for (final e in emojis) ...[
+                  Container(
+                    margin: const EdgeInsets.fromLTRB(16, 10, 16, 2),
+                    padding: const EdgeInsets.only(bottom: 4),
+                    decoration: BoxDecoration(border: Border(bottom: BorderSide(color: p.borde))),
+                    child: Row(children: [
+                      Emoji(e, tamano: 22),
+                      const SizedBox(width: 8),
+                      Text('${del[e]!.length}', style: numeros(context, tamano: 13, weight: FontWeight.w800, color: p.texto)),
+                    ]),
+                  ),
+                  // Yo primero; los demás por nombre.
+                  for (final u in del[e]!.toList()
+                    ..sort((a, b) => a == _yo
+                        ? -1
+                        : b == _yo
+                            ? 1
+                            : ((_perfiles[a]?['username'] as String?) ?? '~').toLowerCase().compareTo(((_perfiles[b]?['username'] as String?) ?? '~').toLowerCase())))
+                    ListTile(
+                      dense: true,
+                      leading: SizedBox(
+                        width: 32,
+                        height: 32,
+                        child: _perfiles[u] == null ? const Center(child: Emoji('💩', tamano: 26)) : Avatar(_perfiles[u]!, tamano: 32),
+                      ),
+                      title: Text(
+                        u == _yo ? tr('Tú', 'You') : (_perfiles[u]?['username'] as String?) ?? '…',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      onTap: () => Navigator.pop(context, u),
+                    ),
+                ],
+              ]);
+            },
+          ),
+        ),
+      ),
+    );
+    if (usuario == null || !mounted) return;
+    Navigator.push(context, MaterialPageRoute(builder: (_) => PantallaPerfil(usuarioId: usuario)));
+  }
+
   Future<void> _reaccionar(Map<String, dynamic> m, String emoji) async {
     final id = m['id'] as int;
     final quitar = _reacciones[id]?[emoji]?.contains(_yo) ?? false;
@@ -983,6 +1100,8 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
                   ),
               ]),
             ),
+          if (_reacciones[m['id']]?.values.any((q) => q.isNotEmpty) ?? false)
+            ListTile(leading: const Icon(Icons.groups_outlined), title: Text(tr('Ver quién reaccionó', 'See who reacted')), onTap: () => Navigator.pop(context, 'quienes')),
           if (_hayHilos && !enHilo && !esRespuesta && m['id'] is int)
             ListTile(leading: const Icon(Icons.forum_outlined), title: Text(tr('Responder en hilo', 'Reply in thread')), onTap: () => Navigator.pop(context, 'hilo')),
           if (!enHilo && !suyo && !_esSoporte && _amigos.any((a) => a['id'] == m['user_id']))
@@ -1008,6 +1127,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
     );
     if (accion == null || !mounted) return;
     if (accion.startsWith('reaccion:')) return _reaccionar(m, accion.substring('reaccion:'.length));
+    if (accion == 'quienes') return _verReacciones(m);
     try {
       switch (accion) {
         case 'hilo':
@@ -1120,6 +1240,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
             mia: del[e]!.contains(_yo),
             rebote: _rebote['$id $e'],
             onTap: () => _reaccionar(m, e),
+            onLongPress: () => _verReacciones(m, primero: e),
           ),
     ];
     final respuestas = conHilo ? (_respuestas[id]?.values.toList() ?? const <Map<String, dynamic>>[]) : const <Map<String, dynamic>>[];
@@ -1216,7 +1337,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
               TextButton.icon(onPressed: _reportarError, icon: const Icon(Icons.bug_report_outlined), label: Text(tr('ERROR', 'BUG'))),
             ]),
           ),
-        if (_reconectando && _cargado)
+        if ((_reconectando || _cargaFallando) && _cargado)
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 4),
@@ -1550,14 +1671,15 @@ class _AparecerState extends State<_Aparecer> with SingleTickerProviderStateMixi
 }
 
 /// Chip de una reacción: emoji y cuántos. Si es mía va con el acento y tocarla la quita.
-/// Brinca cuando la acabo de poner (solo con movimiento completo).
+/// Mantenerla apretada muestra quién reaccionó. Brinca cuando la acabo de poner (solo con movimiento completo).
 class _ChipReaccion extends StatefulWidget {
-  const _ChipReaccion({super.key, required this.emoji, required this.cuantos, required this.mia, required this.onTap, this.rebote});
+  const _ChipReaccion({super.key, required this.emoji, required this.cuantos, required this.mia, required this.onTap, this.onLongPress, this.rebote});
 
   final String emoji;
   final int cuantos;
   final bool mia;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
   // Cuándo la puse yo; si fue hace un momento, brinca.
   final DateTime? rebote;
 
@@ -1597,6 +1719,7 @@ class _ChipReaccionState extends State<_ChipReaccion> with SingleTickerProviderS
     final p = paleta(context);
     final chip = InkWell(
       onTap: widget.onTap,
+      onLongPress: widget.onLongPress,
       borderRadius: BorderRadius.circular(radio),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
