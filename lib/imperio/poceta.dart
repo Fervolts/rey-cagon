@@ -18,6 +18,7 @@ import '../animaciones.dart';
 import '../emoji.dart';
 import '../idioma.dart';
 import '../tema.dart';
+import 'moneda_app.dart';
 
 /// Lo que devuelve un toque: el texto que sube ("+12", "¡ÉPICO! +3,4 K") y si fue épico.
 typedef ToquePoceta = ({String texto, bool epico});
@@ -333,10 +334,8 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
             top: _cy - 70 - 70 * f,
             child: Opacity(
               opacity: 1 - f,
-              child: Text(q.texto,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  style: numeros(context, tamano: q.epico ? 28 : 18, weight: FontWeight.w900, color: q.epico ? p.primario : p.texto)),
+              child: montoMj(q.texto, numeros(context, tamano: q.epico ? 28 : 18, weight: FontWeight.w900, color: q.epico ? p.primario : p.texto),
+                  alineacion: Alignment.center),
             ),
           ));
       }
@@ -348,7 +347,7 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
         top: 0,
         left: 0,
         right: 0,
-        child: Text(_ultimoTexto!, textAlign: TextAlign.center, style: numeros(context, tamano: 16, weight: FontWeight.w900)),
+        child: montoMj(_ultimoTexto!, numeros(context, tamano: 16, weight: FontWeight.w900), alineacion: Alignment.center),
       ));
     }
 

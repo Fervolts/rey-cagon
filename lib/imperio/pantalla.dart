@@ -353,7 +353,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                         child: FittedBox(
                           fit: BoxFit.scaleDown,
                           alignment: Alignment.centerLeft,
-                          child: Text('${_mj(im.saldo)} ${moneda.abreviatura}', style: numeros(context, tamano: 32, weight: FontWeight.w900)),
+                          child: montoMj(_mj(im.saldo), numeros(context, tamano: 32, weight: FontWeight.w900)),
                         ),
                       ),
                       const SizedBox(width: 6),
@@ -512,7 +512,6 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
   Widget _filaEdificio(BuildContext context, Edificio e, int ahora) {
     final p = paleta(context);
     final im = _c.imperio;
-    final moneda = monedaActual().abreviatura;
     final atasco = im.atasco;
     if (!im.edificioAbierto(e.id)) {
       return _fila(context, emoji: '🔒', titulo: _cagaVeces(e.candado), apagada: true);
@@ -561,7 +560,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
         emoji: misterio ? '❓' : e.emoji,
         titulo: misterio ? '???' : tr(e.nombreEs, e.nombreEn),
         detalle: detalle,
-        derecha: '${_mj(precio)} $moneda',
+        derecha: _mj(precio),
         contador: im.cantidad(e.id),
         resaltada: alcanza,
         extra: misterio || (ofertas.isEmpty && siguiente == null) ? null : _flecha(context, e.id, ofertas),
@@ -672,7 +671,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
               children: [
                 Text(tr(m.nombreEs, m.nombreEn), style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: p.texto)),
                 Text(tr(m.efectoEs, m.efectoEn), style: TextStyle(fontSize: 11, color: p.textoSuave)),
-                Text('${_mj(precio)} ${monedaActual().abreviatura}', style: numeros(context, tamano: 12, weight: FontWeight.w800)),
+                montoMj(_mj(precio), numeros(context, tamano: 12, weight: FontWeight.w800)),
               ],
             ),
           ),
@@ -877,7 +876,7 @@ class _HojaObjetos extends StatelessWidget {
                   Text('1 ', style: numeros(context, tamano: 13, weight: FontWeight.w800)),
                   const Emoji('🎟️', tamano: 16),
                 ] else
-                  Text('${_mj(precio)} $moneda', style: numeros(context, tamano: 13, weight: FontWeight.w800)),
+                  montoMj(_mj(precio), numeros(context, tamano: 13, weight: FontWeight.w800)),
               ],
             ),
             const SizedBox(height: 8),

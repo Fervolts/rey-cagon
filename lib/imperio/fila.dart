@@ -4,6 +4,7 @@ import '../emoji.dart';
 import '../idioma.dart';
 import '../tema.dart';
 import 'formato.dart';
+import 'moneda_app.dart';
 
 /// Una línea de texto que nunca se parte: si no cabe, se encoge.
 Widget textoEnUnaLinea(String texto, TextStyle estilo, {Alignment alineacion = Alignment.centerLeft, TextAlign? align}) => FittedBox(
@@ -30,6 +31,7 @@ class FilaImperio extends StatelessWidget {
   final String emoji;
   final String titulo;
   final String? detalle;
+  /// Precio en la moneda del Imperio, sin la abreviatura: el icono lo pone la fila.
   final String? derecha;
   final int? contador;
   final Widget? extra;
@@ -67,10 +69,10 @@ class FilaImperio extends StatelessWidget {
             ),
             if (derecha != null) ...[
               const SizedBox(width: 6),
-              // El precio puede ser "1,23e21 MjBs": tope de ancho y se encoge antes que partirse.
+              // El precio puede ser "1,23e21": tope de ancho y se encoge antes que partirse. Siempre con el icono de la moneda.
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 92),
-                child: textoEnUnaLinea(derecha!, numeros(context, tamano: 13, weight: FontWeight.w800, color: resaltada ? p.texto : p.textoSuave),
+                child: montoMj(derecha!, numeros(context, tamano: 13, weight: FontWeight.w800, color: resaltada ? p.texto : p.textoSuave),
                     alineacion: Alignment.centerRight),
               ),
             ],

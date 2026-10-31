@@ -203,7 +203,6 @@ class HistoriaCartera extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final moneda = monedaActual().abreviatura;
     String mj(double v) => formatoMj(v, ingles: enIngles);
     final gris = Colors.white.withValues(alpha: .75);
     final blanco = numeros(context, tamano: 18, weight: FontWeight.w900, color: Colors.white);
@@ -243,12 +242,11 @@ class HistoriaCartera extends StatelessWidget {
                     style: const TextStyle(color: acentoTexto, fontWeight: FontWeight.w900, letterSpacing: 4, fontSize: 14)),
               ),
               const Spacer(flex: 2),
-              const Emoji('💰', tamano: 110),
+              const IconoMoneda(tamano: 160),
               const SizedBox(height: 14),
               Text(tr('ESTADO DE CUENTA', 'ACCOUNT STATEMENT'), style: etiqueta.copyWith(fontSize: 13, letterSpacing: 3)),
               const SizedBox(height: 4),
-              textoEnUnaLinea('${mj(d.saldo)} $moneda', numeros(context, tamano: 44, weight: FontWeight.w900, color: acento),
-                  alineacion: Alignment.center),
+              montoMj(mj(d.saldo), numeros(context, tamano: 44, weight: FontWeight.w900, color: acento), alineacion: Alignment.center),
               const SizedBox(height: 16),
               Row(children: [dato('MJ/S', mj(d.mps)), const SizedBox(width: 8), dato(tr('MJ/PUJO', 'MJ/TAP'), mj(d.pujo))]),
               const SizedBox(height: 8),
