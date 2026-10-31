@@ -60,7 +60,9 @@ class PantallaLogrosImperio extends StatelessWidget {
 
 /// Pregunta si presume el logro [id] del Imperio y, si sí, lo manda a la sala general como tarjeta
 /// `{'tipo': 'logro_imperio', 'id': id}`. El servidor revisa que el logro esté en tu partida guardada.
-Future<void> presumirLogroImperio(BuildContext context, String id) async {
+/// [guardar] sube la partida antes de publicar: un logro recién ganado todavía no está en la nube.
+/// Si el servidor aún no lo ve (había otro guardado en curso), guarda de nuevo y reintenta.
+Future<void> presumirLogroImperio(BuildContext context, String id, {Future<void> Function()? guardar}) async {
   final l = logros.where((x) => x.id == id).firstOrNull;
   final nombre = l == null ? '' : tr(l.nombreEs, l.nombreEn);
   final presumir = await showDialog<bool>(
@@ -75,18 +77,28 @@ Future<void> presumirLogroImperio(BuildContext context, String id) async {
     ),
   );
   if (presumir != true || !context.mounted || !await aceptoReglas(context)) return;
+  bool sinLogro(Object e) => e is PostgrestException && e.message == _sinLogro;
+  Future<void> publicar() => db.from('mensajes').insert({
+        'sala': 'global',
+        'tarjeta': {'tipo': 'logro_imperio', 'id': id},
+      });
   try {
-    await db.from('mensajes').insert({
-      'sala': 'global',
-      'tarjeta': {'tipo': 'logro_imperio', 'id': id},
-    });
+    for (var intento = 0;; intento++) {
+      try {
+        if (guardar != null) await guardar();
+        await publicar();
+        break;
+      } catch (e) {
+        if (guardar == null || intento >= 2 || !sinLogro(e)) rethrow;
+        await Future<void>.delayed(const Duration(milliseconds: 800));
+      }
+    }
     if (context.mounted) _aviso(context, tr('Publicado en $nombreSala 🚽', 'Posted in $nombreSala 🚽'));
   } catch (e) {
     if (!context.mounted) return;
-    final sinLogro = e is PostgrestException && e.message == _sinLogro;
     _aviso(
       context,
-      sinLogro
+      sinLogro(e)
           ? tr('Ese logro todavía no está guardado en la nube. Abre el Imperio un momento y vuelve a intentar.',
               "That achievement isn't saved to the cloud yet. Open the Empire for a moment and try again.")
           : textoError(e),

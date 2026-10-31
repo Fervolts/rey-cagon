@@ -85,6 +85,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
   final _cola = <(String, String, String?)>[];
   (String, String, String?)? _aviso;
   Timer? _timerAviso;
+  int _nAviso = 0; // clave del Dismissible: cada aviso nuevo es otro widget
 
   @override
   void initState() {
@@ -134,7 +135,10 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
   void _siguienteAviso() {
     _timerAviso?.cancel();
     if (!mounted) return;
-    setState(() => _aviso = _cola.isEmpty ? null : _cola.removeAt(0));
+    setState(() {
+      _aviso = _cola.isEmpty ? null : _cola.removeAt(0);
+      _nAviso++;
+    });
     if (_aviso != null) _timerAviso = Timer(Duration(milliseconds: _aviso!.$3 == null ? 2400 : 4500), _siguienteAviso);
   }
 
@@ -295,25 +299,30 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
 
   Widget _banner(BuildContext context, (String, String, String?) a) {
     final p = paleta(context);
-    return GestureDetector(
-      onTap: _siguienteAviso,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: _caja(context, borde: p.primario),
-        child: Row(
-          children: [
-            Emoji(a.$1, tamano: 22),
-            const SizedBox(width: 10),
-            Expanded(child: Text(a.$2, style: TextStyle(fontWeight: FontWeight.w800, color: p.texto))),
-            if (a.$3 != null)
-              TextButton(
-                onPressed: () {
-                  _siguienteAviso();
-                  presumirLogroImperio(context, a.$3!);
-                },
-                child: Text(tr('PRESUMIR', 'SHOW OFF')),
-              ),
-          ],
+    // Se quita tocándolo o deslizándolo hacia cualquier lado.
+    return Dismissible(
+      key: ValueKey(_nAviso),
+      onDismissed: (_) => _siguienteAviso(),
+      child: GestureDetector(
+        onTap: _siguienteAviso,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: _caja(context, borde: p.primario),
+          child: Row(
+            children: [
+              Emoji(a.$1, tamano: 22),
+              const SizedBox(width: 10),
+              Expanded(child: Text(a.$2, style: TextStyle(fontWeight: FontWeight.w800, color: p.texto))),
+              if (a.$3 != null)
+                TextButton(
+                  onPressed: () {
+                    _siguienteAviso();
+                    presumirLogroImperio(context, a.$3!, guardar: _c.guardarTodo);
+                  },
+                  child: Text(tr('PRESUMIR', 'SHOW OFF')),
+                ),
+            ],
+          ),
         ),
       ),
     );
