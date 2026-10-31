@@ -18,11 +18,14 @@ class Edificio {
   /// Cagadas reales que pide para poder comprarlo.
   final int candado;
 
-  /// false = llega después: nunca se ve ni se compra en la fase 1.
+  /// false = fase 2: solo sale cuando tienes `rollos` Rollos de Oro (se ganan jalando la cadena).
   final bool fase1;
 
+  /// Rollos de Oro que pide, además del candado de cagadas. 0 en la fase 1.
+  final int rollos;
+
   const Edificio(this.id, this.emoji, this.nombreEs, this.nombreEn, this.chisteEs, this.chisteEn, this.precioBase, this.mpsBase, this.candado,
-      {this.fase1 = true, this.pujoBase = 0});
+      {this.fase1 = true, this.pujoBase = 0, this.rollos = 0});
 }
 
 const List<Edificio> edificios = [
@@ -36,17 +39,17 @@ const List<Edificio> edificios = [
   Edificio('camion', '🚛', 'Camión vacuum', 'Vacuum truck', 'Recolección a domicilio', 'Home pickup service', 20e6, 7800, 10),
   Edificio('planta', '🏭', 'Planta de tratamiento', 'Treatment plant', 'Industria seria', 'Serious industry', 330e6, 44000, 10),
   Edificio('cloaca', '🕳️', 'Cloaca municipal', 'City sewer', 'Todo el pueblo trabaja para ti', 'The whole town works for you', 5.1e9, 260000, 30,
-      fase1: false),
-  Edificio('granja', '🌱', 'Granja de abono', 'Compost farm', 'Agro-mojón', 'Agro-poop', 75e9, 1.6e6, 30, fase1: false),
-  Edificio('mina', '⛏️', 'Mina de metano', 'Methane mine', 'Energía del futuro', 'Energy of the future', 1e12, 10e6, 30, fase1: false),
-  Edificio('templo', '🛕', 'Templo del Trono', 'Throne temple', 'Culto al Rey', 'All hail the King', 14e12, 65e6, 60, fase1: false),
-  Edificio('volcan', '🌋', 'Volcán digestivo', 'Digestive volcano', 'La Tierra también caga', 'Earth poops too', 170e12, 430e6, 60, fase1: false),
+      fase1: false, rollos: 100),
+  Edificio('granja', '🌱', 'Granja de abono', 'Compost farm', 'Agro-mojón', 'Agro-poop', 75e9, 1.6e6, 30, fase1: false, rollos: 300),
+  Edificio('mina', '⛏️', 'Mina de metano', 'Methane mine', 'Energía del futuro', 'Energy of the future', 1e12, 10e6, 30, fase1: false, rollos: 1000),
+  Edificio('templo', '🛕', 'Templo del Trono', 'Throne temple', 'Culto al Rey', 'All hail the King', 14e12, 65e6, 60, fase1: false, rollos: 10000),
+  Edificio('volcan', '🌋', 'Volcán digestivo', 'Digestive volcano', 'La Tierra también caga', 'Earth poops too', 170e12, 430e6, 60, fase1: false, rollos: 30000),
   Edificio('laxante_tiempo', '⏳', 'Laxante del tiempo', 'Time laxative', 'Cagas ayer y mañana', 'Poop yesterday and tomorrow', 2.1e15, 2.9e9, 100,
-      fase1: false),
-  Edificio('agujero', '🌌', 'Agujero negro intestinal', 'Intestinal black hole', 'Nada escapa', 'Nothing escapes', 26e15, 21e9, 150, fase1: false),
+      fase1: false, rollos: 300000),
+  Edificio('agujero', '🌌', 'Agujero negro intestinal', 'Intestinal black hole', 'Nada escapa', 'Nothing escapes', 26e15, 21e9, 150, fase1: false, rollos: 3000000),
 ];
 
-/// Los 8 edificios de la fase 1, en orden.
+/// Los 8 edificios de la fase 1, en orden. Los de la fase 2 (`fase1: false`) se abren con Rollos de Oro.
 final List<Edificio> edificiosFase1 = [for (final e in edificios) if (e.fase1) e];
 
 final Map<String, Edificio> _edificioPorId = {for (final e in edificios) e.id: e};
@@ -79,9 +82,12 @@ class Mejora {
 int _n(Partida p, String id) => p.edificios[id] ?? 0;
 
 /// Niveles de las mejoras por edificio y cuántas veces el precio base cuestan. Cada una da x2 a ese edificio
-/// (al Dedo: x2 a lo que suma por pujo). 1, 5 y 25 son los de siempre (hay partidas guardadas con esos ids y precios).
-/// Los nuevos siguen la curva de los clickers: 10 queda entre 50 y 500; desde 50 cada nivel cuesta x100 el anterior.
-const List<(int, double)> nivelesMejoraEdificio = [(1, 10), (5, 50), (10, 150), (25, 500), (50, 5e4), (100, 5e6), (150, 5e8), (200, 5e10)];
+/// (al Dedo: x2 a lo que suma por pujo). Los ids no cambian (hay partidas guardadas con 1, 5 y 25); los precios
+/// subieron: x5 o x10 por nivel hasta el 25, x100 al 50 y x1000 desde ahí. Los niveles de `rollosNivelMejora` piden Rollos de Oro.
+const List<(int, double)> nivelesMejoraEdificio = [(1, 10), (5, 50), (10, 500), (25, 5e3), (50, 5e5), (100, 5e8), (150, 5e11), (200, 5e14)];
+
+/// Rollos de Oro que piden los niveles altos de las mejoras por edificio (nivel → rollos). Solo se llega jalando la cadena.
+const Map<int, int> rollosNivelMejora = {100: 10, 150: 100, 200: 1000};
 
 // Nombres de las 8 mejoras de cada edificio, en el orden de `nivelesMejoraEdificio` (1, 5, 10, 25, 50, 100, 150, 200).
 const Map<String, List<(String, String)>> _nombresMejoraEdificio = {
@@ -142,7 +148,7 @@ List<Mejora> _mejorasDeEdificios() => [
             e.pujoBase > 0 ? '${e.nombreEn}: push x2' : '${e.nombreEn} makes x2',
             e.precioBase * nivelesMejoraEdificio[i].$2,
             FamiliaMejora.edificio,
-            (p) => _n(p, e.id) >= nivelesMejoraEdificio[i].$1,
+            (p) => _n(p, e.id) >= nivelesMejoraEdificio[i].$1 && p.rollos >= (rollosNivelMejora[nivelesMejoraEdificio[i].$1] ?? 0),
             edificio: e.id,
           ),
     ];
@@ -150,12 +156,12 @@ List<Mejora> _mejorasDeEdificios() => [
 /// Mejoras de clic de los edificios millonarios: (edificio, nivel, %, precio en veces el precio base, emoji, nombres).
 /// Cada una convierte ese % de tu MJ/s en MJ por pujo.
 const List<(String, int, int, double, String, String, String)> _mejorasPujoMillonarias = [
-  ('bano', 5, 1, 20, '📣', 'Pujo en coro', 'Choir push'),
-  ('bano', 25, 2, 1000, '📣', 'Eco del cubículo', 'Stall echo'),
-  ('camion', 5, 1, 20, '📯', 'Bocina al pujar', 'Push horn'),
-  ('camion', 25, 2, 1000, '📯', 'Succión al pujo', 'Push-powered suction'),
-  ('planta', 5, 1, 20, '⚡', 'Turbina de pujo', 'Push turbine'),
-  ('planta', 25, 2, 1000, '⚡', 'Reactor de pujo', 'Push reactor'),
+  ('bano', 5, 1, 50, '📣', 'Pujo en coro', 'Choir push'),
+  ('bano', 25, 2, 1e4, '📣', 'Eco del cubículo', 'Stall echo'),
+  ('camion', 5, 1, 50, '📯', 'Bocina al pujar', 'Push horn'),
+  ('camion', 25, 2, 1e4, '📯', 'Succión al pujo', 'Push-powered suction'),
+  ('planta', 5, 1, 50, '⚡', 'Turbina de pujo', 'Push turbine'),
+  ('planta', 25, 2, 1e4, '⚡', 'Reactor de pujo', 'Push reactor'),
 ];
 
 /// Id de una mejora de pujo de un edificio millonario: 'bano_pujo_1' (+1%), 'bano_pujo_2' (+2%).
@@ -167,7 +173,11 @@ List<Mejora> _mejorasPujo() => [
             edificioPorId(id)!.precioBase * veces, FamiliaMejora.clic, (p) => _n(p, id) >= nivel, edificio: id),
     ];
 
-/// Las 82 mejoras de la fase 1.
+/// Edificio de la mejora que desbloquea jalar la cadena, y cuántos pide.
+const String edificioCadena = 'bano';
+const int unidadesCadena = 10;
+
+/// Las 83 mejoras de la fase 1 (82 + La cadena del trono).
 final List<Mejora> mejoras = [
   // Clic (5 del Dedo + 6 de los millonarios)
   Mejora('guantes', '🧤', 'Guantes de látex', 'Latex gloves', 'Pujo x2', 'Push x2', 100, FamiliaMejora.clic, (p) => _n(p, 'dedo') >= 1, edificio: 'dedo'),
@@ -179,8 +189,12 @@ final List<Mejora> mejoras = [
   Mejora('mano_dios', '🙌', 'Mano de dios', 'Hand of god', 'Cada pujo suma otro 1% de tu MJ/s', 'Each push adds another 1% of your MJ/s', 10e6,
       FamiliaMejora.clic, (p) => _n(p, 'dedo') >= 50, edificio: 'dedo'),
   ..._mejorasPujo(),
-  // Por edificio (64)
+  // Por edificio (64 + la cadena)
   ..._mejorasDeEdificios(),
+  // Sale una sola vez: después de la primera jalada el botón JALAR ya no se esconde.
+  Mejora('cadena_trono', '🚽', 'La cadena del trono', 'The throne chain', 'Desbloquea jalar la cadena', 'Unlocks pulling the chain', 1.4e6 * 500,
+      FamiliaMejora.edificio, (p) => p.jaladas == 0 && p.rollos == 0 && _n(p, edificioCadena) >= unidadesCadena,
+      edificio: edificioCadena),
   // Idle (4)
   Mejora('tanque_4', '🛢️', 'Tanque de 4 horas', '4-hour tank', 'Tope offline 4 h', 'Offline cap 4 h', 50000, FamiliaMejora.idle, (p) => _n(p, 'cafe') >= 1),
   Mejora('tanque_8', '🛢️', 'Tanque de 8 horas', '8-hour tank', 'Tope offline 8 h', 'Offline cap 8 h', 50e6, FamiliaMejora.idle,
@@ -277,7 +291,7 @@ class Logro {
   const Logro(this.id, this.nombreEs, this.nombreEn, this.descEs, this.descEn, this.condicion);
 }
 
-/// Los 20 logros de la fase 1.
+/// Los 24 logros: 20 de la fase 1 y 4 de la cadena.
 final List<Logro> logros = [
   Logro('primer_pujo', 'Primer pujo', 'First push', '1 pujo', '1 push', (p, _) => p.pujos >= 1),
   Logro('calentando', 'Calentando', 'Warming up', '100 pujos', '100 pushes', (p, _) => p.pujos >= 100),
@@ -300,6 +314,12 @@ final List<Logro> logros = [
   Logro('descarga', 'Descarga', 'Big flush', 'Primera Descarga', 'First Big flush', (p, _) => p.descargas >= 1),
   Logro('cagar_fiebre', 'Cagar en Fiebre', 'Fever dump', 'Abrir una Descarga con la Fiebre de un mojón dorado activa',
       'Open a Big flush while a golden poop Fever is on', (p, _) => p.enFiebre >= 1),
+  // Cadena
+  Logro('primera_jalada', 'Jalé y salí corriendo', 'Flush and run', 'Jalar la cadena por primera vez', 'Pull the chain for the first time',
+      (p, _) => p.jaladas >= 1),
+  Logro('diez_jaladas', 'Cadena oxidada', 'Rusty chain', 'Jalar la cadena 10 veces', 'Pull the chain 10 times', (p, _) => p.jaladas >= 10),
+  Logro('primer_rollo', 'Papel de oro', 'Golden paper', '1 Rollo de Oro', '1 Golden Roll', (p, _) => p.rollos >= 1),
+  Logro('cien_rollos', 'Rey del papel', 'Toilet paper king', '100 Rollos de Oro', '100 Golden Rolls', (p, _) => p.rollos >= 100),
 ];
 
 final Map<String, Logro> _logroPorId = {for (final l in logros) l.id: l};
@@ -383,6 +403,15 @@ class Ajustes {
   /// Pujo épico: probabilidad base, cuánto suma cada Dedo, tope; el buff tipo 1 la multiplica (con tope x2); y lo que vale (x10).
   final double epicoBase, epicoPorDedo, epicoTope, epicoTipo1, epicoMultiplicador;
 
+  /// Cadena: cagadas reales que pide cada jalada (el servidor manda la cuenta buena).
+  final int cadenaCagadas;
+
+  /// Rollos de Oro totales = piso((MJ ganados en total / divisor) ^ exponente).
+  final double cadenaDivisor, cadenaExponente;
+
+  /// Producción extra por cada Rollo de Oro (0,01 = +1%), para siempre: MJ/s y pujo.
+  final double rolloPct;
+
   const Ajustes({
     this.doradoMinMin = 5,
     this.doradoMaxMin = 15,
@@ -398,6 +427,10 @@ class Ajustes {
     this.epicoTope = 0.03,
     this.epicoTipo1 = 3,
     this.epicoMultiplicador = 10,
+    this.cadenaCagadas = 5,
+    this.cadenaDivisor = 1e10,
+    this.cadenaExponente = 0.5,
+    this.rolloPct = 0.04,
   });
 
   static const Ajustes porDefecto = Ajustes();

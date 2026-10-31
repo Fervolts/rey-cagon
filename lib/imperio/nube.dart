@@ -68,6 +68,16 @@ class ResultadoGuardar {
   const ResultadoGuardar({required this.mjTotal, required this.recortado, required this.guardado});
 }
 
+class EstadoCadena {
+  final int cagadas;
+  final int necesarias;
+  final int jaladas;
+  const EstadoCadena({required this.cagadas, required this.necesarias, required this.jaladas});
+
+  factory EstadoCadena.desdeJson(Map<String, dynamic> j) =>
+      EstadoCadena(cagadas: _ent(j['cagadas']), necesarias: _ent(j['necesarias']), jaladas: _ent(j['jaladas']));
+}
+
 class NubeImperio {
   Future<CargaImperio> cargar() async {
     final r = await conReintento(() => db.rpc('imperio_cargar'));
@@ -86,6 +96,19 @@ class NubeImperio {
   Future<int> usarFicha() async {
     final r = await conReintento(() => db.rpc('imperio_usar_ficha'));
     return _ent(r);
+  }
+
+  /// Cuántas cagadas reales lleva desde la última jalada (o desde que empezó el Imperio) y cuántas pide la cadena.
+  Future<EstadoCadena> cadena() async {
+    final r = await conReintento(() => db.rpc('imperio_cadena'));
+    return EstadoCadena.desdeJson(Map<String, dynamic>.from(r as Map));
+  }
+
+  /// Marca la jalada en el servidor (que revisa las cagadas). Devuelve el número de jaladas que lleva.
+  /// Sin reintento: si la respuesta se pierde, la jalada ya quedó marcada y `ControlImperio` la recupera al recargar.
+  Future<int> jalar() async {
+    final r = await db.rpc('imperio_jalar');
+    return _ent(Map<String, dynamic>.from(r as Map)['jaladas']);
   }
 
   String _clave(String userId) => 'imperio_local_$userId';

@@ -7,8 +7,12 @@ import '../emoji.dart';
 import '../idioma.dart';
 import '../main.dart' show textoError;
 import '../tema.dart';
+import 'barra.dart';
 import 'bienvenida.dart';
+import 'cadena.dart';
+import 'cartera.dart';
 import 'control.dart';
+import 'fila.dart';
 import 'formato.dart';
 import 'logros.dart' show presumirLogroImperio;
 import 'moneda_app.dart';
@@ -343,34 +347,75 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text('${_mj(im.saldo)} ${moneda.abreviatura}', style: numeros(context, tamano: 32, weight: FontWeight.w900)),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      // Presumir la cartera: en el chat o como imagen para historias.
+                      Tooltip(
+                        message: tr('Presumir cartera', 'Show off your wallet'),
+                        child: InkWell(
+                          key: const Key('boton_cartera'),
+                          onTap: () => compartirCartera(context, _c),
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: _caja(context),
+                            child: Icon(Icons.ios_share, size: 16, color: p.texto),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  // MJ/s y MJ/pujo en una sola línea: si no caben, se encogen (nunca se parten).
                   FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerLeft,
-                    child: Text('${_mj(im.saldo)} ${moneda.abreviatura}', style: numeros(context, tamano: 32, weight: FontWeight.w900)),
-                  ),
-                  Wrap(
-                    spacing: 12,
-                    children: [
-                      Text('${_mj(im.mps(ahora))} /s', style: numeros(context, tamano: 14, color: p.textoSuave)),
-                      Text('${_mj(im.valorPujo(ahora))} /pujo', style: numeros(context, tamano: 14, color: p.textoSuave)),
-                    ],
+                    child: Text('${_mj(im.mps(ahora))} /s   ${_mj(im.valorPujo(ahora))} /pujo',
+                        maxLines: 1, softWrap: false, style: numeros(context, tamano: 14, color: p.textoSuave)),
                   ),
                 ],
               ),
             ),
           ),
           const SizedBox(width: 8),
-          _chip(context, '🎟️', '${im.fichas}'),
-          const SizedBox(width: 6),
-          GestureDetector(
-            onTap: () => _avisar('💩', tr('x${_mj(im.multiplicadorCagadas)} por tus ${im.cagadas} cagadas reales',
-                'x${_mj(im.multiplicadorCagadas)} from your ${im.cagadas} real poops')),
-            child: _chip(context, '💩', 'x${_mj(im.multiplicadorCagadas)}'),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _chip(context, '🎟️', '${im.fichas}'),
+                  const SizedBox(width: 6),
+                  GestureDetector(
+                    onTap: () => _avisar('💩', tr('x${_mj(im.multiplicadorCagadas)} por tus ${im.cagadas} cagadas reales',
+                        'x${_mj(im.multiplicadorCagadas)} from your ${im.cagadas} real poops')),
+                    child: _chip(context, '💩', 'x${_mj(im.multiplicadorCagadas)}'),
+                  ),
+                ],
+              ),
+              if (im.partida.rollos > 0) ...[
+                const SizedBox(height: 6),
+                GestureDetector(
+                  key: const Key('chip_rollos'),
+                  onTap: () => _avisar('🧻', tr('${_mj(im.partida.rollos.toDouble())} Rollos de Oro: todo produce ${_pctRollos(im)} para siempre',
+                      '${_mj(im.partida.rollos.toDouble())} Golden Rolls: everything makes ${_pctRollos(im)} forever')),
+                  child: _chip(context, '🧻', '${_mj(im.partida.rollos.toDouble())} (${_pctRollos(im)})'),
+                ),
+              ],
+            ],
           ),
         ],
       ),
     );
   }
+
+  String _pctRollos(Imperio im) => porcentajeRollos(im.partida.rollos, im.ajustes.rolloPct);
 
   Widget _chip(BuildContext context, String emoji, String texto, {Color? borde}) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
@@ -456,7 +501,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
 
   Widget _listaEdificios(BuildContext context, int ahora) {
     final im = _c.imperio;
-    final lista = [for (final e in edificiosFase1) if (im.edificioVisible(e.id)) e];
+    final lista = [for (final e in edificios) if (im.edificioVisible(e.id)) e];
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       itemCount: lista.length + 1,
@@ -704,75 +749,37 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       int? contador,
       Widget? extra,
       bool resaltada = false,
-      bool apagada = false}) {
-    final p = paleta(context);
-    return Opacity(
-      opacity: apagada ? 0.5 : 1,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 6),
-        padding: const EdgeInsets.all(10),
-        decoration: _caja(context, borde: resaltada ? p.primario : p.borde),
-        child: Row(
-          children: [
-            Emoji(emoji, tamano: 32),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(titulo, style: TextStyle(fontWeight: FontWeight.w800, color: p.texto), overflow: TextOverflow.ellipsis),
-                  if (detalle != null) Text(detalle, style: numeros(context, tamano: 12, color: p.textoSuave)),
-                ],
-              ),
-            ),
-            if (derecha != null) Text(derecha, style: numeros(context, tamano: 13, weight: FontWeight.w800, color: resaltada ? p.texto : p.textoSuave)),
-            if (contador != null) ...[
-              const SizedBox(width: 10),
-              SizedBox(width: 34, child: Text('$contador', textAlign: TextAlign.right, style: numeros(context, tamano: 20, weight: FontWeight.w900))),
-            ],
-            ?extra,
-          ],
-        ),
-      ),
-    );
-  }
+      bool apagada = false}) =>
+      FilaImperio(
+        emoji: emoji,
+        titulo: titulo,
+        detalle: detalle,
+        derecha: derecha,
+        contador: contador,
+        extra: extra,
+        resaltada: resaltada,
+        apagada: apagada,
+      );
 
   Widget _botonesAbajo(BuildContext context) {
-    final p = paleta(context);
-    Widget boton(String emoji, String texto, VoidCallback? alTocar, {String? nota}) => Expanded(
-          child: GestureDetector(
-            onTap: alTocar,
-            child: Opacity(
-              opacity: alTocar == null ? 0.45 : 1,
-              child: Container(
-                height: 64,
-                margin: const EdgeInsets.symmetric(horizontal: 3),
-                decoration: _caja(context),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Emoji(emoji, tamano: nota == null ? 24 : 20),
-                    if (nota == null) const SizedBox(height: 2),
-                    Text(texto, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11, letterSpacing: 0.6, color: p.texto)),
-                    if (nota != null) Text(nota, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: TextStyle(fontSize: 8, color: p.textoSuave)),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(13, 4, 13, 10),
-      child: Row(
-        children: [
-          boton('🧴', tr('OBJETOS', 'ITEMS'), () => _abrirObjetos(context)),
-          boton('🚽', tr('JALAR', 'FLUSH'), null, nota: tr('CON 15 CAGADAS', 'AT 15 POOPS')),
-          boton('🕹️', tr('SALA', 'ARCADE'), () {
-            _c.anotar('sala_abre');
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaSala()));
-          }),
-        ],
-      ),
+    final jalar = botonJalar(_c.imperio, _c.cadena);
+    final moneda = monedaActual().abreviatura;
+    return BarraImperio(
+      jalar: jalar,
+      moneda: moneda,
+      alObjetos: () => _abrirObjetos(context),
+      alJalar: () {
+        if (jalar.encendido) {
+          unawaited(jalarLaCadena(context, _c, avisar: (e, t) => _avisar(e, t)));
+        } else {
+          _c.abrirCadena(false);
+          _avisar('🚽', jalar.aviso(moneda));
+        }
+      },
+      alSala: () {
+        _c.anotar('sala_abre');
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaSala()));
+      },
     );
   }
 

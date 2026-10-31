@@ -147,6 +147,21 @@ const Map<String, (String, String, String, String, String)> _textosEfecto = {
 };
 
 /// El juego: una `Partida` más las cagadas totales y las Fichas que manda el servidor.
+/// Efectos que se quedan al jalar la cadena: se pagaron con Fichas o cagadas reales, no con MJ.
+const Set<String> efectosQueSobrevivenJalada = {'cagada_fresca', 'fiebre_trono'};
+
+/// Rollos de Oro que dan `mj` MJ históricos: piso((mj / divisor) ^ exponente). El 1e-9 tapa el error de coma flotante
+/// (que 8e9 / 1e9 elevado a 1/3 dé 1,9999999 en vez de 2).
+int rollosPorMj(double mj, Ajustes a) {
+  if (mj <= 0 || a.cadenaDivisor <= 0) return 0;
+  final r = pow(mj / a.cadenaDivisor, a.cadenaExponente).toDouble();
+  if (!r.isFinite) return 1 << 52;
+  return min((r + 1e-9).floor(), 1 << 52);
+}
+
+/// MJ históricos para tener `rollos` rollos: divisor × rollos ^ (1 / exponente).
+double mjParaRollos(int rollos, Ajustes a) => a.cadenaDivisor * pow(rollos, 1 / a.cadenaExponente).toDouble();
+
 class Imperio {
   final Partida partida;
 
@@ -214,8 +229,11 @@ class Imperio {
     return 1 + n * (mejoraComprada('lavanda') ? 0.015 : 0.01);
   }
 
-  /// Cagadas x logros: lo que no se acaba.
-  double get multiplicadorPermanente => multiplicadorCagadas * multiplicadorLogros;
+  /// +`ajustes.rolloPct` por cada Rollo de Oro (jalar la cadena). No se pierde nunca.
+  double get multiplicadorRollos => 1 + _p.rollos * ajustes.rolloPct;
+
+  /// Cagadas x logros x rollos: lo que no se acaba.
+  double get multiplicadorPermanente => multiplicadorCagadas * multiplicadorLogros * multiplicadorRollos;
 
   /// Suma de efectos temporales sobre la producción (objetos + tipo), tope x4. No incluye la Fiebre.
   double multiplicadorProduccionTemporal(int ahora) {
@@ -243,7 +261,7 @@ class Imperio {
   double _produccionCruda(String id) {
     final e = edificioPorId(id);
     final n = cantidad(id);
-    if (e == null || !e.fase1 || n <= 0) return 0;
+    if (e == null || n <= 0) return 0;
     var x = 1.0;
     for (final (nivel, _) in nivelesMejoraEdificio) {
       if (mejoraComprada(idMejoraEdificio(id, nivel))) x *= 2;
@@ -260,7 +278,7 @@ class Imperio {
   /// MJ/s total con todos los efectos (lo que se suma en cada tick). No incluye al Dedo: él suma por pujo.
   double mps(int ahora) {
     var s = 0.0;
-    for (final e in edificiosFase1) {
+    for (final e in edificios) {
       s += mpsEdificio(e.id, ahora);
     }
     return s;
@@ -270,7 +288,7 @@ class Imperio {
   /// Con `contarAtasco: false` el edificio atascado cuenta como si produjera.
   double mpsSinEfectos({bool contarAtasco = true}) {
     var s = 0.0;
-    for (final e in edificiosFase1) {
+    for (final e in edificios) {
       if (contarAtasco && _p.atasco?.edificio == e.id) continue;
       s += _produccionCruda(e.id);
     }
@@ -312,15 +330,17 @@ class Imperio {
     return _activo('pujo_loco', ahora) ? t * multiplicadorPujoLoco : t;
   }
 
-  /// MJ de un pujo normal (sin épico): ((1 + aporteDedos) × 2^x2 de clic + % × MJ/s) × efectos temporales, x777 en Pujo loco.
-  double valorPujo(int ahora) => _conEfectosPujo((1 + aporteDedos) * _multiplicadorClic + _pctPujo() * mps(ahora), ahora);
+  /// MJ de un pujo normal (sin épico): ((1 + aporteDedos) × 2^x2 de clic × rollos + % × MJ/s) × efectos temporales, x777 en
+  /// Pujo loco. El % de MJ/s ya trae los rollos dentro, por eso solo la parte del clic se multiplica por `multiplicadorRollos`.
+  double valorPujo(int ahora) =>
+      _conEfectosPujo((1 + aporteDedos) * _multiplicadorClic * multiplicadorRollos + _pctPujo() * mps(ahora), ahora);
 
   /// Lo que un edificio suma a cada pujo, con los mismos efectos que `valorPujo` (para el "+N /pujo" de su fila).
   /// Dedo: sus dedos (con los x2 de clic) y Respiración/Mano de Dios. Baño, camión, planta: sus mejoras de %. La suma de
   /// todas las filas más el pujo base (1 × 2^x2) da `valorPujo`.
   double pujoEdificio(String id, int ahora) {
     var v = _pctPujo(id) * mps(ahora);
-    if (id == 'dedo') v += aporteDedos * _multiplicadorClic;
+    if (id == 'dedo') v += aporteDedos * _multiplicadorClic * multiplicadorRollos;
     return v == 0 ? 0 : _conEfectosPujo(v, ahora);
   }
 
@@ -336,7 +356,7 @@ class Imperio {
   /// 15 pujos por segundo sin efectos. Así quien vive del Dedo no queda con un ritmo de 0 que le rechace el guardado.
   double ritmoEfectivo() {
     final m = mpsSinEfectos();
-    final pujo = (1 + aporteDedos) * _multiplicadorClic + _pctPujo() * m;
+    final pujo = (1 + aporteDedos) * _multiplicadorClic * multiplicadorRollos + _pctPujo() * m;
     return max(m, pujo * pujosPorSegundoRitmo);
   }
 
@@ -358,19 +378,22 @@ class Imperio {
 
   // ---------- Edificios ----------
 
-  /// Su candado de cagadas ya está abierto (y es de la fase 1).
+  /// Se puede comprar: su candado de cagadas está abierto y tienes los Rollos de Oro que pide (0 en la fase 1).
   bool edificioAbierto(String id) {
     final e = edificioPorId(id);
-    return e != null && e.fase1 && cagadas >= e.candado;
+    return e != null && cagadas >= e.candado && _p.rollos >= e.rollos;
   }
 
-  /// Sale en la lista: abierto o con su candado. Los de después de la fase 1 nunca.
-  bool edificioVisible(String id) => edificioPorId(id)?.fase1 ?? false;
+  /// Sale en la lista: los de la fase 1 siempre (abiertos o con su candado); los de la fase 2 cuando ya tienes sus rollos.
+  bool edificioVisible(String id) {
+    final e = edificioPorId(id);
+    return e != null && (e.fase1 || _p.rollos >= e.rollos);
+  }
 
   /// Se muestra como "???": no tienes ninguno y no has ganado la mitad de su precio base.
   bool edificioMisterioso(String id) {
     final e = edificioPorId(id);
-    return e != null && e.fase1 && cantidad(id) == 0 && _p.mjTotal < e.precioBase / 2;
+    return e != null && cantidad(id) == 0 && _p.mjTotal < e.precioBase / 2;
   }
 
   /// Descuento de precio activo: tipo 3 (-10%) y Constructor (-50%).
@@ -588,7 +611,7 @@ class Imperio {
     // Atascos: ~1 cada 2 h activas, uno a la vez, en un edificio con 25 o más.
     if (_p.atasco == null && s > 0) {
       // El Dedo no produce MJ/s: atascarlo no haría nada.
-      final candidatos = [for (final e in edificiosFase1) if (e.mpsBase > 0 && cantidad(e.id) >= minimoParaAtasco) e.id];
+      final candidatos = [for (final e in edificios) if (e.mpsBase > 0 && cantidad(e.id) >= minimoParaAtasco) e.id];
       if (candidatos.isNotEmpty && _azar.nextDouble() < s / segundosPorAtasco) {
         _p.atasco = Atasco(candidatos[_azar.nextInt(candidatos.length)], ahora);
         _p.vioPrimerAtasco = true;
@@ -746,6 +769,54 @@ class Imperio {
       if (tipo == 6) _p.offlineBonus = true;
     }
     return ResultadoCagadas(orden.length, descargas, tipo, enFiebreDorada);
+  }
+
+  // ---------- Jalar la cadena ----------
+
+  /// Rollos de Oro que da todo lo ganado en la historia: piso((mjTotal / divisor) ^ exponente).
+  int get rollosTotales => rollosPorMj(_p.mjTotal, ajustes);
+
+  /// Rollos que da jalar ahora: los totales menos los que ya tienes. Nunca negativo.
+  int get rollosPorGanar => max(0, rollosTotales - _p.rollos);
+
+  /// MJ (históricos) que faltan para que jalar dé un rollo más que ahora.
+  double get mjParaSiguienteRollo {
+    final meta = mjParaRollos(max(rollosTotales, _p.rollos) + 1, ajustes);
+    return max(0, meta - _p.mjTotal);
+  }
+
+  /// Ya compraste La cadena del trono o ya jalaste alguna vez: el botón JALAR se ve para siempre.
+  bool get cadenaDesbloqueada => mejoraComprada('cadena_trono') || _p.rollos > 0 || _p.jaladas > 0;
+
+  /// Se puede jalar: botón desbloqueado, bastantes cagadas reales desde la última jalada y al menos 1 rollo por ganar.
+  bool puedeJalar(int cagadasDesde, int necesarias) =>
+      cadenaDesbloqueada && cagadasDesde >= necesarias && rollosPorGanar >= 1;
+
+  /// Jala la cadena: suma los rollos y la jalada, y la corrida vuelve a empezar. Devuelve los rollos ganados.
+  /// Se va: saldo, edificios, mejoras, objetos (inventario, esperas, robot), efectos comprados con MJ, atasco, mojón
+  /// dorado y los contadores de la corrida (pujos recientes, segPartida). Se queda: mjTotal, logros, rollos, jaladas,
+  /// estadísticas históricas, el buff del tipo, el bono offline y los efectos que se pagaron con cagadas reales o
+  /// Fichas (Cagada fresca, Fiebre de Trono). No mira las cagadas: eso lo valida el servidor en `imperio_jalar`.
+  int jalar() {
+    final ganados = rollosPorGanar;
+    _p
+      ..rollos += ganados
+      ..jaladas += 1
+      ..saldo = 0
+      ..edificios = {}
+      ..mejoras = {}
+      ..inventario = {}
+      ..esperas = {}
+      ..robotHasta = 0
+      ..atasco = null
+      ..dorado = null
+      ..segHastaDorado = -1
+      ..papelDoble = false
+      ..pujosRecientes = []
+      ..segPartida = 0;
+    _p.efectos.removeWhere((id, _) => !efectosQueSobrevivenJalada.contains(id));
+    revisarLogros();
+    return ganados;
   }
 
   // ---------- Veteranos ----------

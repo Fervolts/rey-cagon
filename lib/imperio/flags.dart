@@ -41,6 +41,15 @@ class FlagsImperio {
   /// multiplicador del buff tipo 1 (`epico_tipo1_x`) y lo que vale un épico (`epico_x`).
   final double epicoBase, epicoPorDedo, epicoTope, epicoTipo1, epicoMultiplicador;
 
+  /// Cadena: cagadas reales entre jaladas (`cadena_cagadas`). El botón prefiere la cuenta que manda `imperio_cadena`.
+  final int cadenaCagadas;
+
+  /// Rollos de Oro = piso((MJ en total / `cadena_divisor`) ^ `cadena_exponente`).
+  final double cadenaDivisor, cadenaExponente;
+
+  /// Producción extra por Rollo de Oro (`rollo_pct`, 0,01 = +1%).
+  final double rolloPct;
+
   /// clave → variante asignada (solo las flags con variantes). Va en `sesion_inicio`.
   final Map<String, String> variantes;
 
@@ -59,6 +68,10 @@ class FlagsImperio {
     this.epicoTope = 0.03,
     this.epicoTipo1 = 3,
     this.epicoMultiplicador = 10,
+    this.cadenaCagadas = 5,
+    this.cadenaDivisor = 1e10,
+    this.cadenaExponente = 0.5,
+    this.rolloPct = 0.04,
     this.variantes = const {},
   });
 
@@ -82,6 +95,10 @@ class FlagsImperio {
         epicoTope: epicoTope,
         epicoTipo1: epicoTipo1,
         epicoMultiplicador: epicoMultiplicador,
+        cadenaCagadas: cadenaCagadas,
+        cadenaDivisor: cadenaDivisor,
+        cadenaExponente: cadenaExponente,
+        rolloPct: rolloPct,
       );
 
   static String claveCache(String? usuario) => 'imperio_flags_${usuario ?? 'anon'}';
@@ -128,6 +145,10 @@ class FlagsImperio {
       epicoTope: numero('epico_tope', d.epicoTope, 0, 0.5),
       epicoTipo1: numero('epico_tipo1_x', d.epicoTipo1, 1, 10),
       epicoMultiplicador: numero('epico_x', d.epicoMultiplicador, 1, 100),
+      cadenaCagadas: numero('cadena_cagadas', d.cadenaCagadas.toDouble(), 1, 1000).round(),
+      cadenaDivisor: numero('cadena_divisor', d.cadenaDivisor, 1, 1e15),
+      cadenaExponente: numero('cadena_exponente', d.cadenaExponente, 0.1, 1),
+      rolloPct: numero('rollo_pct', d.rolloPct, 0, 1),
       variantes: {
         for (final e in m.entries)
           if (e.key is String && e.value is Map && (e.value as Map)['variante'] is String) e.key as String: (e.value as Map)['variante'] as String,

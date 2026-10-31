@@ -109,8 +109,14 @@ class Partida {
   /// Momentos (ms) de los últimos pujos, el más viejo primero.
   List<int> pujosRecientes;
 
-  /// Segundos de juego activo de esta partida (solo `tick`, no el tiempo offline).
+  /// Segundos de juego activo de esta partida (solo `tick`, no el tiempo offline). Jalar la cadena lo pone en 0.
   double segPartida;
+
+  /// Rollos de Oro ganados jalando la cadena. No se pierden nunca.
+  int rollos;
+
+  /// Veces que se jaló la cadena (el servidor lleva la cuenta buena en `imperio.jaladas`).
+  int jaladas;
 
   Partida({
     this.saldo = 0,
@@ -141,6 +147,8 @@ class Partida {
     this.ultimaVez = 0,
     List<int>? pujosRecientes,
     this.segPartida = 0,
+    this.rollos = 0,
+    this.jaladas = 0,
   })  : edificios = edificios ?? {},
         mejoras = mejoras ?? {},
         logros = logros ?? {},
@@ -179,6 +187,8 @@ class Partida {
         'ultima_vez': ultimaVez,
         'pujos_recientes': pujosRecientes,
         'seg_partida': segPartida,
+        'rollos': rollos,
+        'jaladas': jaladas,
       };
 
   /// Lee una partida guardada. Aguanta claves que faltan, sobran o vienen con otro tipo.
@@ -218,6 +228,8 @@ class Partida {
       ultimaVez: _ent(j['ultima_vez']),
       pujosRecientes: recientes.length > maxPujosRecientes ? recientes.sublist(recientes.length - maxPujosRecientes) : recientes,
       segPartida: segPartida < 0 ? 0 : segPartida,
+      rollos: _ent(j['rollos']) < 0 ? 0 : _ent(j['rollos']),
+      jaladas: _ent(j['jaladas']) < 0 ? 0 : _ent(j['jaladas']),
     );
   }
 }

@@ -13,11 +13,21 @@ import 'telemetria.dart';
 
 /// Al cargar, ¿manda la copia local? Solo si existe y lleva más MJ totales que la del servidor,
 /// o si el servidor todavía no tiene partida. Empate: gana el servidor.
-bool usarCopiaLocal({required double? mjLocal, required double mjServidor, required bool servidorVacio}) {
+/// Jalar la cadena no sube los MJ totales, así que primero manda la copia que jaló más veces.
+bool usarCopiaLocal({
+  required double? mjLocal,
+  required double mjServidor,
+  required bool servidorVacio,
+  int jaladasLocal = 0,
+  int jaladasServidor = 0,
+}) {
   if (mjLocal == null) return false;
   if (servidorVacio) return true;
+  if (jaladasLocal != jaladasServidor) return jaladasLocal > jaladasServidor;
   return mjLocal > mjServidor;
 }
+
+int _jaladasDe(Map<String, dynamic>? estado) => (estado?['jaladas'] as num?)?.toInt() ?? 0;
 
 /// Desde cuándo se cobra el tiempo fuera: la marca más reciente (ms, reloj del servidor) entre las que haya.
 /// null si no hay ninguna válida (partida nueva). Una marca del futuro se recorta a [ahora].
@@ -79,6 +89,13 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   bool sinConexion = false;
   bool fundador = false;
 
+  /// Cagadas reales desde la última jalada y cuántas pide la cadena (RPC `imperio_cadena`).
+  /// null mientras no llega, si el RPC no existe todavía o sin red: el botón dice PRONTO.
+  EstadoCadena? cadena;
+
+  /// Hay una jalada en curso (RPC + reinicio + guardado).
+  bool jalando = false;
+
   /// Avisos para la pantalla, en orden: bienvenida de veterano, tiempo fuera y Descarga. Los consume la pantalla.
   bool bienvenidaPendiente = false;
   ResultadoOffline? offlinePendiente;
@@ -125,7 +142,8 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       final carga = await nube.cargar();
       _desfase = carga.ahora.millisecondsSinceEpoch - DateTime.now().millisecondsSinceEpoch;
       final vacio = carga.nuevo || carga.estado.isEmpty;
-      final local1 = usarCopiaLocal(mjLocal: mjLocal, mjServidor: carga.mjTotal, servidorVacio: vacio);
+      final local1 = usarCopiaLocal(mjLocal: mjLocal, mjServidor: carga.mjTotal, servidorVacio: vacio,
+          jaladasLocal: _jaladasDe(estadoLocal), jaladasServidor: _jaladasDe(carga.estado));
       imperio = Imperio.desdeJson(local1 ? estadoLocal : carga.estado,
           cagadas: carga.cagadasTotal, fichas: carga.fichas, ajustes: flags.ajustes);
       if (!local1 && !vacio) aceptarRecorte(imperio.partida, carga.mjTotal);
@@ -160,6 +178,28 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     unawaited(_guardarLocal());
     _actualizarBucle();
     notifyListeners();
+    if (!sinConexion) unawaited(_cargarCadena());
+  }
+
+  /// Trae el estado de la cadena. Si el servidor tiene más jaladas que la partida, la jalada se marcó pero el
+  /// guardado se perdió (se cayó la red justo después): se reinicia la corrida aquí y se guarda.
+  Future<void> _cargarCadena() async {
+    try {
+      final c = await nube.cadena();
+      if (_cerrado) return;
+      cadena = c;
+      final p = imperio.partida;
+      if (c.jaladas > p.jaladas) {
+        imperio.jalar();
+        p.jaladas = c.jaladas;
+        _mirarCambios(anotar: false);
+        unawaited(guardarTodo());
+      }
+      notifyListeners();
+    } catch (_) {
+      // Sin el RPC (migración sin aplicar) o sin red: el botón dice PRONTO hasta la próxima recarga.
+      _error('cadena');
+    }
   }
 
   /// Apagado por flag: sin partida, sin bucle y sin guardar (no se pisa lo guardado).
@@ -201,6 +241,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       _aplicarNuevas(carga.nuevas);
       _sumarLogros(imperio.revisarLogros());
       notifyListeners();
+      await _cargarCadena();
     } catch (_) {
       _error('recargar');
       if (!sinConexion) {
@@ -449,6 +490,46 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     return true;
   }
 
+  // ---------- Jalar la cadena ----------
+
+  /// Abre el diálogo de la cadena (`cadena_abre`). [puede]: el botón estaba encendido.
+  void abrirCadena(bool puede) => _anotar('cadena_abre', {'puede': puede});
+
+  /// Jala la cadena: el servidor revisa las cagadas y marca la jalada, aquí se reinicia la corrida y se guarda
+  /// (local y nube). Devuelve los rollos ganados. Lanza el error del servidor o de red sin tocar la partida.
+  Future<int> jalarCadena() async {
+    if (jalando) throw StateError('Ya se está jalando');
+    jalando = true;
+    try {
+      final int n;
+      try {
+        n = await nube.jalar();
+      } catch (_) {
+        _error('jalar');
+        rethrow;
+      }
+      final ganados = imperio.jalar();
+      imperio.partida.jaladas = n;
+      cadena = EstadoCadena(cagadas: 0, necesarias: cadena?.necesarias ?? imperio.ajustes.cadenaCagadas, jaladas: n);
+      _mirarCambios(anotar: false);
+      _anotar('cadena_jala', {'rollos': ganados, 'jaladas': n});
+      notifyListeners();
+      await _guardarLocal();
+      await _guardarNube();
+      return ganados;
+    } finally {
+      jalando = false;
+    }
+  }
+
+  // ---------- Cartera ----------
+
+  /// Antes de presumir la cartera en el chat: el servidor arma la tarjeta con lo guardado, así que se guarda primero.
+  Future<void> guardarParaCartera() => guardarTodo();
+
+  /// `cartera_comparte` {destino: chat | fuera}.
+  void compartioCartera(String destino) => _anotar('cartera_comparte', {'destino': destino});
+
   // ---------- Guardado ----------
 
   Future<void> _guardarLocal() async {
@@ -475,7 +556,9 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
         _guardandoNube = true;
       }
       // Ritmo efectivo (MJ/s o pujos del Dedo, lo mayor): el antitrampa del servidor lo usa como techo.
-      final r = await nube.guardar({...imperio.toJson(), '_mps_edificios': imperio.mpsSinEfectos()}, imperio.mjTotal, imperio.ritmoEfectivo());
+      // _mps_edificios y _pujo: los lee la tarjeta de cartera del chat (el servidor no confía en los números del cliente).
+      final estado = {...imperio.toJson(), '_mps_edificios': imperio.mpsSinEfectos(), '_pujo': imperio.valorPujo(ahora)};
+      final r = await nube.guardar(estado, imperio.mjTotal, imperio.ritmoEfectivo());
       if (r.recortado) aceptarRecorte(imperio.partida, r.mjTotal);
     } catch (_) {
       _error('guardar_nube');

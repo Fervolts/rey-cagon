@@ -179,13 +179,13 @@ void main() {
       expect(todas, imp.mejorasDisponibles().map((m) => m.id).toSet());
     });
 
-    test('niveles nuevos: 8 por edificio, 1/5/25 con los precios de siempre', () {
+    test('niveles nuevos: 8 por edificio, 1/5 con los precios de siempre y la curva de la cadena arriba', () {
       expect(nivelesMejoraEdificio.map((n) => n.$1), [1, 5, 10, 25, 50, 100, 150, 200]);
       expect(mejoraPorId('dedo_1')!.precio, 150);
       expect(mejoraPorId('dedo_5')!.precio, 750);
-      expect(mejoraPorId('dedo_25')!.precio, 7500);
-      expect(mejoraPorId('cafe_25')!.precio, 1100 * 500);
-      expect(mejoraPorId('planta_200')!.precio, 330e6 * 5e10);
+      expect(mejoraPorId('dedo_25')!.precio, 75000);
+      expect(mejoraPorId('cafe_25')!.precio, 1100 * 5e3);
+      expect(mejoraPorId('planta_200')!.precio, 330e6 * 5e14);
       for (final e in edificiosFase1) {
         for (final (nivel, _) in nivelesMejoraEdificio) {
           final m = mejoraPorId(idMejoraEdificio(e.id, nivel))!;
@@ -193,7 +193,7 @@ void main() {
           expect(m.nombreEn, isNotEmpty);
         }
       }
-      expect(mejoras.length, 82);
+      expect(mejoras.length, 83);
       expect(mejoras.map((m) => m.id).toSet().length, mejoras.length);
     });
   });

@@ -18,6 +18,8 @@ import 'popups.dart' show PantallaPopups;
 import 'emoji.dart';
 import 'idioma.dart';
 import 'imperio/catalogo.dart' as imperio show logros;
+import 'imperio/formato.dart' show formatoMj;
+import 'imperio/tarjeta_cartera.dart';
 import 'peso.dart';
 import 'racha.dart';
 import 'main.dart' show db, esDeRed;
@@ -1937,6 +1939,13 @@ class _PantallaHiloState extends State<_PantallaHilo> with ConTecladoEmojis {
   return ('🏆', tr('LOGRO: ${l.nombreEs.toUpperCase()}', 'ACHIEVEMENT: ${l.nombreEn.toUpperCase()}'), tr(l.descEs, l.descEn));
 }
 
+/// 1ST, 2ND, 3RD, 4TH, 11TH, 21ST... para la tarjeta de jalada en inglés.
+String _ordinal(Object? n) {
+  final v = n is num ? n.toInt() : 0;
+  final sufijo = (v % 100 >= 11 && v % 100 <= 13) ? 'TH' : switch (v % 10) { 1 => 'ST', 2 => 'ND', 3 => 'RD', _ => 'TH' };
+  return '$v$sufijo';
+}
+
 class _Tarjeta extends StatelessWidget {
   const _Tarjeta(this.t);
 
@@ -1945,6 +1954,7 @@ class _Tarjeta extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (t['tipo'] == 'reto' || t['tipo'] == 'reto_fin') return TarjetaReto(id: t['id'] as int, compacta: true);
+    if (t['tipo'] == 'cartera') return TarjetaCartera(t);
     final (emoji, titulo, sub) = switch (t['tipo']) {
       'hito' => ('👑', tr('LLEGÓ A ${t['n']} CAGADAS', 'HIT ${t['n']} POOPS'), t['reina'] == true ? tr('Arrodíllense ante la reina', 'Bow down to the queen') : tr('Arrodíllense ante el rey', 'Bow down to the king')),
       'desbloqueo' => (
@@ -1964,6 +1974,11 @@ class _Tarjeta extends StatelessWidget {
           tr('Cagó ${t['n']} veces hoy', 'Pooped ${t['n']} times today'),
         ),
       'logro_imperio' => _logroImperio(t['id']),
+      'jalada' => (
+          '🚽',
+          tr('JALÓ LA CADENA POR ${t['n']}ª VEZ', 'FLUSHED THE CHAIN FOR THE ${_ordinal(t['n'])} TIME'),
+          tr('+${formatoMj(((t['rollos'] as num?) ?? 0).toDouble())} Rollos de Oro', '+${formatoMj(((t['rollos'] as num?) ?? 0).toDouble(), ingles: true)} Golden Rolls'),
+        ),
       _ => ('💩', '', ''),
     };
     return Container(

@@ -86,3 +86,23 @@ String formatoMj(double v, {bool ingles = false}) {
   }
   return fin('$t ${_sufijos[exp - 1]}');
 }
+
+/// Cantidad de edificios corta, sin espacio, para que quepa en una línea: "999", "1,2K", "15K", "250K", "1,5M".
+/// Trunca (nunca redondea hacia arriba): 1999 es "1,9K", no "2K". Coma decimal en español, punto en inglés.
+String formatoCantidad(int n, {bool ingles = false}) {
+  if (n < 1000) return '$n';
+  var exp = 0;
+  var x = n.toDouble();
+  while (x >= 1000 && exp < _sufijos.length) {
+    x /= 1000;
+    exp++;
+  }
+  final String t;
+  if (x < 10) {
+    final d = (x * 10).floor();
+    t = d % 10 == 0 ? '${d ~/ 10}' : '${d ~/ 10}${ingles ? '.' : ','}${d % 10}';
+  } else {
+    t = '${x.floor()}';
+  }
+  return '$t${_sufijos[exp - 1]}';
+}
