@@ -237,11 +237,21 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// Cagada fresca de la última cagada real ([frescaHasta], hora local) en el reloj del servidor.
+  /// Si la cagada se borra (calendario), el fin baja y se recorta lo que ya se había dado.
   void _ponerFresca() {
     final h = frescaHasta.value;
-    if (!_cargado || _cerrado || h == null) return;
-    if (imperio.aplicarFrescaHasta(h.millisecondsSinceEpoch + _desfase)) _avisar();
+    if (!_cargado || _cerrado) return;
+    final fin = h == null ? 0 : h.millisecondsSinceEpoch + _desfase;
+    final antes = _finFresca;
+    _finFresca = fin;
+    if (antes != null && fin < antes) {
+      if (imperio.recortarFresca(antes, fin, ahora)) _avisar();
+      return;
+    }
+    if (h != null && imperio.aplicarFrescaHasta(fin)) _avisar();
   }
+
+  int? _finFresca; // último fin de Cagada fresca real que se aplicó (reloj del servidor)
 
   /// Apagado por flag: sin partida, sin bucle y sin guardar (no se pisa lo guardado).
   void _apagar() {

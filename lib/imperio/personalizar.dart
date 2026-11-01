@@ -35,6 +35,7 @@ const _edificioDe = {
 
 /// Abre la hoja. Al cerrarla guarda la partida.
 Future<void> abrirPersonalizar(BuildContext context, ControlImperio control) async {
+  control.anotar('personalizar_abre');
   await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,

@@ -9,6 +9,7 @@ import 'genero.dart';
 import 'idioma.dart';
 import 'imperio/catalogo.dart' as imperio show logros;
 import 'imperio/formato.dart' show formatoMj;
+import 'imperio/hoja_racha.dart' show nombreLogro;
 import 'peso.dart';
 import 'racha.dart';
 import 'tema.dart';
@@ -976,7 +977,7 @@ class TarjetaPlaca extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = imperio.logros.where((x) => x.id == id).firstOrNull;
-    final nombre = l == null ? tr('Logro del Imperio', 'Empire achievement') : tr(l.nombreEs, l.nombreEn);
+    final nombre = l == null ? tr('Logro del Imperio', 'Empire achievement') : nombreLogro(l);
     final desc = l == null ? tr('Desbloqueado en el Imperio', 'Unlocked in the Empire') : tr(l.descEs, l.descEn);
     const grabado = Color(0xFF3A2A08);
     return Container(

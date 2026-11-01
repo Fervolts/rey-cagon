@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'emoji.dart';
+import 'fresca.dart' show cargarFresca;
 import 'idioma.dart';
 import 'peso.dart';
 import 'main.dart' show conReintento, db, escucharCagadas, esDeRed, textoError;
@@ -85,6 +88,8 @@ class _PantallaCalendarioState extends State<PantallaCalendario> {
   Future<void> _borrar(int id) async {
     try {
       await db.from('cagadas').delete().eq('id', id);
+      // Si era la última, su Cagada fresca se va con ella.
+      unawaited(cargarFresca());
       _mensaje(tr('Borrada', 'Deleted'));
       await _cargar();
     } catch (e) {

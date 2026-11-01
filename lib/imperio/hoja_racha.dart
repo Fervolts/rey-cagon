@@ -12,8 +12,10 @@ import 'motor.dart';
 import 'racha_imperio.dart';
 
 /// Nombre del logro en el idioma y género del jugador.
-String nombreLogro(Logro l) =>
-    l.id == 'constancia' ? tr(segun('Rey de la constancia', 'Reina de la constancia'), segun('King of consistency', 'Queen of consistency')) : tr(l.nombreEs, l.nombreEn);
+/// Los que dicen "Rey"/"King" salen como "Reina"/"Queen" para ellas.
+String nombreLogro(Logro l) => tr(
+    segun(l.nombreEs, l.nombreEs.replaceFirst(RegExp(r'^Rey\b'), 'Reina')),
+    segun(l.nombreEn, l.nombreEn.replaceFirst(RegExp(r'^King\b'), 'Queen').replaceFirst(RegExp(r'\bking$'), 'queen')));
 
 /// "15 min", "1 h".
 String _tiempo(int minutos) => minutos < 60 ? '$minutos min' : '${minutos ~/ 60} h';

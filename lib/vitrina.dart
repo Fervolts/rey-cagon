@@ -9,6 +9,7 @@ import 'emoji.dart';
 import 'genero.dart';
 import 'idioma.dart';
 import 'imperio/catalogo.dart' as imperio show logros;
+import 'imperio/hoja_racha.dart' show nombreLogro;
 import 'imperio/logros.dart' show cargarLogrosImperio, presumirLogroImperio;
 import 'logros.dart';
 import 'main.dart' show db, textoError;
@@ -340,6 +341,7 @@ const _emojisImperio = {
   'diez_jaladas': '🚽',
   'primer_rollo': '🧻',
   'cien_rollos': '👑',
+  'constancia': '🗓️',
 };
 
 const _prefijoImperio = 'imperio:';
@@ -351,7 +353,7 @@ List<Trofeo> trofeosImperio(Set<String> ganados) => [
         (
           clave: '$_prefijoImperio${l.id}',
           emoji: _emojisImperio[l.id] ?? '🏆',
-          nombre: tr(l.nombreEs, l.nombreEn),
+          nombre: nombreLogro(l),
           detalle: tr(l.descEs, l.descEn),
           ganado: ganados.contains(l.id),
           grupo: Grupo.imperio,

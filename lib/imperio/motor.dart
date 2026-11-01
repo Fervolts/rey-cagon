@@ -590,6 +590,21 @@ class Imperio {
     return true;
   }
 
+  /// Se borró la cagada real que daba la Cagada fresca hasta [finViejoMs]: se quita esa parte del bono
+  /// (lo que se compró con Ciruelas encima se queda). [finNuevoMs] = el de la cagada anterior, 0 si no hay.
+  bool recortarFresca(int finViejoMs, int finNuevoMs, int ahora) {
+    final fin = _p.efectos['cagada_fresca'] ?? 0;
+    final quita = finViejoMs - max(finNuevoMs, ahora);
+    if (fin <= ahora || quita <= 1000) return false;
+    final nuevo = fin - quita;
+    if (nuevo <= ahora) {
+      _p.efectos.remove('cagada_fresca');
+    } else {
+      _p.efectos['cagada_fresca'] = nuevo.toInt();
+    }
+    return true;
+  }
+
   // ---------- Ciruelas y racha ----------
 
   /// Suerte de las estéticas compradas (0.04 = +4%).
