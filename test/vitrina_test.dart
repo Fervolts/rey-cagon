@@ -111,4 +111,12 @@ void main() {
     expect(t.ganado, isTrue);
     expect(t.grupo, Grupo.secreto);
   });
+
+  test('vitrina de otro: de sus secretos solo salen los que quien mira ya encontró', () {
+    final cagadas = [c(2026, 1, 1, 3, 33)];
+    List<Trofeo> ver(Set<String>? vistos) => trofeos(cagadas: cagadas, total: 1, victorias: 0, favorito: null, claves: const {'psst_meon'}, vistos: vistos);
+    expect(secretos(ver(null)), containsAll(['hora_333', 'ano_nuevo', 'psst_meon']));
+    expect(secretos(ver({'ano_nuevo'})), {'ano_nuevo'});
+    expect(secretos(ver({})), isEmpty);
+  });
 }

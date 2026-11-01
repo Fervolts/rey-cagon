@@ -53,6 +53,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
   // secretos recién ganados que la vitrina revela con animación (solo en el propio).
   Set<String> _claves = {};
   bool _ladoSecreto = false, _verLadoSecreto = false;
+  Set<String> _misSecretos = {};
   Set<String> _nuevos = {};
   late final VoidCallback _soltar;
   // Ids de logros del Imperio conseguidos (solo en el propio), para la vitrina; null mientras carga o si falló.
@@ -95,6 +96,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
       final claves = cagadas == null ? <String>{} : await logrosDe(widget.usuarioId);
       final (lado, verLado) = await _ladosSecretos(g);
       final nuevos = cagadas != null && _esMio ? await _secretosNuevos(cagadas, ganados, claves, lado) : <String>{};
+      final misSecretos = cagadas != null && !_esMio ? await _secretosDeQuienMira(verLado) : <String>{};
       if (mounted) {
         setState(() {
           _cagadas = cagadas;
@@ -102,6 +104,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
           _claves = claves;
           _ladoSecreto = lado;
           _verLadoSecreto = verLado;
+          _misSecretos = misSecretos;
           _nuevos = nuevos;
           _p = (rows as List).firstOrNull;
           _bloqueado = bloqueo != null;
@@ -137,6 +140,21 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
       return (tiene(widget.usuarioId), tiene(yo));
     } catch (_) {
       return (false, false);
+    }
+  }
+
+  /// Los secretos que ya encontró quien mira: en la vitrina de otro solo salen esos. Si falla,
+  /// ninguno (no se le revela un secreto a quien no lo ha encontrado).
+  Future<Set<String>> _secretosDeQuienMira(bool lado) async {
+    try {
+      final yo = db.auth.currentUser!.id;
+      final (cagadas, claves) = await (cagadasPropias(yo), logrosDe(yo)).wait;
+      return {
+        for (final t in trofeos(cagadas: cagadas, total: 0, victorias: 0, favorito: null, claves: claves, ladoSecreto: lado))
+          if (t.grupo == Grupo.secreto) t.clave,
+      };
+    } catch (_) {
+      return {};
     }
   }
 
@@ -759,8 +777,8 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                   title: Text(tr('Especialidad de la casa', 'House specialty')),
                   subtitle: Text(tipos[p['tipo_favorito']]?.$2 ?? tr('Todavía no se sabe', 'Nobody knows yet')),
                 ),
-                // Su vitrina, sin los "secretos por encontrar" (eso es cosa suya). Los del lado
-                // secreto solo salen si quien mira también lo tiene.
+                // Su vitrina, sin los "secretos por encontrar" (eso es cosa suya). De sus secretos
+                // solo salen los que quien mira también encontró.
                 if (_cagadas != null && !_bloqueado) ...[
                   const SizedBox(height: 8),
                   Vitrina(
@@ -774,6 +792,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                       claves: _claves,
                       ladoSecreto: _ladoSecreto,
                       verLadoSecreto: _verLadoSecreto,
+                      vistos: _misSecretos,
                     ),
                   ),
                   const SizedBox(height: 8),

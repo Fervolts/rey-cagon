@@ -55,6 +55,8 @@ String _veces(int n, int meta) => n == 0 ? '' : '×$n${n < meta ? ' / $meta' : '
 /// seguidores. [claves]: logros de eventos guardados (tabla `logros` y teléfono).
 /// [ladoSecreto]: el dueño tiene el lado secreto. [verLadoSecreto]: quien mira también lo
 /// tiene (o es el dueño); si no, los logros del lado secreto no salen ni ganados.
+/// [vistos]: en la vitrina de otro, los secretos que ya encontró quien mira; solo esos salen
+/// (null en la propia: salen todos los ganados).
 List<Trofeo> trofeos({
   required List<({DateTime cuando, int? tipo, int? peso})> cagadas,
   required int total,
@@ -65,6 +67,7 @@ List<Trofeo> trofeos({
   Set<String> claves = const {},
   bool ladoSecreto = false,
   bool verLadoSecreto = true,
+  Set<String>? vistos,
 }) {
   final porDia = <DateTime, int>{};
   final horasPorDia = <DateTime, Set<int>>{};
@@ -279,7 +282,7 @@ List<Trofeo> trofeos({
   };
   final secretos = <Trofeo>[
     for (final l in logrosSecretos)
-      if (ganados.contains(l.clave) && (verLadoSecreto || !l.ladoSecreto))
+      if (ganados.contains(l.clave) && (verLadoSecreto || !l.ladoSecreto) && (vistos == null || vistos.contains(l.clave)))
         (clave: l.clave, emoji: l.emoji, nombre: l.nombre, detalle: l.detalle, ganado: true, grupo: Grupo.secreto),
   ];
   return [...normales, ...secretos];
