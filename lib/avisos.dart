@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'ajustes_avisos.dart';
 import 'emoji.dart';
 import 'idioma.dart';
 import 'main.dart' show conReintento, db, textoError;
@@ -17,18 +18,24 @@ import 'tema.dart';
 /// A dónde mandar a la persona: un toque en un push o en un aviso. Cada pantalla que sabe
 /// llegar ahí marca su parte como hecha (la de abajo cambia de pestaña, el baño elige su pestaña).
 class Ir {
-  Ir(this.a, {this.hilo});
+  Ir(this.a, {this.hilo, this.periodo, this.usuario});
 
-  /// 'inicio', 'todos' (o una sala: 'global', 'es', 'en'), 'amigos', 'soporte' o 'avisos'.
+  /// 'inicio', 'todos' (o una sala: 'global', 'es', 'en'), 'amigos', 'soporte', 'avisos' o 'ranking'.
   final String a;
 
   /// Id del mensaje padre: la sala abre ese hilo encima.
   final int? hilo;
-  bool inicio = false, bano = false, enHilo = false;
+
+  /// Con 'ranking': 'week', 'month' o 'year' (ganadores y cierres de periodo).
+  final String? periodo;
+
+  /// Perfil a abrir encima (RAMPAGE / HEXAKILL de un amigo), si la pantalla de destino sabe hacerlo.
+  final String? usuario;
+  bool inicio = false, bano = false, enHilo = false, ranking = false;
 }
 
 final irA = ValueNotifier<Ir?>(null);
-void ir(String a, {int? hilo}) => irA.value = Ir(a, hilo: hilo);
+void ir(String a, {int? hilo, String? periodo, String? usuario}) => irA.value = Ir(a, hilo: hilo, periodo: periodo, usuario: usuario);
 
 /// Avisos sin leer más anuncios sin ver. Lo pinta la campana y el puntito de la pestaña.
 final avisosSinLeer = ValueNotifier<int>(0);
@@ -151,7 +158,7 @@ class _PantallaAvisosState extends State<PantallaAvisos> {
   // Filtros de arriba: cada uno junta varios tipos de aviso.
   static Map<String, (String, Set<String>)> get _filtros => {
     'chat': (tr('💬 CHAT', '💬 CHAT'), {'mencion', 'respuesta'}),
-    'amigos': (tr('👀 AMIGOS', '👀 FRIENDS'), {'follow', 'placer'}),
+    'amigos': (tr('👀 AMIGOS', '👀 FRIENDS'), {'follow', 'placer', 'cagada', 'ganadores'}),
     'retos': (tr('⚔️ RETOS', '⚔️ CHALLENGES'), {'reto'}),
     'admin': (tr('📢 ADMIN', '📢 ADMIN'), {'anuncio', 'soporte', 'reporte_chat'}),
   };
@@ -243,7 +250,7 @@ class _PantallaAvisosState extends State<PantallaAvisos> {
     switch (a['tipo']) {
       case 'anuncio':
         verPopup(context, a);
-      case 'follow' || 'placer' when datos['user_id'] != null:
+      case 'follow' || 'placer' || 'cagada' when datos['user_id'] != null:
         Navigator.push(context, MaterialPageRoute(builder: (_) => PantallaPerfil(usuarioId: datos['user_id'])));
       case 'mencion' || 'reporte_chat':
         Navigator.pop(context);
@@ -257,6 +264,9 @@ class _PantallaAvisosState extends State<PantallaAvisos> {
       case 'reto':
         Navigator.pop(context);
         ir('inicio');
+      case 'ganadores':
+        Navigator.pop(context);
+        ir('ranking', periodo: datos['periodo'] as String?);
     }
   }
 
@@ -268,6 +278,11 @@ class _PantallaAvisosState extends State<PantallaAvisos> {
       appBar: AppBar(
         title: TextoConEmojis(tr('📰 LECTURA DEL BAÑO', '📰 BATHROOM READING')),
         actions: [
+          IconButton(
+            tooltip: tr('Qué notificaciones me llegan', 'Which notifications I get'),
+            icon: const Icon(Icons.tune),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaAjustesAvisos())),
+          ),
           if (_soyAdmin)
             IconButton(
               tooltip: tr('Pop-ups', 'Pop-ups'),
@@ -369,6 +384,8 @@ class _FilaAviso extends StatelessWidget {
     'soporte': '🛠️',
     'placer': '🤫',
     'reporte_chat': '🚩',
+    'cagada': '🔥',
+    'ganadores': '🏆',
   };
 
   @override

@@ -373,12 +373,16 @@ class _PantallaInicioState extends State<PantallaInicio> {
     Navigator.of(context).popUntil((r) => r.isFirst);
     setState(() => _tab = switch (destino.a) {
           'inicio' || 'avisos' => 0,
+          'ranking' => 1,
           'imperio' => 2,
           _ => _tabBano,
         });
     if (_tab == _tabBano) _marcarVisto();
     if (destino.a == 'avisos') {
       Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaAvisos()));
+      // RAMPAGE / HEXAKILL de un amigo: su perfil encima de los avisos.
+      final quien = destino.usuario;
+      if (quien != null) Navigator.push(context, MaterialPageRoute(builder: (_) => PantallaPerfil(usuarioId: quien)));
     }
   }
 
@@ -503,6 +507,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
   @override
   void initState() {
     super.initState();
+    if (!widget.trono) _irAPeriodo(alNacer: true);
     _cargar();
     secretoAbierto.addListener(_alAbrirSecreto);
     _soltar = escucharCagadas(widget.trono ? 'trono' : 'ranking', () => _cargar(spinner: false));
@@ -519,10 +524,27 @@ class _PantallaRankingState extends State<PantallaRanking> {
     });
     // Bienvenida, permisos y actualización: una sola vez, desde el trono.
     if (widget.trono) _avisoPrimeraVez();
+    if (!widget.trono) irA.addListener(_irAPeriodo);
+  }
+
+  // Push de ganadores o de cierre: RANKING con ese periodo (si la pestaña aún no existía, lo toma al nacer).
+  void _irAPeriodo({bool alNacer = false}) {
+    final destino = irA.value;
+    final periodo = destino?.periodo;
+    if (destino == null || destino.a != 'ranking' || destino.ranking || periodo == null || !periodos.containsKey(periodo)) return;
+    destino.ranking = true;
+    if (periodo == _periodo) return;
+    if (alNacer) {
+      _periodo = periodo;
+      return;
+    }
+    setState(() => _periodo = periodo);
+    _cargar();
   }
 
   @override
   void dispose() {
+    irA.removeListener(_irAPeriodo);
     secretoAbierto.removeListener(_alAbrirSecreto);
     _ciclo.dispose();
     _soltar();

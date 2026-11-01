@@ -12,6 +12,11 @@
 //   - trigger anuncios_avisar: { tipo: "anuncio" } → anuncio de un admin a todos los teléfonos.
 //   - cron push_poceta: { tipo: "poceta", lista } → empujones del Imperio.
 //   - cron push_racha: { tipo: "racha", lista: [{ user_id, llevas, dia }] } → racha del Imperio a punto de perderse.
+//   - cron push_ganadores: { tipo: "ganadores", periodo, lista } → quién ganó la semana/mes/año entre tus amigos.
+//   - cron push_cierres: { tipo: "cierre", periodo, lista } → la semana/mes/año se acaba: tu puesto y a quién pasar.
+// Cada quien apaga categorías en push_ajustes (cagadas, rachas, ganadores, cierres, chat, retos,
+// seguidores, imperio). Apagar solo quita el push: lo que se guardaba en el centro de avisos se sigue guardando.
+// Anuncio, versión y soporte no se apagan.
 // Lo que va a una persona también se guarda en public.notificaciones (centro de avisos de la app).
 // Cada texto va en español y en inglés: cada teléfono recibe el de su idioma (push_tokens.idioma).
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
@@ -138,6 +143,31 @@ const fijo = (a: Aviso, data: Record<string, string>) => (d: Destino): Mensaje =
   return { titulo, cuerpo, data };
 };
 
+// Interruptores de push_ajustes de esos usuarios. Sin fila = todo prendido. Si la consulta falla
+// (migración sin aplicar) devuelve vacío y se manda igual.
+async function ajustes(usuarios: (string | null | undefined)[], claves: string[]) {
+  const mapa = new Map<string, Record<string, unknown>>();
+  const unicos = [...new Set(usuarios.filter((u): u is string => !!u))];
+  for (let i = 0; i < unicos.length; i += 200) {
+    const { data, error } = await db.from("push_ajustes").select(["user_id", ...claves].join(", ")).in("user_id", unicos.slice(i, i + 200));
+    if (error) {
+      console.error("push_ajustes", error.message);
+      return mapa;
+    }
+    for (const f of (data ?? []) as unknown as Record<string, unknown>[]) mapa.set(String(f.user_id), f);
+  }
+  return mapa;
+}
+const prendido = (mapa: Map<string, Record<string, unknown>>, u: string | null | undefined, clave: string) =>
+  !u || mapa.get(u)?.[clave] !== false;
+
+// Solo los teléfonos de quienes tienen prendidas todas esas categorías.
+async function conAviso(destinos: Destino[], ...claves: string[]) {
+  if (!destinos.length) return destinos;
+  const mapa = await ajustes(destinos.map((d) => d.user_id), claves);
+  return destinos.filter((d) => claves.every((c) => prendido(mapa, d.user_id, c)));
+}
+
 // Copia del aviso en el centro de avisos de cada usuario, tenga o no teléfono registrado.
 async function guardar(usuarios: string[], a: Aviso, datos: Record<string, string>) {
   if (!usuarios.length) return;
@@ -170,8 +200,9 @@ async function avisarFollow(follower: string, followed: string) {
       `👀 ${perfil.username} started following you`, "Follow back to see how much they poop 💩");
   const datos = { tipo: "follow", user_id: follower };
   await guardar([followed], a, datos);
-  if (!tokens?.length) return Response.json({ enviados: 0 });
-  const { enviados } = await repartir("follow", tokens, fijo(a, datos));
+  const destinos = await conAviso(tokens ?? [], "seguidores");
+  if (!destinos.length) return Response.json({ enviados: 0 });
+  const { enviados } = await repartir("follow", destinos, fijo(a, datos));
   return Response.json({ enviados });
 }
 
@@ -246,18 +277,21 @@ async function avisarPlacer(id: string) {
   if (!abiertos?.length) return Response.json({ enviados: 0 });
   await guardar(abiertos.map((a) => a.id), texto, { tipo: "placer", user_id: c.user_id });
   const { data: tokens } = await db.from("push_tokens").select("token, user_id, idioma").in("user_id", abiertos.map((a) => a.id));
-  if (!tokens?.length) return Response.json({ enviados: 0 });
-  const { enviados } = await repartir("placer", tokens, fijo(texto, { tipo: "placer", user_id: c.user_id }));
+  const destinos = await conAviso(tokens ?? [], "cagadas");
+  if (!destinos.length) return Response.json({ enviados: 0 });
+  const { enviados } = await repartir("placer", destinos, fijo(texto, { tipo: "placer", user_id: c.user_id }));
   return Response.json({ enviados });
 }
 
 // Manda el mismo aviso a todos los teléfonos de esos usuarios y limpia los tokens muertos.
-async function avisarA(usuarios: string[], a: Aviso, data: Record<string, string>) {
+// clave = categoría de push_ajustes que lo apaga (sin clave no se apaga).
+async function avisarA(usuarios: string[], a: Aviso, data: Record<string, string>, clave?: string) {
   if (!usuarios.length) return Response.json({ enviados: 0 });
   await guardar(usuarios, a, data);
   const { data: tokens } = await db.from("push_tokens").select("token, user_id, idioma").in("user_id", usuarios);
-  if (!tokens?.length) return Response.json({ enviados: 0 });
-  const { enviados } = await repartir(data.tipo ?? "otro", tokens, fijo(a, data));
+  const destinos = clave ? await conAviso(tokens ?? [], clave) : tokens ?? [];
+  if (!destinos.length) return Response.json({ enviados: 0 });
+  const { enviados } = await repartir(data.tipo ?? "otro", destinos, fijo(a, data));
   return Response.json({ enviados });
 }
 
@@ -301,8 +335,8 @@ async function avisarRespuesta(id: number, para: string[]) {
   const dueno = para.filter((u) => u === padre?.user_id);
   const otros = para.filter((u) => u !== padre?.user_id);
   const [a, b] = await Promise.all([
-    avisarA(dueno, aviso(`💬 ${quien} respondió tu mensaje`, cuerpo, `💬 ${quien} replied to your message`, cuerpo), datos),
-    avisarA(otros, aviso(`💬 ${quien} respondió en un hilo`, cuerpo, `💬 ${quien} replied in a thread`, cuerpo), datos),
+    avisarA(dueno, aviso(`💬 ${quien} respondió tu mensaje`, cuerpo, `💬 ${quien} replied to your message`, cuerpo), datos, "chat"),
+    avisarA(otros, aviso(`💬 ${quien} respondió en un hilo`, cuerpo, `💬 ${quien} replied in a thread`, cuerpo), datos, "chat"),
   ]);
   const enviados = ((await a.json()).enviados ?? 0) + ((await b.json()).enviados ?? 0);
   return Response.json({ enviados });
@@ -335,7 +369,7 @@ async function avisarMencion(id: number, para: string[]) {
     tipo: "mencion",
     id: String(id),
     sala: m.sala,
-  });
+  }, "chat");
 }
 
 // El Cagadón: avisos del reto a quien le toca.
@@ -350,19 +384,19 @@ async function avisarReto(id: number, evento: string) {
     return avisarA([r.retado], aviso(
       `⚔️ ${nombre(r.retador)} te retó a un Cagadón`, "Gana el que cague más hoy. ¿Aceptas o te rajas?",
       `⚔️ ${nombre(r.retador)} challenged you to a Poop-Off`, "Whoever poops the most today wins. In or chicken?",
-    ), data);
+    ), data, "retos");
   }
   if (evento === "aceptado") {
     return avisarA([r.retador], aviso(
       `🔥 ${nombre(r.retado)} aceptó tu Cagadón`, "Que empiece la guerra. Gana el que cague más hoy 💩",
       `🔥 ${nombre(r.retado)} accepted your Poop-Off`, "Let the war begin. Whoever poops the most today wins 💩",
-    ), data);
+    ), data, "retos");
   }
   if (evento === "rechazado") {
     return avisarA([r.retador], aviso(
       `🐔 ${nombre(r.retado)} se rajó`, "No aceptó tu Cagadón. Cobarde.",
       `🐔 ${nombre(r.retado)} chickened out`, "They turned down your Poop-Off. Coward.",
-    ), data);
+    ), data, "retos");
   }
   const marcador = (yo: string) =>
     yo === r.retador ? `${r.marcador_retador}-${r.marcador_retado}` : `${r.marcador_retado}-${r.marcador_retador}`;
@@ -370,18 +404,18 @@ async function avisarReto(id: number, evento: string) {
     return avisarA([r.retador, r.retado], aviso(
       "🤝 Cagadón empatado en cero", "Ninguno cagó. Qué decepción.",
       "🤝 Poop-Off tied at zero", "Nobody pooped. What a letdown.",
-    ), data);
+    ), data, "retos");
   }
   const perdedor = r.ganador === r.retador ? r.retado : r.retador;
   const reina = perfiles?.find((p) => p.id === r.ganador)?.genero === "mujer";
   await avisarA([r.ganador], aviso(
     "🏆 ¡Ganaste el Cagadón!", `${marcador(r.ganador)} contra ${nombre(perdedor)}. ${reina ? "Reina indiscutible" : "Rey indiscutible"} 👑`,
     "🏆 You won the Poop-Off!", `${marcador(r.ganador)} against ${nombre(perdedor)}. Undisputed ${reina ? "queen" : "king"} 👑`,
-  ), data);
+  ), data, "retos");
   return avisarA([perdedor], aviso(
     "💀 Perdiste el Cagadón", `${marcador(perdedor)} contra ${nombre(r.ganador)}. Mañana revancha.`,
     "💀 You lost the Poop-Off", `${marcador(perdedor)} against ${nombre(r.ganador)}. Rematch tomorrow.`,
-  ), data);
+  ), data, "retos");
 }
 
 // Anuncio de un admin: a todos los teléfonos (o solo a los de un idioma), de Play y de la APK
@@ -476,8 +510,9 @@ async function avisarPoceta(lista: Poceta[]) {
     const { data } = await db.from("push_tokens").select("token, user_id, idioma").in("user_id", usuarios.slice(i, i + 200));
     tokens.push(...(data ?? []));
   }
-  if (!tokens.length) return Response.json({ enviados: 0 });
-  const r = await repartir("poceta", tokens, (t) => {
+  const destinos = await conAviso(tokens, "imperio", "poceta");
+  if (!destinos.length) return Response.json({ enviados: 0 });
+  const r = await repartir("poceta", destinos, (t) => {
     const { p, i } = elegido.get(t.user_id ?? "")!;
     const [titulo, cuerpo] = enSuIdioma(textosPoceta[p.subtipo][i](p), t.idioma);
     return { titulo, cuerpo, subtipo: p.subtipo, variante: letras[i], data: { tipo: "poceta", subtipo: p.subtipo, variante: letras[i] } };
@@ -533,8 +568,9 @@ async function avisarRacha(lista: Racha[]) {
     const { data } = await db.from("push_tokens").select("token, user_id, idioma").in("user_id", usuarios.slice(i, i + 200));
     tokens.push(...(data ?? []));
   }
-  if (!tokens.length) return Response.json({ enviados: 0 });
-  const r = await repartir("racha", tokens, (t) => {
+  const destinos = await conAviso(tokens, "imperio", "racha");
+  if (!destinos.length) return Response.json({ enviados: 0 });
+  const r = await repartir("racha", destinos, (t) => {
     const { llevas, dia, congeladores } = porUsuario.get(t.user_id ?? "")!;
     const [es, en] = premiosRacha[dia - 1];
     // Con congelador 🧊 la racha no se pierde, pero se le pide que no lo gaste por flojo.
@@ -555,6 +591,128 @@ async function avisarRacha(lista: Racha[]) {
   return Response.json(r);
 }
 
+// ---- Ganadores y cierres (semana / mes / año entre amigos) ----
+
+type Periodo = "week" | "month" | "year";
+// [la semana, de la semana, esta semana, week]
+const periodos: Record<Periodo, [string, string, string, string]> = {
+  week: ["la semana", "de la semana", "Esta semana", "week"],
+  month: ["el mes", "del mes", "Este mes", "month"],
+  year: ["el año", "del año", "Este año", "year"],
+};
+const cagadasEs = (n: number) => `${n} ${n === 1 ? "cagada" : "cagadas"}`;
+const cagadasEn = (n: number) => `${n} ${n === 1 ? "poop" : "poops"}`;
+const ordinalEn = (n: number) =>
+  `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : n % 10 === 1 ? "st" : n % 10 === 2 ? "nd" : n % 10 === 3 ? "rd" : "th"}`;
+
+// "A", "A y B", "A, B y 3 más".
+function quienes(nombres: string[], total: number, en: boolean) {
+  const y = en ? "and" : "y";
+  if (nombres.length <= 1 && total <= 1) return nombres[0] ?? "?";
+  if (total === 2 && nombres.length === 2) return `${nombres[0]} ${y} ${nombres[1]}`;
+  const resto = total - 2;
+  return resto > 0 ? `${nombres.slice(0, 2).join(", ")} ${y} ${resto} ${en ? "more" : "más"}` : nombres.join(` ${y} `);
+}
+
+// Teléfonos de esos usuarios, en tandas.
+async function telefonos(usuarios: string[]) {
+  const tokens: Destino[] = [];
+  for (let i = 0; i < usuarios.length; i += 200) {
+    const { data } = await db.from("push_tokens").select("token, user_id, idioma").in("user_id", usuarios.slice(i, i + 200));
+    tokens.push(...(data ?? []));
+  }
+  return tokens;
+}
+
+type Ganador = { user_id: string; gane: boolean; n: number; empatados: number; nombres: string[]; reina?: boolean };
+
+function textoGanadores(periodo: Periodo, g: Ganador): Aviso {
+  const [la, , esta, en] = periodos[periodo];
+  const otros = g.nombres ?? [];
+  if (g.gane && g.empatados <= 1) {
+    return aviso(`👑 ¡Ganaste ${la}!`, `Nadie entre tus amigos cagó más que tú: ${cagadasEs(g.n)}. ${g.reina ? "Reina" : "Rey"} del trono.`,
+      `👑 You won the ${en}!`, `Nobody in your circle pooped more than you: ${cagadasEn(g.n)}. ${g.reina ? "Queen" : "King"} of the throne.`);
+  }
+  if (g.gane) {
+    return aviso(`👑 ¡Empataste en la cima de ${la}!`, `${cagadasEs(g.n)}, igual que ${quienes(otros, g.empatados - 1, false)}. Toca desempatar.`,
+      `👑 You tied for the top of the ${en}!`, `${cagadasEn(g.n)}, same as ${quienes(otros, g.empatados - 1, true)}. Time for a tiebreaker.`);
+  }
+  if (g.empatados <= 1) {
+    return aviso(`🏆 ${otros[0]} ganó ${la} entre tus amigos`, `Con ${cagadasEs(g.n)}. ¿${esta} le ganas tú? 💩`,
+      `🏆 ${otros[0]} won the ${en} among your friends`, `With ${cagadasEn(g.n)}. Beat them this ${en}? 💩`);
+  }
+  return aviso(`🏆 Empate en ${la}: ${quienes(otros, g.empatados, false)}`, `${cagadasEs(g.n)} cada uno. ¿${esta} les ganas tú? 💩`,
+    `🏆 Tie for the ${en}: ${quienes(otros, g.empatados, true)}`, `${cagadasEn(g.n)} each. Beat them this ${en}? 💩`);
+}
+
+// Lista que arma push_ganadores_revisar(): un aviso por persona. Se guarda en el centro de avisos.
+async function avisarGanadores(periodo: Periodo, lista: Ganador[]) {
+  if (!periodos[periodo]) return Response.json({ enviados: 0 });
+  const porUsuario = new Map<string, Aviso>();
+  for (const g of lista) {
+    if (!g?.user_id || !(g.n > 0) || (!g.gane && !g.nombres?.length)) continue;
+    porUsuario.set(g.user_id, textoGanadores(periodo, g));
+  }
+  if (!porUsuario.size) return Response.json({ enviados: 0 });
+  const datos = { tipo: "ganadores", periodo };
+  const filas = [...porUsuario].map(([u, a]) => ({
+    user_id: u, tipo: "ganadores", titulo: a.es[0], cuerpo: a.es[1], titulo_en: a.en[0], cuerpo_en: a.en[1], datos,
+  }));
+  for (let i = 0; i < filas.length; i += 500) {
+    const { error } = await db.from("notificaciones").insert(filas.slice(i, i + 500));
+    if (error) console.error("notificaciones", error.message);
+  }
+  const destinos = await conAviso(await telefonos([...porUsuario.keys()]), "ganadores");
+  if (!destinos.length) return Response.json({ enviados: 0 });
+  const r = await repartir("ganadores", destinos, (t) => {
+    const [titulo, cuerpo] = enSuIdioma(porUsuario.get(t.user_id ?? "")!, t.idioma);
+    return { titulo, cuerpo, subtipo: periodo, data: datos };
+  });
+  return Response.json(r);
+}
+
+type Cierre = { user_id: string; n: number; puesto: number; empatados: number; rival?: string | null; rival_n?: number | null; horas: number };
+
+function textoCierre(periodo: Periodo, c: Cierre): Aviso {
+  const [, del, , en] = periodos[periodo];
+  const h = Math.max(1, Math.round(c.horas ?? 6));
+  const titulo = aviso(`⏳ Quedan ${h} h ${del}`, "", `⏳ ${h} h left in the ${en}`, "");
+  const rival = c.rival ?? null;
+  const suyas = c.rival_n ?? 0;
+  let es: string;
+  let ing: string;
+  if (c.puesto === 1 && c.empatados > 0 && rival) {
+    es = `Vas empatado en el 1º con ${rival} (${cagadasEs(c.n)}). Una más y ganas 👑`;
+    ing = `You're tied for 1st with ${rival} (${cagadasEn(c.n)}). One more and you win 👑`;
+  } else if (c.puesto === 1) {
+    es = rival
+      ? `Vas 1º con ${cagadasEs(c.n)}, ${rival} te sigue a ${c.n - suyas}. Aguanta el trono 👑`
+      : `Vas 1º con ${cagadasEs(c.n)}. Aguanta el trono 👑`;
+    ing = rival
+      ? `You're 1st with ${cagadasEn(c.n)}, ${rival} is ${c.n - suyas} behind. Hold the throne 👑`
+      : `You're 1st with ${cagadasEn(c.n)}. Hold the throne 👑`;
+  } else {
+    es = `Vas ${c.puesto}º, a ${cagadasEs(suyas - c.n)} de ${rival ?? "?"}. ¡Puja! 💩`;
+    ing = `You're ${ordinalEn(c.puesto)}, ${cagadasEn(suyas - c.n)} behind ${rival ?? "?"}. Push! 💩`;
+  }
+  return aviso(titulo.es[0], es, titulo.en[0], ing);
+}
+
+// Lista que arma push_cierres_revisar(): un aviso por persona. No se guarda: es un empujón.
+async function avisarCierre(periodo: Periodo, lista: Cierre[]) {
+  if (!periodos[periodo]) return Response.json({ enviados: 0 });
+  const porUsuario = new Map<string, Aviso>();
+  for (const c of lista) if (c?.user_id && c.puesto >= 1) porUsuario.set(c.user_id, textoCierre(periodo, c));
+  if (!porUsuario.size) return Response.json({ enviados: 0 });
+  const destinos = await conAviso(await telefonos([...porUsuario.keys()]), "cierres");
+  if (!destinos.length) return Response.json({ enviados: 0 });
+  const r = await repartir("cierre", destinos, (t) => {
+    const [titulo, cuerpo] = enSuIdioma(porUsuario.get(t.user_id ?? "")!, t.idioma);
+    return { titulo, cuerpo, subtipo: periodo, data: { tipo: "cierre", periodo } };
+  });
+  return Response.json(r);
+}
+
 Deno.serve(async (req) => {
   if (req.headers.get("x-webhook-secret") !== Deno.env.get("WEBHOOK_SECRET")) {
     return new Response("no", { status: 401 });
@@ -571,6 +729,8 @@ Deno.serve(async (req) => {
   if (cuerpo.tipo === "reporte_chat") return avisarReporteChat(cuerpo.mensaje_id, cuerpo.motivo);
   if (cuerpo.tipo === "poceta") return avisarPoceta(cuerpo.lista ?? []);
   if (cuerpo.tipo === "racha") return avisarRacha(cuerpo.lista ?? []);
+  if (cuerpo.tipo === "ganadores") return avisarGanadores(cuerpo.periodo, cuerpo.lista ?? []);
+  if (cuerpo.tipo === "cierre") return avisarCierre(cuerpo.periodo, cuerpo.lista ?? []);
   const { user_id } = cuerpo;
 
   const { data: seguidores } = await db.from("follows").select("follower").eq("followed", user_id);
@@ -587,17 +747,54 @@ Deno.serve(async (req) => {
   for (const c of hoy ?? []) cuenta.set(c.user_id, (cuenta.get(c.user_id) ?? 0) + 1);
   const n = cuenta.get(user_id) ?? 0;
 
-  const data = { tipo: "cagada", user_id };
-  const r = await repartir("cagada", tokens, (t) => {
-    const mio = cuenta.get(t.user_id ?? "") ?? 0;
-    const en = t.idioma === "en";
-    const cola = en
-      ? (mio < n ? "you're losing 😬" : mio === n ? "you're tied 👀" : "you're still winning 👑")
-      : (mio < n ? "vas perdiendo 😬" : mio === n ? "van empatados 👀" : "todavía le ganas 👑");
-    return en
-      ? { titulo: `💩 ${perfil.username} pooped`, cuerpo: `${perfil.username} pooped ${n} ${n === 1 ? "time" : "times"} today... ${cola}`, data }
-      : { titulo: `💩 ${perfil.username} cagó`, cuerpo: `${perfil.username} cagó ${n} ${n === 1 ? "vez" : "veces"} hoy... ${cola}`, data };
-  });
+  // 5ª del día = RAMPAGE, 6ª = HEXAKILL: reemplaza al push de siempre para quien tiene "rachas" prendido y
+  // queda en el centro de avisos de todos los seguidores. Con "rachas" apagado llega el de siempre si
+  // tiene "cagadas" prendido.
+  const especial = n === 5 ? "rampage" : n === 6 ? "hexakill" : null;
+  const mapa = await ajustes(tokens.map((t) => t.user_id), ["cagadas", "rachas"]);
+  const hype = especial ? tokens.filter((t) => prendido(mapa, t.user_id, "rachas")) : [];
+  const normales = tokens.filter((t) => !hype.includes(t) && prendido(mapa, t.user_id, "cagadas"));
+  const u = perfil.username;
 
-  return Response.json(r);
+  let enviados = 0;
+  let borrados = 0;
+  if (especial) {
+    const datosHype = { tipo: "cagada", subtipo: especial, user_id };
+    const texto = (mio: number | null): Aviso => {
+      const tuEs = mio == null ? "" : ` Tú llevas ${mio}.`;
+      const tuEn = mio == null ? "" : ` You're at ${mio}.`;
+      return especial === "rampage"
+        ? aviso(`🔥 ¡RAMPAGE! ${u} lleva 5 cagadas hoy`, `Cinco en un día. Está imparable.${tuEs}`,
+          `🔥 RAMPAGE! ${u} pooped 5 times today`, `Five in one day. Unstoppable.${tuEn}`)
+        : aviso(`☠️ ¡HEXAKILL! ${u} cagó 6 veces hoy`, `Seis. SEIS. Que alguien revise esas tuberías.${tuEs}`,
+          `☠️ HEXAKILL! ${u} pooped 6 times today`, `Six. SIX. Someone check those pipes.${tuEn}`);
+    };
+    await guardar(seguidores.map((s) => s.follower), texto(null), datosHype);
+    if (hype.length) {
+      const r = await repartir("cagada", hype, (t) => {
+        const [titulo, cuerpo] = enSuIdioma(texto(cuenta.get(t.user_id ?? "") ?? 0), t.idioma);
+        return { titulo, cuerpo, subtipo: especial, data: datosHype };
+      });
+      enviados += r.enviados;
+      borrados += r.borrados;
+    }
+  }
+
+  const data = { tipo: "cagada", user_id };
+  if (normales.length) {
+    const r = await repartir("cagada", normales, (t) => {
+      const mio = cuenta.get(t.user_id ?? "") ?? 0;
+      const en = t.idioma === "en";
+      const cola = en
+        ? (mio < n ? "you're losing 😬" : mio === n ? "you're tied 👀" : "you're still winning 👑")
+        : (mio < n ? "vas perdiendo 😬" : mio === n ? "van empatados 👀" : "todavía le ganas 👑");
+      return en
+        ? { titulo: `💩 ${u} pooped`, cuerpo: `${u} pooped ${n} ${n === 1 ? "time" : "times"} today... ${cola}`, data }
+        : { titulo: `💩 ${u} cagó`, cuerpo: `${u} cagó ${n} ${n === 1 ? "vez" : "veces"} hoy... ${cola}`, data };
+    });
+    enviados += r.enviados;
+    borrados += r.borrados;
+  }
+
+  return Response.json({ enviados, borrados });
 });

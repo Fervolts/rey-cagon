@@ -40,6 +40,15 @@ void _alTocar(RemoteMessage m) {
     ir(m.data['sala'] ?? 'todos', hilo: int.tryParse('${m.data['hilo']}'));
     return;
   }
+  if (m.data['tipo'] == 'ganadores' || m.data['tipo'] == 'cierre') {
+    ir('ranking', periodo: m.data['periodo']);
+    return;
+  }
+  // RAMPAGE / HEXAKILL: queda en el centro de avisos y de ahí se abre el perfil del amigo.
+  if (m.data['tipo'] == 'cagada' && m.data['subtipo'] != null) {
+    ir('avisos', usuario: m.data['user_id']);
+    return;
+  }
   final destino = switch (m.data['tipo']) {
     'mencion' || 'reporte_chat' => m.data['sala'] ?? 'todos',
     'soporte' => 'soporte',

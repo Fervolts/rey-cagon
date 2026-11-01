@@ -6,6 +6,7 @@ import 'genero.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'accesorios.dart';
+import 'ajustes_avisos.dart';
 import 'animaciones.dart';
 import 'avisos.dart';
 import 'cagadon.dart';
@@ -482,6 +483,13 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                   subtitle: Text(_nombreMovimientoElegido()),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: luego(_elegirMovimiento),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.tune),
+                  title: Text(tr('Notificaciones', 'Notifications')),
+                  subtitle: Text(tr('Qué te llega y qué no', 'What you get and what you don\'t')),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaAjustesAvisos())),
                 ),
                 const FilaAvisosPoceta(),
                 ListTile(
