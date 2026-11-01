@@ -431,7 +431,7 @@ class Logro {
 /// Veces que se tocó una cosa del baño ([Partida.toques]).
 int _toques(Partida p, String id) => p.toques[id] ?? 0;
 
-/// Los 46 logros: 20 de la fase 1, 4 de la cadena, el de la racha, 15 de la fase 2 y 6 escondidos del baño.
+/// Los 48 logros: 20 de la fase 1, 4 de la cadena, el de la racha, 15 de la fase 2 y 8 escondidos del baño.
 final List<Logro> logros = [
   Logro('primer_pujo', 'Primer pujo', 'First push', '1 pujo', '1 push', (p, _) => p.pujos >= 1),
   Logro('calentando', 'Calentando', 'Warming up', '100 pujos', '100 pushes', (p, _) => p.pujos >= 100),
@@ -495,13 +495,17 @@ final List<Logro> logros = [
       (p, _) => _toques(p, 'camion') >= 5, oculto: true),
   Logro('arepa_voladora', 'Arepa voladora', 'Flying arepa', 'Voltear la arepa 12 veces', 'Flip the arepa 12 times',
       (p, _) => _toques(p, 'arepa') >= 12, oculto: true),
+  Logro('agua_fria', 'Agua helada', 'Ice-cold shower', 'Abrir la ducha 7 veces', 'Turn on the shower 7 times',
+      (p, _) => _toques(p, 'ducha') >= 7, oculto: true),
+  Logro('cuadro_torcido', 'Lo dejaste torcido', 'Hung it crooked', 'Enderezar el cuadro 8 veces', 'Straighten the picture 8 times',
+      (p, _) => _toques(p, 'cuadro') >= 8, oculto: true),
   Logro('metiche', 'Metiche', 'Nosy', 'Tocar 6 cosas distintas del baño', 'Touch 6 different things in the bathroom',
       (p, _) => p.toques.length >= 6, oculto: true),
 ];
 
 /// Las cosas del baño que cuentan para [Partida.toques] (lo demás que llegue se ignora).
 const Set<String> objetosTocables = {
-  'bidet', 'tobo', 'bombillo', 'espejo', 'lavamanos', 'reactor', 'ventana', 'matica', 'arepa', 'banera', 'papel', 'cucaracha', 'camion',
+  'bidet', 'tobo', 'bombillo', 'espejo', 'lavamanos', 'reactor', 'ventana', 'matica', 'arepa', 'banera', 'papel', 'cucaracha', 'camion', 'ducha', 'cuadro',
 };
 
 /// Ids de los alquilables (logro Cliente fijo).

@@ -21,6 +21,9 @@ void main() {
       expect(Bano.objetoEn(conTodo, const Offset(80, 30), _amplio), 'ventana');
       expect(Bano.objetoEn(conTodo, const Offset(-145, 60), _amplio), 'espejo');
       expect(Bano.objetoEn(conTodo, const Offset(-145, 150), _amplio), 'lavamanos');
+      expect(Bano.objetoEn(conTodo, Bano.cuadro, _amplio), 'cuadro');
+      expect(Bano.objetoEn(conTodo, const Offset(174, 30), _amplio), 'ducha');
+      expect(Bano.objetoEn(const EstadoBano(claseMedia: 3), Bano.cuadro, _amplio), isNull, reason: 'el cuadro sale con la mejora 4');
     });
 
     test('la poceta no es una cosa: ahí solo se puja', () {
@@ -110,8 +113,8 @@ void main() {
       expect(imp.partida.toques['arepa'], 1);
     });
 
-    test('hay 6 escondidos, ids únicos', () {
-      expect(logros.where((l) => l.oculto).length, 6);
+    test('hay 8 escondidos, ids únicos', () {
+      expect(logros.where((l) => l.oculto).length, 8);
       expect(logros.map((l) => l.id).toSet().length, logros.length);
     });
   });
@@ -121,12 +124,12 @@ void main() {
       final ocultos = {for (final l in logros) if (l.oculto) 'imperio:${l.id}'};
       final sinNada = trofeosImperio({});
       expect(sinNada.where((t) => ocultos.contains(t.clave)), isEmpty);
-      expect(sinNada.length, logros.length - 6);
-      expect(secretosImperioPorEncontrar({}), 6);
+      expect(sinNada.length, logros.length - 8);
+      expect(secretosImperioPorEncontrar({}), 8);
 
       final conUno = trofeosImperio({'metiche'});
       expect(conUno.where((t) => t.clave == 'imperio:metiche').single.ganado, isTrue);
-      expect(secretosImperioPorEncontrar({'metiche'}), 5);
+      expect(secretosImperioPorEncontrar({'metiche'}), 7);
     });
   });
 }

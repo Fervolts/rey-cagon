@@ -315,6 +315,8 @@ abstract final class Bano {
   /// Bañera de clase media (detrás de la matica) y la ducha de lluvia encima.
   static const banera = Rect.fromLTRB(146, 186, 236, 226);
   static const ducha = Offset(174, 18);
+  static const cuadro = Offset(12, 36); // el cuadro de la clase media
+  static const piloto = Offset(-54, 34); // la llamita del calentador
 
   /// Alto total de la escena (con cloaca hay sótano).
   static double altura(EstadoBano e) => alto + (e.cloaca > 0 ? sotano : 0);
@@ -385,6 +387,8 @@ abstract final class Bano {
     if (const Rect.fromLTRB(-177, 26, -113, 92).contains(p)) return 'espejo';
     if (const Rect.fromLTRB(-177, 97, -113, 202).contains(p)) return 'lavamanos';
     if (e.planta > 0 && reactor.contains(p)) return 'reactor';
+    if (e.claseMedia >= 6 && const Rect.fromLTRB(150, 0, 198, 60).contains(p)) return 'ducha';
+    if (e.claseMedia >= 4 && Rect.fromCenter(center: cuadro, width: 38, height: 38).contains(p)) return 'cuadro';
     if (ventana.contains(p)) return 'ventana';
     if (e.matica && Rect.fromCenter(center: l.matica, width: 40, height: 44).contains(p)) return 'matica';
     if (e.arepa > 0 && Rect.fromCenter(center: l.budare + const Offset(0, -6), width: 70, height: 34).contains(p)) return 'arepa';
@@ -426,7 +430,6 @@ class FondoBano extends StatelessWidget {
         if (e.papel || e.lujo('est_papel')) en(Bano.papel, 24, const Emoji('🧻', tamano: 24)),
         if (e.claseMedia >= 8) en(const Offset(172, 180), 22, const Emoji('🫧', tamano: 22)),
         if (e.claseMedia >= 8) en(const Offset(194, 172), 16, const Emoji('🫧', tamano: 16)),
-        if (e.claseMedia >= 4) en(const Offset(12, 36), 34, const Emoji('🖼️', tamano: 34)),
         if (e.planta > 0) en(Bano.reactor.center + const Offset(0, 30), 18, const Emoji('☢️', tamano: 18)),
         if (e.cloaca >= 2) en(const Offset(-150, Bano.alto + 30), 20, const Emoji('🐀', tamano: 20)),
         if (e.lavanda) en(Bano.lavanda, 20, const Emoji('🪻', tamano: 20)),

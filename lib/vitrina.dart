@@ -367,6 +367,8 @@ const _emojisImperio = {
   'bombillo_quemado': '💡',
   'corneta_camion': '🚛',
   'arepa_voladora': '🫓',
+  'agua_fria': '🚿',
+  'cuadro_torcido': '🖼️',
   'metiche': '👀',
 };
 

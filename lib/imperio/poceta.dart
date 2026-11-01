@@ -498,6 +498,7 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
     final encima = <Widget>[]; // textos: no les cae el parpadeo del bombillo
 
     _ambienteVivo(hijos, cx, t, vivo);
+    _cuadro(hijos, cx, t, vivo);
     if (vivo) _planta(hijos, cx, tv);
     _cloaca(hijos, cx, t, tv, vivo);
     final trasTaza = <Widget>[]; // la manguera y la lluvia del camión van delante de la poceta
@@ -576,6 +577,7 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
       _leche(hijos, cx, t);
       _cafe(hijos, cx, t);
       _chorritos(hijos, cx, t);
+      _edificiosVivos(hijos, cx, t);
       if (k > 0) _apurado(hijos, cx, tv, k);
       if (widget.mps > 0) _sueltos(context, encima, cx, t);
     }
@@ -807,6 +809,11 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
         hijos.add(_abs(cx, Offset(Bano.banera.center.dx + 16, Bano.banera.top - 6 - 30 * f), 14, Opacity(opacity: 1 - f, child: const Emoji('🫧', tamano: 14))));
       }
       grito(Offset(Bano.banera.center.dx - 30, Bano.banera.top - 36), tr('¡CUAC!', 'QUACK!'), acento, f);
+    }
+    if (_reaccion('ducha', t) case final f?) grito(Bano.ducha + const Offset(-20, 44), tr('¡AGUA FRÍA!', 'COLD WATER!'), agua, f);
+    if (_reaccion('cuadro', t) case final f?) {
+      final torcido = (_veces['cuadro'] ?? 0).isOdd;
+      grito(Bano.cuadro + const Offset(0, 36), torcido ? tr('¡TORCIDO!', 'CROOKED!') : tr('¡DERECHITO!', 'STRAIGHT!'), Colors.white, f);
     }
     if (_reaccion('cucaracha', t) case final f?) {
       grito((_donde['cucaracha'] ?? Offset(0, l.cucaracha)) + const Offset(0, -6), tr('¡CHAO!', 'BYE!'), Colors.white, f);
@@ -1198,8 +1205,8 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
         ),
       );
 
-  // Cada 2 min (la primera a los 8 s) aparece la taza encima de la poceta y le echa un chorro de café.
-  // El chorrito de la poceta japonesa (cada 7 s, dura 1,6 s) y la fuentecita del bidet a presión (cada 11 s, 0,9 s).
+  // Cada 30 s (la primera a los 8 s) aparece la taza encima de la poceta y le echa un chorro de café.
+  // El chorrito de la poceta japonesa (cada 7 s, dura 1,6 s) y la fuentecita del bidet (cada 11 s, 0,9 s; bajita sin la presión).
   void _chorritos(List<Widget> hijos, double cx, double t) {
     final b = widget.bano;
     final boca = Offset(cx + _boca.dx, _cy + _boca.dy);
@@ -1210,20 +1217,110 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
             child: IgnorePointer(child: CustomPaint(painter: _Agua(boca + const Offset(10, 2), boca + const Offset(-14, 2), 46, e / 1.6)))));
       }
     }
-    if (b.bidet >= 2) {
+    if (b.bidet >= 1) {
       final e = (t - 5) % 11;
       if (t >= 5 && e < .9) {
         final l = _lugar;
         final d = Bano.chorroBidet(l) + Offset(cx, 0);
-        hijos.add(Positioned.fill(child: IgnorePointer(child: CustomPaint(painter: _Agua(d, d + const Offset(8, 0), Bano.altoChorro(l, b, 30 * l.escalaBidet), e / .9)))));
+        final alto = (b.bidet >= 2 ? 30 : 16) * l.escalaBidet;
+        hijos.add(Positioned.fill(child: IgnorePointer(child: CustomPaint(painter: _Agua(d, d + const Offset(8, 0), Bano.altoChorro(l, b, alto), e / .9)))));
       }
+    }
+  }
+
+  // El cuadro de la clase media: tocado se bambolea colgado del clavo y queda torcido o derecho, uno y uno.
+  void _cuadro(List<Widget> hijos, double cx, double t, bool vivo) {
+    if (widget.bano.claseMedia < 4) return;
+    final f = vivo ? _reaccion('cuadro', t) : null;
+    final giro = ((_veces['cuadro'] ?? 0).isOdd ? .14 : 0.0) + (f == null ? 0 : .45 * sin(f * pi * 4) * (1 - f));
+    hijos.add(_abs(cx, Bano.cuadro, 34, Transform.rotate(angle: giro, alignment: Alignment.topCenter, child: const Emoji('🖼️', tamano: 34))));
+  }
+
+  // Lo que se mueve solo de los edificios: la llamita del calentador, la ducha que se abre cada tanto, el patico y las
+  // burbujas de la bañera, y el ambiente del edificio más alto (piedras de la mina, destellos del templo, chispas del
+  // volcán, el remolino del laxante y lo que se traga el agujero negro).
+  void _edificiosVivos(List<Widget> hijos, double cx, double t) {
+    final b = widget.bano;
+    final c = b.claseMedia;
+    if (c >= 5) {
+      final esc = .75 + .25 * sin(t * 11) * cos(t * 7);
+      hijos.add(_abs(cx, Bano.piloto, 10, Transform.scale(scale: esc, alignment: Alignment.bottomCenter, child: const Emoji('🔥', tamano: 10))));
+    }
+    if (c >= 6) {
+      // Cada 25 s se abre 4 s; tocada, un chorrazo.
+      final e = (t - 12) % 25;
+      final fuerte = _reaccion('ducha', t) != null;
+      if (fuerte || (t >= 12 && e < 4)) {
+        final abre = fuerte ? 1.0 : min(1.0, min(e, 4 - e) / .4);
+        hijos.add(Positioned.fill(child: IgnorePointer(child: CustomPaint(painter: _Lluvia(Offset(cx + Bano.ducha.dx, Bano.ducha.dy), t, abre, fuerte)))));
+      }
+    }
+    if (c >= 8) {
+      final m = Bano.banera;
+      if (_reaccion('banera', t) == null) {
+        hijos.add(_abs(cx, Offset(m.center.dx - 10, m.top - 8 + 1.5 * sin(t * 2.2)), 22,
+            Transform.rotate(angle: .08 * sin(t * 1.6), child: const Emoji('🦆', tamano: 22))));
+      }
+      for (var k = 0; k < 3; k++) {
+        final f = (t * .35 + k / 3) % 1;
+        hijos.add(_abs(cx, Offset(m.left + 12 + 10.0 * k + 3 * sin(f * 7 + k), m.top - 4 - 34 * f), 12,
+            Opacity(opacity: (1 - f) * .8, child: const Emoji('🫧', tamano: 12))));
+      }
+    }
+    // Lo de adentro de la ventana, recortado a ella (x, y desde la esquina de arriba del vidrio).
+    Widget ventana(List<Widget> dentro) => Positioned.fromRect(
+        rect: Bano.ventana.shift(Offset(cx, 0)).deflate(3), child: IgnorePointer(child: ClipRect(child: Stack(clipBehavior: Clip.none, children: dentro))));
+    switch (b.ambiente) {
+      case AmbienteBano.mina:
+        // Se desprenden piedritas del techo por los lados y rebotan en el piso.
+        for (var k = 0; k < 2; k++) {
+          final u = t / 9 + k * .5, e = (u % 1) * 9;
+          if (e > 1.4) continue;
+          final x = (k == 0 ? -120.0 : 64.0) + 34 * _h(u.floorToDouble() + k);
+          final y = e < 1 ? 6 + (Bano.piso + 2) * e * e : Bano.piso + 8 - 16 * sin(pi * (e - 1) / .4);
+          hijos.add(_abs(cx, Offset(x, y), 14,
+              Opacity(opacity: e < 1.2 ? 1 : (1.4 - e) / .2, child: Transform.rotate(angle: e * 6, child: const Emoji('🪨', tamano: 14)))));
+        }
+        hijos.add(_abs(cx, Bano.letrero + const Offset(18, 14), 12, Transform.scale(scale: .5 + .5 * sin(t * 1.9).abs(), child: const Emoji('💎', tamano: 12))));
+      case AmbienteBano.templo:
+        // Destellos dorados que suben despacio a los lados del trono.
+        for (var k = 0; k < 4; k++) {
+          final f = (t * .18 + k / 4) % 1;
+          final x = (k.isEven ? -1 : 1) * (72 + 12 * sin(f * 5 + k));
+          hijos.add(_abs(cx, Offset(x, Bano.piso + 6 - 150 * f), 14, Opacity(opacity: sin(pi * f) * .9, child: const Emoji('✨', tamano: 14))));
+        }
+      case AmbienteBano.volcan:
+        // Chispas que suben del piso y humo que echa el volcán de la ventana.
+        for (var k = 0; k < 4; k++) {
+          final f = (t * .5 + k / 4) % 1;
+          final x = -160 + 320 * _h(k + 3.0) + 10 * sin(f * 8 + k);
+          hijos.add(_abs(cx, Offset(x, Bano.piso + 20 - 120 * f), 10, Opacity(opacity: (1 - f) * .9, child: const Emoji('🔥', tamano: 10))));
+        }
+        hijos.add(ventana([
+          for (var k = 0; k < 2; k++)
+            if ((t * .4 + k * .5) % 1 case final f)
+              Positioned(left: 30 + 6 * sin(f * 5 + k), top: 16 - 26 * f, width: 16, height: 16, child: Opacity(opacity: 1 - f, child: const Emoji('💨', tamano: 16))),
+        ]));
+      case AmbienteBano.laxante:
+        hijos.add(ventana([Positioned.fill(child: Center(child: Transform.rotate(angle: t * 2, child: const Opacity(opacity: .85, child: Emoji('🌀', tamano: 34)))))]));
+      case AmbienteBano.agujero:
+        // Cada 5 s algo del baño se va en espiral al agujero negro.
+        final e = t % 5;
+        if (e < 3) {
+          final f = e / 3, a = f * 4 * pi;
+          final cosa = const ['💩', '🧻', '🪠'][(t / 5).floor() % 3];
+          final o = Bano.ventana.center + Offset(cos(a), .6 * sin(a)) * 50 * (1 - f);
+          hijos.add(_abs(cx, o, 18, Opacity(opacity: 1 - f * f, child: Transform.rotate(angle: a, child: Transform.scale(scale: 1 - .8 * f, child: Emoji(cosa, tamano: 18))))));
+        }
+      default:
+        break;
     }
   }
 
   void _cafe(List<Widget> hijos, double cx, double t) {
     final b = widget.bano;
     if (b.cafe == 0 || t < 8) return;
-    final e = (t - 8) % 120;
+    final e = (t - 8) % 30;
     if (e >= 3.4) return;
     final objeto = b.objetoCafe;
     // Dónde flota, cuánto se inclina y por dónde sale el chorro (sin girar), según lo que sea.
@@ -1254,6 +1351,32 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
       child: Opacity(opacity: opacidad, child: Transform.rotate(angle: giro, child: w)),
     ));
   }
+}
+
+/// La ducha abierta: rayitas de agua que caen de la regadera. [abre] de 0 a 1 (se abre y se cierra); [fuerte] es el
+/// chorrazo de cuando la tocan.
+class _Lluvia extends CustomPainter {
+  _Lluvia(this.regadera, this.t, this.abre, this.fuerte);
+
+  final Offset regadera;
+  final double t, abre;
+  final bool fuerte;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final largo = fuerte ? 150.0 : 110.0, n = fuerte ? 14 : 9;
+    final pincel = Paint()
+      ..strokeWidth = fuerte ? 2 : 1.5
+      ..color = const Color(0xFF8FD3F5).withValues(alpha: .75 * abre);
+    for (var i = 0; i < n; i++) {
+      final x = regadera.dx - 16 + 32 * i / (n - 1);
+      final y = regadera.dy + 6 + (t * (fuerte ? 260 : 180) + i * 37) % largo;
+      canvas.drawLine(Offset(x, y), Offset(x, y + 8), pincel);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_Lluvia v) => true;
 }
 
 /// Agua del bidet: el chorrito de la poceta japonesa o la fuentecita del bidet (un arco que sube y cae), o el
