@@ -361,14 +361,23 @@ const _emojisImperio = {
   'rey_templo': '🛕',
   'erupcion': '🌋',
   'se_lo_trago': '🕳️',
+  // Escondidos del baño.
+  'cucaracha_cazador': '🪳',
+  'bidet_en_la_cara': '💦',
+  'bombillo_quemado': '💡',
+  'corneta_camion': '🚛',
+  'arepa_voladora': '🫓',
+  'metiche': '👀',
 };
 
 const _prefijoImperio = 'imperio:';
 
 /// Los logros del Imperio como trofeos de la vitrina, con [ganados] (ids de `cargarLogrosImperio`).
 /// La clave lleva el prefijo `imperio:` para no chocar con las de los trofeos normales.
+/// Los escondidos (`Logro.oculto`) que faltan no salen: solo cuentan en [secretosImperioPorEncontrar].
 List<Trofeo> trofeosImperio(Set<String> ganados) => [
       for (final l in imperio.logros)
+        if (!l.oculto || ganados.contains(l.id))
         (
           clave: '$_prefijoImperio${l.id}',
           emoji: _emojisImperio[l.id] ?? '🏆',
@@ -386,6 +395,9 @@ List<Trofeo> _tapados(int n) => [
     ];
 
 bool _esTapado(Trofeo t) => t.clave.startsWith('tapado-');
+
+/// Cuántos logros escondidos del Imperio faltan: la línea "+N secretos por encontrar" de la sección IMPERIO.
+int secretosImperioPorEncontrar(Set<String> ganados) => imperio.logros.where((l) => l.oculto && !ganados.contains(l.id)).length;
 
 /// La zona VITRINA del perfil: una repisa con los mejores trofeos (primero los recién revelados,
 /// luego los secretos y los ganados) y "N de M". Toda la tarjeta abre [PantallaVitrina].
@@ -627,6 +639,8 @@ class _PantallaVitrinaState extends State<PantallaVitrina> {
                                   alTocar: _detalle,
                                 ),
                               if (grupo == Grupo.secreto && widget.porEncontrar > 0) _PorEncontrar(widget.porEncontrar),
+                              if (grupo == Grupo.imperio && _imperio != null && secretosImperioPorEncontrar(_imperio!) > 0)
+                                _PorEncontrar(secretosImperioPorEncontrar(_imperio!)),
                             ],
                           ),
                   ),

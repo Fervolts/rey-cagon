@@ -453,6 +453,14 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     return r;
   }
 
+  /// Se tocó una cosa del baño (además del pujo, que ya contó [pujar]): suma el toque y avisa si salió un logro escondido.
+  void tocarObjeto(String id) {
+    final nuevos = imperio.tocarObjeto(id);
+    if (nuevos.isEmpty) return;
+    _sumarLogros(nuevos);
+    _avisar();
+  }
+
   bool _pidiendoCiruela = false;
 
   /// La suerte salió en el pujo: el servidor acredita 1 🫐 si no pasó el tope del día. Nunca lanza.

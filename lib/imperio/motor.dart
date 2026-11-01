@@ -1013,6 +1013,14 @@ class Imperio {
     _p.segHastaDorado = (a + (b - a) * _azar.nextDouble()) / (rapido ? 2 : 1);
   }
 
+  /// Se tocó una cosa del baño en la Poceta: la cuenta en [Partida.toques] (para los logros escondidos) y devuelve los logros nuevos.
+  /// Un id que no está en [objetosTocables] no cuenta. Tope de 99999 por cosa para que el estado no crezca sin fin.
+  List<Logro> tocarObjeto(String id) {
+    if (!objetosTocables.contains(id)) return const [];
+    _p.toques[id] = min((_p.toques[id] ?? 0) + 1, 99999);
+    return revisarLogros();
+  }
+
   /// Marca los logros que se cumplen y devuelve los nuevos.
   List<Logro> revisarLogros() {
     final m = mpsSinEfectos();

@@ -694,6 +694,8 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     final jalar = botonJalar(im, _c.cadena);
     return Poceta(
       alTocar: _pujar,
+      // Tocar una cosa del baño (bidet, cucaracha, camión...) también puja; además cuenta para los logros escondidos.
+      alTocarObjeto: _c.tocarObjeto,
       mps: im.mps(ahora),
       fiebre: im.enFiebre(ahora),
       pujoLoco: efectos.any((e) => e.id == 'pujo_loco'),

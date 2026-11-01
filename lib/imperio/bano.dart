@@ -1,8 +1,8 @@
 // El baño del Imperio: la escena alrededor de la poceta.
 //
 // Arranca destartalado (cerámica partida, mancha de humedad, bombillo pelado, periódico en un clavo, tobo con agua)
-// y cada adorno arregla algo que se ve. Los edificios ponen cosas que hacen algo (leche de magnesia, budare, la
-// manguerita del bidet, el baño de clase media, el camión vacuum, el reactor, la cloaca de abajo, las moscas) y el
+// y cada adorno arregla algo que se ve. Los edificios ponen cosas que hacen algo (leche de magnesia, budare, el
+// bidet de piso, el baño de clase media, el camión vacuum, el reactor, la cloaca de abajo, las moscas) y el
 // edificio más alto cambia el ambiente (ventana, tinte; sobre todo fase 2). Las mejoras del bidet arreglan la poceta
 // misma (tapa, botones, mármol, chorrito japonés, oro). Las estéticas premium cambian piezas por versiones de lujo.
 // Personalizar (`vista` de la partida) oculta cosas, elige ambiente y cuántos dedos se ven: solo visual.
@@ -258,7 +258,7 @@ final List<OcultableBano> ocultablesBano = [
   (id: 'leche', emoji: '🥛', es: 'Leche de magnesia', en: 'Milk of magnesia', tiene: (e) => e.leche > 0),
   (id: 'cafe', emoji: '☕', es: 'Chorro de café', en: 'Coffee stream', tiene: (e) => e.cafe > 0),
   (id: 'arepa', emoji: '🫓', es: 'Budare', en: 'Griddle', tiene: (e) => e.arepa > 0),
-  (id: 'bidet', emoji: '🚿', es: 'Manguerita del bidet', en: 'Bidet hose', tiene: (e) => e.bidet > 0),
+  (id: 'bidet', emoji: '🚿', es: 'Bidet', en: 'Bidet', tiene: (e) => e.bidet > 0),
   (
     id: 'lujos_poceta',
     emoji: '🚽',
@@ -280,6 +280,9 @@ final List<OcultableBano> ocultablesBano = [
   for (final s in esteticas) (id: s.id, emoji: s.emoji, es: s.nombreEs, en: s.nombreEn, tiene: (e) => e.lujo(s.id)),
 ];
 
+/// Dónde va cada cosa del piso (x relativa al centro, y desde arriba). `cucaracha` y `camion` son la y de su carril.
+typedef LugaresBano = ({Offset bidet, double escalaBidet, Offset tobo, double tamTobo, Offset matica, Offset budare, double cucaracha, double camion});
+
 /// Medidas de la escena. Las x son relativas al centro (cx); las y, absolutas desde arriba.
 abstract final class Bano {
   static const alto = 280.0;
@@ -293,13 +296,8 @@ abstract final class Bano {
   static const frasco = Offset(-87, 54);
   static const bombillo = Offset(-28, 34);
   static const papel = Offset(74, 140);
-  static const tobo = Offset(88, 236);
-  static const matica = Offset(160, 246);
-  static const manguera = Offset(114, 116); // el gancho de la manguerita del bidet
-  static const boquilla = Offset(110, 146); // por donde sale el chorro
   static const letrero = Offset(108, 100);
   static const letreroPlanta = Offset(89, 88); // con reactor el letrero se corre
-  static const budare = Offset(-128, 258);
   static const lavanda = Offset(-122, 104);
   static const destellos = [Offset(-130, 42), Offset(26, 72), Offset(-62, 182)];
 
@@ -320,6 +318,80 @@ abstract final class Bano {
 
   /// Alto total de la escena (con cloaca hay sótano).
   static double altura(EstadoBano e) => alto + (e.cloaca > 0 ? sotano : 0);
+
+  /// Desde cuánto piso de más (la escena llenando la pantalla, debajo de los 280) las cosas del piso se separan.
+  static const sueloAmplio = 120.0;
+
+  /// Las cosas del piso según cuánto piso de más hay. Sin él (tarjeta del chat, cloaca, pantallas bajitas) se quedan
+  /// apretadas en la franja de piso de la escena; con él bajan y se reparten: bidet al lado de la poceta, tobo a la
+  /// izquierda, budare más abajo, matica en su esquina, la cucaracha y el camión por carriles propios.
+  static LugaresBano lugares(EstadoBano e, double suelo) {
+    if (suelo < sueloAmplio || e.cloaca > 0) {
+      return (
+        bidet: const Offset(100, 260),
+        escalaBidet: .8,
+        tobo: const Offset(-82, 252),
+        tamTobo: 30.0,
+        matica: const Offset(164, 250),
+        budare: const Offset(-150, 266),
+        cucaracha: 262.0,
+        camion: 272.0,
+      );
+    }
+    return (
+      bidet: const Offset(100, 290),
+      escalaBidet: 1.15,
+      tobo: const Offset(-104, 294),
+      tamTobo: 40.0,
+      matica: Offset(164, alto + min(suelo * .25, 56)),
+      budare: Offset(-150, alto + suelo * .33),
+      cucaracha: alto + suelo * .5,
+      camion: min(alto + suelo * .82, alto + suelo - 10),
+    );
+  }
+
+  /// Por donde sale el chorro del bidet (el centro de la taza).
+  static Offset chorroBidet(LugaresBano l) => l.bidet + Offset(0, -41 * l.escalaBidet);
+
+  /// Cuánto puede subir el chorro del bidet sin mojar el reactor (que queda justo encima a la derecha).
+  static double altoChorro(LugaresBano l, EstadoBano e, double quiere) {
+    if (e.planta == 0) return quiere;
+    return min(quiere, max(10.0, chorroBidet(l).dy - reactor.bottom - 6));
+  }
+
+  /// Lo que ocupa el bidet (para tocarlo).
+  static Rect cajaBidet(LugaresBano l) {
+    final b = l.bidet, k = l.escalaBidet;
+    return Rect.fromLTRB(b.dx - 26 * k, b.dy - 58 * k, b.dx + 26 * k, b.dy + 4);
+  }
+
+  /// Lo que ocupa el tobo o, con tanque, el pipote azul.
+  static Rect cajaTobo(EstadoBano e, LugaresBano l) {
+    if (e.tanque == 0) return Rect.fromCenter(center: l.tobo, width: l.tamTobo, height: l.tamTobo);
+    final grande = e.tanque == 2;
+    final c = l.tobo + Offset(grande ? 4 : 0, 0);
+    final ancho = grande ? 42.0 : 32.0, alto = grande ? 58.0 : 44.0;
+    return Rect.fromLTRB(c.dx - ancho / 2, c.dy + 16 - alto - 4, c.dx + ancho / 2, c.dy + 16);
+  }
+
+  /// Qué cosa quieta de la escena hay en [p] (x relativa al centro, y desde arriba de la escena), o null. La poceta
+  /// misma no cuenta (ahí se puja nada más). La cucaracha y el camión se mueven: los busca poceta.dart.
+  static String? objetoEn(EstadoBano e, Offset p, double suelo) {
+    if (const Rect.fromLTRB(-56, 86, 56, 216).contains(p)) return null;
+    final l = lugares(e, suelo);
+    if (e.bidet > 0 && cajaBidet(l).contains(p)) return 'bidet';
+    if (cajaTobo(e, l).contains(p)) return 'tobo';
+    if (Rect.fromCenter(center: bombillo, width: 32, height: 44).contains(p)) return 'bombillo';
+    if (const Rect.fromLTRB(-177, 26, -113, 92).contains(p)) return 'espejo';
+    if (const Rect.fromLTRB(-177, 97, -113, 202).contains(p)) return 'lavamanos';
+    if (e.planta > 0 && reactor.contains(p)) return 'reactor';
+    if (ventana.contains(p)) return 'ventana';
+    if (e.matica && Rect.fromCenter(center: l.matica, width: 40, height: 44).contains(p)) return 'matica';
+    if (e.arepa > 0 && Rect.fromCenter(center: l.budare + const Offset(0, -6), width: 70, height: 34).contains(p)) return 'arepa';
+    if (e.claseMedia >= 8 && banera.contains(p)) return 'banera';
+    if ((e.papel || e.lujo('est_papel')) && const Rect.fromLTRB(60, 122, 88, 158).contains(p)) return 'papel';
+    return null;
+  }
 
   /// Tubo que baja a la cloaca: del reactor si hay planta, si no del pie de la poceta.
   static List<Offset> tuboCloaca(EstadoBano e) => e.planta > 0
@@ -349,13 +421,11 @@ class FondoBano extends StatelessWidget {
           Positioned.fromRect(rect: v, child: const ClipRect(child: Align(alignment: Alignment(.3, 0), child: Emoji('🌌', tamano: 40)))),
         if (!e.bombillo && !e.lujo('est_lampara')) en(Bano.bombillo, 24, const RotatedBox(quarterTurns: 2, child: Emoji('💡', tamano: 24))),
         if (e.papel || e.lujo('est_papel')) en(Bano.papel, 24, const Emoji('🧻', tamano: 24)),
-        if (e.tanque == 0) en(Bano.tobo, 36, e.lujo('est_tobo') ? _dorado(const Emoji('🪣', tamano: 36)) : const Emoji('🪣', tamano: 36)),
         if (e.claseMedia >= 8) en(const Offset(172, 180), 22, const Emoji('🫧', tamano: 22)),
         if (e.claseMedia >= 8) en(const Offset(194, 172), 16, const Emoji('🫧', tamano: 16)),
         if (e.claseMedia >= 4) en(const Offset(12, 36), 34, const Emoji('🖼️', tamano: 34)),
         if (e.planta > 0) en(Bano.reactor.center + const Offset(0, 30), 18, const Emoji('☢️', tamano: 18)),
         if (e.cloaca >= 2) en(const Offset(-150, Bano.alto + 30), 20, const Emoji('🐀', tamano: 20)),
-        if (e.matica) en(Bano.matica, 40, const Emoji('🪴', tamano: 40)),
         if (e.lavanda) en(Bano.lavanda, 20, const Emoji('🪻', tamano: 20)),
         ..._repisa(e, en),
         if (_letrero(e) case final l?) en(e.planta > 0 ? Bano.letreroPlanta : Bano.letrero, 26, Emoji(l, tamano: 26)),
@@ -365,7 +435,7 @@ class FondoBano extends StatelessWidget {
   }
 
   /// Un emoji teñido de oro (estéticas y moscas de oro).
-  static Widget _dorado(Widget hijo) =>
+  static Widget dorado(Widget hijo) =>
       ColorFiltered(colorFilter: ColorFilter.mode(const Color(0xFFFFC21A).withValues(alpha: .55), BlendMode.srcATop), child: hijo);
 
   static String? _letrero(EstadoBano e) => switch (e.ambiente) {
@@ -393,6 +463,38 @@ class FondoBano extends StatelessWidget {
   }
 }
 
+/// Las baldosas del piso de más, debajo de los 280 de la escena: misma fuga (-260) y filas que crecen ~25% cada una
+/// (la última de la escena mide 24). [size] es solo esa franja; y = 0 es el borde de abajo de la escena.
+void pintarPisoDeMas(Canvas canvas, Size size, EstadoBano e) {
+  final w = size.width, cx = w / 2;
+  const h = Bano.alto, fuga = -260.0;
+  final marmol = e.lujo('est_piso');
+  final a = marmol ? const Color(0xFFF3EFE6) : (e.ceramica ? const Color(0xFFE4E7EA) : const Color(0xFFB4A88F));
+  final b = marmol ? const Color(0xFFD9D3C7) : (e.ceramica ? const Color(0xFFB7C0C8) : const Color(0xFF8A7F69));
+  double xEn(double xb, double y) => cx + (xb - cx) * (y + h - fuga) / (h - fuga);
+  final pincel = Paint()..isAntiAlias = false;
+  var y0 = 0.0, alto = 30.0;
+  for (var f = 0; y0 < size.height; f++) {
+    final y1 = y0 + alto;
+    final n = (w / 2 / 46 * (h - fuga) / (y0 + h - fuga)).ceil() + 1;
+    for (var c = -n; c < n; c++) {
+      final xb0 = cx + c * 46.0, xb1 = xb0 + 46;
+      // Es la fila 6 de la escena en adelante (par): alterna igual que si siguiera.
+      pincel.color = (c + f).isEven ? a : b;
+      canvas.drawPath(
+          Path()
+            ..moveTo(xEn(xb0, y0), y0)
+            ..lineTo(xEn(xb1, y0), y0)
+            ..lineTo(xEn(xb1, y1), y1)
+            ..lineTo(xEn(xb0, y1), y1)
+            ..close(),
+          pincel);
+    }
+    y0 = y1;
+    alto *= 1.25;
+  }
+}
+
 /// El fondo pintado. Solo se repinta si cambia el [EstadoBano].
 class PintorBano extends CustomPainter {
   PintorBano(this.estado);
@@ -408,10 +510,19 @@ class PintorBano extends CustomPainter {
     final w = size.width, cx = w / 2;
     final pincel = Paint()..isAntiAlias = true;
     Rect r(double l, double t, double ri, double b) => Rect.fromLTRB(cx + l, t, cx + ri, b);
+    // Piso de más: la escena llena la pantalla y el piso sigue debajo de los 280.
+    final suelo = max(0.0, size.height - Bano.altura(e));
+    final lugar = Bano.lugares(e, suelo);
 
     _banda(canvas, size, cx);
     _azulejos(canvas, size, cx);
     _piso(canvas, size, cx);
+    if (suelo > 0 && e.cloaca == 0) {
+      canvas.save();
+      canvas.translate(0, Bano.alto);
+      pintarPisoDeMas(canvas, Size(w, suelo), e);
+      canvas.restore();
+    }
     _ventana(canvas, cx);
 
     // Moldura entre la pintura y la cerámica.
@@ -432,13 +543,13 @@ class PintorBano extends CustomPainter {
       canvas.drawRect(r(Bano.papel.dx - 13, Bano.papel.dy - 15, Bano.papel.dx + 13, Bano.papel.dy - 12), pincel);
     }
     if (e.planta > 0) _reactor(canvas, cx);
-    if (e.tanque > 0) _pipote(canvas, cx);
+    if (e.tanque > 0) _pipote(canvas, cx, lugar);
     if (e.alfombra || e.lujo('est_alfombra')) _alfombra(canvas, cx);
     _cortina(canvas, size, cx);
     if (e.claseMedia >= 8) _banera(canvas, cx);
     if (e.claseMedia >= 6) _ducha(canvas, cx);
-    if (e.arepa > 0) _budare(canvas, cx);
-    if (e.bidet > 0) _manguera(canvas, cx);
+    if (e.arepa > 0) _budare(canvas, cx, lugar);
+    if (e.bidet > 0) _bidet(canvas, Offset(cx + lugar.bidet.dx, lugar.bidet.dy), lugar.escalaBidet);
     if (e.cloaca > 0) _sotano(canvas, size, cx);
     _bombillo(canvas, cx);
 
@@ -843,28 +954,53 @@ class PintorBano extends CustomPainter {
     }
   }
 
-  // Bidet: la manguerita colgada de su gancho en la pared, con la manguera que baja a la poceta.
-  void _manguera(Canvas canvas, double cx) {
-    final g = Offset(cx + Bano.manguera.dx, Bano.manguera.dy);
+  // Bidet de piso: la taza de porcelana baja, con su pie, el grifo atrás y las dos llaves (fría y caliente). [b] es
+  // donde toca el piso y [k] la escala (más grande con piso de más).
+  void _bidet(Canvas canvas, Offset b, double k) {
+    Offset p(double x, double y) => Offset(b.dx + x * k, b.dy + y * k);
+    Path poli(List<Offset> l) => Path()..addPolygon(l, true);
+    final borde = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2
+      ..color = const Color(0xFF9AA3AA);
     final cromo = Paint()..color = const Color(0xFFC9D1D8);
-    final sombra = Paint()..color = const Color(0xFF7F8A93);
-    canvas.drawPath(
-        Path()
-          ..moveTo(g.dx - 1, g.dy + 30)
-          ..cubicTo(g.dx - 2, g.dy + 62, g.dx - 40, g.dy + 56, g.dx - 52, g.dy + 84),
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3
-          ..strokeCap = StrokeCap.round
-          ..color = const Color(0xFFA9B2BA));
-    canvas.drawRect(Rect.fromLTRB(g.dx - 6, g.dy - 3, g.dx + 6, g.dy + 3), sombra); // gancho
-    canvas.save();
-    canvas.translate(g.dx, g.dy + 2);
-    canvas.rotate(.18);
-    canvas.drawRRect(RRect.fromLTRBR(-3, 0, 3, 26, const Radius.circular(2)), cromo); // mango
-    canvas.drawRRect(RRect.fromLTRBR(-6, 24, 4, 33, const Radius.circular(3)), cromo); // cabeza
-    canvas.drawRect(const Rect.fromLTRB(-5, 31, 3, 33), sombra);
-    canvas.restore();
+    canvas.drawOval(Rect.fromCenter(center: p(0, 0), width: 50 * k, height: 8 * k), Paint()..color = const Color(0x33000000));
+    // Pie.
+    final pie = poli([p(-11, -16), p(11, -16), p(14, 0), p(-14, 0)]);
+    canvas.drawPath(pie, Paint()..color = const Color(0xFFE3E5E7));
+    canvas.drawPath(poli([p(5, -16), p(11, -16), p(14, 0), p(7, 0)]), Paint()..color = const Color(0xFFCDD1D5));
+    canvas.drawPath(pie, borde);
+    // Taza: se angosta hacia el pie.
+    final taza = Path()
+      ..moveTo(p(-23, -40).dx, p(-23, -40).dy)
+      ..cubicTo(p(-23, -24).dx, p(-23, -24).dy, p(-14, -14).dx, p(-14, -14).dy, p(-11, -12).dx, p(-11, -12).dy)
+      ..lineTo(p(11, -12).dx, p(11, -12).dy)
+      ..cubicTo(p(14, -14).dx, p(14, -14).dy, p(23, -24).dx, p(23, -24).dy, p(23, -40).dx, p(23, -40).dy)
+      ..close();
+    canvas.drawPath(taza, Paint()..color = const Color(0xFFF2F3F1));
+    final lado = Path()
+      ..moveTo(p(10, -40).dx, p(10, -40).dy)
+      ..cubicTo(p(10, -26).dx, p(10, -26).dy, p(8, -15).dx, p(8, -15).dy, p(6, -12).dx, p(6, -12).dy)
+      ..lineTo(p(11, -12).dx, p(11, -12).dy)
+      ..cubicTo(p(14, -14).dx, p(14, -14).dy, p(23, -24).dx, p(23, -24).dy, p(23, -40).dx, p(23, -40).dy)
+      ..close();
+    canvas.drawPath(lado, Paint()..color = const Color(0xFFDADDE0));
+    canvas.drawPath(taza, borde);
+    // Grifo atrás del borde, con su caño hacia adelante, y las llaves a los lados.
+    canvas.drawRect(Rect.fromLTRB(p(-2.5, -54).dx, p(-2.5, -54).dy, p(2.5, -44).dx, p(2.5, -44).dy), cromo);
+    canvas.drawRect(Rect.fromLTRB(p(-1.5, -55).dx, p(-1.5, -55).dy, p(1.5, -48).dx, p(1.5, -48).dy), Paint()..color = const Color(0xFF9AA3AA));
+    for (final (x, punto) in const [(-11.0, Color(0xFFD9443A)), (11.0, Color(0xFF3A7BD9))]) {
+      canvas.drawCircle(p(x, -47), 3.2 * k, cromo);
+      canvas.drawCircle(p(x, -47), 1.2 * k, Paint()..color = punto);
+    }
+    // Borde de arriba y el hueco con un poquito de agua.
+    final borde0 = Rect.fromCenter(center: p(0, -40), width: 46 * k, height: 12 * k);
+    canvas.drawOval(borde0, Paint()..color = const Color(0xFFFAFAF8));
+    canvas.drawOval(borde0, borde);
+    canvas.drawOval(Rect.fromCenter(center: p(0, -40), width: 36 * k, height: 7 * k), Paint()..color = const Color(0xFFD5DCE1));
+    canvas.drawOval(Rect.fromCenter(center: p(0, -39.5), width: 24 * k, height: 4 * k), Paint()..color = const Color(0xFFA9CCDD));
+    // La boquilla del chorro en el medio.
+    canvas.drawCircle(p(0, -41), 1.6 * k, Paint()..color = const Color(0xFF7F8A93));
   }
 
   void _repisa(Canvas canvas, double cx) {
@@ -904,9 +1040,9 @@ class PintorBano extends CustomPainter {
     canvas.drawCircle(c + const Offset(0, -12), 2, Paint()..color = const Color(0xFF4A4A4A));
   }
 
-  void _pipote(Canvas canvas, double cx) {
+  void _pipote(Canvas canvas, double cx, LugaresBano l) {
     final grande = estado.tanque == 2;
-    final c = Offset(cx + Bano.tobo.dx + (grande ? 4 : 0), Bano.tobo.dy);
+    final c = Offset(cx + l.tobo.dx + (grande ? 4 : 0), l.tobo.dy);
     final ancho = grande ? 42.0 : 32.0, alto = grande ? 58.0 : 44.0;
     final cuerpo = Rect.fromLTRB(c.dx - ancho / 2, c.dy + 16 - alto, c.dx + ancho / 2, c.dy + 16);
     final oro = estado.lujo('est_tobo');
@@ -1008,9 +1144,9 @@ class PintorBano extends CustomPainter {
     }
   }
 
-  void _budare(Canvas canvas, double cx) {
+  void _budare(Canvas canvas, double cx, LugaresBano l) {
     final grande = estado.arepa >= 3;
-    final c = Offset(cx + Bano.budare.dx, Bano.budare.dy);
+    final c = Offset(cx + l.budare.dx, l.budare.dy);
     final rx = grande ? 34.0 : 27.0;
     // Hornilla con brasas y el budare encima.
     canvas.drawRect(Rect.fromCenter(center: c + const Offset(0, 9), width: rx * 1.4, height: 8), Paint()..color = const Color(0xFF3E3A36));

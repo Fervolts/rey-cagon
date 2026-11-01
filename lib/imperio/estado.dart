@@ -119,6 +119,10 @@ class Partida {
   /// Objetos de Rollos de Oro: 'super_plomero' (0/1), 'tanque_lujo' (0 a 6), 'cadena_reserva' (1 = pendiente). No se borran al jalar.
   Map<String, int> objetosRollos;
 
+  /// Veces que se tocó cada cosa del baño en la Poceta (id de [objetosTocables]), para los logros escondidos.
+  /// No se borra al jalar.
+  Map<String, int> toques;
+
   /// Última compra de la Cadena de reserva (ms), para el límite semanal.
   int cadenaReservaEn;
 
@@ -199,6 +203,7 @@ class Partida {
     Set<String>? alquiladosUsados,
     Set<String>? pintura,
     Map<String, int>? objetosRollos,
+    Map<String, int>? toques,
     this.cadenaReservaEn = 0,
     this.superPlomeroDia = 0,
     this.cofres = 0,
@@ -231,7 +236,8 @@ class Partida {
         alquilados = alquilados ?? {},
         alquiladosUsados = alquiladosUsados ?? {},
         pintura = pintura ?? {},
-        objetosRollos = objetosRollos ?? {} {
+        objetosRollos = objetosRollos ?? {},
+        toques = toques ?? {} {
     // El robot viejo pasa al mapa; si ya está en el mapa gana el fin más tarde.
     if (robotHasta > (this.alquilados['robot'] ?? 0)) this.alquilados['robot'] = robotHasta;
   }
@@ -264,6 +270,7 @@ class Partida {
         'alquilados_usados': alquiladosUsados.toList(),
         'pintura': pintura.toList(),
         'objetos_rollos': objetosRollos,
+        'toques': toques,
         'cadena_reserva_en': cadenaReservaEn,
         'super_plomero_dia': superPlomeroDia,
         'cofres': cofres,
@@ -322,6 +329,7 @@ class Partida {
       alquiladosUsados: _conjunto(j['alquilados_usados']),
       pintura: _conjunto(j['pintura']),
       objetosRollos: _mapaEnt(j['objetos_rollos'])..removeWhere((_, n) => n <= 0),
+      toques: _mapaEnt(j['toques'])..removeWhere((_, n) => n <= 0),
       cadenaReservaEn: _ent(j['cadena_reserva_en']),
       superPlomeroDia: _ent(j['super_plomero_dia']),
       cofres: max(0, _ent(j['cofres'])),

@@ -46,6 +46,7 @@ class Poceta extends StatefulWidget {
     this.alJalar,
     this.cartelJalar = false,
     this.llenar = false,
+    this.alTocarObjeto,
     @visibleForTesting this.instante,
   });
 
@@ -84,6 +85,10 @@ class Poceta extends StatefulWidget {
 
   /// Ocupa todo el alto que le den: sale más pared arriba y más piso abajo, la poceta queda igual.
   final bool llenar;
+
+  /// Se tocó una cosa del baño (el bidet, el tobo, la cucaracha...). Va además del pujo: ese toque igual puja. El id
+  /// es el de [Bano.objetoEn], o 'cucaracha' / 'camion' (los que se mueven).
+  final void Function(String id)? alTocarObjeto;
 
   /// Solo para pruebas: dibuja la escena quieta en este segundo, como con movimiento completo.
   final double? instante;
@@ -135,6 +140,11 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
   double _jalo = -9; // cuándo se bajó la palanca
   double _cx = 0; // centro de la escena, para saber qué se tocó
   double _arriba = 0; // con llenar: pared de más encima de la escena
+  double _suelo = 0; // con llenar: piso de más que entra en la escena (las cosas del piso se reparten en él)
+  final _reacciones = <String, double>{}; // cuándo se tocó cada cosa del baño, para su animación
+  final _veces = <String, int>{}; // cuántas veces en esta sesión (cada 5 al bidet: chorro en la cara)
+  final _donde = <String, Offset>{}; // dónde se tocó (la cucaracha se mueve: su grito sale ahí)
+  static const _dura = 1.4; // lo que dura la reacción de una cosa tocada
 
   // Palanca del tanque: la manija cromada en la cara del tanque, justo bajo la tapa, que sale hacia el frente (a la
   // izquierda). _palanca es la zona de toque (x relativa al centro, y desde arriba); _pivote, el eje de la manija en
@@ -156,7 +166,19 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
       widget.instante == null &&
       widget.activo &&
       _mov != Movimiento.nada &&
-      (_mov == Movimiento.completo || _particulas.isNotEmpty || _ahora - _jalo < .6);
+      (_mov == Movimiento.completo || _particulas.isNotEmpty || _ahora - _jalo < .6 || _reaccionando);
+
+  bool get _reaccionando => _reacciones.values.any((r) => _ahora - r < _dura);
+
+  LugaresBano get _lugar => Bano.lugares(widget.bano, _suelo);
+
+  // Cuánto va la reacción de lo que se tocó (0 a 1), o null si no hay.
+  double? _reaccion(String id, double t, [double dura = _dura]) {
+    final r = _reacciones[id];
+    if (r == null) return null;
+    final d = t - r;
+    return d >= 0 && d < dura ? d / dura : null;
+  }
 
   void _ajustarTicker() {
     if (_debeCorrer) {
@@ -181,7 +203,8 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
     _ajustarTicker();
   }
 
-  // Qué se tocó: el pincel de Personalizar, la palanca o, si no, la poceta (pujar).
+  // Qué se tocó: el pincel de Personalizar, la palanca o, si no, la poceta (pujar). Una cosa del baño hace lo suyo y
+  // además puja: tocar la escena nunca deja de pujar.
   void _pulsar(Offset o) {
     if (widget.alPersonalizar != null && o.dx >= 2 * _cx - 46 && o.dy <= 46) {
       widget.alPersonalizar!();
@@ -191,7 +214,27 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
       _jalar();
       return;
     }
+    final q = o - Offset(0, _arriba);
+    final id = _objetoEn(q);
+    if (id != null) {
+      if (_mov != Movimiento.nada) {
+        _reacciones[id] = _ahora;
+        _veces[id] = (_veces[id] ?? 0) + 1;
+        _donde[id] = q - Offset(_cx, 0);
+      }
+      widget.alTocarObjeto?.call(id);
+    }
     _tocar();
+  }
+
+  // Qué cosa del baño hay en [q] (x absoluta, y desde arriba de la escena). Primero lo que se mueve y va delante.
+  String? _objetoEn(Offset q) {
+    if (_mov == Movimiento.completo && widget.instante == null) {
+      final c = _cucaracha(_cx, _ahora);
+      if (c != null && !c.huye && (q - c.o).distance < 22) return 'cucaracha';
+      if (_cajaCamion(_cx, _ahora)?.contains(q) ?? false) return 'camion';
+    }
+    return Bano.objetoEn(widget.bano, q - Offset(_cx, 0), _suelo);
   }
 
   // La palanca baja y sube; si está lista, el remolino arranca cuando ya bajó.
@@ -280,6 +323,9 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
               // Lo que sobra: un poco más de pared arriba y el resto de piso hacia uno.
               _arriba = ((alto - nativo) * .4).roundToDouble();
               final abajo = alto - nativo - _arriba;
+              // El piso de más entra en la escena (sin cloaca, que pinta su sótano ahí): las cosas del piso bajan a él.
+              _suelo = abajo > 0 && widget.bano.cloaca == 0 ? abajo : 0.0;
+              final abajoFuera = _suelo > 0 ? 0.0 : abajo;
               return SizedBox(
                 height: alto,
                 width: double.infinity,
@@ -299,7 +345,7 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
                       if (alto == nativo && widget.efectos.isEmpty && widget.alPersonalizar == null) return escena;
                       return Stack(children: [
                         if (_arriba > 0) Positioned(top: 0, left: 0, right: 0, height: _arriba, child: _pared(nativo)),
-                        if (abajo > 0)
+                        if (abajoFuera > 0)
                           Positioned(
                             top: _arriba + nativo,
                             left: 0,
@@ -307,19 +353,19 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
                             bottom: 0,
                             child: RepaintBoundary(child: CustomPaint(painter: _PintorSuelo(widget.bano), child: const SizedBox.expand())),
                           ),
-                        Positioned(top: _arriba, left: 0, right: 0, height: nativo, child: escena),
+                        Positioned(top: _arriba, left: 0, right: 0, height: nativo + _suelo, child: escena),
                         if (alto > nativo || widget.efectos.isNotEmpty)
                           Positioned.fill(
                             child: ValueListenableBuilder<double>(
                               valueListenable: _t,
                               builder: (context, t, _) {
                                 final vivo = fijo != null || _mov == Movimiento.completo;
-                                return Stack(children: _esquinas(context, fijo ?? (_mov == Movimiento.nada ? 0 : t), vivo, nativo, abajo));
+                                return Stack(children: _esquinas(context, fijo ?? (_mov == Movimiento.nada ? 0 : t), vivo, nativo, abajoFuera));
                               },
                             ),
                           )
                         else
-                          ..._esquinas(context, 0, false, nativo, abajo),
+                          ..._esquinas(context, 0, false, nativo, abajoFuera),
                       ]);
                     },
                   ),
@@ -569,6 +615,8 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
       }
     }
 
+    _tocados(context, hijos, encima, cx, t, vivo);
+
     // Bombillo pelado: se va la luz un momentico cada tanto.
     if (vivo && !b.bombillo) {
       final g = t % 7.3;
@@ -636,6 +684,132 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
     return Stack(clipBehavior: Clip.hardEdge, children: [...hijos, ...encima]);
   }
 
+  // Lo que hace cada cosa del baño cuando la tocan. Con movimiento completo ([vivo]) la animación y el grito; con
+  // "simple", solo el grito (barato); con "nada" no llega ninguna reacción. El tobo, la matica, la arepa, la
+  // cucaracha y el camión se animan donde se dibujan.
+  void _tocados(BuildContext context, List<Widget> hijos, List<Widget> encima, double cx, double t, bool vivo) {
+    if (_reacciones.isEmpty) return;
+    final b = widget.bano;
+    final l = _lugar;
+    // Grito: sube un poco y se apaga al final. o con x relativa al centro, y desde arriba.
+    void grito(Offset o, String texto, Color color, double f, {double tam = 15}) {
+      final x = min(max(cx + o.dx, 110.0), max(110.0, 2 * cx - 110));
+      encima.add(Positioned(
+        left: x - 110,
+        width: 220,
+        top: o.dy - tam - 18 * f,
+        child: IgnorePointer(
+          child: Opacity(
+            opacity: f < .7 ? 1 : (1 - f) / .3,
+            child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(texto, textAlign: TextAlign.center, maxLines: 1, style: _contorno(numeros(context, tamano: tam, weight: FontWeight.w900, color: color)))),
+          ),
+        ),
+      ));
+    }
+
+    Widget pinta(CustomPainter p) => Positioned.fill(child: IgnorePointer(child: CustomPaint(painter: p)));
+    const agua = Color(0xFF8FD3F5);
+
+    if (_reaccion('bidet', t) case final f?) {
+      final d = Bano.chorroBidet(l) + Offset(cx, 0);
+      final cara = (_veces['bidet'] ?? 0) % 5 == 0;
+      if (vivo) {
+        if (cara) {
+          // Cada quinto toque, el chorro sale torcido y te da en la cara.
+          // Sale hacia la izquierda, por el hueco entre la poceta y el reactor, sin subirle encima a nada.
+          final fin = d + const Offset(-46, -4);
+          final alto = Bano.altoChorro(l, b, 110);
+          hijos.add(pinta(_Agua(d, fin, alto, f)));
+          hijos.add(pinta(_Agua(d, fin + const Offset(-8, 12), alto * .8, f, gotas: true)));
+          final g = (f * 2.5).clamp(0.0, 1.0);
+          hijos.add(Positioned(left: fin.dx - 20, top: fin.dy - 20, width: 40, height: 40,
+              child: IgnorePointer(child: Opacity(opacity: g * (f < .8 ? 1 : (1 - f) / .2), child: Transform.scale(scale: .5 + g, child: const Emoji('💦', tamano: 40))))));
+        } else {
+          // Fuente: un chorro al centro y dos que caen al piso por los lados (bajitos para no mojar el reactor).
+          final alto = Bano.altoChorro(l, b, 70 * l.escalaBidet);
+          hijos.add(pinta(_Agua(d, d + const Offset(4, 0), alto, f)));
+          hijos.add(pinta(_Agua(d, d + Offset(-34 * l.escalaBidet, 34 * l.escalaBidet), alto * .8, f, gotas: true)));
+          hijos.add(pinta(_Agua(d, d + Offset(36 * l.escalaBidet, 36 * l.escalaBidet), alto * .8, f, gotas: true)));
+        }
+      }
+      grito(l.bidet + Offset(cara ? -40 : 0, -60 * l.escalaBidet), cara ? tr('¡EN LA CARA!', 'RIGHT IN THE FACE!') : tr('¡FSSSHH!', 'FSSSHH!'), agua, f,
+          tam: cara ? 17 : 15);
+    }
+    if (_reaccion('tobo', t) case final f?) {
+      final pipote = b.tanque > 0;
+      if (vivo && pipote) {
+        for (var i = 0; i < 3; i++) {
+          final u = (f * 1.6 - i * .2).clamp(0.0, 1.0);
+          if (u <= 0 || u >= 1) continue;
+          hijos.add(_abs(cx, l.tobo + Offset(-8.0 + 8 * i, -30 - 40 * u), 16, Opacity(opacity: 1 - u, child: const Emoji('🫧', tamano: 16))));
+        }
+      }
+      grito(l.tobo + Offset(0, -l.tamTobo / 2 - 12), pipote ? 'GLUP GLUP' : 'CLONK', Colors.white, f);
+    }
+    if (_reaccion('bombillo', t) case final f?) {
+      if (vivo) {
+        if (f < .8 && (f * 9).floor().isEven) hijos.add(const Positioned.fill(child: IgnorePointer(child: ColoredBox(color: Color(0x5C000000)))));
+        hijos.add(_abs(cx, Bano.bombillo + Offset(14, -6 + 4 * sin(t * 30)), 18, Opacity(opacity: 1 - f, child: const Emoji('✨', tamano: 18))));
+      }
+      grito(Bano.bombillo + const Offset(0, 50), tr('¡BZZT!', 'BZZT!'), acento, f);
+    }
+    if (_reaccion('espejo', t) case final f?) {
+      if (vivo) {
+        final s = Curves.elasticOut.transform(min(1.0, f * 2.5));
+        hijos.add(_abs(cx, Offset(Bano.lavamanos, 59), 30,
+            Opacity(opacity: f < .8 ? 1 : (1 - f) / .2, child: Transform.scale(scale: s, child: const Emoji('👀', tamano: 30)))));
+      }
+      grito(const Offset(Bano.lavamanos, 30), tr('¡QUÉ PINTA!', 'LOOKING GOOD!'), Colors.white, f);
+    }
+    if (_reaccion('lavamanos', t) case final f?) {
+      if (vivo) {
+        for (var i = 0; i < 4; i++) {
+          final u = (f * 1.8 - i * .22).clamp(0.0, 1.0);
+          if (u <= 0 || u >= 1) continue;
+          hijos.add(_abs(cx, Bano.grifo + Offset(0, 4 + 26 * u * u), 12, Opacity(opacity: 1 - u * u, child: const Emoji('💧', tamano: 12))));
+        }
+      }
+      grito(Bano.grifo + const Offset(0, 60), 'PLIC PLOC', agua, f);
+    }
+    if (_reaccion('reactor', t) case final f?) {
+      if (vivo) {
+        final a = (.45 * (1 - f) * sin(f * pi * 7).abs()).clamp(0.0, 1.0);
+        hijos.add(Positioned.fromRect(rect: Bano.reactor.shift(Offset(cx, 0)), child: IgnorePointer(child: ColoredBox(color: const Color(0xFFFF4D3D).withValues(alpha: a)))));
+      }
+      grito(Offset(Bano.reactor.center.dx - 20, Bano.reactor.top - 4), tr('¡ALERTA!', 'ALERT!'), const Color(0xFFFF4D3D), f, tam: 16);
+    }
+    if (_reaccion('arepa', t) case final f?) grito(l.budare + const Offset(0, -40), tr('¡VUELTA!', 'FLIP!'), acento, f);
+    if (_reaccion('matica', t) case final f?) grito(l.matica + const Offset(-20, -30), tr('¡RIÉGAME!', 'WATER ME!'), const Color(0xFF7BD88F), f);
+    if (_reaccion('ventana', t) case final f?) {
+      if (vivo) {
+        final sube = sin(pi * f);
+        hijos.add(_abs(cx, Offset(Bano.ventana.center.dx, Bano.ventana.bottom - 6 - 20 * sube), 26, Opacity(opacity: sube.clamp(0.0, 1.0), child: const Emoji('👻', tamano: 26))));
+      }
+      grito(Offset(Bano.ventana.center.dx, Bano.ventana.bottom + 22), 'TOC TOC', Colors.white, f);
+    }
+    if (_reaccion('papel', t) case final f?) {
+      if (vivo) {
+        final y = Bano.papel.dy + (Bano.alto - 14 - Bano.papel.dy) * Curves.easeIn.transform(min(1.0, f * 1.6));
+        hijos.add(_abs(cx, Offset(Bano.papel.dx + 10 * f, y), 18,
+            Opacity(opacity: f < .8 ? 1 : (1 - f) / .2, child: Transform.rotate(angle: 4 * pi * f, child: const Emoji('🧻', tamano: 18)))));
+      }
+      grito(Bano.papel + const Offset(0, -18), 'RRRIP', Colors.white, f);
+    }
+    if (_reaccion('banera', t) case final f?) {
+      if (vivo) {
+        final salto = (sin(f * pi * 3)).abs() * (1 - f);
+        hijos.add(_abs(cx, Offset(Bano.banera.center.dx - 10, Bano.banera.top - 8 - 26 * salto), 22, const Emoji('🦆', tamano: 22)));
+        hijos.add(_abs(cx, Offset(Bano.banera.center.dx + 16, Bano.banera.top - 6 - 30 * f), 14, Opacity(opacity: 1 - f, child: const Emoji('🫧', tamano: 14))));
+      }
+      grito(Offset(Bano.banera.center.dx - 30, Bano.banera.top - 36), tr('¡CUAC!', 'QUACK!'), acento, f);
+    }
+    if (_reaccion('cucaracha', t) case final f?) {
+      grito((_donde['cucaracha'] ?? Offset(0, l.cucaracha)) + const Offset(0, -6), tr('¡CHAO!', 'BYE!'), Colors.white, f);
+    }
+  }
+
   // El "+N" va en blanco con un borde oscuro duro (sin difuminar): se lee sobre cualquier pared.
   static TextStyle _contorno(TextStyle e) => e.copyWith(shadows: const [
         Shadow(color: Color(0xE6000000), offset: Offset(1.2, 1.2)),
@@ -681,9 +855,48 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
     );
   }
 
-  // Lo que se mueve del baño: gota, humo, destellos, cucaracha, arepa.
+  // La cucaracha en t: centro (x absoluta), hacia dónde mira y si va huyendo. null = no está cruzando, o ya se fue.
+  ({Offset o, double giro, bool huye})? _cucaracha(double cx, double t) {
+    if (widget.bano.ceramica) return null;
+    final fase = t % 40;
+    if (fase < 6 || fase >= 11) return null;
+    final y = _lugar.cucaracha + 9;
+    double xEn(double fase) {
+      final f = (fase - 6) / 5;
+      final u = f < .4 ? f / .4 * .45 : (f < .55 ? .45 : .45 + (f - .55) / .45 * .55);
+      return -20 + (2 * cx + 40) * u;
+    }
+
+    final r = _reacciones['cucaracha'];
+    if (r != null && r <= t && t - r < fase - 6) {
+      // La tocaron en esta pasada: corre al borde más cerca, mucho más rápido, y no vuelve hasta la próxima.
+      final x0 = xEn(r % 40);
+      final dir = x0 < cx ? -1.0 : 1.0;
+      final x = x0 + dir * 520 * (t - r);
+      if (x < -20 || x > 2 * cx + 20) return null;
+      return (o: Offset(x, y + 1.5 * sin(t * 60)), giro: dir * pi / 2, huye: true);
+    }
+    final f = (fase - 6) / 5;
+    return (o: Offset(xEn(fase), y + (f < .4 || f >= .55 ? sin(t * 30) : 0)), giro: pi / 2, huye: false);
+  }
+
+  // Lo que se mueve del baño: tobo y matica (se tambalean si los tocan), gota, humo, destellos, cucaracha, arepa.
   void _ambienteVivo(List<Widget> hijos, double cx, double t, bool vivo) {
     final b = widget.bano;
+    final l = _lugar;
+    double bamboleo(String id) {
+      final f = vivo ? _reaccion(id, t, .9) : null;
+      return f == null ? 0 : .45 * sin(f * pi * 5) * (1 - f);
+    }
+
+    if (b.tanque == 0) {
+      Widget w = Emoji('🪣', tamano: l.tamTobo);
+      if (b.lujo('est_tobo')) w = FondoBano.dorado(w);
+      hijos.add(_abs(cx, l.tobo, l.tamTobo, Transform.rotate(angle: bamboleo('tobo'), alignment: Alignment.bottomCenter, child: w)));
+    }
+    if (b.matica) {
+      hijos.add(_abs(cx, l.matica, 40, Transform.rotate(angle: .6 * bamboleo('matica'), alignment: Alignment.bottomCenter, child: const Emoji('🪴', tamano: 40))));
+    }
     // El grifo sin válvula gotea.
     if (b.valvula == 0 && vivo) {
       final f = (t % 1.6) / 1.6;
@@ -704,32 +917,30 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
         hijos.add(_abs(cx, Bano.destellos[i], 16, Transform.scale(scale: esc, child: const Emoji('✨', tamano: 16))));
       }
     }
-    // Cucaracha que cruza el piso (mientras no haya cerámica nueva). Se para a la mitad, como hacen.
-    if (!b.ceramica && vivo) {
-      final fase = t % 40;
-      if (fase >= 6 && fase < 11) {
-        final f = (fase - 6) / 5;
-        final u = f < .4 ? f / .4 * .45 : (f < .55 ? .45 : .45 + (f - .55) / .45 * .55);
-        final x = -20 + (2 * cx + 40) * u;
-        hijos.add(Positioned(
-            left: x - 9,
-            top: 262 + (f < .4 || f >= .55 ? sin(t * 30) : 0),
-            width: 18,
-            height: 18,
-            child: Transform.rotate(angle: pi / 2, child: const Emoji('🪳', tamano: 18))));
+    // Cucaracha que cruza el piso (mientras no haya cerámica nueva). Se para a la mitad, como hacen. Tocada, sale
+    // corriendo al borde más cerca.
+    if (vivo) {
+      if (_cucaracha(cx, t) case final c?) {
+        hijos.add(_abs(cx, c.o - Offset(cx, 0), 18, Transform.rotate(angle: c.giro, child: const Emoji('🪳', tamano: 18))));
+        if (c.huye) hijos.add(_abs(cx, c.o - Offset(cx + (c.giro > 0 ? 18 : -18), 0), 16, const Emoji('💨', tamano: 16)));
       }
     }
     if (b.arepa > 0) {
-      final base = Bano.budare + const Offset(0, -9);
+      final base = _lugar.budare + const Offset(0, -9);
       final fase = t % 9;
-      final salto = vivo && fase < .6 ? fase / .6 : 0.0;
+      var salto = vivo && fase < .6 ? fase / .6 : 0.0;
+      var alto = 28.0, vueltas = 1.0;
+      // Tocada: vuela alto y da tres vueltas.
+      if (vivo) {
+        if (_reaccion('arepa', t, 1.1) case final v?) (salto, alto, vueltas) = (v, 92.0, 3.0);
+      }
       if (b.arepa >= 2) hijos.add(_abs(cx, base + const Offset(-5, 3), 22, const Emoji('🫓', tamano: 22)));
       if (b.arepa >= 3) hijos.add(_abs(cx, base + const Offset(14, 3), 22, const Emoji('🫓', tamano: 22)));
       hijos.add(_abs(
           cx,
-          base + Offset(b.arepa >= 2 ? 3 : 0, (b.arepa >= 2 ? -4 : 0) - 28 * sin(pi * salto)),
+          base + Offset(b.arepa >= 2 ? 3 : 0, (b.arepa >= 2 ? -4 : 0) - alto * sin(pi * salto)),
           24,
-          Transform.rotate(angle: 2 * pi * salto, child: const Emoji('🫓', tamano: 24))));
+          Transform.rotate(angle: 2 * pi * vueltas * salto, child: const Emoji('🫓', tamano: 24))));
       if (b.arepaBrillo) {
         final esc = vivo ? .5 + .5 * sin(t * 2.3).abs() : .8;
         hijos.add(_abs(cx, base + const Offset(22, -12), 12, Transform.scale(scale: esc, child: const Emoji('✨', tamano: 12))));
@@ -794,21 +1005,11 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
   // lluvia de mojones y se va. El cuerpo va detrás de la poceta; la manguera y la lluvia, delante (trasTaza).
   void _camion(BuildContext context, List<Widget> hijos, List<Widget> trasTaza, List<Widget> encima, double cx, double t, bool vivo) {
     final c = widget.bano.camion;
-    if (!vivo || c == 0 || t < 10) return;
-    final e = (t - 10) % 40;
-    if (e >= 9.5) return;
-    const parado = -75.0;
-    final fuera = -cx - 5;
-    final double x;
-    if (e < 2.5) {
-      x = fuera + (parado - fuera) * Curves.easeOut.transform(e / 2.5);
-    } else if (e < 7) {
-      x = parado + .6 * sin(t * 40);
-    } else {
-      x = parado + (fuera - parado) * Curves.easeIn.transform((e - 7) / 2.5);
-    }
+    if (!vivo) return;
+    final q = _posCamion(cx, t);
+    if (q == null) return;
+    final e = q.e, suelo = q.suelo, x = q.cola - cx;
     final s = c >= 4 ? 1.2 : 1.0;
-    final suelo = c >= 9 ? 272 - 46 + 3 * sin(t * 3) : 272.0;
     final largo = (c >= 7 ? 110 : 76) * s;
     final arriba = suelo - 12 * s - 30 * s;
     final cola = cx + x, izq = cola - largo;
@@ -850,6 +1051,40 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
     if (c >= 3 && e < 2.5 && (t * 3) % 1 < .6) grito(cola - 30, arriba - 52, tr('PII PII', 'BEEP BEEP'), acento, 12, .1);
     if (c >= 5 && e >= 2.3 && e < 3) grito(cabina - 6, arriba - 56, tr('TUUUU', 'HOOONK'), Colors.white, 15, -.08);
     if (e >= 3.2 && e < 6.5) grito(boquilla.dx + 26, boquilla.dy - 30 + 3 * sin(t * 9), 'FLUUUSH', const Color(0xFF8FD3F5), 16, .08);
+    // Tocado: corneta (y el brinquito va en _posCamion).
+    if (_reaccion('camion', t, .9) case final v?) grito(cabina - 24, arriba - 40 - 22 * v, tr('PIIIIII', 'HOOOONK'), acento, 18, -.1);
+  }
+
+  // Dónde va el camión en t: la cola (x absoluta), el suelo bajo las ruedas y el segundo de su visita; null si no está.
+  ({double cola, double suelo, double e})? _posCamion(double cx, double t) {
+    final c = widget.bano.camion;
+    if (c == 0 || t < 10) return null;
+    final e = (t - 10) % 40;
+    if (e >= 9.5) return null;
+    const parado = -75.0;
+    final fuera = -cx - 5;
+    final double x;
+    if (e < 2.5) {
+      x = fuera + (parado - fuera) * Curves.easeOut.transform(e / 2.5);
+    } else if (e < 7) {
+      x = parado + .6 * sin(t * 40);
+    } else {
+      x = parado + (fuera - parado) * Curves.easeIn.transform((e - 7) / 2.5);
+    }
+    final piso = _lugar.camion;
+    var suelo = c >= 9 ? piso - 46 + 3 * sin(t * 3) : piso;
+    if (_reaccion('camion', t, .45) case final v?) suelo -= 9 * sin(pi * v);
+    return (cola: cx + x, suelo: suelo, e: e);
+  }
+
+  // Lo que ocupa el camión (cabina y cisterna) en t, para tocarlo.
+  Rect? _cajaCamion(double cx, double t) {
+    final q = _posCamion(cx, t);
+    if (q == null) return null;
+    final c = widget.bano.camion;
+    final s = c >= 4 ? 1.2 : 1.0;
+    final largo = (c >= 7 ? 110 : 76) * s;
+    return Rect.fromLTRB(q.cola - largo - 34 * s, q.suelo - 50 * s, q.cola, q.suelo + 4);
   }
 
   // Criadero de moscas: vuelan en una franja encima del tanque con senos sumados (parece al azar y no da vueltas en
@@ -961,7 +1196,7 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
       );
 
   // Cada 2 min (la primera a los 8 s) aparece la taza encima de la poceta y le echa un chorro de café.
-  // El chorrito de la poceta japonesa (cada 7 s, dura 1,6 s) y el de la manguerita a presión (cada 11 s, 0,9 s).
+  // El chorrito de la poceta japonesa (cada 7 s, dura 1,6 s) y la fuentecita del bidet a presión (cada 11 s, 0,9 s).
   void _chorritos(List<Widget> hijos, double cx, double t) {
     final b = widget.bano;
     final boca = Offset(cx + _boca.dx, _cy + _boca.dy);
@@ -975,9 +1210,9 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
     if (b.bidet >= 2) {
       final e = (t - 5) % 11;
       if (t >= 5 && e < .9) {
-        final d = Offset(cx + Bano.boquilla.dx, Bano.boquilla.dy);
-        hijos.add(Positioned.fill(
-            child: IgnorePointer(child: CustomPaint(painter: _Agua(d, d + const Offset(-34, 44), 10, e / .9, gotas: true)))));
+        final l = _lugar;
+        final d = Bano.chorroBidet(l) + Offset(cx, 0);
+        hijos.add(Positioned.fill(child: IgnorePointer(child: CustomPaint(painter: _Agua(d, d + const Offset(8, 0), Bano.altoChorro(l, b, 30 * l.escalaBidet), e / .9)))));
       }
     }
   }
@@ -1018,8 +1253,8 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
   }
 }
 
-/// Agua del bidet: el chorrito de la poceta japonesa (un arco que sube y cae en la taza) o el chorro de la
-/// manguerita (gotas que salen en abanico). [f] va de 0 a 1 en lo que dura.
+/// Agua del bidet: el chorrito de la poceta japonesa o la fuentecita del bidet (un arco que sube y cae), o el
+/// rociado de gotas del chorro que te da en la cara. [f] va de 0 a 1 en lo que dura.
 class _Agua extends CustomPainter {
   _Agua(this.desde, this.hasta, this.alto, this.f, {this.gotas = false});
 
@@ -1402,7 +1637,7 @@ class _PintorSuelo extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final e = estado;
-    final w = size.width, cx = w / 2;
+    final w = size.width;
     if (e.cloaca > 0) {
       canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFF1A1714));
       final junta = Paint()
@@ -1416,33 +1651,7 @@ class _PintorSuelo extends CustomPainter {
         }
       }
     } else {
-      // Mismas baldosas: fuga en -260 y filas que crecen ~25% cada una (la última de la escena mide 24).
-      const h = Bano.alto, fuga = -260.0;
-      final marmol = e.lujo('est_piso');
-      final a = marmol ? const Color(0xFFF3EFE6) : (e.ceramica ? const Color(0xFFE4E7EA) : const Color(0xFFB4A88F));
-      final b = marmol ? const Color(0xFFD9D3C7) : (e.ceramica ? const Color(0xFFB7C0C8) : const Color(0xFF8A7F69));
-      double xEn(double xb, double y) => cx + (xb - cx) * (y + h - fuga) / (h - fuga);
-      final pincel = Paint()..isAntiAlias = false;
-      var y0 = 0.0, alto = 30.0;
-      for (var f = 0; y0 < size.height; f++) {
-        final y1 = y0 + alto;
-        final n = (w / 2 / 46 * (h - fuga) / (y0 + h - fuga)).ceil() + 1;
-        for (var c = -n; c < n; c++) {
-          final xb0 = cx + c * 46.0, xb1 = xb0 + 46;
-          // Es la fila 6 de la escena en adelante (par): alterna igual que si siguiera.
-          pincel.color = (c + f).isEven ? a : b;
-          canvas.drawPath(
-              Path()
-                ..moveTo(xEn(xb0, y0), y0)
-                ..lineTo(xEn(xb1, y0), y0)
-                ..lineTo(xEn(xb1, y1), y1)
-                ..lineTo(xEn(xb0, y1), y1)
-                ..close(),
-              pincel);
-        }
-        y0 = y1;
-        alto *= 1.25;
-      }
+      pintarPisoDeMas(canvas, size, e);
     }
     final tinte = switch (e.ambiente) {
       AmbienteBano.volcan => const Color(0xFFFF5A1F).withValues(alpha: .10),

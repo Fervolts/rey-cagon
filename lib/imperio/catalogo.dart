@@ -422,10 +422,16 @@ class Logro {
   /// Se cumple con el estado y el MJ/s sin efectos temporales.
   final bool Function(Partida p, double mps) condicion;
 
-  const Logro(this.id, this.nombreEs, this.nombreEn, this.descEs, this.descEn, this.condicion);
+  /// Escondido: en la vitrina no sale (ni nombre ni cómo se gana) hasta ganarlo; solo cuenta en "+N secretos".
+  final bool oculto;
+
+  const Logro(this.id, this.nombreEs, this.nombreEn, this.descEs, this.descEn, this.condicion, {this.oculto = false});
 }
 
-/// Los 40 logros: 20 de la fase 1, 4 de la cadena, el de la racha y 15 de la fase 2.
+/// Veces que se tocó una cosa del baño ([Partida.toques]).
+int _toques(Partida p, String id) => p.toques[id] ?? 0;
+
+/// Los 46 logros: 20 de la fase 1, 4 de la cadena, el de la racha, 15 de la fase 2 y 6 escondidos del baño.
 final List<Logro> logros = [
   Logro('primer_pujo', 'Primer pujo', 'First push', '1 pujo', '1 push', (p, _) => p.pujos >= 1),
   Logro('calentando', 'Calentando', 'Warming up', '100 pujos', '100 pushes', (p, _) => p.pujos >= 100),
@@ -478,7 +484,25 @@ final List<Logro> logros = [
   Logro('erupcion', 'Erupción mañanera', 'Morning eruption', '1 Volcán digestivo', '1 Digestive volcano', (p, _) => _n(p, 'volcan') >= 1),
   Logro('se_lo_trago', 'Se lo tragó todo', 'Swallowed it all', '1 Agujero negro intestinal', '1 Intestinal black hole',
       (p, _) => _n(p, 'agujero') >= 1),
+  // Escondidos: salen de tocar las cosas del baño (Poceta.alTocarObjeto). No se anuncian hasta ganarlos.
+  Logro('cucaracha_cazador', 'Cazacucarachas', 'Roach hunter', 'Espantar a la cucaracha 10 veces', 'Scare the roach away 10 times',
+      (p, _) => _toques(p, 'cucaracha') >= 10, oculto: true),
+  Logro('bidet_en_la_cara', 'Me mojó la cara', 'Right in the face', 'Que el bidet te eche el chorro en la cara', 'Get squirted in the face by the bidet',
+      (p, _) => _toques(p, 'bidet') >= 5, oculto: true),
+  Logro('bombillo_quemado', 'Se fue la luz', 'Power outage', 'Tocar el bombillo 20 veces', 'Tap the light bulb 20 times',
+      (p, _) => _toques(p, 'bombillo') >= 20, oculto: true),
+  Logro('corneta_camion', 'Pi pi, camionero', 'Honk honk', 'Tocarle la corneta al camión 5 veces', "Honk the truck's horn 5 times",
+      (p, _) => _toques(p, 'camion') >= 5, oculto: true),
+  Logro('arepa_voladora', 'Arepa voladora', 'Flying arepa', 'Voltear la arepa 12 veces', 'Flip the arepa 12 times',
+      (p, _) => _toques(p, 'arepa') >= 12, oculto: true),
+  Logro('metiche', 'Metiche', 'Nosy', 'Tocar 6 cosas distintas del baño', 'Touch 6 different things in the bathroom',
+      (p, _) => p.toques.length >= 6, oculto: true),
 ];
+
+/// Las cosas del baño que cuentan para [Partida.toques] (lo demás que llegue se ignora).
+const Set<String> objetosTocables = {
+  'bidet', 'tobo', 'bombillo', 'espejo', 'lavamanos', 'reactor', 'ventana', 'matica', 'arepa', 'banera', 'papel', 'cucaracha', 'camion',
+};
 
 /// Ids de los alquilables (logro Cliente fijo).
 final List<String> _alquilables = [for (final o in objetos) if (o.tipo == TipoObjeto.alquilable) o.id];
