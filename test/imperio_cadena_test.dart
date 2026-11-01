@@ -47,7 +47,7 @@ Future<void> _montar(WidgetTester tester, Widget hijo) async {
 
 Widget _barra(BotonJalar b) => Align(
       alignment: Alignment.bottomCenter,
-      child: BarraImperio(jalar: b, moneda: 'MjBs', alObjetos: () {}, alJalar: () {}, alSala: () {}),
+      child: BarraImperio(jalar: b, moneda: 'MjBs', alObjetos: () {}, alJalar: () {}, alSala: () {}, alEdificios: () {}),
     );
 
 void main() {
@@ -180,8 +180,9 @@ void main() {
       expect(find.byKey(const Key('boton_jalar')), findsNothing);
       expect(find.text('TIENDA'), findsOneWidget);
       expect(find.text('SALA'), findsOneWidget);
-      // Dos botones: cada uno ocupa la mitad.
-      expect(tester.getSize(find.ancestor(of: find.text('TIENDA'), matching: find.byType(Expanded))).width, closeTo(147, 1));
+      // Tres botones (EDIFICIOS, TIENDA, SALA): cada uno ocupa un tercio.
+      expect(tester.getSize(find.ancestor(of: find.text('TIENDA'), matching: find.byType(Expanded))).width, closeTo(100, 1));
+      expect(find.text('EDIFICIOS'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

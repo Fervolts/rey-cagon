@@ -393,7 +393,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                   _cabecera(context, ahora),
                   if (_c.sinConexion) _sinConexion(context),
                   Expanded(child: _zona(context, ahora)),
-                  _botonesAbajo(context),
+                  _botonesAbajo(context, ahora),
                 ],
               ),
               if (dorado != null)
@@ -450,11 +450,10 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     return n;
   }
 
-  // El baño a todo el alto, la pestaña del cajón en el borde izquierdo y el cajón encima.
+  // El baño a todo el alto y el cajón encima. El cajón se abre con EDIFICIOS en la barra de abajo o arrastrando desde el borde.
   Widget _zona(BuildContext context, int ahora) {
     return LayoutBuilder(builder: (context, zona) {
       _anchoCajon = max(zona.maxWidth, 1);
-      const altoPestana = 132.0;
       return Stack(
         children: [
           Positioned.fill(child: KeyedSubtree(key: _llavePoceta, child: _poceta(ahora))),
@@ -470,7 +469,6 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
               onHorizontalDragEnd: _soltarCajon,
             ),
           ),
-          Positioned(left: 0, top: max(0, (zona.maxHeight - altoPestana) / 2), height: altoPestana, child: _pestanaCajon(context, ahora)),
           AnimatedBuilder(
             animation: _cajon,
             builder: (context, hijo) => Positioned.fill(
@@ -484,57 +482,6 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
         ],
       );
     });
-  }
-
-  Widget _pestanaCajon(BuildContext context, int ahora) {
-    final p = paleta(context);
-    final atasco = _c.imperio.atasco != null;
-    final n = _comprables(ahora);
-    final aviso = atasco || n > 0;
-    return Semantics(
-      button: true,
-      label: tr('Abrir edificios', 'Open buildings'),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => _abrirCajon(true),
-        onHorizontalDragUpdate: _arrastrarCajon,
-        onHorizontalDragEnd: _soltarCajon,
-        child: Container(
-          width: 30,
-          decoration: BoxDecoration(
-            color: p.tarjeta,
-            border: Border(top: BorderSide(color: p.primario), right: BorderSide(color: p.primario), bottom: BorderSide(color: p.primario)),
-            borderRadius: const BorderRadius.horizontal(right: Radius.circular(radio)),
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Column(
-            children: [
-              // Con atasco, el desatascador avisa que hay que entrar a destapar.
-              Emoji(atasco ? '🪠' : '🏗️', tamano: 18),
-              const SizedBox(height: 4),
-              Expanded(
-                child: RotatedBox(
-                  quarterTurns: 1,
-                  child: Center(
-                    child: Text(tr('EDIFICIOS', 'BUILDINGS'),
-                        maxLines: 1, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 1.2, color: p.texto)),
-                  ),
-                ),
-              ),
-              if (aviso)
-                Container(
-                  constraints: const BoxConstraints(minWidth: 18),
-                  height: 16,
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  decoration: BoxDecoration(color: p.primario, borderRadius: BorderRadius.circular(radio)),
-                  alignment: Alignment.center,
-                  child: Text(atasco ? '!' : (n > 99 ? '99+' : '$n'), style: numeros(context, tamano: 10, weight: FontWeight.w900, color: p.sobrePrimario)),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   Widget _panelCajon(BuildContext context, int ahora) {
@@ -1119,10 +1066,17 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
         apagada: apagada,
       );
 
-  Widget _botonesAbajo(BuildContext context) {
+  Widget _botonesAbajo(BuildContext context, int ahora) {
     final jalar = botonJalar(_c.imperio, _c.cadena);
     final moneda = monedaActual().abreviatura;
+    final atasco = _c.imperio.atasco != null;
+    final n = _comprables(ahora);
     return BarraImperio(
+      // Abre o cierra el cajón.
+      alEdificios: () => _abrirCajon(_cajon.value < 0.5),
+      // Con atasco, el desatascador avisa que hay que entrar a destapar.
+      atasco: atasco,
+      avisoEdificios: atasco ? '!' : (n > 0 ? (n > 99 ? '99+' : '$n') : null),
       jalar: jalar,
       moneda: moneda,
       alObjetos: () => _abrirObjetos(context),

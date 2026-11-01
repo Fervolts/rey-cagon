@@ -5,8 +5,9 @@ import '../idioma.dart';
 import '../tema.dart';
 import 'cadena.dart';
 
-/// Barra de abajo del Imperio: OBJETOS, JALAR (solo si [jalar] es visible) y SALA.
+/// Barra de abajo del Imperio: EDIFICIOS, TIENDA, JALAR (solo si [jalar] es visible) y SALA. Baja, para no tapar el baño.
 /// JALAR no sale hasta comprar La cadena del trono; después de la primera jalada sale para siempre. Sin hueco.
+/// EDIFICIOS abre el cajón; [avisoEdificios] va en la esquina (cuántos se pueden comprar o '!' con atasco).
 class BarraImperio extends StatelessWidget {
   const BarraImperio({
     super.key,
@@ -15,6 +16,9 @@ class BarraImperio extends StatelessWidget {
     required this.alObjetos,
     required this.alJalar,
     required this.alSala,
+    required this.alEdificios,
+    this.avisoEdificios,
+    this.atasco = false,
   });
 
   final BotonJalar jalar;
@@ -22,11 +26,17 @@ class BarraImperio extends StatelessWidget {
   final VoidCallback alObjetos;
   final VoidCallback alJalar;
   final VoidCallback alSala;
+  final VoidCallback alEdificios;
+  final String? avisoEdificios;
+
+  /// Con atasco el botón de edificios muestra el desatascador.
+  final bool atasco;
 
   @override
   Widget build(BuildContext context) {
     final p = paleta(context);
-    Widget boton(String emoji, String texto, VoidCallback? alTocar, {String? nota, bool apagado = false, bool resaltado = false, bool rollo = false, Key? key}) =>
+    Widget boton(String emoji, String texto, VoidCallback? alTocar,
+            {String? nota, String? aviso, bool apagado = false, bool resaltado = false, bool rollo = false, Key? key}) =>
         Expanded(
           key: key,
           child: GestureDetector(
@@ -34,19 +44,22 @@ class BarraImperio extends StatelessWidget {
             child: Opacity(
               opacity: alTocar == null || apagado ? 0.45 : 1,
               child: Container(
-                height: 64,
-                margin: const EdgeInsets.symmetric(horizontal: 3),
+                height: 50,
+                margin: const EdgeInsets.symmetric(horizontal: 2),
                 decoration: BoxDecoration(
                   color: p.tarjeta,
                   border: Border.all(color: resaltado ? p.primario : p.borde),
                   borderRadius: BorderRadius.circular(radio),
                 ),
-                child: Column(
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Emoji(emoji, tamano: nota == null ? 24 : 20),
+                    Emoji(emoji, tamano: nota == null ? 18 : 15),
                     if (nota == null) const SizedBox(height: 2),
-                    Text(texto, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11, letterSpacing: 0.6, color: p.texto)),
+                    Text(texto, maxLines: 1, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 10, letterSpacing: 0.5, color: p.texto)),
                     if (nota != null)
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -62,15 +75,33 @@ class BarraImperio extends StatelessWidget {
                         ),
                       ),
                   ],
+                      ),
+                    ),
+                    if (aviso != null)
+                      Positioned(
+                        top: 3,
+                        right: 3,
+                        child: Container(
+                          constraints: const BoxConstraints(minWidth: 16),
+                          height: 15,
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          decoration: BoxDecoration(color: p.primario, borderRadius: BorderRadius.circular(radio)),
+                          alignment: Alignment.center,
+                          child: Text(aviso, style: numeros(context, tamano: 9, weight: FontWeight.w900, color: p.sobrePrimario)),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
           ),
         );
     return Padding(
-      padding: const EdgeInsets.fromLTRB(13, 4, 13, 10),
+      padding: const EdgeInsets.fromLTRB(10, 4, 10, 6),
       child: Row(
         children: [
+          boton(atasco ? '🪠' : '🏗️', tr('EDIFICIOS', 'BUILDINGS'), alEdificios,
+              key: const Key('boton_edificios'), aviso: avisoEdificios, resaltado: atasco),
           boton('🛒', tr('TIENDA', 'SHOP'), alObjetos),
           if (jalar.visible)
             boton('🚽', tr('JALAR', 'FLUSH'), alJalar,
