@@ -34,7 +34,7 @@ const List<Edificio> edificios = [
   Edificio('ciruela', '🫐', 'Ciruela pasa', 'Prune', 'Lo natural', 'All natural', 100, 1, 0),
   Edificio('cafe', '☕', 'Café negro', 'Black coffee', 'El de las 7 am', 'The 7 a.m. one', 1100, 8, 0),
   Edificio('arepa', '🫓', 'Arepa con caraotas', 'Arepa with beans', 'Combustible nacional', 'National fuel', 12000, 47, 0),
-  Edificio('inodoro', '🚽', 'Inodoro extra', 'Spare toilet', 'Ya no hay cola', 'No more waiting in line', 130000, 260, 3),
+  Edificio('inodoro', '💦', 'Bidet', 'Bidet', 'Agua a presión, cero papel', 'Water pressure, zero paper', 130000, 260, 3),
   Edificio('bano', '🚻', 'Baño público', 'Public restroom', 'Producción masiva', 'Mass production', 1.4e6, 1400, 5),
   Edificio('camion', '🚛', 'Camión vacuum', 'Vacuum truck', 'Recolección a domicilio', 'Home pickup service', 20e6, 7800, 10),
   Edificio('planta', '🏭', 'Planta de tratamiento', 'Treatment plant', 'Industria seria', 'Serious industry', 330e6, 44000, 10),
@@ -113,7 +113,7 @@ const Map<String, List<(String, String)>> _nombresMejoraEdificio = {
   ],
   'inodoro': [
     ('Tapa acolchada', 'Padded lid'), ('Asiento caliente', 'Heated seat'), ('Descarga doble', 'Dual flush'),
-    ('Bidet', 'Bidet'), ('Inodoro con wifi', 'Wi-Fi toilet'), ('Trono de mármol', 'Marble throne'),
+    ('Chorro a presión', 'Power spray'), ('Inodoro con wifi', 'Wi-Fi toilet'), ('Trono de mármol', 'Marble throne'),
     ('Inodoro japonés', 'Japanese smart toilet'), ('Inodoro de oro', 'Solid gold toilet'),
   ],
   'bano': [
@@ -332,7 +332,7 @@ final List<Logro> logros = [
   Logro('mojonario', 'Mojonario', 'Poopillionaire', '1 B ganados en total', '1 B earned in total', (p, _) => p.mjTotal >= 1e9),
   Logro('primer_guayoyo', 'Primer guayoyo', 'First cup', '1 Café negro', '1 Black coffee', (p, _) => _n(p, 'cafe') >= 1),
   Logro('cafeina', 'Cafeína pura', 'Pure caffeine', '50 Cafés negros', '50 Black coffees', (p, _) => _n(p, 'cafe') >= 50),
-  Logro('segundo_trono', 'Mi segundo trono', 'My second throne', '1 Inodoro extra', '1 Spare toilet', (p, _) => _n(p, 'inodoro') >= 1),
+  Logro('segundo_trono', 'Culito lavado', 'Squeaky clean', '1 Bidet', '1 Bidet', (p, _) => _n(p, 'inodoro') >= 1),
   Logro('primer_oro', 'Primer oro', 'First gold', '1 mojón dorado', '1 golden poop', (p, _) => p.dorados >= 1),
   Logro('buscador_oro', 'Buscador de oro', 'Gold digger', '7 mojones dorados', '7 golden poops', (p, _) => p.dorados >= 7),
   Logro('plomero', 'Plomero', 'Plumber', '100 destapes', '100 unclogs', (p, _) => p.destapes >= 100),
@@ -383,7 +383,7 @@ class Candado {
 /// Candados que abre la fase 1, de menor a mayor.
 const List<Candado> candadosFase1 = [
   Candado(1, 'Fichas de cagada y Cagada fresca', 'Poop tokens and Fresh dump'),
-  Candado(3, 'Inodoro extra', 'Spare toilet'),
+  Candado(3, 'Bidet', 'Bidet'),
   Candado(5, 'Baño público y los consumibles', 'Public restroom and consumables'),
   Candado(10, 'Robot destapador, Camión vacuum y Planta de tratamiento', 'Plunger bot, Vacuum truck and Treatment plant'),
 ];

@@ -298,7 +298,9 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
       }
     }
 
-    // La poceta, sin tinte. El forro se dibuja encima, dentro del mismo temblor.
+    // La poceta, sin tinte (salvo la de oro). Las mejoras del bidet y el forro van encima, dentro del mismo temblor.
+    Widget taza = Image.asset('assets/emoji/toilet.png', width: _lado, height: _lado, filterQuality: FilterQuality.medium, gaplessPlayback: true);
+    if (b.pocetaOro) taza = ColorFiltered(colorFilter: ColorFilter.matrix(_tinte(ColorDedo.oro)!), child: taza);
     hijos.add(_en(
       cx,
       Offset(dx, dy),
@@ -308,7 +310,8 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
         child: Transform.scale(
           scale: escala,
           child: Stack(children: [
-            Image.asset('assets/emoji/toilet.png', width: _lado, height: _lado, filterQuality: FilterQuality.medium, gaplessPlayback: true),
+            taza,
+            Positioned.fill(child: CustomPaint(painter: PintorMejorasPoceta(b))),
             if (b.forro) const Positioned.fill(child: CustomPaint(painter: PintorForro())),
           ]),
         ),
@@ -327,6 +330,7 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
     if (vivo) {
       _ciruela(hijos, cx, t);
       _cafe(hijos, cx, t);
+      _chorritos(hijos, cx, t);
     }
 
     // Partículas de los toques.
@@ -538,6 +542,27 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
   }
 
   // Cada 2 min (la primera a los 8 s) aparece la taza encima de la poceta y le echa un chorro de café.
+  // El chorrito de la poceta japonesa (cada 7 s, dura 1,6 s) y el de la manguerita a presión (cada 11 s, 0,9 s).
+  void _chorritos(List<Widget> hijos, double cx, double t) {
+    final b = widget.bano;
+    final boca = Offset(cx + _boca.dx, _cy + _boca.dy);
+    if (b.japones) {
+      final e = (t - 3) % 7;
+      if (t >= 3 && e < 1.6) {
+        hijos.add(Positioned.fill(
+            child: IgnorePointer(child: CustomPaint(painter: _Agua(boca + const Offset(10, 2), boca + const Offset(-14, 2), 46, e / 1.6)))));
+      }
+    }
+    if (b.bidet >= 2) {
+      final e = (t - 5) % 11;
+      if (t >= 5 && e < .9) {
+        final d = Offset(cx + Bano.boquilla.dx, Bano.boquilla.dy);
+        hijos.add(Positioned.fill(
+            child: IgnorePointer(child: CustomPaint(painter: _Agua(d, d + const Offset(-34, 44), 10, e / .9, gotas: true)))));
+      }
+    }
+  }
+
   void _cafe(List<Widget> hijos, double cx, double t) {
     final b = widget.bano;
     if (b.cafe == 0 || t < 8) return;
@@ -572,6 +597,56 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
       child: Opacity(opacity: opacidad, child: Transform.rotate(angle: giro, child: w)),
     ));
   }
+}
+
+/// Agua del bidet: el chorrito de la poceta japonesa (un arco que sube y cae en la taza) o el chorro de la
+/// manguerita (gotas que salen en abanico). [f] va de 0 a 1 en lo que dura.
+class _Agua extends CustomPainter {
+  _Agua(this.desde, this.hasta, this.alto, this.f, {this.gotas = false});
+
+  final Offset desde, hasta;
+  final double alto, f;
+  final bool gotas;
+
+  static const _color = Color(0xD98FD3F5);
+
+  Offset _en(double u) {
+    final x = desde.dx + (hasta.dx - desde.dx) * u;
+    final y = desde.dy + (hasta.dy - desde.dy) * u - alto * 4 * u * (1 - u);
+    return Offset(x, y);
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final punta = Paint()..color = _color;
+    if (gotas) {
+      for (var k = 0; k < 6; k++) {
+        final u = (f * 1.4 - k * .08).clamp(0.0, 1.0);
+        if (u <= 0 || u >= 1) continue;
+        canvas.drawCircle(_en(u) + Offset(0, (k.isEven ? 2.0 : -2.0) * u), 2.2 - k * .2, punta);
+      }
+      return;
+    }
+    // Sube y baja de altura con f; la punta del arco lleva una gota.
+    final crece = sin(pi * f);
+    final camino = Path()..moveTo(desde.dx, desde.dy);
+    for (var i = 1; i <= 16; i++) {
+      final o = _en(i / 16);
+      camino.lineTo(o.dx, desde.dy + (o.dy - desde.dy) * crece);
+    }
+    canvas.drawPath(
+        camino,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.6
+          ..strokeCap = StrokeCap.round
+          ..color = _color);
+    final arriba = _en(.5);
+    canvas.drawCircle(Offset(arriba.dx, desde.dy + (arriba.dy - desde.dy) * crece - 3), 1.8, punta);
+  }
+
+  @override
+  bool shouldRepaint(_Agua old) => old.f != f || old.desde != desde;
 }
 
 /// El chorro de café de la taza a la poceta: una curva que cae, dibujada entre [u0] y [u1] (0 a 1).

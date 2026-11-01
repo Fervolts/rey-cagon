@@ -2,7 +2,7 @@
 // Pujo 5 veces por segundo, 3 sesiones de 10 min al día, 0,7 cagadas reales al día.
 // Compra lo que se paga más rápido (espera + recuperación). Las aserciones son flojas a propósito.
 // Con el Dedo que puja (+1 por pujo) el arranque va mucho más rápido que cuando daba 0,1 MJ/s: con semilla 7 el Café sale
-// al minuto y la Arepa poco después; el medio del juego lo siguen frenando los candados de cagadas (Inodoro día 5, Baño día 8).
+// al minuto y la Arepa poco después; el medio del juego lo siguen frenando los candados de cagadas (Bidet día 5, Baño día 8).
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -150,7 +150,7 @@ void main() {
       'Ciruela: ${_cuando(sim.primeros['ciruela'])}',
       'Café: ${_cuando(sim.primeros['cafe'])}',
       'Arepa: ${_cuando(sim.primeros['arepa'])}',
-      'Inodoro: ${_cuando(sim.primeros['inodoro'])}',
+      'Bidet: ${_cuando(sim.primeros['inodoro'])}',
       'Baño: ${_cuando(sim.primeros['bano'])}',
       'Camión: ${_cuando(sim.primeros['camion'])}',
       'Planta: ${_cuando(sim.primeros['planta'])}',

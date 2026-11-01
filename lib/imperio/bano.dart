@@ -1,8 +1,9 @@
 // El baño del Imperio: la escena alrededor de la poceta.
 //
 // Arranca destartalado (cerámica partida, mancha de humedad, bombillo pelado, periódico en un clavo, tobo con agua)
-// y cada adorno arregla algo que se ve. Los edificios ponen cosas que hacen algo (frasco de ciruelas, budare, poceta
-// extra) y el edificio más alto cambia el ambiente (baño público, camión por la ventana, tubos, cloaca, fase 2).
+// y cada adorno arregla algo que se ve. Los edificios ponen cosas que hacen algo (frasco de ciruelas, budare, la
+// manguerita del bidet) y el edificio más alto cambia el ambiente (baño público, camión por la ventana, tubos, cloaca,
+// fase 2). Las mejoras del bidet arreglan la poceta misma (tapa, botones, mármol, chorrito japonés, oro).
 //
 // [EstadoBano] es puro: sale de las mejoras y los edificios, y se compara por valor. [FondoBano] dibuja lo que no se
 // mueve (un CustomPainter y unos pocos emojis quietos) y solo se repinta cuando cambia el estado, no en cada tick.
@@ -65,7 +66,14 @@ class EstadoBano {
     this.cafe = 0,
     this.arepa = 0,
     this.arepaBrillo = false,
-    this.inodoro = 0,
+    this.bidet = 0,
+    this.tapaAcolchada = false,
+    this.asientoCaliente = false,
+    this.descargaDoble = false,
+    this.wifi = false,
+    this.marmol = false,
+    this.japones = false,
+    this.pocetaOro = false,
     this.ambiente = AmbienteBano.casa,
   });
 
@@ -115,7 +123,15 @@ class EstadoBano {
       cafe: cantidad('cafe') == 0 ? 0 : 1 + nivel('cafe'),
       arepa: cantidad('arepa') == 0 ? 0 : 1 + (comprada('arepa_10') ? 1 : 0) + (comprada('arepa_50') ? 1 : 0),
       arepaBrillo: comprada('arepa_200'),
-      inodoro: cantidad('inodoro') == 0 ? 0 : (comprada('inodoro_200') ? 2 : 1),
+      // El edificio 'inodoro' es el bidet (el id no cambia: las partidas guardadas lo usan).
+      bidet: cantidad('inodoro') == 0 ? 0 : (comprada('inodoro_25') ? 2 : 1),
+      tapaAcolchada: comprada('inodoro_1'),
+      asientoCaliente: comprada('inodoro_5'),
+      descargaDoble: comprada('inodoro_10'),
+      wifi: comprada('inodoro_50'),
+      marmol: comprada('inodoro_100'),
+      japones: comprada('inodoro_150'),
+      pocetaOro: comprada('inodoro_200'),
       ambiente: ambiente,
     );
   }
@@ -144,8 +160,11 @@ class EstadoBano {
   final int arepa;
   final bool arepaBrillo;
 
-  /// Poceta extra al fondo: 0 nada, 1 normal, 2 de oro.
-  final int inodoro;
+  /// Bidet: 0 nada, 1 manguerita colgada junto a la poceta, 2 a presión (echa su chorro cada tanto).
+  final int bidet;
+
+  /// Mejoras del bidet, dibujadas sobre la poceta principal.
+  final bool tapaAcolchada, asientoCaliente, descargaDoble, wifi, marmol, japones, pocetaOro;
   final AmbienteBano ambiente;
 
   /// Lo que lleva la taza del chorro de café.
@@ -153,7 +172,8 @@ class EstadoBano {
 
   Object get _clave => (
         bombillo, papel, forro, alfombra, cortina, matica, ceramica, pintura, tanque, valvula, iman, brillo, lavanda,
-        colorDedo, formaDedo, adornoDedo, ciruela, ciruelaVerde, ciruelaNuclear, cafe, arepa, arepaBrillo, inodoro, ambiente,
+        colorDedo, formaDedo, adornoDedo, ciruela, ciruelaVerde, ciruelaNuclear, cafe, arepa, arepaBrillo, bidet,
+        tapaAcolchada, asientoCaliente, descargaDoble, wifi, marmol, japones, pocetaOro, ambiente,
       );
 
   @override
@@ -178,7 +198,8 @@ abstract final class Bano {
   static const papel = Offset(74, 140);
   static const tobo = Offset(88, 236);
   static const matica = Offset(160, 246);
-  static const inodoro = Offset(108, 162);
+  static const manguera = Offset(114, 116); // el gancho de la manguerita del bidet
+  static const boquilla = Offset(110, 146); // por donde sale el chorro
   static const letrero = Offset(108, 100);
   static const budare = Offset(-128, 258);
   static const rejilla = Offset(-58, 266);
@@ -214,17 +235,6 @@ class FondoBano extends StatelessWidget {
         if (e.matica) en(Bano.matica, 40, const Emoji('🪴', tamano: 40)),
         if (e.lavanda) en(Bano.lavanda, 20, const Emoji('🪻', tamano: 20)),
         ..._repisa(e, en),
-        if (e.inodoro > 0)
-          en(
-            Bano.inodoro,
-            44,
-            Image.asset('assets/emoji/toilet.png',
-                width: 44,
-                height: 44,
-                filterQuality: FilterQuality.medium,
-                color: e.inodoro == 2 ? const Color(0xFFF2C230).withValues(alpha: .6) : null,
-                colorBlendMode: BlendMode.srcATop),
-          ),
         if (_letrero(e) case final l?) en(Bano.letrero, 26, Emoji(l, tamano: 26)),
       ];
       return Stack(clipBehavior: Clip.hardEdge, children: hijos);
@@ -320,6 +330,7 @@ class PintorBano extends CustomPainter {
     if (e.alfombra) _alfombra(canvas, cx);
     _cortina(canvas, size, cx);
     if (e.arepa > 0) _budare(canvas, cx);
+    if (e.bidet > 0) _manguera(canvas, cx);
     if (e.ambiente == AmbienteBano.cloaca) _rejilla(canvas, cx);
     if (e.ambiente == AmbienteBano.publico) {
       // Placa del letrero damas/caballeros.
@@ -692,6 +703,30 @@ class PintorBano extends CustomPainter {
     }
   }
 
+  // Bidet: la manguerita colgada de su gancho en la pared, con la manguera que baja a la poceta.
+  void _manguera(Canvas canvas, double cx) {
+    final g = Offset(cx + Bano.manguera.dx, Bano.manguera.dy);
+    final cromo = Paint()..color = const Color(0xFFC9D1D8);
+    final sombra = Paint()..color = const Color(0xFF7F8A93);
+    canvas.drawPath(
+        Path()
+          ..moveTo(g.dx - 1, g.dy + 30)
+          ..cubicTo(g.dx - 2, g.dy + 62, g.dx - 40, g.dy + 56, g.dx - 52, g.dy + 84),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3
+          ..strokeCap = StrokeCap.round
+          ..color = const Color(0xFFA9B2BA));
+    canvas.drawRect(Rect.fromLTRB(g.dx - 6, g.dy - 3, g.dx + 6, g.dy + 3), sombra); // gancho
+    canvas.save();
+    canvas.translate(g.dx, g.dy + 2);
+    canvas.rotate(.18);
+    canvas.drawRRect(RRect.fromLTRBR(-3, 0, 3, 26, const Radius.circular(2)), cromo); // mango
+    canvas.drawRRect(RRect.fromLTRBR(-6, 24, 4, 33, const Radius.circular(3)), cromo); // cabeza
+    canvas.drawRect(const Rect.fromLTRB(-5, 31, 3, 33), sombra);
+    canvas.restore();
+  }
+
   void _repisa(Canvas canvas, double cx) {
     final r = Bano.repisa.shift(Offset(cx, 0));
     final madera = Paint()..color = const Color(0xFF8A6A48);
@@ -880,6 +915,93 @@ class PintorForro extends CustomPainter {
         canvas.drawCircle(Offset(x, r.top + 1), 1.8, tela);
         canvas.drawCircle(Offset(x + 2, r.bottom - 1), 1.8, tela);
         canvas.drawCircle(Offset(x + 1, r.center.dy + ((x ~/ 4.5).isEven ? -1.5 : 1.5)), 1, pelo);
+      }
+    }
+  }
+}
+
+/// Las mejoras del bidet sobre la poceta principal, en el mismo cuadro que toilet.png (vista de lado: la taza a la
+/// izquierda, el tanque a la derecha). La tapa acolchada no se pinta si hay forro: el forro va encima.
+class PintorMejorasPoceta extends CustomPainter {
+  const PintorMejorasPoceta(this.estado);
+
+  final EstadoBano estado;
+
+  @override
+  bool shouldRepaint(PintorMejorasPoceta old) => old.estado != estado;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final l = size.width;
+    final e = estado;
+    Offset p(double x, double y) => Offset(l * x, l * y);
+    if (e.marmol && !e.pocetaOro) {
+      final veta = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.1
+        ..strokeCap = StrokeCap.round
+        ..color = const Color(0x667A7F8C);
+      for (final v in const [
+        [.20, .60, .30, .66, .27, .74, .38, .80],
+        [.42, .58, .47, .65, .55, .66, .57, .74],
+        [.68, .16, .72, .24, .70, .30, .76, .38],
+        [.80, .20, .78, .28, .83, .34, .81, .42],
+      ]) {
+        canvas.drawPath(
+            Path()
+              ..moveTo(l * v[0], l * v[1])
+              ..cubicTo(l * v[2], l * v[3], l * v[4], l * v[5], l * v[6], l * v[7]),
+            veta);
+      }
+    }
+    if (e.tapaAcolchada && !e.forro) {
+      final r = Rect.fromLTRB(l * .08, l * .44, l * .63, l * .52);
+      canvas.drawRRect(RRect.fromRectAndRadius(r, Radius.circular(r.height / 2)), Paint()..color = const Color(0xFFB8D4EC));
+      final costura = Paint()
+        ..strokeWidth = 1
+        ..color = const Color(0xFF86A9C9);
+      for (var x = r.left + 8; x < r.right - 6; x += 7) {
+        canvas.drawLine(Offset(x, r.center.dy), Offset(x + 3, r.center.dy), costura);
+      }
+    }
+    if (e.asientoCaliente) {
+      final calor = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.6
+        ..strokeCap = StrokeCap.round
+        ..color = const Color(0xCCE8552E);
+      for (final x in const [.18, .32, .46]) {
+        canvas.drawPath(
+            Path()
+              ..moveTo(l * x, l * .42)
+              ..cubicTo(l * (x - .03), l * .39, l * (x + .03), l * .36, l * x, l * .32),
+            calor);
+      }
+    }
+    if (e.descargaDoble) {
+      for (final x in const [.70, .80]) {
+        canvas.drawCircle(p(x, .045), l * .032, Paint()..color = const Color(0xFF8E979F));
+        canvas.drawCircle(p(x, .04), l * .024, Paint()..color = const Color(0xFFDCE2E7));
+      }
+    }
+    if (e.wifi) {
+      final ondas = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.6
+        ..strokeCap = StrokeCap.round
+        ..color = const Color(0xFF3B82C4);
+      final c = p(.755, .30);
+      canvas.drawCircle(c, 1.6, Paint()..color = ondas.color);
+      for (final r in const [5.0, 9.0, 13.0]) {
+        canvas.drawArc(Rect.fromCircle(center: c, radius: r), -pi * .75, pi * .5, false, ondas);
+      }
+    }
+    if (e.japones) {
+      final panel = Rect.fromLTRB(l * .55, l * .53, l * .67, l * .60);
+      canvas.drawRect(panel, Paint()..color = const Color(0xFF2B2F36));
+      const luces = [Color(0xFF4FC3F7), Color(0xFFFFD60A), Color(0xFFEF5350)];
+      for (var i = 0; i < luces.length; i++) {
+        canvas.drawCircle(Offset(panel.left + panel.width * (i + 1) / 4, panel.center.dy), 1.6, Paint()..color = luces[i]);
       }
     }
   }

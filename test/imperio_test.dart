@@ -407,7 +407,7 @@ void main() {
   });
 
   group('candados', () {
-    test('sin cagadas no se compra el Inodoro extra; con 3 sí', () {
+    test('sin cagadas no se compra el Bidet; con 3 sí', () {
       final imp = Imperio(partida: Partida(saldo: 1e6, mjTotal: 1e6));
       expect(imp.edificioAbierto('inodoro'), isFalse);
       expect(imp.comprarEdificio('inodoro', t0), isFalse);
