@@ -68,6 +68,8 @@ String trServidor(String mensaje) {
   if (fijo != null) return fijo;
   final espera = RegExp(r'^Calma, (?:rey|reina): solo una por hora\. Espera (\d+) min más\.$').firstMatch(mensaje);
   if (espera != null) return 'Easy, your majesty: one per hour. Wait ${espera[1]} more min.';
+  final tapada = RegExp(r'^Se tapó la poceta, (?:rey|reina): de tanto cagar y deshacer ya no baja nada\. Vuelve en (\d+) min\.$').firstMatch(mensaje);
+  if (tapada != null) return 'The toilet is clogged, your majesty: all that pooping and undoing jammed it. Come back in ${tapada[1]} min.';
   final genero = RegExp(r'^Solo puedes cambiar el género una vez al año\. Próximo cambio: (.+)$').firstMatch(mensaje);
   if (genero != null) return 'You can only change your gender once a year. Next change: ${genero[1]}';
   final link = RegExp(r'^Link bloqueado: no se permiten (.+)$').firstMatch(mensaje);

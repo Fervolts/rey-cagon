@@ -47,3 +47,9 @@ Repo público: nada de refs de proyecto, keys, correos ni usernames reales en c�
 
 Tablas: `profiles` (total en `cagadas`, `placer_desbloqueado`, accesorios), `cagadas` (`tipo`, `peso`, `placer`, `etiquetas`), `follows`, `mensajes`, `mensaje_reportes`, `bloqueos`, `push_tokens`, `desbloqueos`, avisos y retos. RPC: `leaderboard`, `ranking_placer`, `victorias`, `es_admin`. Triggers: `limitar_cagadas` (una por hora), `cagadas_contar`, `cagadas_racha` (tarjeta en el chat), `validar_desbloqueos`, `validar_secreto`.
 Edge Function `supabase/functions/notificaciones` manda los push (FCM v1).
+
+## Exploits
+
+- Todo nerf va en el servidor (trigger o RPC), nunca solo en la app.
+- Cagar y deshacer: `limitar_cagadas` + `cagadas_borradas`. Un deshacer rápido al día es gratis; desde el segundo cuenta la hora de la borrada; al tercero en 24 h (o dos en una hora) se tapa la poceta 3 h (`pocetas_tapadas`, hint `poceta_tapada`, logro secreto). `imperio_cargar` descuenta Fichas de cagadas cobradas y borradas.
+- Sospechas: tabla `sospechas` (la llenan triggers y el cron `detectar_exploits`), se ven en el panel (`panel_sospechas`). Consultas a mano en `supabase/consultas/exploits.sql`. Para un exploit nuevo: consulta ahí, chequeo en `detectar_exploits()` con un tipo nuevo, nerf en el servidor.

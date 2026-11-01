@@ -125,6 +125,9 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   /// Cofre del Trono de esta semana (RPC `imperio_cofre`). null mientras no llega o sin la migración.
   EstadoCofre? cofre;
 
+  /// Producción que dio el último Cofre abierto (para mostrarla en la hoja del Cofre).
+  double premioCofreMj = 0;
+
   /// Sube cada vez que cae una Ciruela 🫐 (pujo o cagada): la pantalla la hace volar al chip.
   final ValueNotifier<int> ciruelaCae = ValueNotifier(0);
 
@@ -656,6 +659,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     p.cofres += 1;
     p.semanasRacha = c.semanasRacha;
     final mj = imperio.aplicarPremioCofre(ahora);
+    premioCofreMj = mj;
     _sumarLogros(imperio.revisarLogros());
     _anotar('cofre_reclamar', {'dias': c.dias, 'fichas': c.fichasGanadas, 'ciruelas': c.ciruelasGanadas, 'semanas': c.semanasRacha, 'mj': mj});
     _fichasHechas();
@@ -869,7 +873,11 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       // _mps_edificios y _pujo: los lee la tarjeta de cartera del chat (el servidor no confía en los números del cliente).
       final estado = {...imperio.toJson(), '_mps_edificios': imperio.mpsSinEfectos(), '_pujo': imperio.valorPujo(ahora)};
       final r = await nube.guardar(estado, imperio.mjTotal, imperio.ritmoEfectivo(ahora));
-      if (r.recortado) aceptarRecorte(imperio.partida, r.mjTotal);
+      if (r.recortado) {
+        // Para cazar trampas (supabase/consultas/exploits.sql): cuánto dijo la app y cuánto aceptó el servidor.
+        _anotar('guardado_recortado', {'mj_app': imperio.mjTotal, 'mj_servidor': r.mjTotal});
+        aceptarRecorte(imperio.partida, r.mjTotal);
+      }
     } catch (_) {
       _error('guardar_nube');
       sinConexion = true;

@@ -20,6 +20,7 @@ import 'fresca.dart';
 import 'idioma.dart';
 import 'inodoro.dart';
 import 'invitar_play.dart';
+import 'logros.dart' show ganarLogro;
 import 'config.dart';
 import 'nuclear.dart';
 import 'onboarding.dart';
@@ -678,10 +679,57 @@ class _PantallaRankingState extends State<PantallaRanking> {
       if (mounted) await ofrecerPresumir(context, _misCagadas);
     } on PostgrestException catch (e) {
       // El trigger limitar_cagadas devuelve el mensaje listo para mostrar.
+      if (e.hint == 'poceta_tapada') return _pocetaTapada(trServidor(e.message));
       _mensaje(e.hint == 'limite_hora' ? trServidor(e.message) : 'Error: ${trServidor(e.message)}');
     } catch (e) {
       _mensaje(textoError(e));
     }
+  }
+
+  /// Después de deshacer: el primer deshacer rápido del día es el truquito gratis; desde el segundo, avisa
+  /// que la poceta se puede tapar (ver limitar_cagadas en la base).
+  Future<String> _textoDeshecho() async {
+    try {
+      final r = Map<String, dynamic>.from(await db.rpc('poceta_estado') as Map);
+      if (r['tapada_hasta'] != null) return tr('Deshecho. Uy... algo se trancó ahí abajo 🪠', 'Undone. Uh oh... something got stuck down there 🪠');
+      final n = (r['deshechas_24h'] as num?)?.toInt() ?? 0;
+      if (n == 1) return tr('Deshecho. Ese fue tu truquito del día 😏', "Undone. That was your trick of the day 😏");
+      if (n >= 2) return tr('Deshecho. Ojo: la poceta ya hace ruidos raros 🪠', 'Undone. Careful: the toilet is making weird noises 🪠');
+    } catch (_) {}
+    return tr('Deshecho', 'Undone');
+  }
+
+  /// Easter egg: de tanto cagar y deshacer se tapó la poceta. La primera vez gana el logro secreto.
+  Future<void> _pocetaTapada(String mensaje) async {
+    if (!mounted) return;
+    HapticFeedback.heavyImpact();
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(tr('¡SE TAPÓ LA POCETA!', 'THE TOILET IS CLOGGED!')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Emoji('🪠', tamano: 64),
+            const SizedBox(height: 12),
+            Text(mensaje, textAlign: TextAlign.center),
+            const SizedBox(height: 8),
+            Text(
+              tr('Un deshacer al día es truquito. Tres ya es plomería.', 'One undo a day is a trick. Three is plumbing.'),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: paleta(context).textoSuave, fontSize: 13),
+            ),
+          ],
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(tr('Voy a buscar el destapacaños', "I'll go get the plunger")),
+          ),
+        ],
+      ),
+    );
+    if (mounted) await ganarLogro(context, 'poceta_tapada');
   }
 
   Future<void> _deshacer() async {
@@ -695,7 +743,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
           .maybeSingle();
       if (ultima == null) return _mensaje(tr('No hay nada que deshacer', 'Nothing to undo'));
       await db.from('cagadas').delete().eq('id', ultima['id']);
-      _mensaje(tr('Deshecho', 'Undone'));
+      _mensaje(await _textoDeshecho());
       cargarFresca();
       await _cargar(spinner: false);
     } catch (e) {

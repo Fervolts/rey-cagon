@@ -126,6 +126,13 @@ List<LogroSecreto> get logrosSecretos => <LogroSecreto>[
         detalle: tr('Leíste 10 frases del trono', 'You read 10 throne lines'),
         ladoSecreto: false,
       ),
+      (
+        clave: 'poceta_tapada',
+        emoji: '🪠',
+        nombre: tr('Plomero de guardia', 'Plumber on call'),
+        detalle: tr('Cagaste y deshiciste tanto que se tapó la poceta', 'You pooped and undid so much the toilet clogged'),
+        ladoSecreto: false,
+      ),
     ];
 
 // SharedPreferences: los ganados en este teléfono (por si la tabla no existe o no hay red),

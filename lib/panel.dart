@@ -39,9 +39,11 @@ class _PantallaPanelState extends State<PantallaPanel> {
     _cargando = true;
     try {
       final r = await db.rpc('panel_admin', params: {'p_n': 50});
+      // Sospechas de exploits (supabase/consultas/exploits.sql). Si falla, el panel sale igual.
+      final sospechas = await db.rpc('panel_sospechas', params: {'p_n': 30}).catchError((_) => const []);
       if (mounted) {
         setState(() {
-          _datos = Map<String, dynamic>.from(r as Map);
+          _datos = {...Map<String, dynamic>.from(r as Map), 'sospechas': sospechas};
           _error = null;
         });
       }
@@ -118,6 +120,16 @@ class _PantallaPanelState extends State<PantallaPanel> {
                     ],
                   ),
                   const SizedBox(height: 20),
+                  Rotulo(tr('Sospechas de trampa', 'Cheat suspicions')),
+                  const SizedBox(height: 6),
+                  _Tabla(
+                    encabezado: [tr('Usuario', 'User'), tr('Tipo', 'Type'), tr('Cuándo', 'When')],
+                    filas: [
+                      for (final s in _lista(d['sospechas']))
+                        ['${s['usuario'] ?? '?'}', '${s['tipo']}', _fecha(s['creado'])],
+                    ],
+                  ),
+                  const SizedBox(height: 20),
                   Rotulo(tr('En vivo', 'Live')),
                   const SizedBox(height: 6),
                   _Tabla(
@@ -141,6 +153,13 @@ String _hora(Object? iso, {bool segundos = false}) {
   if (t == null) return '';
   String dos(int n) => n.toString().padLeft(2, '0');
   return segundos ? '${dos(t.hour)}:${dos(t.minute)}:${dos(t.second)}' : '${dos(t.hour)}:00';
+}
+
+String _fecha(Object? iso) {
+  final t = DateTime.tryParse('$iso')?.toLocal();
+  if (t == null) return '';
+  String dos(int n) => n.toString().padLeft(2, '0');
+  return '${dos(t.day)}/${dos(t.month)} ${dos(t.hour)}:${dos(t.minute)}';
 }
 
 String _porcentaje(Object? parte, Object? total) {
