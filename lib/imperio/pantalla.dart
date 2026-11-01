@@ -1,25 +1,31 @@
 import 'dart:async';
+import 'dart:math' show max, min, pi, sin;
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../animaciones.dart';
 import '../emoji.dart';
 import '../idioma.dart';
-import '../main.dart' show textoError;
 import '../tema.dart';
 import 'bano.dart';
 import 'barra.dart';
 import 'bienvenida.dart';
 import 'cadena.dart';
+import 'cantidades.dart';
 import 'cartera.dart';
 import 'control.dart';
 import 'fila.dart';
 import 'formato.dart';
+import 'hoja_racha.dart';
 import 'logros.dart' show presumirLogroImperio;
 import 'moneda_app.dart';
 import 'motor.dart';
+import 'personalizar.dart';
 import 'poceta.dart';
+import 'racha_imperio.dart' show diasRacha;
 import 'sala.dart';
+import 'tienda_ciruelas.dart';
 
 String _mj(double v) => formatoMj(v, ingles: enIngles);
 
@@ -75,7 +81,20 @@ class PantallaImperio extends StatefulWidget {
 class _PantallaImperioState extends State<PantallaImperio> with TickerProviderStateMixin {
   final _c = ControlImperio();
   late final AnimationController _pulso = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
-  bool _porDiez = false, _dialogoAbierto = false;
+  bool _dialogoAbierto = false;
+
+  // Cuántos edificios compra cada toque (x1, x10, x100, x1000) y qué botones ya salieron alguna vez.
+  int _cantidad = 1;
+  var _cantidadesVistas = <int>{};
+  bool _vistasCargadas = false;
+  static const _claveVistas = 'imperio_cantidades_vistas';
+
+  // Ciruelas que vuelan de la poceta al chip: (id, desde, hasta) en coordenadas de la escena.
+  final _llaveEscena = GlobalKey();
+  final _llavePoceta = GlobalKey();
+  final _llaveCiruelas = GlobalKey();
+  final _vuelos = <(int, Offset, Offset)>[];
+  int _nVuelo = 0;
 
   // Desplegables de mejoras abiertos: id del edificio o 'poceta'.
   final _abiertos = <String>{};
@@ -92,8 +111,10 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
   void initState() {
     super.initState();
     _c.addListener(_alCambiar);
+    _c.ciruelaCae.addListener(_alCaerCiruela);
     _c.visible = widget.activo;
     _c.iniciar();
+    _cargarVistas();
   }
 
   @override
@@ -109,6 +130,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
   void dispose() {
     _timerAviso?.cancel();
     _c.removeListener(_alCambiar);
+    _c.ciruelaCae.removeListener(_alCaerCiruela);
     _c.dispose();
     _pulso.dispose();
     super.dispose();
@@ -119,11 +141,75 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     if (widget.activo) {
       while (_c.logrosNuevos.isNotEmpty) {
         final l = _c.logrosNuevos.removeAt(0);
-        _avisar('🏆', tr('Logro: ${l.nombreEs}', 'Achievement: ${l.nombreEn}'), logro: l.id);
+        _avisar('🏆', tr('Logro: ${nombreLogro(l)}', 'Achievement: ${nombreLogro(l)}'), logro: l.id);
       }
       _mostrarDialogos();
     }
     setState(() {});
+  }
+
+  // ---------- Ciruelas 🫐 ----------
+
+  void _alCaerCiruela() {
+    if (!mounted) return;
+    _avisar('🫐', tr('¡Cayó una Ciruela! Gástala en la tienda 🫐', 'A Plum dropped! Spend it in the shop 🫐'));
+    if (movimiento(context) == Movimiento.nada) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final escena = _llaveEscena.currentContext?.findRenderObject() as RenderBox?;
+      final poceta = _llavePoceta.currentContext?.findRenderObject() as RenderBox?;
+      final chip = _llaveCiruelas.currentContext?.findRenderObject() as RenderBox?;
+      if (!mounted || escena == null || poceta == null || chip == null || !escena.hasSize) return;
+      Offset centro(RenderBox b) => escena.globalToLocal(b.localToGlobal(b.size.center(Offset.zero)));
+      setState(() => _vuelos.add((_nVuelo++, centro(poceta), centro(chip))));
+    });
+  }
+
+  Widget _ciruelaVolando((int, Offset, Offset) v) => Positioned.fill(
+        key: ValueKey('vuelo_${v.$1}'),
+        child: IgnorePointer(
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: 1),
+            duration: const Duration(milliseconds: 900),
+            curve: Curves.easeInOutCubic,
+            onEnd: () => setState(() => _vuelos.remove(v)),
+            builder: (context, t, _) {
+              // Sube en arco y se achica al llegar al chip.
+              final pos = Offset.lerp(v.$2, v.$3, t)! + Offset(0, -70 * sin(pi * t));
+              return Stack(children: [
+                Positioned(
+                  left: pos.dx - 18,
+                  top: pos.dy - 18,
+                  child: Transform.scale(scale: 1.5 - 0.9 * t, child: const Emoji('🫐', tamano: 36)),
+                ),
+              ]);
+            },
+          ),
+        ),
+      );
+
+  // ---------- Cantidad de compra ----------
+
+  Future<void> _cargarVistas() async {
+    try {
+      final guardadas = (await SharedPreferences.getInstance()).getStringList(_claveVistas) ?? const [];
+      if (!mounted) return;
+      setState(() => _cantidadesVistas = {..._cantidadesVistas, ...guardadas.map(int.tryParse).whereType<int>()});
+    } catch (_) {
+      // Sin preferencias: los botones salen igual cuando toque.
+    }
+    _vistasCargadas = true;
+  }
+
+  Set<int> _cantidadesVisibles() {
+    final v = cantidadesDe(_c.imperio, _c.ahora, vistas: _cantidadesVistas);
+    if (!_cantidadesVistas.containsAll(v)) {
+      _cantidadesVistas = {..._cantidadesVistas, ...v};
+      if (_vistasCargadas) {
+        final lista = [for (final n in _cantidadesVistas) '$n'];
+        SharedPreferences.getInstance().then((p) => p.setStringList(_claveVistas, lista)).ignore();
+      }
+    }
+    return v;
   }
 
   // ---------- Avisos de arriba ----------
@@ -175,10 +261,14 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
           if (b != null) '${tr(b.nombreEs, b.nombreEn)}: ${tr(b.efectoEs, b.efectoEn)}',
         ]);
       }
+      if (_c.rachaPendiente && mounted) {
+        _c.rachaPendiente = false;
+        await mostrarHojaRacha(context, _c, _avisar);
+      }
     } finally {
       _dialogoAbierto = false;
     }
-    if (mounted && (_c.offlinePendiente != null || _c.descargaPendiente != null || _c.bienvenidaPendiente)) _mostrarDialogos();
+    if (mounted && (_c.offlinePendiente != null || _c.descargaPendiente != null || _c.bienvenidaPendiente || _c.rachaPendiente)) _mostrarDialogos();
   }
 
   Future<void> _dialogo(String emoji, String titulo, List<String> lineas) => showDialog<void>(
@@ -266,12 +356,13 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, caja) => Stack(
+            key: _llaveEscena,
             children: [
               Column(
                 children: [
                   _cabecera(context, ahora),
                   if (_c.sinConexion) _sinConexion(context),
-                  _poceta(ahora),
+                  KeyedSubtree(key: _llavePoceta, child: _poceta(ahora)),
                   _barraEfectos(context, ahora),
                   _pestanas(context),
                   Expanded(child: _listaEdificios(context, ahora)),
@@ -290,6 +381,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                     ),
                   ),
                 ),
+              for (final v in _vuelos) _ciruelaVolando(v),
               if (_aviso != null) Positioned(top: 8, left: 16, right: 16, child: _banner(context, _aviso!)),
             ],
           ),
@@ -402,6 +494,13 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                 children: [
                   _chip(context, '🎟️', '${im.fichas}'),
                   const SizedBox(width: 6),
+                  // Ciruelas: abre la tienda. La llave es el destino de la ciruela que vuela.
+                  GestureDetector(
+                    key: const Key('chip_ciruelas'),
+                    onTap: () => abrirTiendaCiruelas(context, _c, _avisar),
+                    child: KeyedSubtree(key: _llaveCiruelas, child: _chip(context, '🫐', '${im.ciruelas}', borde: acento)),
+                  ),
+                  const SizedBox(width: 6),
                   GestureDetector(
                     onTap: () => _avisar('💩', tr('x${_mj(im.multiplicadorCagadas)} por tus ${im.cagadas} cagadas reales',
                         'x${_mj(im.multiplicadorCagadas)} from your ${im.cagadas} real poops')),
@@ -409,6 +508,14 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                   ),
                 ],
               ),
+              if (_c.racha case final r?) ...[
+                const SizedBox(height: 6),
+                GestureDetector(
+                  key: const Key('chip_racha'),
+                  onTap: () => mostrarHojaRacha(context, _c, _avisar),
+                  child: _chip(context, '🔥', '${r.dia}/$diasRacha', borde: r.reclamado ? null : acento),
+                ),
+              ],
               if (im.partida.rollos > 0) ...[
                 const SizedBox(height: 6),
                 GestureDetector(
@@ -444,6 +551,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     for (final e in efectos) {
       if (!conDibujo.contains(e.id) && !otros.contains(e.emoji)) otros.add(e.emoji);
     }
+    final jalar = botonJalar(im, _c.cadena);
     return Poceta(
       alTocar: _pujar,
       mps: im.mps(ahora),
@@ -451,10 +559,30 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       pujoLoco: efectos.any((e) => e.id == 'pujo_loco'),
       efectos: otros,
       // Lo que se ve en el baño sale de lo comprado: adornos, mejoras de la poceta y de cada edificio.
-      bano: EstadoBano.desde(comprada: im.mejoraComprada, cantidad: im.cantidad),
-      dedos: im.cantidad('dedo'),
+      // Personalizar (Templo) oculta cosas, elige ambiente y cuántos dedos se ven: solo visual.
+      bano: EstadoBano.desde(comprada: im.mejoraComprada, cantidad: im.cantidad, esteticas: im.esteticas, vista: im.partida.vista),
+      dedos: min(im.cantidad('dedo'), (im.partida.vista['dedos'] as int?) ?? im.cantidad('dedo')),
       activo: widget.activo,
+      // Cuánto más rápido va que lo normal (fiebre, pujo loco...): acelera la escena.
+      apuro: im.mps(ahora) / max(im.mpsSinEfectos(), 1e-9),
+      alPersonalizar: im.cantidad('templo') >= 1
+          ? () => abrirPersonalizar(context, _c).then((_) => mounted ? setState(() {}) : null)
+          : null,
+      jalar: im.cadenaDesbloqueada ? jalar.encendido : null,
+      alJalar: () => _jalar(context, jalar),
+      // El cartelito solo la primera vez que la cadena queda lista.
+      cartelJalar: jalar.encendido && im.partida.jaladas == 0,
     );
+  }
+
+  // Botón JALAR y palanca de la poceta hacen lo mismo.
+  void _jalar(BuildContext context, BotonJalar jalar) {
+    if (jalar.encendido) {
+      unawaited(jalarLaCadena(context, _c, avisar: (e, t) => _avisar(e, t)));
+    } else {
+      _c.abrirCadena(false);
+      _avisar('🚽', jalar.aviso(monedaActual().abreviatura));
+    }
   }
 
   Widget _barraEfectos(BuildContext context, int ahora) {
@@ -492,18 +620,23 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     );
   }
 
-  Widget _pestanas(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
-        child: Row(
-          children: [
-            Rotulo(tr('EDIFICIOS', 'BUILDINGS')),
-            const Spacer(),
-            _opcion(context, 'x1', !_porDiez, () => setState(() => _porDiez = false)),
-            const SizedBox(width: 4),
-            _opcion(context, 'x10', _porDiez, () => setState(() => _porDiez = true)),
-          ],
-        ),
-      );
+  Widget _pestanas(BuildContext context) {
+    final visibles = _cantidadesVisibles();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+      child: Row(
+        children: [
+          Rotulo(tr('EDIFICIOS', 'BUILDINGS')),
+          const Spacer(),
+          for (final n in cantidadesCompra)
+            if (visibles.contains(n)) ...[
+              if (n != cantidadesCompra.first) const SizedBox(width: 4),
+              _opcion(context, 'x$n', _cantidad == n, () => setState(() => _cantidad = n)),
+            ],
+        ],
+      ),
+    );
+  }
 
   Widget _listaEdificios(BuildContext context, int ahora) {
     final im = _c.imperio;
@@ -548,7 +681,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
         ),
       );
     }
-    final n = _porDiez ? 10 : 1;
+    final n = _cantidad;
     final precio = im.precioEdificioVarios(e.id, n, ahora);
     final alcanza = precio <= im.saldo;
     final misterio = im.edificioMisterioso(e.id);
@@ -684,7 +817,13 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
           const SizedBox(width: 8),
           FilledButton(
             style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
-            onPressed: alcanza ? () => _c.comprarMejora(m.id) : null,
+            onPressed: alcanza
+                ? () async {
+                    // La cadena borra la corrida al jalar: antes de comprarla se explica.
+                    if (m.id == 'cadena_trono' && (!await confirmarComprarCadena(context, _c) || !mounted)) return;
+                    _c.comprarMejora(m.id);
+                  }
+                : null,
             child: Text(tr('COMPRAR', 'BUY')),
           ),
         ],
@@ -773,14 +912,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       jalar: jalar,
       moneda: moneda,
       alObjetos: () => _abrirObjetos(context),
-      alJalar: () {
-        if (jalar.encendido) {
-          unawaited(jalarLaCadena(context, _c, avisar: (e, t) => _avisar(e, t)));
-        } else {
-          _c.abrirCadena(false);
-          _avisar('🚽', jalar.aviso(moneda));
-        }
-      },
+      alJalar: () => _jalar(context, jalar),
       alSala: () {
         _c.anotar('sala_abre');
         Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaSala()));
@@ -804,15 +936,6 @@ class _HojaObjetos extends StatelessWidget {
   const _HojaObjetos({required this.control, required this.avisar});
   final ControlImperio control;
   final void Function(String emoji, String texto) avisar;
-
-  Future<void> _cagadaFresca(BuildContext context) async {
-    try {
-      final ok = await control.usarCagadaFresca();
-      if (!ok) avisar('🎟️', tr('No te quedan Fichas. Caga de verdad para ganar más.', 'No Tokens left. Poop for real to earn more.'));
-    } catch (e) {
-      avisar('💩', textoError(e));
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -839,12 +962,13 @@ class _HojaObjetos extends StatelessWidget {
     final abierto = im.objetoAbierto(o.id);
     final espera = im.esperaRestante(o.id, ahora);
     final precio = im.precioObjeto(o.id, ahora);
+    // La Cagada fresca no se compra: sale sola 1 h después de cada cagada real.
     final esFicha = o.tipo == TipoObjeto.ficha;
+    final fresca = esFicha ? im.efectosActivos(ahora).where((e) => e.id == o.id).firstOrNull?.restante : null;
     final candado = im.cagadas < o.candado
         ? _cagaVeces(o.candado)
         : tr('Sale con tu primer Atasco', 'Unlocks with your first Clog');
     final botones = <Widget>[
-      if (esFicha) FilledButton(onPressed: abierto && im.fichas > 0 ? () => _cagadaFresca(context) : null, child: Text(tr('USAR', 'USE'))),
       if (o.tipo == TipoObjeto.consumible) ...[
         OutlinedButton(
           onPressed: abierto && precio <= im.saldo && im.enInventario(o.id) < o.maxInventario ? () => control.comprarObjeto(o.id) : null,
@@ -878,10 +1002,7 @@ class _HojaObjetos extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (esFicha) ...[
-                  Text('1 ', style: numeros(context, tamano: 13, weight: FontWeight.w800)),
-                  const Emoji('🎟️', tamano: 16),
-                ] else
+                if (!esFicha)
                   montoMj(_mj(precio), numeros(context, tamano: 13, weight: FontWeight.w800)),
               ],
             ),
@@ -889,7 +1010,14 @@ class _HojaObjetos extends StatelessWidget {
             Row(
               children: [
                 if (o.tipo == TipoObjeto.consumible) Text('${im.enInventario(o.id)}/${o.maxInventario}', style: numeros(context, tamano: 12, color: p.textoSuave)),
-                if (esFicha) Text(tr('Tienes ${im.fichas}', 'You have ${im.fichas}'), style: numeros(context, tamano: 12, color: p.textoSuave)),
+                if (esFicha)
+                  Expanded(
+                    child: Text(
+                        fresca != null
+                            ? tr('Activa: ${_cuenta(fresca)}', 'Active: ${_cuenta(fresca)}')
+                            : tr('Gratis 1 h después de cada cagada real', 'Free for 1 h after each real poop'),
+                        style: numeros(context, tamano: 12, color: p.textoSuave)),
+                  ),
                 if (espera != null) ...[
                   const SizedBox(width: 10),
                   const Emoji('⏳', tamano: 14),

@@ -394,11 +394,11 @@ void main() {
       expect(nuevos, containsAll(['descarga', 'cagar_fiebre']));
     });
 
-    test('Cagada fresca: x2 por 1 h y gasta una Ficha local', () {
+    test('Cagada fresca: x2 por 1 h y no gasta Fichas', () {
       final imp = Imperio(fichas: 2);
       imp.partida.edificios['ciruela'] = 1;
       imp.activarCagadaFresca(t0);
-      expect(imp.fichas, 1);
+      expect(imp.fichas, 2);
       expect(imp.mps(t0), 2);
       imp.activarCagadaFresca(t0);
       expect(imp.mps(t0 + hora + 1), 2); // se sumó otra hora

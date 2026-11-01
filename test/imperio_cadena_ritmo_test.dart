@@ -175,7 +175,8 @@ class _Simulacion {
           imp.aplicarCagadas(nuevas, inicio);
         }
         _quizasJalar(inicio);
-        if (imp.fichas > 0) imp.activarCagadaFresca(inicio);
+        // Cada cagada real da x2 por 1 h desde que se hizo (aquí, al abrir la sesión).
+        if (nuevas.isNotEmpty) imp.aplicarFrescaHasta(inicio + 3600000);
         for (var s = 0; s < _largoSesion; s++) {
           final ahora = inicio + s * _seg;
           for (var k = 0; k < 5; k++) {

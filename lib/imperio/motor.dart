@@ -5,7 +5,9 @@
 import 'dart:math';
 
 import 'catalogo.dart';
+import 'esteticas.dart';
 import 'estado.dart';
+import 'racha_imperio.dart';
 
 export 'catalogo.dart';
 export 'estado.dart';
@@ -147,7 +149,7 @@ const Map<String, (String, String, String, String, String)> _textosEfecto = {
 };
 
 /// El juego: una `Partida` más las cagadas totales y las Fichas que manda el servidor.
-/// Efectos que se quedan al jalar la cadena: se pagaron con Fichas o cagadas reales, no con MJ.
+/// Efectos que se quedan al jalar la cadena: vienen de cagadas reales o Ciruelas, no de MJ.
 const Set<String> efectosQueSobrevivenJalada = {'cagada_fresca', 'fiebre_trono'};
 
 /// Rollos de Oro que dan `mj` MJ históricos: piso((mj / divisor) ^ exponente). El 1e-9 tapa el error de coma flotante
@@ -171,17 +173,27 @@ class Imperio {
   /// Fichas de cagada (las cuenta el servidor). La pone el controlador.
   int fichas;
 
+  /// Ciruelas 🫐, la moneda premium (las cuenta el servidor). La pone el controlador.
+  int ciruelas;
+
+  /// Estéticas premium compradas (ids de `esteticas`; las guarda el servidor). Solo suben la suerte de las Ciruelas.
+  Set<String> esteticas;
+
   /// Números que vienen de los flags remotos (por defecto, los de siempre).
   final Ajustes ajustes;
   final Random _azar;
 
-  Imperio({Partida? partida, this.cagadas = 0, this.fichas = 0, Random? azar, this.ajustes = Ajustes.porDefecto})
+  Imperio({Partida? partida, this.cagadas = 0, this.fichas = 0, this.ciruelas = 0, Set<String>? esteticas, Random? azar,
+      this.ajustes = Ajustes.porDefecto})
       : partida = partida ?? Partida(),
+        esteticas = esteticas ?? {},
         _azar = azar ?? Random();
 
   /// Arranca desde lo guardado en la nube.
-  factory Imperio.desdeJson(Map<String, dynamic>? json, {int cagadas = 0, int fichas = 0, Random? azar, Ajustes ajustes = Ajustes.porDefecto}) =>
-      Imperio(partida: Partida.desdeJson(json), cagadas: cagadas, fichas: fichas, azar: azar, ajustes: ajustes);
+  factory Imperio.desdeJson(Map<String, dynamic>? json,
+          {int cagadas = 0, int fichas = 0, int ciruelas = 0, Set<String>? esteticas, Random? azar, Ajustes ajustes = Ajustes.porDefecto}) =>
+      Imperio(
+          partida: Partida.desdeJson(json), cagadas: cagadas, fichas: fichas, ciruelas: ciruelas, esteticas: esteticas, azar: azar, ajustes: ajustes);
 
   /// Estado para guardar (`'v': 1`).
   Map<String, dynamic> toJson() => partida.toJson();
@@ -496,7 +508,7 @@ class Imperio {
     return o != null && cagadas >= o.candado && (!o.pideAtasco || _p.vioPrimerAtasco);
   }
 
-  /// Precio en MJ: minutos x MJ/s sin efectos x 60, mínimo 100. La Cagada fresca da 0 (se paga con una Ficha).
+  /// Precio en MJ: minutos x MJ/s sin efectos x 60, mínimo 100. La Cagada fresca da 0 (no se compra con MJ: viene con cada cagada real).
   double precioObjeto(String id, int ahora) {
     final o = objetoPorId(id);
     if (o == null) return double.infinity;
@@ -551,11 +563,62 @@ class Imperio {
     return true;
   }
 
-  /// Cagada fresca: producción x2 por 1 h (si ya estaba, suma 1 h). El controlador ya gastó la Ficha en el servidor.
+  /// Cagada fresca: producción x2 por 1 h (si ya estaba, suma 1 h). La da la tienda de Ciruelas.
   void activarCagadaFresca(int ahora) {
     final dur = objetoPorId('cagada_fresca')!.duracion!.inMilliseconds;
     _p.efectos['cagada_fresca'] = max(_p.efectos['cagada_fresca'] ?? 0, ahora) + dur;
-    if (fichas > 0) fichas--;
+  }
+
+  /// La Cagada fresca de la última cagada real (x2 hasta [finMs]). Si ya dura más, se queda como está.
+  /// Devuelve si cambió.
+  bool aplicarFrescaHasta(int finMs) {
+    if (finMs <= (_p.efectos['cagada_fresca'] ?? 0)) return false;
+    _p.efectos['cagada_fresca'] = finMs;
+    return true;
+  }
+
+  // ---------- Ciruelas y racha ----------
+
+  /// Suerte de las estéticas compradas (0.04 = +4%).
+  double get bonoSuerte => bonoSuerteDe(esteticas);
+
+  /// Tira la suerte de una Ciruela por pujo (~1/1500 con el bono). El servidor decide si la acepta.
+  bool tirarCiruela() => _azar.nextDouble() < probConBono(probCiruelaPujoBase, esteticas);
+
+  /// Pone el efecto de una oferta de la tienda de Ciruelas (el servidor ya descontó). Devuelve los MJ ganados.
+  double aplicarOfertaCiruela(String id, int ahora) {
+    switch (id) {
+      case 'cagada_fresca':
+        activarCagadaFresca(ahora);
+        return 0;
+      case 'produccion_2h':
+        final mj = 2 * 3600 * mpsSinEfectos(contarAtasco: false);
+        _ganar(mj);
+        return mj;
+      case 'robot_24h':
+        _p.robotHasta = max(_p.robotHasta, ahora) + const Duration(hours: 24).inMilliseconds;
+        return 0;
+    }
+    return 0;
+  }
+
+  /// Pone lo de la app del premio de la racha (producción, objetos, logro). Las Ciruelas y Fichas las da el servidor.
+  /// Devuelve los MJ ganados.
+  double aplicarPremioRacha(int dia, int ahora) {
+    final p = premioDia(dia);
+    final mj = p.minutos * 60 * mpsSinEfectos(contarAtasco: false);
+    _ganar(mj);
+    for (final MapEntry(key: id, value: n) in p.objetos.entries) {
+      final o = objetoPorId(id);
+      if (o == null || n <= 0) continue;
+      if (o.tipo == TipoObjeto.alquilable) {
+        _p.robotHasta = max(_p.robotHasta, ahora) + o.duracion!.inMilliseconds * n;
+      } else {
+        _p.inventario[id] = enInventario(id) + n;
+      }
+    }
+    if (p.logro != null && logroPorId(p.logro!) != null && !_p.logros.contains(p.logro)) _p.logros.add(p.logro!);
+    return mj;
   }
 
   /// Efectos para la barra de buffs, del que menos le queda al que más.
@@ -804,8 +867,8 @@ class Imperio {
   /// Jala la cadena: suma los rollos y la jalada, y la corrida vuelve a empezar. Devuelve los rollos ganados.
   /// Se va: saldo, edificios, mejoras, objetos (inventario, esperas, robot), efectos comprados con MJ, atasco, mojón
   /// dorado y los contadores de la corrida (pujos recientes, segPartida). Se queda: mjTotal, logros, rollos, jaladas,
-  /// estadísticas históricas, el buff del tipo, el bono offline y los efectos que se pagaron con cagadas reales o
-  /// Fichas (Cagada fresca, Fiebre de Trono). No mira las cagadas: eso lo valida el servidor en `imperio_jalar`.
+  /// estadísticas históricas, el buff del tipo, el bono offline y los efectos que vienen de cagadas reales o
+  /// Ciruelas (Cagada fresca, Fiebre de Trono). No mira las cagadas: eso lo valida el servidor en `imperio_jalar`.
   int jalar() {
     final ganados = rollosPorGanar;
     _p

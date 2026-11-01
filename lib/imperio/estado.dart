@@ -17,6 +17,17 @@ Map<String, int> _mapaEnt(Object? v) {
 
 Set<String> _conjunto(Object? v) => v is List ? {for (final x in v) '$x'} : <String>{};
 
+/// Preferencias de vista del baño: solo las claves conocidas y con su tipo.
+Map<String, dynamic> _vista(Object? v) {
+  if (v is! Map) return {};
+  final r = <String, dynamic>{};
+  if (v['ocultos'] is List) r['ocultos'] = [for (final x in v['ocultos'] as List) '$x'];
+  final d = _entN(v['dedos']);
+  if (d != null) r['dedos'] = d.clamp(0, 24);
+  if (v['ambiente'] is String) r['ambiente'] = v['ambiente'];
+  return r;
+}
+
 /// Atasco en un edificio: produce 0 hasta 10 toques.
 class Atasco {
   final String edificio;
@@ -118,6 +129,9 @@ class Partida {
   /// Veces que se jaló la cadena (el servidor lleva la cuenta buena en `imperio.jaladas`).
   int jaladas;
 
+  /// Cómo se ve el baño (Personalizar): 'ocultos' (lista de ids), 'dedos' (int), 'ambiente' (nombre). Solo visual.
+  Map<String, dynamic> vista;
+
   Partida({
     this.saldo = 0,
     this.mjTotal = 0,
@@ -149,7 +163,9 @@ class Partida {
     this.segPartida = 0,
     this.rollos = 0,
     this.jaladas = 0,
-  })  : edificios = edificios ?? {},
+    Map<String, dynamic>? vista,
+  })  : vista = vista ?? {},
+        edificios = edificios ?? {},
         mejoras = mejoras ?? {},
         logros = logros ?? {},
         inventario = inventario ?? {},
@@ -189,6 +205,7 @@ class Partida {
         'seg_partida': segPartida,
         'rollos': rollos,
         'jaladas': jaladas,
+        if (vista.isNotEmpty) 'vista': vista,
       };
 
   /// Lee una partida guardada. Aguanta claves que faltan, sobran o vienen con otro tipo.
@@ -230,6 +247,7 @@ class Partida {
       segPartida: segPartida < 0 ? 0 : segPartida,
       rollos: _ent(j['rollos']) < 0 ? 0 : _ent(j['rollos']),
       jaladas: _ent(j['jaladas']) < 0 ? 0 : _ent(j['jaladas']),
+      vista: _vista(j['vista']),
     );
   }
 }

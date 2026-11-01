@@ -1,0 +1,176 @@
+// Tienda de Ciruelas 🫐: ofertas (efectos al instante) y estéticas del baño (solo suerte).
+
+import 'package:flutter/material.dart';
+
+import '../emoji.dart';
+import '../idioma.dart';
+import '../main.dart' show textoError;
+import '../tema.dart';
+import 'ciruelas.dart';
+import 'control.dart';
+import 'esteticas.dart';
+
+/// "+4%".
+String pctSuerte(double bono) => '+${(bono * 100).round()}%';
+
+/// Abre la tienda. [avisar] pone el aviso de arriba de la pantalla del Imperio.
+Future<void> abrirTiendaCiruelas(BuildContext context, ControlImperio control, void Function(String emoji, String texto) avisar) {
+  control.anotar('tienda_ciruelas_abre');
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: paleta(context).fondo,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radio)),
+    builder: (_) => ListenableBuilder(
+      listenable: control,
+      builder: (context, _) => TiendaCiruelas(control: control, avisar: avisar),
+    ),
+  );
+}
+
+class TiendaCiruelas extends StatefulWidget {
+  const TiendaCiruelas({super.key, required this.control, required this.avisar});
+
+  final ControlImperio control;
+  final void Function(String emoji, String texto) avisar;
+
+  @override
+  State<TiendaCiruelas> createState() => _TiendaCiruelasState();
+}
+
+class _TiendaCiruelasState extends State<TiendaCiruelas> {
+  String? _ocupado; // id de lo que se está comprando
+
+  Future<void> _comprar(String id, Future<bool> Function() compra, String emoji, String hecho) async {
+    setState(() => _ocupado = id);
+    try {
+      final ok = await compra();
+      widget.avisar(ok ? emoji : '🫐', ok ? hecho : tr('No te alcanzan las Ciruelas.', 'Not enough Plums.'));
+    } catch (e) {
+      widget.avisar('💩', textoError(e));
+    } finally {
+      if (mounted) setState(() => _ocupado = null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paleta(context);
+    final im = widget.control.imperio;
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Emoji('🫐', tamano: 36),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(tr('${im.ciruelas} Ciruelas', '${im.ciruelas} Plums'),
+                          key: const Key('saldo_ciruelas'), style: numeros(context, tamano: 22, weight: FontWeight.w900)),
+                      Text(
+                          tr('Salen de vez en cuando al pujar, al cagar de verdad y en la racha.',
+                              'They drop now and then when you push, when you really poop and in the streak.'),
+                          style: TextStyle(fontSize: 12, color: p.textoSuave)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Rotulo(tr('Tienda', 'Shop')),
+            const SizedBox(height: 8),
+            for (final o in ofertasCiruela)
+              _fila(
+                context,
+                emoji: o.emoji,
+                titulo: tr(o.nombreEs, o.nombreEn),
+                detalle: tr(o.descEs, o.descEn),
+                precio: o.precio,
+                boton: _boton(
+                  context,
+                  tr('COMPRAR', 'BUY'),
+                  _ocupado == null && im.ciruelas >= o.precio
+                      ? () => _comprar(o.id, () => widget.control.gastarCiruelas(o.id), o.emoji,
+                          tr('${o.nombreEs}: listo', '${o.nombreEn}: done'))
+                      : null,
+                ),
+              ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(child: Rotulo(tr('Tu baño de lujo', 'Your luxury bathroom'))),
+                Text(tr('${pctSuerte(im.bonoSuerte)} de suerte ', '${pctSuerte(im.bonoSuerte)} luck '),
+                    key: const Key('suerte_total'), style: numeros(context, tamano: 13, weight: FontWeight.w900)),
+                const Emoji('🫐', tamano: 16),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(tr('Solo se ven bonitas y suben la suerte de que caigan Ciruelas.', 'They only look nice and raise your luck for Plums.'),
+                style: TextStyle(fontSize: 12, color: p.textoSuave)),
+            const SizedBox(height: 8),
+            for (final e in esteticas)
+              _fila(
+                context,
+                emoji: e.emoji,
+                titulo: tr(e.nombreEs, e.nombreEn),
+                detalle: tr('${pctSuerte(e.bono)} de suerte', '${pctSuerte(e.bono)} luck'),
+                precio: im.esteticas.contains(e.id) ? null : e.precio,
+                boton: im.esteticas.contains(e.id)
+                    ? Text(tr('COMPRADA', 'OWNED'), style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 0.8, color: p.textoSuave))
+                    : _boton(
+                        context,
+                        tr('COMPRAR', 'BUY'),
+                        _ocupado == null && im.ciruelas >= e.precio
+                            ? () => _comprar(e.id, () => widget.control.comprarEstetica(e.id), e.emoji,
+                                tr('${e.nombreEs}: ${pctSuerte(e.bono)} de suerte', '${e.nombreEn}: ${pctSuerte(e.bono)} luck'))
+                            : null,
+                      ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _boton(BuildContext context, String texto, VoidCallback? alTocar) =>
+      FilledButton(style: FilledButton.styleFrom(visualDensity: VisualDensity.compact), onPressed: alTocar, child: Text(texto));
+
+  Widget _fila(BuildContext context, {required String emoji, required String titulo, required String detalle, int? precio, required Widget boton}) {
+    final p = paleta(context);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: p.borde), borderRadius: BorderRadius.circular(radio)),
+      child: Row(
+        children: [
+          Emoji(emoji, tamano: 30),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(titulo, style: TextStyle(fontWeight: FontWeight.w800, color: p.texto)),
+                Text(detalle, style: TextStyle(fontSize: 12, color: p.textoSuave)),
+                if (precio != null)
+                  Row(
+                    children: [
+                      Text('$precio ', style: numeros(context, tamano: 13, weight: FontWeight.w800)),
+                      const Emoji('🫐', tamano: 14),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          boton,
+        ],
+      ),
+    );
+  }
+}

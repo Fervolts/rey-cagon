@@ -38,7 +38,7 @@ Future<int> _enviarPorRpc(List<Map<String, Object?>> lote) async {
 /// - `offline` {segundos, tope_lleno, ganado}
 /// - `descarga` {cagadas, ganado}
 /// - `bienvenida` {cagadas, fichas, fundador}
-/// - `ficha_usa` {}
+/// - `ficha_usa` {}: ya no se emite (la Cagada fresca sale sola con cada cagada real; las Fichas son para minijuegos)
 /// - `sala_abre` {}
 /// - `minijuego_toca` {id} (los "próximamente")
 /// - `pestana_abre` {}
@@ -46,6 +46,12 @@ Future<int> _enviarPorRpc(List<Map<String, Object?>> lote) async {
 /// - `cadena_abre` {puede}: tocó JALAR (`puede` = estaba encendido)
 /// - `cadena_jala` {rollos, jaladas}: jaló la cadena (rollos ganados en esta jalada, jaladas en total)
 /// - `cartera_comparte` {destino}: presumió la cartera (`chat` = tarjeta en la sala general, `fuera` = imagen para historias)
+/// - `ciruela_suerte` {origen, cantidad, saldo}: cayeron Ciruelas (`pujo` = al pujar, tope diario; `cagada` = al cargar, por cagadas reales)
+/// - `ciruelas_gastar` {id, precio, saldo, mj}: compró en la tienda de Ciruelas (id de `ofertasCiruela`; mj = producción ganada al instante)
+/// - `estetica_compra` {id, saldo, bono}: compró una estética del baño (bono = suerte total después de comprar)
+/// - `tienda_ciruelas_abre` {}
+/// - `racha_abre` {}: abrió la hoja de la racha de 30 días (sola al cargar o desde el chip 🔥)
+/// - `racha_reclamar` {dia, ciruelas, ficha, mj}: reclamó el día de la racha (ciruelas = las que dio el servidor, ficha = si entró una)
 /// - `error` {donde}
 ///
 /// Nombres: `[a-z0-9_]`, hasta 40. Datos: JSON plano, hasta ~3,5 KB (si no, se manda `{recortado: true}`).

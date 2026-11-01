@@ -141,6 +141,13 @@ const _archivos = {
   '🫖': 'teapot',
   '💉': 'syringe',
   '🫙': 'jar',
+  // Escenas v2 del baño: leche de magnesia, clase media, camión volador.
+  '🥛': 'glass_of_milk',
+  '🪞': 'mirror',
+  '🖼️': 'framed_picture',
+  '🥄': 'spoon',
+  '🫧': 'bubbles',
+  '🚁': 'helicopter',
 };
 
 // Las mismas claves sin FE0F, para encontrar '🌶' igual que '🌶️'.

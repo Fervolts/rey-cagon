@@ -3,10 +3,12 @@ import 'dart:math';
 
 import 'package:flutter/widgets.dart';
 
+import '../fresca.dart' show frescaHasta;
 import '../main.dart' show db;
 import 'flags.dart';
 import 'motor.dart';
 import 'nube.dart';
+import 'racha_imperio.dart';
 import 'telemetria.dart';
 
 // ---------- Partes puras (se prueban sin Supabase) ----------
@@ -104,6 +106,19 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   /// Logros nuevos para el aviso de arriba.
   final List<Logro> logrosNuevos = [];
 
+  /// Racha del Imperio: último día reclamado y su fecha (del servidor). null = sin datos (sin red o no cargó).
+  int? _rachaDia;
+  DateTime? _rachaFecha;
+
+  /// La pantalla abre la hoja de racha si hay premio de hoy sin reclamar. La consume la pantalla.
+  bool rachaPendiente = false;
+
+  /// Estado de la racha para hoy (fecha local). null sin datos del servidor.
+  EstadoRacha? get racha => _rachaDia == null ? null : estadoRacha(_rachaDia!, _rachaFecha, fechaLocal(DateTime.now()));
+
+  /// Sube cada vez que cae una Ciruela 🫐 (pujo o cagada): la pantalla la hace volar al chip.
+  final ValueNotifier<int> ciruelaCae = ValueNotifier(0);
+
   int _desfase = 0; // reloj del servidor menos reloj del teléfono, en ms
   int get ahora => DateTime.now().millisecondsSinceEpoch + _desfase;
 
@@ -145,7 +160,9 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       final local1 = usarCopiaLocal(mjLocal: mjLocal, mjServidor: carga.mjTotal, servidorVacio: vacio,
           jaladasLocal: _jaladasDe(estadoLocal), jaladasServidor: _jaladasDe(carga.estado));
       imperio = Imperio.desdeJson(local1 ? estadoLocal : carga.estado,
-          cagadas: carga.cagadasTotal, fichas: carga.fichas, ajustes: flags.ajustes);
+          cagadas: carga.cagadasTotal, fichas: carga.fichas, ciruelas: carga.ciruelas, esteticas: carga.esteticas, ajustes: flags.ajustes);
+      _leerRacha(carga);
+      _ciruelasDeCagadas(carga.ciruelasCagadas);
       if (!local1 && !vacio) aceptarRecorte(imperio.partida, carga.mjTotal);
       fundador = carga.fundador;
       final desde = inicioOffline([ultimaLocal, carga.guardado.millisecondsSinceEpoch, imperio.partida.ultimaVez], ahora);
@@ -163,6 +180,8 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
         estadoLocal,
         cagadas: (estadoLocal?['_cagadas'] as num?)?.toInt() ?? 0,
         fichas: (estadoLocal?['_fichas'] as num?)?.toInt() ?? 0,
+        ciruelas: (estadoLocal?['_ciruelas'] as num?)?.toInt() ?? 0,
+        esteticas: {...?(estadoLocal?['_esteticas'] as List?)?.map((e) => '$e')},
         ajustes: flags.ajustes,
       );
       final desde = inicioOffline([ultimaLocal], ahora);
@@ -175,6 +194,8 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     _mirarCambios(anotar: false);
     _cargado = true;
     cargando = false;
+    frescaHasta.addListener(_ponerFresca);
+    _ponerFresca();
     unawaited(_guardarLocal());
     _actualizarBucle();
     notifyListeners();
@@ -200,6 +221,26 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       // Sin el RPC (migración sin aplicar) o sin red: el botón dice PRONTO hasta la próxima recarga.
       _error('cadena');
     }
+  }
+
+  void _leerRacha(CargaImperio carga) {
+    _rachaDia = carga.rachaDia;
+    _rachaFecha = leerFecha(carga.rachaFecha);
+    rachaPendiente = racha?.reclamado == false;
+  }
+
+  /// Ciruelas que el servidor sacó con las cagadas reales nuevas (5% cada una): vuelan y se anotan.
+  void _ciruelasDeCagadas(int n) {
+    if (n <= 0) return;
+    ciruelaCae.value += n;
+    _anotar('ciruela_suerte', {'origen': 'cagada', 'cantidad': n, 'saldo': imperio.ciruelas});
+  }
+
+  /// Cagada fresca de la última cagada real ([frescaHasta], hora local) en el reloj del servidor.
+  void _ponerFresca() {
+    final h = frescaHasta.value;
+    if (!_cargado || _cerrado || h == null) return;
+    if (imperio.aplicarFrescaHasta(h.millisecondsSinceEpoch + _desfase)) _avisar();
   }
 
   /// Apagado por flag: sin partida, sin bucle y sin guardar (no se pisa lo guardado).
@@ -238,7 +279,12 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       fundador = carga.fundador;
       imperio.cagadas = carga.cagadasTotal;
       imperio.fichas = carga.fichas;
+      imperio.ciruelas = carga.ciruelas;
+      imperio.esteticas = {...carga.esteticas};
+      _leerRacha(carga);
+      _ciruelasDeCagadas(carga.ciruelasCagadas);
       _aplicarNuevas(carga.nuevas);
+      _ponerFresca();
       _sumarLogros(imperio.revisarLogros());
       notifyListeners();
       await _cargarCadena();
@@ -365,7 +411,109 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   ResultadoPujo pujar() {
     final r = imperio.pujar(ahora);
     _sesion?.pujos++;
+    if (!sinConexion && imperio.tirarCiruela()) unawaited(_pedirCiruela());
     _avisar();
+    return r;
+  }
+
+  bool _pidiendoCiruela = false;
+
+  /// La suerte salió en el pujo: el servidor acredita 1 🫐 si no pasó el tope del día. Nunca lanza.
+  Future<void> _pedirCiruela() async {
+    if (_pidiendoCiruela) return;
+    _pidiendoCiruela = true;
+    try {
+      final r = await nube.ciruelaSuerte();
+      if (_cerrado || r < 0) return;
+      imperio.ciruelas = r;
+      ciruelaCae.value++;
+      _anotar('ciruela_suerte', {'origen': 'pujo', 'cantidad': 1, 'saldo': r});
+      notifyListeners();
+      unawaited(_guardarLocal());
+    } catch (_) {
+      _error('ciruela');
+    } finally {
+      _pidiendoCiruela = false;
+    }
+  }
+
+  /// Compra una oferta de la tienda de Ciruelas: el servidor descuenta y aquí se pone el efecto.
+  /// false si no alcanzaba. Lanza el error de red sin tocar la partida.
+  Future<bool> gastarCiruelas(String id) async {
+    final int r;
+    try {
+      r = await nube.gastarCiruelas(id);
+    } catch (_) {
+      _error('ciruelas_gastar');
+      rethrow;
+    }
+    if (_cerrado) return false;
+    if (r < 0) {
+      notifyListeners();
+      return false;
+    }
+    final antes = imperio.ciruelas;
+    imperio.ciruelas = r;
+    final mj = imperio.aplicarOfertaCiruela(id, ahora);
+    _anotar('ciruelas_gastar', {'id': id, 'precio': antes - r, 'saldo': r, 'mj': mj});
+    _hecho(true);
+    notifyListeners();
+    unawaited(_guardarLocal());
+    unawaited(_guardarNube());
+    return true;
+  }
+
+  /// Compra una estética (solo da suerte). false si no alcanzaba o ya la tenía. Lanza el error de red.
+  Future<bool> comprarEstetica(String id) async {
+    final int r;
+    try {
+      r = await nube.comprarEstetica(id);
+    } catch (_) {
+      _error('estetica_compra');
+      rethrow;
+    }
+    if (_cerrado) return false;
+    if (r == -2) imperio.esteticas = {...imperio.esteticas, id};
+    if (r < 0) {
+      notifyListeners();
+      return false;
+    }
+    imperio.ciruelas = r;
+    imperio.esteticas = {...imperio.esteticas, id};
+    _anotar('estetica_compra', {'id': id, 'saldo': r, 'bono': imperio.bonoSuerte});
+    notifyListeners();
+    unawaited(_guardarLocal());
+    return true;
+  }
+
+  /// Reclama el día de hoy de la racha. El servidor da Ciruelas y Fichas; aquí, producción, objetos y logro.
+  /// Lanza el error de red sin tocar la partida.
+  Future<ReclamoRacha> reclamarRacha() async {
+    final ReclamoRacha r;
+    try {
+      r = await nube.reclamarRacha(fechaTexto(fechaLocal(DateTime.now())));
+    } catch (_) {
+      _error('racha');
+      rethrow;
+    }
+    rachaPendiente = false;
+    if (_cerrado) return r;
+    imperio.ciruelas = r.ciruelas;
+    imperio.fichas = r.fichas;
+    _rachaDia = r.dia;
+    _rachaFecha = fechaLocal(DateTime.now());
+    if (!r.ya) {
+      final logro = premioDia(r.dia).logro;
+      final yaLoTenia = logro != null && imperio.partida.logros.contains(logro);
+      final mj = imperio.aplicarPremioRacha(r.dia, ahora);
+      final l = logro == null || yaLoTenia ? null : logroPorId(logro);
+      if (l != null && imperio.partida.logros.contains(l.id)) _sumarLogros([l]);
+      _anotar('racha_reclamar', {'dia': r.dia, 'ciruelas': r.ciruelasGanadas, 'ficha': r.ficha, 'mj': mj});
+      _hecho(true);
+      unawaited(_guardarLocal());
+      unawaited(_guardarNube());
+    }
+    notifyListeners();
     return r;
   }
 
@@ -468,28 +616,6 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     } catch (_) {}
   }
 
-  /// Gasta una Ficha en el servidor y activa la Cagada fresca. false si no quedaban. Lanza el error de red.
-  Future<bool> usarCagadaFresca() async {
-    final int r;
-    try {
-      r = await nube.usarFicha();
-    } catch (_) {
-      _error('ficha');
-      rethrow;
-    }
-    if (r < 0) {
-      imperio.fichas = 0;
-      notifyListeners();
-      return false;
-    }
-    imperio.activarCagadaFresca(ahora);
-    imperio.fichas = r;
-    _anotar('ficha_usa');
-    notifyListeners();
-    unawaited(_guardarLocal());
-    return true;
-  }
-
   // ---------- Jalar la cadena ----------
 
   /// Abre el diálogo de la cadena (`cadena_abre`). [puede]: el botón estaba encendido.
@@ -534,7 +660,13 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> _guardarLocal() async {
     _desdeLocal = 0;
-    final estado = {...imperio.toJson(), '_cagadas': imperio.cagadas, '_fichas': imperio.fichas};
+    final estado = {
+      ...imperio.toJson(),
+      '_cagadas': imperio.cagadas,
+      '_fichas': imperio.fichas,
+      '_ciruelas': imperio.ciruelas,
+      '_esteticas': imperio.esteticas.toList(),
+    };
     try {
       await nube.guardarLocal(_userId, estado, imperio.mjTotal, imperio.mpsSinEfectos());
     } catch (_) {
@@ -579,6 +711,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   @override
   void dispose() {
     _cerrado = true;
+    frescaHasta.removeListener(_ponerFresca);
     _bucle?.cancel();
     _bucle = null;
     _cerrarSesion();

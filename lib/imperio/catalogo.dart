@@ -31,16 +31,16 @@ class Edificio {
 const List<Edificio> edificios = [
   // El Dedo no produce MJ/s: suma MJ a cada pujo.
   Edificio('dedo', '👆', 'Dedo que puja', 'Pushing finger', 'Puja contigo: +1 por pujo', 'Pushes with you: +1 per push', 15, 0, 0, pujoBase: 1),
-  Edificio('ciruela', '🫐', 'Ciruela pasa', 'Prune', 'Lo natural', 'All natural', 100, 1, 0),
+  Edificio('ciruela', '🥛', 'Leche de magnesia', 'Milk of magnesia', 'El remedio de la abuela', "Grandma's remedy", 100, 1, 0),
   Edificio('cafe', '☕', 'Café negro', 'Black coffee', 'El de las 7 am', 'The 7 a.m. one', 1100, 8, 0),
   Edificio('arepa', '🫓', 'Arepa con caraotas', 'Arepa with beans', 'Combustible nacional', 'National fuel', 12000, 47, 0),
   Edificio('inodoro', '💦', 'Bidet', 'Bidet', 'Agua a presión, cero papel', 'Water pressure, zero paper', 130000, 260, 3),
-  Edificio('bano', '🚻', 'Baño público', 'Public restroom', 'Producción masiva', 'Mass production', 1.4e6, 1400, 5),
+  Edificio('bano', '🛁', 'Baño clase media', 'Middle-class bathroom', 'Con toallas de visita', 'Guest towels included', 1.4e6, 1400, 5),
   Edificio('camion', '🚛', 'Camión vacuum', 'Vacuum truck', 'Recolección a domicilio', 'Home pickup service', 20e6, 7800, 10),
   Edificio('planta', '🏭', 'Planta de tratamiento', 'Treatment plant', 'Industria seria', 'Serious industry', 330e6, 44000, 10),
   Edificio('cloaca', '🕳️', 'Cloaca municipal', 'City sewer', 'Todo el pueblo trabaja para ti', 'The whole town works for you', 5.1e9, 260000, 30,
       fase1: false, rollos: 100),
-  Edificio('granja', '🌱', 'Granja de abono', 'Compost farm', 'Agro-mojón', 'Agro-poop', 75e9, 1.6e6, 30, fase1: false, rollos: 300),
+  Edificio('granja', '🪰', 'Criadero de moscas', 'Fly farm', 'Ganadería de altura', 'Livestock, sort of', 75e9, 1.6e6, 30, fase1: false, rollos: 300),
   Edificio('mina', '⛏️', 'Mina de metano', 'Methane mine', 'Energía del futuro', 'Energy of the future', 1e12, 10e6, 30, fase1: false, rollos: 1000),
   Edificio('templo', '🛕', 'Templo del Trono', 'Throne temple', 'Culto al Rey', 'All hail the King', 14e12, 65e6, 60, fase1: false, rollos: 10000),
   Edificio('volcan', '🌋', 'Volcán digestivo', 'Digestive volcano', 'La Tierra también caga', 'Earth poops too', 170e12, 430e6, 60, fase1: false, rollos: 30000),
@@ -97,9 +97,9 @@ const Map<String, List<(String, String)>> _nombresMejoraEdificio = {
     ('Mano entera', 'The whole hand'), ('Dedo de Rey', "The King's finger"),
   ],
   'ciruela': [
-    ('Ciruela remojada', 'Soaked prune'), ('Jugo de ciruela', 'Prune juice'), ('Ciruela con linaza', 'Prune with flaxseed'),
-    ('Ciruela de la abuela', "Grandma's prunes"), ('Mermelada de ciruela', 'Prune jam'), ('Ciruelo en el patio', 'Prune tree out back'),
-    ('Ciruela transgénica', 'GMO prune'), ('Ciruela nuclear', 'Nuclear prune'),
+    ('Cucharada colmada', 'Heaping spoonful'), ('Sabor a menta', 'Mint flavor'), ('Botella familiar', 'Family-size bottle'),
+    ('Receta de la abuela', "Grandma's recipe"), ('Dosis de caballo', 'Horse dose'), ('Pipote de magnesia', 'Magnesia barrel'),
+    ('Magnesia fosforescente', 'Glow-in-the-dark magnesia'), ('Magnesia nuclear', 'Nuclear magnesia'),
   ],
   'cafe': [
     ('Doble carga', 'Double shot'), ('Café de bodega', 'Corner store coffee'), ('Café con leche de magnesia', 'Milk of magnesia latte'),
@@ -117,19 +117,19 @@ const Map<String, List<(String, String)>> _nombresMejoraEdificio = {
     ('Inodoro japonés', 'Japanese smart toilet'), ('Inodoro de oro', 'Solid gold toilet'),
   ],
   'bano': [
-    ('Papel en todos los cubículos', 'Paper in every stall'), ('Señora de la limpieza', 'The cleaning lady'), ('Cobrador en la puerta', 'Paid entry'),
-    ('Baño de terminal', 'Bus station restroom'), ('Baño de estadio', 'Stadium restroom'), ('Baño de concierto', 'Festival portapotties'),
-    ('Cadena nacional de baños', 'National restroom chain'), ('Baño sin cola', 'Restroom with no line'),
+    ('Toallas dobladitas', 'Neatly folded towels'), ('Mueble bajo el lavamanos', 'Vanity cabinet'), ('Cuadro de la abuela', "Grandma's painting"),
+    ('Calentador de agua', 'Water heater'), ('Ducha de lluvia', 'Rain shower'), ('Jabones de visita', 'Guest soaps'),
+    ('Jacuzzi', 'Jacuzzi'), ('Bañera con patas de oro', 'Gold clawfoot tub'),
   ],
   'camion': [
-    ('Manguera larga', 'Extra long hose'), ('Ruta nocturna', 'Night route'), ('Turbo en la bomba', 'Turbo pump'),
-    ('Flota municipal', 'City fleet'), ('Camión cisterna doble', 'Double tanker'), ('Gandola del mojón', 'Poop semi truck'),
-    ('Convoy nacional', 'National convoy'), ('Camión volador', 'Flying truck'),
+    ('Pintura de la alcaldía', 'City paint job'), ('Pito de retroceso', 'Backup beeper'), ('Camión grande', 'Bigger truck'),
+    ('Bocina de barco', 'Ship horn'), ('Camión cisterna doble', 'Double tanker'), ('Gandola del mojón', 'Poop semi truck'),
+    ('Gandola con llamas', 'Flame-painted rig'), ('Camión volador', 'Flying truck'),
   ],
   'planta': [
-    ('Filtro de arena', 'Sand filter'), ('Bacterias obreras', 'Worker bacteria'), ('Turno de noche', 'Night shift'),
-    ('Planta modelo', 'Model plant'), ('Bacterias sindicalizadas', 'Unionized bacteria'), ('Planta con ISO 9001', 'ISO 9001 plant'),
-    ('Planta exportadora', 'Export plant'), ('Planta en órbita', 'Plant in orbit'),
+    ('Segundo anillo', 'Second ring'), ('Luces de emergencia', 'Warning lights'), ('Chimenea', 'Smokestack'),
+    ('Tercer anillo', 'Third ring'), ('Núcleo verde', 'Green core'), ('Reactor con ISO 9001', 'ISO 9001 reactor'),
+    ('Reactor que vibra', 'Humming reactor'), ('Reactor en órbita', 'Reactor in orbit'),
   ],
 };
 
@@ -266,7 +266,7 @@ class Objeto {
   /// null = dura hasta el próximo mojón dorado (Papel doble hoja).
   final Duration? duracion;
 
-  /// Precio en minutos de producción (mínimo 100 MJ). 0 = se paga con una Ficha.
+  /// Precio en minutos de producción (mínimo 100 MJ). 0 = no se compra con MJ (Cagada fresca: viene con cada cagada real).
   final double minutosPrecio;
 
   /// Espera entre usos (consumible) o entre alquileres (alquilable). null = sin espera.
@@ -345,6 +345,8 @@ final List<Logro> logros = [
   Logro('diez_jaladas', 'Cadena oxidada', 'Rusty chain', 'Jalar la cadena 10 veces', 'Pull the chain 10 times', (p, _) => p.jaladas >= 10),
   Logro('primer_rollo', 'Papel de oro', 'Golden paper', '1 Rollo de Oro', '1 Golden Roll', (p, _) => p.rollos >= 1),
   Logro('cien_rollos', 'Rey del papel', 'Toilet paper king', '100 Rollos de Oro', '100 Golden Rolls', (p, _) => p.rollos >= 100),
+  // Lo da el día 30 de la racha (Imperio.aplicarPremioRacha), no una condición. En pantalla va con segun() (nombreLogro).
+  Logro('constancia', 'Rey de la constancia', 'King of consistency', '30 días seguidos de racha', '30-day streak', (p, m) => false),
 ];
 
 final Map<String, Logro> _logroPorId = {for (final l in logros) l.id: l};

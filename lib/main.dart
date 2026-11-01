@@ -16,6 +16,7 @@ import 'avisos.dart';
 import 'cagadon.dart';
 import 'chat.dart';
 import 'comunidad.dart';
+import 'fresca.dart';
 import 'idioma.dart';
 import 'inodoro.dart';
 import 'invitar_play.dart';
@@ -325,7 +326,12 @@ class _PantallaInicioState extends State<PantallaInicio> {
     // y el anuncio nuevo y los avisos del trono esperan a que se cierre (esperarExplosion).
     // Se registra antes que el AppLifecycleListener del trono, así que al volver también va primero.
     revisarHazanas(context);
-    _cicloHexa = AppLifecycleListener(onResume: () => revisarHazanas(context));
+    // Cagada fresca (x2 en el Imperio): se lee al abrir y al volver (pudo cagar desde el widget).
+    cargarFresca();
+    _cicloHexa = AppLifecycleListener(onResume: () {
+      revisarHazanas(context);
+      cargarFresca();
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       _irA();
       await esperarExplosion();
@@ -443,7 +449,7 @@ class _PantallaInicioState extends State<PantallaInicio> {
                 destinations: [
                   NavigationDestination(icon: IconoRebota(activo: _tab == 0, child: const Emoji('💩', tamano: 24)), label: tr('TRONO', 'THRONE')),
                   NavigationDestination(icon: IconoRebota(activo: _tab == 1, child: Icon(_tab == 1 ? Icons.emoji_events : Icons.emoji_events_outlined)), label: tr('RANKING', 'LEADERBOARD')),
-                  NavigationDestination(icon: IconoRebota(activo: _tab == 2, child: const Emoji('🏭', tamano: 24)), label: tr('IMPERIO', 'EMPIRE')),
+                  NavigationDestination(icon: IconoRebota(activo: _tab == 2, child: IconoImperio(activo: _tab == 2)), label: tr('IMPERIO', 'EMPIRE')),
                   NavigationDestination(icon: IconoRebota(activo: _tab == 3, child: icono(_tab == 3 ? Icons.wc : Icons.wc_outlined)), label: nombreCorto),
                   NavigationDestination(icon: IconoRebota(activo: _tab == 4, child: Icon(_tab == 4 ? Icons.person : Icons.person_outline)), label: tr('YO', 'ME')),
                 ],
@@ -628,6 +634,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
     HapticFeedback.mediumImpact();
     try {
       final nueva = await db.from('cagadas').insert({}).select('id').single();
+      frescaTrasCagar();
       _mensaje(tr('Registrado 💩', 'Logged 💩'));
       await _cargar(spinner: false);
       await animacion;
@@ -666,6 +673,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
       if (ultima == null) return _mensaje(tr('No hay nada que deshacer', 'Nothing to undo'));
       await db.from('cagadas').delete().eq('id', ultima['id']);
       _mensaje(tr('Deshecho', 'Undone'));
+      cargarFresca();
       await _cargar(spinner: false);
     } catch (e) {
       _mensaje(textoError(e));

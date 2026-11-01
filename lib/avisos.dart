@@ -200,11 +200,11 @@ class _PantallaAvisosState extends State<PantallaAvisos> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(tr('¿Jalar la cadena? 🚽', 'Flush it? 🚽')),
-        content: Text(tr('Tus avisos se van por el tubo y no vuelven. Los anuncios del admin se quedan.', 'Your notices go down the pipes and never come back. Admin announcements stay.')),
+        title: Text(tr('¿Borrar todos los avisos?', 'Clear all notifications?')),
+        content: Text(tr('Se borran y no vuelven. Los anuncios del admin se quedan.', "They're deleted for good. Admin announcements stay.")),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('NO', 'NO'))),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('JALAR', 'FLUSH'))),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('BORRAR', 'CLEAR'))),
         ],
       ),
     );
@@ -275,7 +275,7 @@ class _PantallaAvisosState extends State<PantallaAvisos> {
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaPopups())).then((_) => _cargar()),
             ),
           if (avisos?.any((a) => a['anuncio'] != true) ?? false)
-            TextButton(onPressed: _borrarTodo, child: TextoConEmojis(tr('🚽 JALAR', '🚽 FLUSH'))),
+            TextButton(onPressed: _borrarTodo, child: Text(tr('BORRAR TODO', 'CLEAR ALL'))),
         ],
       ),
       body: avisos == null

@@ -16,21 +16,21 @@ import 'tipos.dart';
 
 /// Las tarjetas de presumir del chat, cada una con su objeto: el hito es un periódico, el
 /// desbloqueo una vitrina con etiqueta de precio, la cagada una muestra de laboratorio, la racha
-/// una hoja de calendario, el logro del Imperio una placa con trofeo y la jalada un medidor.
+/// un anuncio de juego (tipo MOBA), el logro del Imperio una placa con trofeo y la jalada un medidor.
 /// Son objetos físicos: mismos colores en tema claro y oscuro. La cartera va aparte (tarjeta_cartera.dart).
 
 const _tinta = Color(0xFF171513);
 const _serif = 'serif';
 const _mono = 'monospace';
 
-/// La tarjeta propia de [t] o null si el tipo no es de aquí.
-Widget? tarjetaPresumir(Map<String, dynamic> t) {
+/// La tarjeta propia de [t] o null si el tipo no es de aquí. [perfil] y [hora] (del mensaje) los usa la racha.
+Widget? tarjetaPresumir(Map<String, dynamic> t, {Map<String, dynamic>? perfil, DateTime? hora}) {
   int entero(Object? v) => v is num ? v.toInt() : 0;
   return switch (t['tipo']) {
     'hito' => TarjetaTitular(n: entero(t['n']), reina: t['reina'] == true),
     'desbloqueo' => TarjetaVitrina.de('${t['emoji']}', minimo: t['minimo'] is num ? entero(t['minimo']) : null),
     'cagada' => TarjetaMuestra(n: entero(t['n']), mojon: t['mojon'] as int?, peso: t['peso'] as int?),
-    'racha' => TarjetaCalendario(n: entero(t['n'])),
+    'racha' => TarjetaRacha(n: entero(t['n']), perfil: perfil, hora: hora),
     'logro_imperio' => TarjetaPlaca(id: '${t['id']}'),
     'jalada' => TarjetaContador(n: entero(t['n']), rollos: ((t['rollos'] as num?) ?? 0).toDouble()),
     _ => null,
@@ -575,213 +575,374 @@ class _EtiquetaMuestra extends StatelessWidget {
       );
 }
 
-// ───────────────────────────── RACHA: hoja de calendario ─────────────────────────────
+// ───────────────────────────── RACHA: anuncio de juego (tipo MOBA) ─────────────────────────────
 
-const _rojoCalendario = Color(0xFFD7263D);
-const _papelCalendario = Color(0xFFFFFDF8);
+const _oroClaro = Color(0xFFFFF1B0);
+const _nocheMoba = Color(0xFF0B0A10);
+const _nocheMobaAlta = Color(0xFF1C1428);
 
-/// Racha del día: la hoja del calendario de hoy, con las rayitas contadas y fuego abajo.
-class TarjetaCalendario extends StatelessWidget {
-  const TarjetaCalendario({super.key, required this.n});
+/// Mojones de la fila de "kills": los del día encendidos, el resto apagados.
+const _ranuras = 6;
 
-  final int n;
+/// Gris para los mojones apagados.
+const _gris = ColorFilter.matrix(<double>[
+  0.2126, 0.7152, 0.0722, 0, 0, //
+  0.2126, 0.7152, 0.0722, 0, 0, //
+  0.2126, 0.7152, 0.0722, 0, 0, //
+  0, 0, 0, 1, 0,
+]);
+
+/// El color que brilla de la racha (el más claro: el rojo oscuro de RAMPAGE no alumbra).
+Color _brilloRacha(List<Color> colores) => colores.last.computeLuminance() < .1 ? colores.first : colores.last;
+
+/// "2 cagadas hoy · 20:51" (sin hora si no se sabe).
+String _lineaRacha(int n, DateTime? hora) {
+  final base = n == 1 ? tr('1 cagada hoy', '1 poop today') : tr('$n cagadas hoy', '$n poops today');
+  if (hora == null) return base;
+  final h = hora.toLocal();
+  return '$base · ${h.hour.toString().padLeft(2, '0')}:${h.minute.toString().padLeft(2, '0')}';
+}
+
+/// Rectángulo con las esquinas cortadas a [corte].
+Path _chaflan(Rect r, double corte) => Path()
+  ..moveTo(r.left + corte, r.top)
+  ..lineTo(r.right - corte, r.top)
+  ..lineTo(r.right, r.top + corte)
+  ..lineTo(r.right, r.bottom - corte)
+  ..lineTo(r.right - corte, r.bottom)
+  ..lineTo(r.left + corte, r.bottom)
+  ..lineTo(r.left, r.bottom - corte)
+  ..lineTo(r.left, r.top + corte)
+  ..close();
+
+Shader _oroShader(Rect r) => const LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [_oroClaro, _bronce, _bronceOscuro, _bronce, _oroClaro],
+      stops: [0, .3, .55, .8, 1],
+    ).createShader(r);
+
+/// Fondo del anuncio: noche, brillo del color de la racha, rayas de velocidad y marco de oro con esquinas cortadas.
+class _MarcoMoba extends CustomPainter {
+  const _MarcoMoba(this.brillo, {this.corte = 10, this.centroBrillo = const Alignment(.3, -.2), this.rayas = 16});
+
+  final Color brillo;
+  final double corte;
+  final Alignment centroBrillo;
+  final int rayas;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = Offset.zero & size;
+    final borde = _chaflan(r.deflate(.75), corte);
+    canvas.save();
+    canvas.clipPath(borde);
+    canvas.drawRect(
+        r, Paint()..shader = const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [_nocheMobaAlta, _nocheMoba]).createShader(r));
+    canvas.drawRect(
+      r,
+      Paint()
+        ..shader = RadialGradient(center: centroBrillo, radius: .8, colors: [brillo.withValues(alpha: .38), brillo.withValues(alpha: 0)])
+            .createShader(r),
+    );
+    // Rayas de velocidad, inclinadas como la letra.
+    final raya = Paint()
+      ..color = Colors.white.withValues(alpha: .05)
+      ..strokeWidth = 1;
+    final paso = size.width / rayas;
+    for (var i = 0; i <= rayas + 4; i++) {
+      final x = i * paso;
+      canvas.drawLine(Offset(x, 0), Offset(x - size.height * .45, size.height), raya);
+    }
+    canvas.restore();
+    canvas.drawPath(borde, Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..shader = _oroShader(r));
+    canvas.drawPath(
+      _chaflan(r.deflate(4), math.max(0, corte - 2.5)),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = _bronce.withValues(alpha: .35),
+    );
+    // Picos de oro arriba y abajo, al centro.
+    final m = size.width / 2;
+    final pico = Paint()..shader = _oroShader(r);
+    canvas.drawPath(Path()..moveTo(m - 12, 0)..lineTo(m + 12, 0)..lineTo(m, 5)..close(), pico);
+    canvas.drawPath(Path()..moveTo(m - 12, size.height)..lineTo(m + 12, size.height)..lineTo(m, size.height - 5)..close(), pico);
+  }
+
+  @override
+  bool shouldRepaint(covariant _MarcoMoba old) => old.brillo != brillo || old.corte != corte || old.centroBrillo != centroBrillo;
+}
+
+/// El retrato del que la hizo en marco de héroe: oro con esquinas cortadas y brillo detrás.
+class _Retrato extends StatelessWidget {
+  const _Retrato({required this.tamano, required this.brillo, required this.child});
+
+  final double tamano;
+  final Color brillo;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: tamano,
+        height: tamano,
+        child: CustomPaint(
+          painter: _MarcoRetrato(brillo),
+          child: Padding(padding: EdgeInsets.all(tamano * .12), child: FittedBox(child: child)),
+        ),
+      );
+}
+
+class _MarcoRetrato extends CustomPainter {
+  const _MarcoRetrato(this.brillo);
+
+  final Color brillo;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = Offset.zero & size;
+    final corte = size.width * .2;
+    final marco = _chaflan(r.deflate(1), corte);
+    canvas.drawPath(
+      marco,
+      Paint()..shader = RadialGradient(colors: [brillo.withValues(alpha: .55), _nocheMoba], stops: const [0, 1]).createShader(r),
+    );
+    canvas.drawPath(marco, Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = math.max(2, size.width / 30)
+      ..shader = _oroShader(r));
+    canvas.drawPath(
+      _chaflan(r.deflate(size.width * .07), corte * .7),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = _oroClaro.withValues(alpha: .4),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _MarcoRetrato old) => old.brillo != brillo;
+}
+
+/// El nombre de la racha como anuncio: itálica gruesa, borde negro, degradado y brillo.
+class _NombreRacha extends StatelessWidget {
+  const _NombreRacha(this.texto, {required this.colores, required this.tamano});
+
+  final String texto;
+  final List<Color> colores;
+  final double tamano;
 
   @override
   Widget build(BuildContext context) {
-    final colores = estiloRacha(n).$1;
-    return Container(
-      decoration: BoxDecoration(color: _papelCalendario, border: Border.all(color: _tinta), borderRadius: BorderRadius.circular(radio)),
-      clipBehavior: Clip.antiAlias,
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-        const _Anillas(),
-        Container(
-          color: _rojoCalendario,
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Text(tr('HOY', 'TODAY'),
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 6, fontSize: 13)),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
-          child: Row(children: [
-            Text('$n', style: const TextStyle(fontSize: 64, fontWeight: FontWeight.w900, color: _rojoCalendario, height: 1)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(tr('CAGADAS EN UN DÍA', 'POOPS IN ONE DAY'),
-                    style: const TextStyle(color: _tinta, fontWeight: FontWeight.w800, fontSize: 11, letterSpacing: 1)),
-                const SizedBox(height: 4),
-                Container(
-                  color: _tinta,
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  child: ShaderMask(
-                    shaderCallback: (r) => LinearGradient(colors: colores).createShader(r),
-                    child: Text(nombreRacha(n) ?? '',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, fontSize: 18)),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                SizedBox(height: 20, width: double.infinity, child: CustomPaint(painter: _Rayitas(n))),
-              ]),
-            ),
-          ]),
-        ),
-        Container(
-          color: const Color(0xFF2A0D05),
-          padding: const EdgeInsets.symmetric(vertical: 3),
-          child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-            for (var i = 0; i < 7; i++) Emoji(i.isEven ? '🔥' : estiloRacha(n).$2, tamano: i.isEven ? 18 : 14),
-          ]),
+    final brillo = _brilloRacha(colores);
+    final base = TextStyle(fontSize: tamano, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, letterSpacing: .5, height: 1.05);
+    return Padding(
+      // La itálica se sale por la derecha: aire para que no se corte.
+      padding: EdgeInsets.only(right: tamano * .15),
+      child: Stack(children: [
+        Text(texto,
+            maxLines: 1,
+            softWrap: false,
+            style: base.copyWith(
+              foreground: Paint()
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = tamano / 6
+                ..strokeJoin = StrokeJoin.round
+                ..color = Colors.black,
+              shadows: [Shadow(color: brillo, blurRadius: tamano * .7), Shadow(color: brillo.withValues(alpha: .6), blurRadius: tamano * .25)],
+            )),
+        ShaderMask(
+          shaderCallback: (r) => LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color.lerp(colores.first, Colors.white, .65)!, ...colores],
+            stops: const [0, .45, 1],
+          ).createShader(r),
+          child: Text(texto, maxLines: 1, softWrap: false, style: base.copyWith(color: Colors.white)),
         ),
       ]),
     );
   }
 }
 
-/// El lomo con las anillas del calendario.
-class _Anillas extends StatelessWidget {
-  const _Anillas({this.alto = 12});
-
-  final double alto;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        height: alto,
-        color: _tinta,
-        child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-          for (var i = 0; i < 8; i++) Container(width: alto * .5, height: alto * .5, color: const Color(0xFF9A968C)),
-        ]),
-      );
-}
-
-/// Las rayitas del preso, de cinco en cinco (la quinta cruza).
-class _Rayitas extends CustomPainter {
-  const _Rayitas(this.n, {this.centrado = false});
+/// La fila de "kills": [n] mojones encendidos de 6 y los demás apagados; pasado el 6, "+k".
+class _Kills extends StatelessWidget {
+  const _Kills({required this.n, required this.brillo, required this.tamano});
 
   final int n;
-  final bool centrado;
+  final Color brillo;
+  final double tamano;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final lapiz = Paint()
-      ..color = _tinta
-      ..strokeWidth = size.height / 9
-      ..strokeCap = StrokeCap.square;
-    final paso = size.height * .3;
-    var x = 0.0;
-    if (centrado) {
-      // Ancho de las rayitas dibujadas, del primer palo al último.
-      final grupos = (n + 4) ~/ 5;
-      final ultimo = n - (grupos - 1) * 5;
-      final ancho = (grupos - 1) * paso * 5.4 + (math.min(4, ultimo) - 1) * paso;
-      x = math.max(0, (size.width - ancho) / 2);
-    }
-    for (var g = 0; g * 5 < n; g++) {
-      final enGrupo = math.min(5, n - g * 5);
-      final inicio = x;
-      for (var i = 0; i < math.min(4, enGrupo); i++) {
-        canvas.drawLine(Offset(x, size.height * .1), Offset(x, size.height * .9), lapiz);
-        x += paso;
-      }
-      if (enGrupo == 5) canvas.drawLine(Offset(inicio - paso * .4, size.height * .8), Offset(x - paso * .6, size.height * .2), lapiz);
-      x += paso * 1.4;
-      if (x > size.width) break;
-    }
+  Widget build(BuildContext context) {
+    final extra = n - _ranuras;
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      for (var i = 0; i < _ranuras; i++) ...[
+        if (i > 0) SizedBox(width: tamano * .14),
+        _Ranura(encendida: i < n, brillo: brillo, tamano: tamano),
+      ],
+      if (extra > 0) ...[
+        SizedBox(width: tamano * .2),
+        Text('+$extra',
+            style: TextStyle(
+                color: _oroClaro, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, fontSize: tamano * .6, shadows: [Shadow(color: brillo, blurRadius: 8)])),
+      ],
+    ]);
   }
-
-  @override
-  bool shouldRepaint(covariant _Rayitas old) => old.n != n || old.centrado != centrado;
 }
 
-/// La imagen 9:16 de la racha para historias: hoja grande del calendario con fuego.
-/// Los tamaños los fija quien la usa (racha.dart).
-class HistoriaCalendario extends StatelessWidget {
-  const HistoriaCalendario({super.key, required this.n, this.foto, this.letrero, this.usuario, this.lugar});
+class _Ranura extends StatelessWidget {
+  const _Ranura({required this.encendida, required this.brillo, required this.tamano});
+
+  final bool encendida;
+  final Color brillo;
+  final double tamano;
+
+  @override
+  Widget build(BuildContext context) {
+    final mojon = Emoji('💩', tamano: tamano * .72);
+    return Container(
+      width: tamano,
+      height: tamano,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radio),
+        border: Border.all(color: encendida ? brillo : Colors.white.withValues(alpha: .16)),
+        gradient: encendida
+            ? RadialGradient(colors: [brillo.withValues(alpha: .6), brillo.withValues(alpha: .08)])
+            : LinearGradient(colors: [Colors.black.withValues(alpha: .35), Colors.black.withValues(alpha: .35)]),
+      ),
+      child: encendida ? mojon : Opacity(opacity: .28, child: ColorFiltered(colorFilter: _gris, child: mojon)),
+    );
+  }
+}
+
+/// Racha del día en el chat: anuncio de juego con el retrato, el nombre enorme y la fila de kills.
+/// [perfil] (avatar del que cagó) y [hora] son opcionales: sin perfil sale el emoji del nivel.
+class TarjetaRacha extends StatelessWidget {
+  const TarjetaRacha({super.key, required this.n, this.perfil, this.hora});
 
   final int n;
-
-  /// El nombre de la racha con su letrero de juego (racha.dart); sin él, texto con degradado.
-  final Widget? letrero;
-
-  /// El avatar del usuario (o un mojón).
-  final Widget? foto;
-  final String? usuario;
-  final String? lugar;
+  final Map<String, dynamic>? perfil;
+  final DateTime? hora;
 
   @override
   Widget build(BuildContext context) {
     final (colores, emojiNivel) = estiloRacha(n);
+    final brillo = _brilloRacha(colores);
+    return CustomPaint(
+      painter: _MarcoMoba(brillo),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+        child: Row(children: [
+          _Retrato(
+            tamano: 64,
+            brillo: brillo,
+            child: perfil != null ? Avatar(perfil!, tamano: 56) : Emoji(emojiNivel, tamano: 48),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              Text(tr('RACHA DE HOY', "TODAY'S STREAK"),
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.fade,
+                  style: const TextStyle(fontFamily: _mono, color: _bronce, fontWeight: FontWeight.w700, fontSize: 9, letterSpacing: 3)),
+              SizedBox(
+                height: 36,
+                width: double.infinity,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: _NombreRacha(nombreRacha(n) ?? tr('RACHA', 'STREAK'), colores: colores, tamano: 30),
+                ),
+              ),
+              const SizedBox(height: 6),
+              FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: _Kills(n: n, brillo: brillo, tamano: 22)),
+              const SizedBox(height: 6),
+              Text(_lineaRacha(n, hora),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontFamily: _mono, color: Colors.white.withValues(alpha: .75), fontSize: 11, fontWeight: FontWeight.w700)),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+/// La imagen 9:16 de la racha para historias: el mismo anuncio en grande.
+/// Los tamaños los fija quien la usa (racha.dart).
+class HistoriaRacha extends StatelessWidget {
+  const HistoriaRacha({super.key, required this.n, this.foto, this.letrero, this.usuario, this.lugar, this.hora});
+
+  final int n;
+
+  /// Otro letrero para el nombre; sin él, el de la tarjeta del chat.
+  final Widget? letrero;
+
+  /// El avatar del usuario; sin él, el emoji del nivel.
+  final Widget? foto;
+  final String? usuario;
+  final String? lugar;
+  final DateTime? hora;
+
+  @override
+  Widget build(BuildContext context) {
+    final (colores, emojiNivel) = estiloRacha(n);
+    final brillo = _brilloRacha(colores);
     const blanco = Colors.white;
-    return ColoredBox(
-      color: const Color(0xFF1A0703),
+    return CustomPaint(
+      painter: _MarcoMoba(brillo, corte: 18, centroBrillo: const Alignment(0, -.25), rayas: 14),
       child: Column(children: [
         Container(
-          margin: const EdgeInsets.only(top: 24),
+          margin: const EdgeInsets.only(top: 26),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           color: acento,
           child: Text(tr('REY CAGÓN', 'KING OF THE THRONE'),
               style: const TextStyle(color: acentoTexto, fontWeight: FontWeight.w900, letterSpacing: 4, fontSize: 14)),
         ),
-        const SizedBox(height: 20),
-        Expanded(
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 26),
-            decoration: BoxDecoration(color: _papelCalendario, border: Border.all(color: _tinta, width: 2)),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              const _Anillas(alto: 18),
-              Container(
-                color: _rojoCalendario,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(tr('HOY', 'TODAY'),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: blanco, fontWeight: FontWeight.w900, letterSpacing: 10, fontSize: 20)),
-              ),
-              const SizedBox(height: 10),
-              Center(child: SizedBox(width: 80, height: 80, child: FittedBox(child: foto ?? const Emoji('💩', tamano: 80)))),
-              Text('$n', textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 100, fontWeight: FontWeight.w900, color: _rojoCalendario, height: 1)),
-              Text(tr('CAGADAS EN UN DÍA', 'POOPS IN ONE DAY'),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: _tinta, fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 13)),
-              const SizedBox(height: 10),
-              Container(
-                color: _tinta,
-                height: 54,
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                child: FittedBox(
-                  child: letrero ??
-                      ShaderMask(
-                        shaderCallback: (r) => LinearGradient(colors: colores).createShader(r),
-                        child: Text(' ${nombreRacha(n) ?? ''} ',
-                            style: const TextStyle(color: blanco, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, fontSize: 34)),
-                      ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Center(child: SizedBox(width: 160, height: 30, child: CustomPaint(painter: _Rayitas(n, centrado: true)))),
-              const Spacer(),
-              if (usuario != null)
-                Text('@$usuario',
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: _tinta, fontWeight: FontWeight.w900, fontSize: 20)),
-              if (lugar != null)
-                Text(lugar!, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFF6B6559), fontSize: 13)),
-              const SizedBox(height: 8),
-              Container(
-                color: const Color(0xFF2A0D05),
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-                  for (var i = 0; i < 7; i++) Emoji(i.isEven ? '🔥' : emojiNivel, tamano: i.isEven ? 26 : 18),
-                ]),
-              ),
-            ]),
+        const Spacer(),
+        Text(tr('RACHA DE HOY', "TODAY'S STREAK"),
+            style: const TextStyle(fontFamily: _mono, color: _bronce, fontWeight: FontWeight.w700, fontSize: 13, letterSpacing: 6)),
+        const SizedBox(height: 14),
+        _Retrato(tamano: 150, brillo: brillo, child: foto ?? Emoji(emojiNivel, tamano: 110)),
+        const SizedBox(height: 18),
+        SizedBox(
+          height: 78,
+          width: double.infinity,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            child: FittedBox(child: letrero ?? _NombreRacha(nombreRacha(n) ?? tr('RACHA', 'STREAK'), colores: colores, tamano: 60)),
           ),
         ),
+        const SizedBox(height: 16),
+        FittedBox(child: _Kills(n: n, brillo: brillo, tamano: 38)),
+        const SizedBox(height: 12),
+        Text(_lineaRacha(n, hora),
+            style: TextStyle(fontFamily: _mono, color: blanco.withValues(alpha: .8), fontSize: 15, fontWeight: FontWeight.w700)),
+        const Spacer(),
+        if (usuario != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Text('@$usuario',
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: blanco, fontWeight: FontWeight.w900, fontSize: 20)),
+          ),
+        if (lugar != null) Text(lugar!, textAlign: TextAlign.center, style: TextStyle(color: blanco.withValues(alpha: .6), fontSize: 13)),
+        Container(
+          height: 1,
+          margin: const EdgeInsets.fromLTRB(26, 12, 26, 0),
+          decoration: const BoxDecoration(gradient: LinearGradient(colors: [Colors.transparent, _bronce, Colors.transparent])),
+        ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(26, 14, 26, 20),
+          padding: const EdgeInsets.fromLTRB(26, 12, 26, 22),
           child: Row(children: [
             const Emoji('🚽', tamano: 40),
             const SizedBox(width: 12),

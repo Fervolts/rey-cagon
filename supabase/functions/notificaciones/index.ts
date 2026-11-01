@@ -10,6 +10,8 @@
 //   - trigger mensajes_avisar_respuesta: { tipo: "respuesta" } → respuesta en un hilo de una sala pública.
 //   - retos (Cagadón): { tipo: "reto", evento } → nuevo, aceptado, rechazado o fin del día.
 //   - trigger anuncios_avisar: { tipo: "anuncio" } → anuncio de un admin a todos los teléfonos.
+//   - cron push_poceta: { tipo: "poceta", lista } → empujones del Imperio.
+//   - cron push_racha: { tipo: "racha", lista: [{ user_id, llevas, dia }] } → racha del Imperio a punto de perderse.
 // Lo que va a una persona también se guarda en public.notificaciones (centro de avisos de la app).
 // Cada texto va en español y en inglés: cada teléfono recibe el de su idioma (push_tokens.idioma).
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
@@ -483,6 +485,70 @@ async function avisarPoceta(lista: Poceta[]) {
   return Response.json(r);
 }
 
+// Premio de cada día de la racha del Imperio (copia de premiosRacha en lib/imperio/racha_imperio.dart).
+const premiosRacha: [string, string][] = [
+  ["⏰ 15 min de producción", "⏰ 15 min of production"],
+  ["🧴 Ambientador criollo", "🧴 Homemade air freshener"],
+  ["1 🫐 Ciruela", "1 🫐 Plum"],
+  ["⏰ 30 min de producción", "⏰ 30 min of production"],
+  ["💊 Laxante express", "💊 Express laxative"],
+  ["2 🫐 Ciruelas", "2 🫐 Plums"],
+  ["🎟️ 1 Ficha + 3 🫐 Ciruelas", "🎟️ 1 Token + 3 🫐 Plums"],
+  ["⏰ 45 min de producción", "⏰ 45 min of production"],
+  ["🧻 Papel doble hoja", "🧻 Two-ply paper"],
+  ["3 🫐 Ciruelas", "3 🫐 Plums"],
+  ["⏰ 1 h de producción", "⏰ 1 h of production"],
+  ["🤖 Robot destapador", "🤖 Plunger bot"],
+  ["4 🫐 Ciruelas", "4 🫐 Plums"],
+  ["🎟️ 1 Ficha + 5 🫐 Ciruelas", "🎟️ 1 Token + 5 🫐 Plums"],
+  ["⏰ 2 h de producción", "⏰ 2 h of production"],
+  ["🧴 2 Ambientadores", "🧴 2 Air fresheners"],
+  ["5 🫐 Ciruelas", "5 🫐 Plums"],
+  ["💊 2 Laxantes", "💊 2 Laxatives"],
+  ["⏰ 3 h de producción", "⏰ 3 h of production"],
+  ["6 🫐 Ciruelas", "6 🫐 Plums"],
+  ["🎟️ 1 Ficha + 8 🫐 Ciruelas", "🎟️ 1 Token + 8 🫐 Plums"],
+  ["⏰ 4 h de producción", "⏰ 4 h of production"],
+  ["🧻 Papel doble hoja + 🤖 Robot destapador", "🧻 Two-ply paper + 🤖 Plunger bot"],
+  ["8 🫐 Ciruelas", "8 🫐 Plums"],
+  ["⏰ 6 h de producción", "⏰ 6 h of production"],
+  ["🧴 Ambientador + 💊 Laxante", "🧴 Air freshener + 💊 Laxative"],
+  ["10 🫐 Ciruelas", "10 🫐 Plums"],
+  ["🎟️ 1 Ficha + 12 🫐 Ciruelas", "🎟️ 1 Token + 12 🫐 Plums"],
+  ["⏰ 8 h de producción", "⏰ 8 h of production"],
+  ["25 🫐 Ciruelas + un logro 🏆", "25 🫐 Plums + an achievement 🏆"],
+];
+
+type Racha = { user_id: string; llevas: number; dia: number };
+
+// Lista que arma push_racha_revisar(): reclamó ayer y no hoy, a ~4 h de su medianoche.
+// Un aviso por persona; no se guarda en notificaciones.
+async function avisarRacha(lista: Racha[]) {
+  const porUsuario = new Map<string, Racha>();
+  for (const r of lista) if (r?.user_id && r.dia >= 1 && r.dia <= premiosRacha.length) porUsuario.set(r.user_id, r);
+  if (!porUsuario.size) return Response.json({ enviados: 0 });
+  const usuarios = [...porUsuario.keys()];
+  const tokens: Destino[] = [];
+  for (let i = 0; i < usuarios.length; i += 200) {
+    const { data } = await db.from("push_tokens").select("token, user_id, idioma").in("user_id", usuarios.slice(i, i + 200));
+    tokens.push(...(data ?? []));
+  }
+  if (!tokens.length) return Response.json({ enviados: 0 });
+  const r = await repartir("racha", tokens, (t) => {
+    const { llevas, dia } = porUsuario.get(t.user_id ?? "")!;
+    const [es, en] = premiosRacha[dia - 1];
+    const a = aviso(
+      `Llevas ${llevas} ${llevas === 1 ? "día" : "días"} 🔥`,
+      `Hoy toca ${es}. Si no entras antes de medianoche, tu racha se va por la poceta 🚽`,
+      `${llevas} ${llevas === 1 ? "day" : "days"} in a row 🔥`,
+      `Today you get ${en}. If you don't come in before midnight, your streak goes down the toilet 🚽`,
+    );
+    const [titulo, cuerpo] = enSuIdioma(a, t.idioma);
+    return { titulo, cuerpo, subtipo: `dia_${dia}`, data: { tipo: "racha", dia: String(dia) } };
+  });
+  return Response.json(r);
+}
+
 Deno.serve(async (req) => {
   if (req.headers.get("x-webhook-secret") !== Deno.env.get("WEBHOOK_SECRET")) {
     return new Response("no", { status: 401 });
@@ -498,6 +564,7 @@ Deno.serve(async (req) => {
   if (cuerpo.tipo === "anuncio") return avisarAnuncio(cuerpo.id);
   if (cuerpo.tipo === "reporte_chat") return avisarReporteChat(cuerpo.mensaje_id, cuerpo.motivo);
   if (cuerpo.tipo === "poceta") return avisarPoceta(cuerpo.lista ?? []);
+  if (cuerpo.tipo === "racha") return avisarRacha(cuerpo.lista ?? []);
   const { user_id } = cuerpo;
 
   const { data: seguidores } = await db.from("follows").select("follower").eq("followed", user_id);

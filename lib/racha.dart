@@ -9,7 +9,7 @@ import 'compartir.dart';
 import 'emoji.dart';
 import 'idioma.dart';
 import 'nuclear.dart';
-import 'presumir.dart' show HistoriaCalendario;
+import 'presumir.dart' show HistoriaRacha;
 import 'tema.dart';
 
 /// Rachas del día al estilo del anunciador de DotA. Siempre en inglés, en los dos idiomas: es el chiste.
@@ -305,13 +305,13 @@ class _Historia extends StatelessWidget {
   Widget build(BuildContext context) => SizedBox(
         width: ancho,
         height: alto,
-        // La hoja del calendario de hoy con fuego (presumir.dart); el letrero sigue siendo el de aquí.
-        child: HistoriaCalendario(
+        // El anuncio de la racha en grande (presumir.dart), con la hora de ahora.
+        child: HistoriaRacha(
           n: n,
           foto: perfil != null ? Avatar(perfil!, tamano: 96) : null,
-          letrero: _Letrero(nombreRacha(n) ?? '', colores: estiloRacha(n).$1, tamano: 44),
           usuario: perfil?['username'] as String?,
           lugar: lugar,
+          hora: DateTime.now(),
         ),
       );
 }

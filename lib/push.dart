@@ -46,6 +46,7 @@ void _alTocar(RemoteMessage m) {
     'reto' => 'inicio',
     'follow' || 'placer' || 'anuncio' => 'avisos',
     'poceta' => m.data['subtipo'] == 'constipado' ? 'inicio' : 'imperio',
+    'racha' => 'imperio',
     _ => null,
   };
   if (destino != null) ir(destino);

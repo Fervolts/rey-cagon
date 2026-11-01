@@ -11,6 +11,7 @@ import '../main.dart' show db, textoError;
 import '../tema.dart';
 import 'control.dart';
 import 'formato.dart';
+import 'moneda_app.dart';
 import 'motor.dart';
 import 'nube.dart';
 
@@ -193,6 +194,97 @@ class _Confirmar extends StatelessWidget {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('NO', 'NO'))),
         FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('JALAR', 'FLUSH'))),
+      ],
+    );
+  }
+}
+
+/// Antes de comprar La cadena del trono: explica qué es jalar, qué se gana y qué hace falta. true = COMPRAR.
+Future<bool> confirmarComprarCadena(BuildContext context, ControlImperio c) async {
+  final seguro = await showDialog<bool>(
+    context: context,
+    builder: (context) => _ConfirmarCadena(cadena: c.cadena, pct: c.imperio.ajustes.rolloPct, moneda: monedaActual().abreviatura),
+  );
+  return seguro == true;
+}
+
+class _ConfirmarCadena extends StatelessWidget {
+  const _ConfirmarCadena({required this.cadena, required this.pct, required this.moneda});
+
+  final EstadoCadena? cadena;
+  final double pct;
+  final String moneda;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paleta(context);
+    final suave = TextStyle(fontSize: 13, color: p.textoSuave);
+    Widget linea(String emoji, String titulo, String texto) => Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Emoji(emoji, tamano: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(titulo, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 1, color: p.texto)),
+                    Text(texto, style: suave),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+    final uno = porcentajeRollos(1, pct);
+    final ca = cadena;
+    // Sin respuesta de imperio_cadena no se sabe el número: se explica sin él.
+    final String falta;
+    if (ca == null) {
+      falta = tr('Hacer cagadas reales desde que empezaste el Imperio. El botón JALAR te dice cuántas faltan.',
+          'Make real poops since you started the Empire. The FLUSH button tells you how many are left.');
+    } else {
+      final quedan = ca.necesarias - ca.cagadas;
+      falta = quedan <= 0
+          ? tr('${ca.necesarias} cagadas reales desde que empezaste. Ya las tienes.',
+              '${ca.necesarias} real poops since you started. You already have them.')
+          : tr('${ca.necesarias} cagadas reales desde que empezaste. Llevas ${ca.cagadas}: te faltan $quedan.',
+              '${ca.necesarias} real poops since you started. You have ${ca.cagadas}: $quedan to go.');
+    }
+    return AlertDialog(
+      title: Text(tr('¿Comprar La cadena del trono?', 'Buy The throne chain?')),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(border: Border.all(color: p.primario), borderRadius: BorderRadius.circular(radio)),
+              child: Text(
+                tr('Esta mejora te da el botón JALAR. Comprarla no borra nada: tú decides cuándo jalar.',
+                    'This upgrade gives you the FLUSH button. Buying it erases nothing: you choose when to flush.'),
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: p.texto),
+              ),
+            ),
+            linea('🚽', tr('JALAR LA CADENA', 'FLUSHING'),
+                tr('Empiezas de cero: se van tus $moneda, edificios, mejoras y objetos.',
+                    'You start over: your $moneda, buildings, upgrades and items are gone.')),
+            linea('🏆', tr('SE QUEDA', 'KEPT'),
+                tr('Tus logros, tus Rollos de Oro y lo que pagaste con cagadas reales.',
+                    'Your achievements, your Golden Rolls and what you paid for with real poops.')),
+            linea('🧻', tr('QUÉ GANAS', 'WHAT YOU GET'),
+                tr('Rollos de Oro: cada uno suma $uno de producción para siempre, aunque vuelvas a jalar.',
+                    'Golden Rolls: each one adds $uno production forever, even after you flush again.')),
+            linea('💩', tr('QUÉ HACE FALTA', 'WHAT YOU NEED'), falta),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('AHORA NO', 'NOT NOW'))),
+        FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('COMPRAR', 'BUY'))),
       ],
     );
   }
