@@ -15,11 +15,14 @@ import 'bienvenida.dart';
 import 'cadena.dart';
 import 'cantidades.dart';
 import 'cartera.dart';
+import 'cofre.dart';
 import 'control.dart';
+import 'fichas.dart';
 import 'fila.dart';
 import 'formato.dart';
 import 'hoja_racha.dart';
 import 'logros.dart' show presumirLogroImperio;
+import 'mana.dart';
 import 'moneda_app.dart';
 import 'motor.dart';
 import 'personalizar.dart';
@@ -156,6 +159,12 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       while (_c.logrosNuevos.isNotEmpty) {
         final l = _c.logrosNuevos.removeAt(0);
         _avisar('🏆', tr('Logro: ${nombreLogro(l)}', 'Achievement: ${nombreLogro(l)}'), logro: l.id);
+      }
+      // Súper Plomero: 1 h de producción al primer tick del día.
+      final regalo = _c.imperio.tomarRegaloPlomero();
+      if (regalo > 0) {
+        final mj = formatoMj(regalo, ingles: enIngles);
+        _avisar('🦸', tr('El Súper Plomero te trajo +$mj', 'The Super Plumber brought you +$mj'));
       }
       _mostrarDialogos();
     }
@@ -599,8 +608,10 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     final rollos = im.partida.rollos;
     // Chips en una sola fila, todos del mismo ancho y alto.
     final chips = <Widget>[
+      // Fichas: abre la hoja de Fichas (fichas.dart).
       GestureDetector(
-        onTap: () => _avisar('🎟️', tr('${im.fichas} Fichas para los minijuegos del ARCADE', '${im.fichas} Tokens for the ARCADE minigames')),
+        key: const Key('chip_fichas'),
+        onTap: () => abrirHojaFichas(context, _c, _avisar),
         child: _chip(context, '🎟️', '${im.fichas}'),
       ),
       // Ciruelas: abre la tienda. La llave es el destino de la ciruela que vuela.
@@ -620,6 +631,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
           onTap: () => mostrarHojaRacha(context, _c, _avisar),
           child: _chip(context, '🔥', '${racha.dia}/$diasRacha', borde: racha.reclamado ? null : acento),
         ),
+      if (_c.cofre != null) ChipCofre(control: _c, avisar: _avisar),
       if (rollos > 0)
         GestureDetector(
           key: const Key('chip_rollos'),
@@ -700,6 +712,10 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
               ],
             ],
           ),
+          if (im.manaAbierto) ...[
+            const SizedBox(height: 6),
+            BarraMana(control: _c, avisar: (e, t) => _avisar(e, t), ahora: ahora),
+          ],
         ],
       ),
     );
@@ -1142,7 +1158,115 @@ class _HojaObjetos extends StatelessWidget {
         Rotulo(tr('Objetos', 'Items')),
         const SizedBox(height: 8),
         for (final o in objetos) _fila(context, p, im, o, ahora),
+        if (im.objetosRollosAbiertos) ...[
+          const SizedBox(height: 8),
+          Rotulo(tr('Rollos de Oro', 'Golden Rolls')),
+          const SizedBox(height: 4),
+          Text(
+              tr('Cada Rollo que gastas deja de darte ${porcentajeRollos(1, im.ajustes.rolloPct)}. Edificios y mejoras siguen abiertos.',
+                  'Each Roll you spend stops giving you ${porcentajeRollos(1, im.ajustes.rolloPct)}. Buildings and upgrades stay open.'),
+              style: TextStyle(fontSize: 12, color: p.textoSuave)),
+          const SizedBox(height: 8),
+          for (final r in objetosRollos) _filaRollos(context, p, im, r, ahora),
+        ],
       ],
+    );
+  }
+
+  void _comprarRollos(ObjetoRollos r) {
+    if (control.comprarObjetoRollos(r.id)) avisar(r.emoji, tr('${r.nombreEs}: listo', '${r.nombreEn}: done'));
+  }
+
+  Widget _filaRollos(BuildContext context, Paleta p, Imperio im, ObjetoRollos r, int ahora) {
+    final tiene = im.tieneObjetoRollos(r.id);
+    final espera = r.id == 'cadena_reserva' ? im.esperaCadena(ahora) : null;
+    final pendiente = r.id == 'cadena_reserva' && tiene > 0;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: _caja(context),
+      child: Row(
+        children: [
+          Emoji(r.emoji, tamano: 30),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(tr(r.nombreEs, r.nombreEn), style: TextStyle(fontWeight: FontWeight.w800, color: p.texto)),
+                Text(tr(r.descEs, r.descEn), style: TextStyle(fontSize: 12, color: p.textoSuave)),
+                const SizedBox(height: 2),
+                Text(
+                    pendiente
+                        ? tr('Lista para tu próxima jalada', 'Ready for your next flush')
+                        : espera != null
+                            ? tr('Otra en ${_cuenta(espera)}', 'Another in ${_cuenta(espera)}')
+                            : '$tiene/${r.limite}',
+                    style: numeros(context, tamano: 11, color: p.textoSuave)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          OutlinedButton(
+            key: Key('pagar_rollos_${r.id}'),
+            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10), minimumSize: const Size(0, 44)),
+            onPressed: im.puedeComprarObjetoRollos(r.id, ahora) ? () => _comprarRollos(r) : null,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [Text('${r.costo} ', style: numeros(context, tamano: 13, weight: FontWeight.w900)), const Emoji('🧻', tamano: 18)],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Hoja para elegir dónde va la Pintura marrón.
+  Future<void> _elegirPintura(BuildContext context) {
+    final im = control.imperio;
+    final o = objetoPorId('pintura')!;
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: paleta(context).fondo,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radio)),
+      builder: (hoja) {
+        final p = paleta(hoja);
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Rotulo(tr('¿Qué edificio pintas?', 'Which building do you paint?')),
+                const SizedBox(height: 8),
+                for (final id in im.edificiosParaPintura())
+                  if (edificioPorId(id) case final e?)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: OutlinedButton(
+                        key: Key('pintar_$id'),
+                        style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48), alignment: Alignment.centerLeft),
+                        onPressed: () {
+                          Navigator.pop(hoja);
+                          if (control.usarPintura(id)) {
+                            avisar(o.emoji, tr('${e.nombreEs} pintado: +10% hasta jalar', '${e.nombreEn} painted: +10% until you flush'));
+                          }
+                        },
+                        child: Row(
+                          children: [
+                            Emoji(e.emoji, tamano: 24),
+                            const SizedBox(width: 10),
+                            Expanded(child: Text(tr(e.nombreEs, e.nombreEn), style: TextStyle(color: p.texto))),
+                          ],
+                        ),
+                      ),
+                    ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -1168,6 +1292,14 @@ class _HojaObjetos extends StatelessWidget {
     final fresca = esFicha ? im.efectosActivos(ahora).where((e) => e.id == o.id).firstOrNull?.restante : null;
     final candado = im.cagadas < o.candado ? _cagaVeces(o.candado) : tr('Sale con tu primer Atasco', 'Unlocks with your first Clog');
     final consumible = o.tipo == TipoObjeto.consumible;
+    // Pintura: hace falta un edificio sin pintar. Destapacaños: hace falta un Atasco.
+    final puedeUsar = switch (o.id) {
+      'pintura' => im.edificiosParaPintura().isNotEmpty,
+      'destapacanos' => im.partida.atasco != null,
+      _ => true,
+    };
+    final alquilado = o.tipo == TipoObjeto.alquilable && im.alquiladoActivo(o.id, ahora);
+    final finAlquiler = im.partida.alquilados[o.id] ?? 0;
     final estiloPrecio = numeros(context, tamano: 13, weight: FontWeight.w900);
     Widget pagar({required Widget precio, required bool puede, required VoidCallback alTocar, Key? key}) => Expanded(
           child: OutlinedButton(
@@ -1219,6 +1351,15 @@ class _HojaObjetos extends StatelessWidget {
               )
             else ...[
               const SizedBox(height: 8),
+              if (alquilado) ...[
+                Text(
+                    o.duracion == null
+                        ? tr('Activo hasta tu próximo offline', 'Active until your next offline')
+                        : tr('Activo: ${_cuenta(Duration(milliseconds: finAlquiler - ahora))}',
+                            'Active: ${_cuenta(Duration(milliseconds: finAlquiler - ahora))}'),
+                    style: numeros(context, tamano: 12, color: acento)),
+                const SizedBox(height: 6),
+              ],
               Text(consumible ? tr('COMPRAR CON', 'BUY WITH') : tr('ALQUILAR CON', 'RENT WITH'),
                   style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1, color: p.textoSuave)),
               const SizedBox(height: 4),
@@ -1246,7 +1387,9 @@ class _HojaObjetos extends StatelessWidget {
                     const SizedBox(width: 6),
                     FilledButton(
                       style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
-                      onPressed: abierto && im.enInventario(o.id) > 0 && espera == null ? () => control.usarObjeto(o.id) : null,
+                      onPressed: abierto && im.enInventario(o.id) > 0 && espera == null && puedeUsar
+                          ? (o.id == 'pintura' ? () => _elegirPintura(context) : () => control.usarObjeto(o.id))
+                          : null,
                       child: Text(tr('USAR', 'USE')),
                     ),
                   ],

@@ -91,18 +91,27 @@ class EstadoRacha {
   /// Días seguidos que se llevan antes de hoy (para la cuadrícula).
   final int previos;
 
-  const EstadoRacha(this.dia, this.reclamado, this.previos);
+  /// Congeladores 🧊 que se gastan al reclamar hoy (faltaron esos días y alcanzan los congeladores).
+  final int congelar;
+
+  const EstadoRacha(this.dia, this.reclamado, this.previos, {this.congelar = 0});
 }
 
+/// Días que faltaron que el congelador cubre: k entre 1 y [congeladores]; si no alcanza, 0 (la racha se pierde).
+/// Igual que imperio_reclamar_racha en el servidor.
+int congeladoresAGastar(int faltaron, int congeladores) => faltaron >= 1 && faltaron <= congeladores ? faltaron : 0;
+
 /// Qué día toca con lo que guarda el servidor (último día y su fecha) y la fecha local de hoy.
-/// Ayer reclamado: el siguiente (30 → 1). Hoy reclamado: ese mismo, ya hecho. Si no: día 1.
-EstadoRacha estadoRacha(int rachaDia, DateTime? rachaFecha, DateTime hoy) {
+/// Ayer reclamado: el siguiente (30 → 1). Hoy reclamado: ese mismo, ya hecho.
+/// Faltaron k días y hay k congeladores o más: sigue al siguiente gastando k. Si no: día 1.
+EstadoRacha estadoRacha(int rachaDia, DateTime? rachaFecha, DateTime hoy, {int congeladores = 0}) {
   if (rachaDia > 0 && rachaFecha != null) {
     final dif = hoy.difference(rachaFecha).inDays;
     if (dif <= 0) return EstadoRacha(rachaDia, true, rachaDia - 1);
-    if (dif == 1) {
+    final k = congeladoresAGastar(dif - 1, congeladores);
+    if (dif == 1 || k > 0) {
       final dia = rachaDia % diasRacha + 1;
-      return EstadoRacha(dia, false, dia - 1);
+      return EstadoRacha(dia, false, dia - 1, congelar: k);
     }
   }
   return const EstadoRacha(1, false, 0);

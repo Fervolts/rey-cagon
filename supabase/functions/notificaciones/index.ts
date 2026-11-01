@@ -519,7 +519,7 @@ const premiosRacha: [string, string][] = [
   ["25 🫐 Ciruelas + un logro 🏆", "25 🫐 Plums + an achievement 🏆"],
 ];
 
-type Racha = { user_id: string; llevas: number; dia: number };
+type Racha = { user_id: string; llevas: number; dia: number; congeladores?: number };
 
 // Lista que arma push_racha_revisar(): reclamó ayer y no hoy, a ~4 h de su medianoche.
 // Un aviso por persona; no se guarda en notificaciones.
@@ -535,13 +535,19 @@ async function avisarRacha(lista: Racha[]) {
   }
   if (!tokens.length) return Response.json({ enviados: 0 });
   const r = await repartir("racha", tokens, (t) => {
-    const { llevas, dia } = porUsuario.get(t.user_id ?? "")!;
+    const { llevas, dia, congeladores } = porUsuario.get(t.user_id ?? "")!;
     const [es, en] = premiosRacha[dia - 1];
+    // Con congelador 🧊 la racha no se pierde, pero se le pide que no lo gaste por flojo.
+    const conHielo = (congeladores ?? 0) > 0;
     const a = aviso(
       `Llevas ${llevas} ${llevas === 1 ? "día" : "días"} 🔥`,
-      `Hoy toca ${es}. Si no entras antes de medianoche, tu racha se va por la poceta 🚽`,
+      conHielo
+        ? `Hoy toca ${es}. Tienes 🧊 congelador, pero no lo gastes por flojo: entra antes de medianoche 🚽`
+        : `Hoy toca ${es}. Si no entras antes de medianoche, tu racha se va por la poceta 🚽`,
       `${llevas} ${llevas === 1 ? "day" : "days"} in a row 🔥`,
-      `Today you get ${en}. If you don't come in before midnight, your streak goes down the toilet 🚽`,
+      conHielo
+        ? `Today you get ${en}. You have a 🧊 freezer, but don't waste it being lazy: come in before midnight 🚽`
+        : `Today you get ${en}. If you don't come in before midnight, your streak goes down the toilet 🚽`,
     );
     const [titulo, cuerpo] = enSuIdioma(a, t.idioma);
     return { titulo, cuerpo, subtipo: `dia_${dia}`, data: { tipo: "racha", dia: String(dia) } };

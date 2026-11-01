@@ -430,7 +430,7 @@ void main() {
       expect(b.veterano, isTrue);
       expect(b.multiplicador, closeTo(1.62, 1e-9));
       expect(b.fichas, 4);
-      expect(b.candadosAbiertos, 4);
+      expect(b.candadosAbiertos, 6);
       expect(Imperio(cagadas: 4).bienvenida().candadosAbiertos, 2);
     });
   });

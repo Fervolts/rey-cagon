@@ -342,6 +342,22 @@ const _emojisImperio = {
   'primer_rollo': '🧻',
   'cien_rollos': '👑',
   'constancia': '🗓️',
+  // Fase 2.
+  'primer_mana': '🌀',
+  'brujo_tripa': '🌀',
+  'chorro_fallido': '🚿',
+  'cliente_fijo': '🧰',
+  'bodeguero': '🍵',
+  'brocha_gorda': '🎨',
+  'plomero_confianza': '🦸',
+  'papel_al_poceto': '🧻',
+  'primer_cofre': '🎁',
+  'mes_de_hierro': '🔥',
+  'congelado': '🧊',
+  'minero': '⛏️',
+  'rey_templo': '🛕',
+  'erupcion': '🌋',
+  'se_lo_trago': '🕳️',
 };
 
 const _prefijoImperio = 'imperio:';

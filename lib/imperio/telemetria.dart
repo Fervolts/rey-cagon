@@ -54,6 +54,15 @@ Future<int> _enviarPorRpc(List<Map<String, Object?>> lote) async {
 /// - `tienda_ciruelas_abre` {}
 /// - `racha_abre` {}: abrió la hoja de la racha de 30 días (sola al cargar o desde el chip 🔥)
 /// - `racha_reclamar` {dia, ciruelas, ficha, mj}: reclamó el día de la racha (ciruelas = las que dio el servidor, ficha = si entró una)
+/// - `fichas_abre` {fichas}: abrió la hoja de Fichas desde el chip 🎟️
+/// - `fichas_usar` {que, precio, saldo, espera?}: gastó Fichas en la hoja de Fichas (`cagada_fresca`, `sin_espera` con la `espera` borrada,
+///   `tanque_extra` o `congelador`)
+/// - `cofre_reclamar` {dias, fichas, ciruelas, semanas, mj}: abrió el Cofre del Trono de la semana (fichas/ciruelas = las que dio el servidor)
+/// - `congelador_usar` {cantidad, dia, quedan}: el servidor gastó Congeladores 🧊 al reclamar la racha y la racha siguió
+/// - `mana_usar` {id, mana, mj, fallo}: usó una habilidad de Maná (id de `habilidades`; mana = el que quedó; mj y fallo del Chorro)
+/// - `alquilar` {id, precio, hasta}: alquiló un objeto (además del `objeto_compra`; hasta = fin en ms, o cuándo se alquiló el Guardia)
+/// - `consumible_usar` {id, quedan, edificio?}: usó un consumible (va con `objeto_uso`, salvo la Pintura marrón, que trae `edificio`)
+/// - `rollos_gastar` {id, costo, quedan, tiene}: compró un objeto de Rollos de Oro (id de `objetosRollos`)
 /// - `error` {donde}
 ///
 /// Nombres: `[a-z0-9_]`, hasta 40. Datos: JSON plano, hasta ~3,5 KB (si no, se manda `{recortado: true}`).

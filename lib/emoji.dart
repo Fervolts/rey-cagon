@@ -150,6 +150,22 @@ const _archivos = {
   '🥄': 'spoon',
   '🫧': 'bubbles',
   '🚁': 'helicopter',
+  // Imperio fase 2: Maná, alquilables, consumibles y objetos de Rollos.
+  '🌀': 'cyclone',
+  '🧰': 'toolbox',
+  '👦': 'boy',
+  '👷': 'construction_worker',
+  '🔦': 'flashlight',
+  '🌲': 'evergreen_tree',
+  '🍵': 'teacup_without_handle',
+  '🧪': 'test_tube',
+  '🦸': 'superhero',
+  '⛓️': 'chains',
+  '⛓': 'chains',
+  // Imperio fase 2: Fichas, Cofre del Trono y Congelador de racha.
+  '🧊': 'ice',
+  '🎁': 'wrapped_gift',
+  '⏩': 'fast-forward_button',
 };
 
 // Las mismas claves sin FE0F, para encontrar '🌶' igual que '🌶️'.

@@ -96,12 +96,14 @@ class _TiendaCiruelasState extends State<TiendaCiruelas> {
                 context,
                 emoji: o.emoji,
                 titulo: tr(o.nombreEs, o.nombreEn),
-                detalle: tr(o.descEs, o.descEn),
+                detalle: o.id == 'congelador'
+                    ? '${tr(o.descEs, o.descEn)} · ${widget.control.congeladores}/$maxCongeladores'
+                    : tr(o.descEs, o.descEn),
                 precio: o.precio,
                 boton: _boton(
                   context,
-                  tr('COMPRAR', 'BUY'),
-                  _ocupado == null && im.ciruelas >= o.precio
+                  o.id == 'congelador' && widget.control.congeladores >= maxCongeladores ? tr('LLENO', 'FULL') : tr('COMPRAR', 'BUY'),
+                  _ocupado == null && im.ciruelas >= o.precio && !(o.id == 'congelador' && widget.control.congeladores >= maxCongeladores)
                       ? () => _comprar(o.id, () => widget.control.gastarCiruelas(o.id), o.emoji,
                           tr('${o.nombreEs}: listo', '${o.nombreEn}: done'))
                       : null,

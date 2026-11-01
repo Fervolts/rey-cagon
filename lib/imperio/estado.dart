@@ -1,6 +1,8 @@
 // Estado guardable del Imperio Cagón. Dart puro: se serializa a JSON para la nube (`imperio_guardar`).
 // Las cagadas totales y las Fichas NO van aquí: las manda el servidor y las pone el controlador en `Imperio`.
 
+import 'dart:math';
+
 double _dbl(Object? v, [double d = 0]) {
   final r = v is num ? v.toDouble() : double.tryParse('$v');
   return r == null || r.isNaN || r.isInfinite ? d : r;
@@ -94,8 +96,40 @@ class Partida {
   /// Esperas: id de objeto → cuándo se puede volver a usar/alquilar (ms).
   Map<String, int> esperas;
 
-  /// Fin del alquiler del Robot destapador (ms). 0 = nunca.
-  int robotHasta;
+  /// Alquilados: id de objeto → fin del alquiler (ms). El Robot viejo (`robot_hasta`) vive aquí como 'robot'.
+  Map<String, int> alquilados;
+
+  /// Fin del alquiler del Robot destapador (ms). 0 = nunca. Atajo a `alquilados['robot']`.
+  int get robotHasta => alquilados['robot'] ?? 0;
+  set robotHasta(int v) => v > 0 ? alquilados['robot'] = v : alquilados.remove('robot');
+
+  /// Maná de Tripa (0 a 100) y cuándo se calculó por última vez (ms).
+  double mana;
+  int manaEn;
+
+  // Contadores de la fase 2 (logros).
+  int habilidades, chorrosFallidos, consumiblesUsados;
+
+  /// Ids de alquilables alquilados alguna vez.
+  Set<String> alquiladosUsados;
+
+  /// Edificios con Pintura marrón (+10% c/u). Se borra al jalar la cadena.
+  Set<String> pintura;
+
+  /// Objetos de Rollos de Oro: 'super_plomero' (0/1), 'tanque_lujo' (0 a 6), 'cadena_reserva' (1 = pendiente). No se borran al jalar.
+  Map<String, int> objetosRollos;
+
+  /// Última compra de la Cadena de reserva (ms), para el límite semanal.
+  int cadenaReservaEn;
+
+  /// Día real (días desde epoch, UTC) del último regalo del Súper Plomero.
+  int superPlomeroDia;
+
+  /// Cofres del Trono abiertos, semanas seguidas con cofre y Congeladores gastados (los escribe el carril de la nube).
+  int cofres, semanasRacha, congeladosUsados;
+
+  /// Horas de más en el tope offline pagadas con Fichas (Tanque extra, 0 o 1). No se borra al jalar.
+  int horasExtraTanque;
 
   Atasco? atasco;
   bool vioPrimerAtasco;
@@ -126,6 +160,12 @@ class Partida {
   /// Rollos de Oro ganados jalando la cadena. No se pierden nunca.
   int rollos;
 
+  /// Rollos gastados en objetos de Rollos. Cuentan como ya ganados: jalar no los devuelve.
+  int rollosGastados;
+
+  /// Todos los Rollos que se ganaron (los que quedan más los gastados): abren edificios, mejoras y logros.
+  int get rollosGanados => rollos + rollosGastados;
+
   /// Veces que se jaló la cadena (el servidor lleva la cuenta buena en `imperio.jaladas`).
   int jaladas;
 
@@ -149,7 +189,22 @@ class Partida {
     Map<String, int>? inventario,
     Map<String, int>? efectos,
     Map<String, int>? esperas,
-    this.robotHasta = 0,
+    int robotHasta = 0,
+    Map<String, int>? alquilados,
+    this.mana = 0,
+    this.manaEn = 0,
+    this.habilidades = 0,
+    this.chorrosFallidos = 0,
+    this.consumiblesUsados = 0,
+    Set<String>? alquiladosUsados,
+    Set<String>? pintura,
+    Map<String, int>? objetosRollos,
+    this.cadenaReservaEn = 0,
+    this.superPlomeroDia = 0,
+    this.cofres = 0,
+    this.semanasRacha = 0,
+    this.congeladosUsados = 0,
+    this.horasExtraTanque = 0,
     this.atasco,
     this.vioPrimerAtasco = false,
     this.segHastaDorado = -1,
@@ -162,6 +217,7 @@ class Partida {
     List<int>? pujosRecientes,
     this.segPartida = 0,
     this.rollos = 0,
+    this.rollosGastados = 0,
     this.jaladas = 0,
     Map<String, dynamic>? vista,
   })  : vista = vista ?? {},
@@ -171,7 +227,14 @@ class Partida {
         inventario = inventario ?? {},
         efectos = efectos ?? {},
         esperas = esperas ?? {},
-        pujosRecientes = pujosRecientes ?? [];
+        pujosRecientes = pujosRecientes ?? [],
+        alquilados = alquilados ?? {},
+        alquiladosUsados = alquiladosUsados ?? {},
+        pintura = pintura ?? {},
+        objetosRollos = objetosRollos ?? {} {
+    // El robot viejo pasa al mapa; si ya está en el mapa gana el fin más tarde.
+    if (robotHasta > (this.alquilados['robot'] ?? 0)) this.alquilados['robot'] = robotHasta;
+  }
 
   Map<String, dynamic> toJson() => {
         'v': version,
@@ -192,6 +255,21 @@ class Partida {
         'efectos': efectos,
         'esperas': esperas,
         'robot_hasta': robotHasta,
+        'alquilados': alquilados,
+        'mana': mana,
+        'mana_en': manaEn,
+        'habilidades': habilidades,
+        'chorros_fallidos': chorrosFallidos,
+        'consumibles_usados': consumiblesUsados,
+        'alquilados_usados': alquiladosUsados.toList(),
+        'pintura': pintura.toList(),
+        'objetos_rollos': objetosRollos,
+        'cadena_reserva_en': cadenaReservaEn,
+        'super_plomero_dia': superPlomeroDia,
+        'cofres': cofres,
+        'semanas_racha': semanasRacha,
+        'congelados_usados': congeladosUsados,
+        'horas_extra_tanque': horasExtraTanque,
         'atasco': atasco?.toJson(),
         'vio_atasco': vioPrimerAtasco,
         'seg_dorado': segHastaDorado,
@@ -204,6 +282,7 @@ class Partida {
         'pujos_recientes': pujosRecientes,
         'seg_partida': segPartida,
         'rollos': rollos,
+        'rollos_gastados': rollosGastados,
         'jaladas': jaladas,
         if (vista.isNotEmpty) 'vista': vista,
       };
@@ -234,6 +313,21 @@ class Partida {
       efectos: _mapaEnt(j['efectos']),
       esperas: _mapaEnt(j['esperas']),
       robotHasta: _ent(j['robot_hasta']),
+      alquilados: _mapaEnt(j['alquilados'])..removeWhere((_, n) => n <= 0),
+      mana: _dbl(j['mana']).clamp(0, 100).toDouble(),
+      manaEn: _ent(j['mana_en']),
+      habilidades: max(0, _ent(j['habilidades'])),
+      chorrosFallidos: max(0, _ent(j['chorros_fallidos'])),
+      consumiblesUsados: max(0, _ent(j['consumibles_usados'])),
+      alquiladosUsados: _conjunto(j['alquilados_usados']),
+      pintura: _conjunto(j['pintura']),
+      objetosRollos: _mapaEnt(j['objetos_rollos'])..removeWhere((_, n) => n <= 0),
+      cadenaReservaEn: _ent(j['cadena_reserva_en']),
+      superPlomeroDia: _ent(j['super_plomero_dia']),
+      cofres: max(0, _ent(j['cofres'])),
+      semanasRacha: max(0, _ent(j['semanas_racha'])),
+      congeladosUsados: max(0, _ent(j['congelados_usados'])),
+      horasExtraTanque: max(0, _ent(j['horas_extra_tanque'])),
       atasco: Atasco.desdeJson(j['atasco']),
       vioPrimerAtasco: _bool(j['vio_atasco']),
       segHastaDorado: _dbl(j['seg_dorado'], -1),
@@ -246,6 +340,7 @@ class Partida {
       pujosRecientes: recientes.length > maxPujosRecientes ? recientes.sublist(recientes.length - maxPujosRecientes) : recientes,
       segPartida: segPartida < 0 ? 0 : segPartida,
       rollos: _ent(j['rollos']) < 0 ? 0 : _ent(j['rollos']),
+      rollosGastados: max(0, _ent(j['rollos_gastados'])),
       jaladas: _ent(j['jaladas']) < 0 ? 0 : _ent(j['jaladas']),
       vista: _vista(j['vista']),
     );

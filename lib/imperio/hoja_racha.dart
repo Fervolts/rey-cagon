@@ -73,11 +73,13 @@ class HojaRacha extends StatefulWidget {
 
 class _HojaRachaState extends State<HojaRacha> {
   bool _ocupado = false;
+  int _congelados = 0; // los que gastó el último RECLAMAR
 
   Future<void> _reclamar() async {
     setState(() => _ocupado = true);
     try {
       final r = await widget.control.reclamarRacha();
+      if (mounted && r.congelados > 0) setState(() => _congelados = r.congelados);
       if (!r.ya) {
         final extra = r.ciruelasGanadas > 0 && !r.ficha && premioDia(r.dia).ficha
             ? tr(' (Fichas llenas: te dimos Ciruelas)', ' (Tokens full: you got Plums)')
@@ -128,6 +130,11 @@ class _HojaRachaState extends State<HojaRacha> {
               Text(' /$diasRacha', style: numeros(context, tamano: 16, weight: FontWeight.w800, color: p.textoSuave)),
             ],
           ),
+          if (_congeladores(context) case final w?) ...[const SizedBox(height: 6), w],
+          if (_congelados > 0 || (!estado.reclamado && estado.congelar > 0)) ...[
+            const SizedBox(height: 8),
+            _avisoHielo(context, estado),
+          ],
           const SizedBox(height: 12),
           _barra(context, estado, hechos),
           const SizedBox(height: 16),
@@ -159,7 +166,9 @@ class _HojaRachaState extends State<HojaRacha> {
                   ),
           ),
           const SizedBox(height: 8),
-          Text(tr('Si se te pasa un día, vuelves al día 1.', 'Miss a day and you go back to day 1.'),
+          Text(
+              tr('Si se te pasa un día, vuelves al día 1. Cada Congelador te salva un día.',
+                  'Miss a day and you go back to day 1. Each Freezer saves you one day.'),
               textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: p.textoSuave)),
         ],
       ),
@@ -169,6 +178,7 @@ class _HojaRachaState extends State<HojaRacha> {
   /// 30 rayitas: hechas en acento, hoy con borde, las metas (Ficha y trofeo) marcadas debajo.
   Widget _barra(BuildContext context, EstadoRacha e, int hechos) {
     final p = paleta(context);
+    final salvados = widget.control.rachaSalvados.toSet();
     return Column(
       children: [
         Row(
@@ -195,7 +205,13 @@ class _HojaRachaState extends State<HojaRacha> {
               clipBehavior: Clip.none,
               children: [
                 for (var d = 1; d <= diasRacha; d++)
-                  if (premioDia(d).ficha || premioDia(d).logro != null)
+                  if (salvados.contains(d) && d <= hechos)
+                    Positioned(
+                      key: Key('salvado_$d'),
+                      left: (d - 0.5) / diasRacha * c.maxWidth - 9,
+                      child: const Emoji('🧊', tamano: 18),
+                    )
+                  else if (premioDia(d).ficha || premioDia(d).logro != null)
                     Positioned(
                       left: (d - 0.5) / diasRacha * c.maxWidth - 9,
                       child: Opacity(opacity: d <= hechos ? 0.4 : 1, child: Emoji(premioDia(d).logro != null ? '🏆' : '🎟️', tamano: 18)),
@@ -205,6 +221,41 @@ class _HojaRachaState extends State<HojaRacha> {
           ),
         ),
       ],
+    );
+  }
+
+  /// "🧊 x 2" debajo del día. null si no tiene.
+  Widget? _congeladores(BuildContext context) {
+    final n = widget.control.congeladores;
+    if (n <= 0) return null;
+    return Row(
+      key: const Key('racha_congeladores'),
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Emoji('🧊', tamano: 20),
+        Text(' x $n', style: numeros(context, tamano: 15, weight: FontWeight.w900, color: paleta(context).texto)),
+      ],
+    );
+  }
+
+  /// Salvó la racha (o la va a salvar al reclamar).
+  Widget _avisoHielo(BuildContext context, EstadoRacha e) {
+    final p = paleta(context);
+    final texto = _congelados > 0
+        ? tr('Tu congelador salvó tu racha', 'Your freezer saved your streak')
+        : tr('Se te pasó ${e.congelar == 1 ? 'un día' : '${e.congelar} días'}: al reclamar, tu congelador salva tu racha',
+            'You missed ${e.congelar == 1 ? 'a day' : '${e.congelar} days'}: claim and your freezer saves your streak');
+    return Container(
+      key: const Key('aviso_congelador'),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: p.bordeFuerte), borderRadius: BorderRadius.circular(radio)),
+      child: Row(
+        children: [
+          const Emoji('🧊', tamano: 26),
+          const SizedBox(width: 8),
+          Expanded(child: Text(texto, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: p.texto))),
+        ],
+      ),
     );
   }
 

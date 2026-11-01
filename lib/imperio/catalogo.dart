@@ -148,7 +148,7 @@ List<Mejora> _mejorasDeEdificios() => [
             e.pujoBase > 0 ? '${e.nombreEn}: push x2' : '${e.nombreEn} makes x2',
             e.precioBase * nivelesMejoraEdificio[i].$2,
             FamiliaMejora.edificio,
-            (p) => _n(p, e.id) >= nivelesMejoraEdificio[i].$1 && p.rollos >= (rollosNivelMejora[nivelesMejoraEdificio[i].$1] ?? 0),
+            (p) => _n(p, e.id) >= nivelesMejoraEdificio[i].$1 && p.rollosGanados >= (rollosNivelMejora[nivelesMejoraEdificio[i].$1] ?? 0),
             edificio: e.id,
           ),
     ];
@@ -286,7 +286,7 @@ class Objeto {
       {this.duracion, this.minutosPrecio = 0, this.espera, this.candado = 0, this.maxInventario = 0, this.pideAtasco = false, this.ciruelas = 0});
 }
 
-/// Tiempo máximo acumulado al volver a alquilar el Robot.
+/// Tiempo máximo acumulado al volver a alquilar el Robot (2 x 30 min). Cada alquilable topa en el doble de su duración.
 const Duration topeAlquiler = Duration(hours: 1);
 
 const List<Objeto> objetos = [
@@ -300,7 +300,113 @@ const List<Objeto> objetos = [
       TipoObjeto.consumible, minutosPrecio: 5, espera: Duration(hours: 1), candado: 5, maxInventario: 5, ciruelas: 2),
   Objeto('robot', '🤖', 'Robot destapador', 'Plunger bot', 'Destapa solo cada Atasco', 'Unclogs every Clog by itself', TipoObjeto.alquilable,
       duracion: Duration(minutes: 30), minutosPrecio: 20, espera: Duration(hours: 4), candado: 10, pideAtasco: true, ciruelas: 3),
+  // Fase 2: alquilables (candado 15 y 30).
+  Objeto('robot_turbo', '🦾', 'Robot destapador Turbo', 'Turbo plunger bot', 'Destapa solo y el Atasco no frena la producción',
+      'Unclogs by itself and Clogs don\'t slow production', TipoObjeto.alquilable,
+      duracion: Duration(hours: 2), minutosPrecio: 90, espera: Duration(hours: 12), candado: 30, pideAtasco: true, ciruelas: 6),
+  Objeto('plomero_horas', '🧰', 'Plomero por horas', 'Hourly plumber', 'Cada Atasco que destapes: producción x3 por 1 min',
+      'Every Clog you clear: production x3 for 1 min', TipoObjeto.alquilable,
+      duracion: Duration(hours: 1), minutosPrecio: 30, espera: Duration(hours: 6), candado: 15),
+  Objeto('primo', '👦', 'Primo pujador', 'Pushing cousin', 'Puja por ti 10 veces por segundo con la app abierta',
+      'Pushes for you 10 times a second while the app is open', TipoObjeto.alquilable,
+      duracion: Duration(minutes: 15), minutosPrecio: 10, espera: Duration(hours: 2), candado: 15, ciruelas: 3),
+  Objeto('cuadrilla', '👷', 'Cuadrilla del barrio', 'Neighborhood crew', 'Cada minuto compra el edificio más barato si te alcanza',
+      'Every minute buys the cheapest building if you can afford it', TipoObjeto.alquilable,
+      duracion: Duration(minutes: 10), minutosPrecio: 35, espera: Duration(hours: 6), candado: 15),
+  // Sin duración: dura hasta que vuelves a abrir la app (se gasta en el offline).
+  Objeto('guardia', '🔦', 'Guardia nocturno', 'Night watchman', 'Tu próximo offline cuenta al 100% y hasta 8 h',
+      'Your next offline counts 100% and up to 8 h', TipoObjeto.alquilable,
+      minutosPrecio: 60, espera: Duration(hours: 24), candado: 30, ciruelas: 4),
+  // Fase 2: consumibles (candado 15).
+  Objeto('pino', '🌲', 'Ambientador de pino', 'Pine air freshener', 'Producción +50%, mojones dorados la mitad de seguido',
+      'Production +50%, golden poops half as often', TipoObjeto.consumible,
+      duracion: Duration(minutes: 15), minutosPrecio: 15, espera: Duration(hours: 3), candado: 15, maxInventario: 5, ciruelas: 3),
+  Objeto('abuela', '🍵', 'Laxante de la abuela', 'Grandma\'s laxative', 'Producción x3; al terminar sale un Atasco seguro',
+      'Production x3; a Clog is sure to follow', TipoObjeto.consumible,
+      duracion: Duration(minutes: 3), minutosPrecio: 8, espera: Duration(hours: 2), candado: 15, maxInventario: 5),
+  Objeto('greca', '☕', 'Guayoyo de greca', 'Stovetop coffee', 'El reloj de los edificios corre al doble',
+      'Buildings run on double time', TipoObjeto.consumible,
+      duracion: Duration(minutes: 10), minutosPrecio: 20, espera: Duration(hours: 4), candado: 15, maxInventario: 5, ciruelas: 3),
+  Objeto('reina_pepiada', '🫓', 'Arepa reina pepiada', 'Chicken avocado arepa', 'Producción +50%; su reloj solo corre con la app abierta',
+      'Production +50%; its clock only runs with the app open', TipoObjeto.consumible,
+      duracion: Duration(minutes: 30), minutosPrecio: 12, espera: Duration(hours: 6), candado: 15, maxInventario: 5, ciruelas: 2),
+  // Sin duración: es al instante.
+  Objeto('destapacanos', '🧪', 'Destapacaños químico', 'Drain cleaner', 'Destapa todos los Atascos al instante', 'Clears every Clog instantly',
+      TipoObjeto.consumible, minutosPrecio: 5, espera: Duration(hours: 1), candado: 15, maxInventario: 5, ciruelas: 1),
+  // Sin duración: dura hasta jalar la cadena. Se usa eligiendo un edificio (Imperio.usarPintura).
+  Objeto('pintura', '🎨', 'Pintura marrón', 'Brown paint', 'Eliges un edificio: +10% hasta jalar la cadena (1 por edificio)',
+      'Pick a building: +10% until you pull the chain (1 per building)', TipoObjeto.consumible,
+      minutosPrecio: 45, candado: 15, maxInventario: 5),
 ];
+
+/// Producción extra de la Pintura marrón para su edificio (0,1 = +10%).
+const double bonoPintura = 0.1;
+
+/// Maná de Tripa 🌀: sale con este candado, se llena 0 → [manaMax] en [llenadoMana] (también offline).
+const int candadoMana = 15;
+const double manaMax = 100;
+const Duration llenadoMana = Duration(hours: 1);
+
+/// Habilidad que se paga con Maná de Tripa. Su espera vive en `esperas['hab_<id>']`.
+class Habilidad {
+  final String id;
+  final String emoji;
+  final String nombreEs, nombreEn;
+  final String descEs, descEn;
+  final int mana;
+
+  /// null = es al instante.
+  final Duration? duracion;
+  final Duration espera;
+  const Habilidad(this.id, this.emoji, this.nombreEs, this.nombreEn, this.descEs, this.descEn, this.mana, this.duracion, this.espera);
+}
+
+const List<Habilidad> habilidades = [
+  Habilidad('jalon_doble', '🚽', 'Jalón doble', 'Double flush', 'Producción x2 por 60 s', 'Production x2 for 60 s', 20, Duration(seconds: 60),
+      Duration(hours: 1)),
+  Habilidad('corre_corre', '🏃', 'Corre corre', 'Run run', 'Destapa todos los Atascos', 'Clears every Clog', 15, null, Duration(hours: 2)),
+  Habilidad('pujo_sagrado', '🙌', 'Pujo sagrado', 'Holy push', 'Pujos x10 por 20 s', 'Pushes x10 for 20 s', 30, Duration(seconds: 20),
+      Duration(hours: 1)),
+  Habilidad('chorro', '🚿', 'Chorro a presión', 'Pressure jet', '15 min de producción al instante; 15% falla y pierdes 5 min',
+      '15 min of production at once; 15% misfire and you lose 5 min', 40, null, Duration(hours: 4)),
+  Habilidad('aguanta', '⏰', 'Aguanta', 'Hold it', 'Alarga 10% lo que les queda a tus efectos y alquilados',
+      'Adds 10% to what\'s left on your effects and rentals', 25, null, Duration(hours: 2)),
+];
+
+final Map<String, Habilidad> _habilidadPorId = {for (final h in habilidades) h.id: h};
+
+/// Habilidad por id, o null si no existe.
+Habilidad? habilidadPorId(String id) => _habilidadPorId[id];
+
+/// Objeto que se paga con Rollos de Oro (sale después de la primera jalada). No se borra al jalar.
+class ObjetoRollos {
+  final String id;
+  final String emoji;
+  final String nombreEs, nombreEn;
+  final String descEs, descEn;
+  final int costo;
+
+  /// Cuántos se pueden tener (la Cadena de reserva: 1 por semana).
+  final int limite;
+  const ObjetoRollos(this.id, this.emoji, this.nombreEs, this.nombreEn, this.descEs, this.descEn, this.costo, this.limite);
+}
+
+const List<ObjetoRollos> objetosRollos = [
+  ObjetoRollos('super_plomero', '🦸', 'Súper Plomero', 'Super Plumber', 'Para siempre: destapa solo y 1 vez al día suelta 1 h de producción',
+      'Forever: unclogs by itself and drops 1 h of production once a day', 5, 1),
+  ObjetoRollos('cadena_reserva', '⛓️', 'Cadena de reserva', 'Spare chain', 'Tu próxima jalada te devuelve 1 edificio de cada tipo que tenías',
+      'Your next pull gives you back 1 of each building you had', 2, 1),
+  ObjetoRollos('tanque_lujo', '🛁', 'Tanque de lujo', 'Luxury tank', '+1 h al tope offline para siempre (hasta +6 h)',
+      '+1 h to your offline cap forever (up to +6 h)', 5, 6),
+];
+
+final Map<String, ObjetoRollos> _objetoRollosPorId = {for (final o in objetosRollos) o.id: o};
+
+/// Objeto de Rollos por id, o null si no existe.
+ObjetoRollos? objetoRollosPorId(String id) => _objetoRollosPorId[id];
+
+/// Una Cadena de reserva por semana.
+const Duration esperaCadenaReserva = Duration(days: 7);
 
 final Map<String, Objeto> _objetoPorId = {for (final o in objetos) o.id: o};
 
@@ -319,7 +425,7 @@ class Logro {
   const Logro(this.id, this.nombreEs, this.nombreEn, this.descEs, this.descEn, this.condicion);
 }
 
-/// Los 24 logros: 20 de la fase 1 y 4 de la cadena.
+/// Los 40 logros: 20 de la fase 1, 4 de la cadena, el de la racha y 15 de la fase 2.
 final List<Logro> logros = [
   Logro('primer_pujo', 'Primer pujo', 'First push', '1 pujo', '1 push', (p, _) => p.pujos >= 1),
   Logro('calentando', 'Calentando', 'Warming up', '100 pujos', '100 pushes', (p, _) => p.pujos >= 100),
@@ -346,11 +452,36 @@ final List<Logro> logros = [
   Logro('primera_jalada', 'Jalé y salí corriendo', 'Flush and run', 'Jalar la cadena por primera vez', 'Pull the chain for the first time',
       (p, _) => p.jaladas >= 1),
   Logro('diez_jaladas', 'Cadena oxidada', 'Rusty chain', 'Jalar la cadena 10 veces', 'Pull the chain 10 times', (p, _) => p.jaladas >= 10),
-  Logro('primer_rollo', 'Papel de oro', 'Golden paper', '1 Rollo de Oro', '1 Golden Roll', (p, _) => p.rollos >= 1),
-  Logro('cien_rollos', 'Rey del papel', 'Toilet paper king', '100 Rollos de Oro', '100 Golden Rolls', (p, _) => p.rollos >= 100),
+  Logro('primer_rollo', 'Papel de oro', 'Golden paper', '1 Rollo de Oro', '1 Golden Roll', (p, _) => p.rollosGanados >= 1),
+  Logro('cien_rollos', 'Rey del papel', 'Toilet paper king', '100 Rollos de Oro', '100 Golden Rolls', (p, _) => p.rollosGanados >= 100),
   // Lo da el día 30 de la racha (Imperio.aplicarPremioRacha), no una condición. En pantalla va con segun() (nombreLogro).
   Logro('constancia', 'Rey de la constancia', 'King of consistency', '30 días seguidos de racha', '30-day streak', (p, m) => false),
+  // Fase 2: Maná, objetos nuevos, Rollos, racha (cofres, semanas, congeladores) y edificios grandes.
+  Logro('primer_mana', 'Se me revolvió la tripa', 'Gut rumble', 'Usar una habilidad de Maná', 'Use a Mana skill', (p, _) => p.habilidades >= 1),
+  Logro('brujo_tripa', 'Brujo de la tripa', 'Gut wizard', '50 habilidades de Maná', '50 Mana skills', (p, _) => p.habilidades >= 50),
+  Logro('chorro_fallido', 'Se me salió por los lados', 'Backfire', 'Que te falle el Chorro a presión', 'Have the Pressure jet misfire',
+      (p, _) => p.chorrosFallidos >= 1),
+  Logro('cliente_fijo', 'Cliente fijo del alquiler', 'Regular renter', 'Alquilar uno de cada alquilable', 'Rent one of every rental',
+      (p, _) => _alquilables.every(p.alquiladosUsados.contains)),
+  Logro('bodeguero', 'Cliente de la bodega', 'Corner store regular', '10 consumibles usados', '10 consumables used', (p, _) => p.consumiblesUsados >= 10),
+  Logro('brocha_gorda', 'Pintor de brocha gorda', 'House painter', 'Pintura marrón en 5 edificios', 'Brown paint on 5 buildings',
+      (p, _) => p.pintura.length >= 5),
+  Logro('plomero_confianza', 'Plomero de confianza', 'Trusty plumber', 'Contratar al Súper Plomero', 'Hire the Super Plumber',
+      (p, _) => (p.objetosRollos['super_plomero'] ?? 0) >= 1),
+  Logro('papel_al_poceto', 'Botaste el papel', 'Money down the drain', 'Gastar un Rollo de Oro', 'Spend a Golden Roll', (p, _) => p.rollosGastados >= 1),
+  Logro('primer_cofre', 'Ese cofre es mío', 'Finders keepers', 'Abrir un Cofre del Trono', 'Open a Throne chest', (p, _) => p.cofres >= 1),
+  Logro('mes_de_hierro', 'Tripa de hierro', 'Iron gut', '4 semanas seguidas de racha', '4 weeks in a row', (p, _) => p.semanasRacha >= 4),
+  Logro('congelado', 'Lo dejé en el congelador', 'Saved it for later', 'Salvar la racha con un Congelador', 'Save your streak with a Freezer',
+      (p, _) => p.congeladosUsados >= 1),
+  Logro('minero', 'Minero de peos', 'Gas miner', '1 Mina de metano', '1 Methane mine', (p, _) => _n(p, 'mina') >= 1),
+  Logro('rey_templo', 'Rey del templo', 'Temple king', '1 Templo del Trono', '1 Throne temple', (p, _) => _n(p, 'templo') >= 1),
+  Logro('erupcion', 'Erupción mañanera', 'Morning eruption', '1 Volcán digestivo', '1 Digestive volcano', (p, _) => _n(p, 'volcan') >= 1),
+  Logro('se_lo_trago', 'Se lo tragó todo', 'Swallowed it all', '1 Agujero negro intestinal', '1 Intestinal black hole',
+      (p, _) => _n(p, 'agujero') >= 1),
 ];
+
+/// Ids de los alquilables (logro Cliente fijo).
+final List<String> _alquilables = [for (final o in objetos) if (o.tipo == TipoObjeto.alquilable) o.id];
 
 final Map<String, Logro> _logroPorId = {for (final l in logros) l.id: l};
 
@@ -391,6 +522,8 @@ const List<Candado> candadosFase1 = [
   Candado(3, 'Bidet', 'Bidet'),
   Candado(5, 'Baño público y los consumibles', 'Public restroom and consumables'),
   Candado(10, 'Robot destapador, Camión vacuum y Planta de tratamiento', 'Plunger bot, Vacuum truck and Treatment plant'),
+  Candado(15, 'Maná de Tripa y la segunda tanda de objetos', 'Gut Mana and the second batch of items'),
+  Candado(30, 'Robot Turbo y Guardia nocturno', 'Turbo bot and Night watchman'),
 ];
 
 /// Cuántos candados de la fase 1 abre un total de cagadas.

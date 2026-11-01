@@ -116,7 +116,9 @@ void main() {
   group('tienda de Ciruelas', () {
     test('paridad con la base: precios de imperio_gastar_ciruelas', () {
       for (final o in ofertasCiruela) {
-        expect(_migracion, contains("when '${o.id}' then ${o.precio}"), reason: o.id);
+        // La última versión de imperio_gastar_ciruelas vive en la migración de la fase 2.
+        expect(File('supabase/migrations/20261102120000_imperio_fase2.sql').readAsStringSync(), contains("when '${o.id}' then ${o.precio}"),
+            reason: o.id);
         expect(ofertaPorId(o.id), same(o));
       }
     });
@@ -149,7 +151,8 @@ void main() {
     });
 
     test('objetos con Ciruelas: precio igual en la base, no cobra MJ', () {
-      final mig = File('supabase/migrations/20261101140000_imperio_objetos_ciruelas.sql').readAsStringSync();
+      // La fase 2 redefine la función con los objetos nuevos.
+      final mig = File('supabase/migrations/20261102120000_imperio_fase2.sql').readAsStringSync();
       for (final o in objetos.where((o) => o.ciruelas > 0)) {
         expect(mig, contains("when 'obj_${o.id}' then ${o.ciruelas}"), reason: o.id);
       }

@@ -41,6 +41,11 @@ class CargaImperio {
   /// Último día de racha reclamado y su fecha (local del teléfono que lo reclamó). 0 / null = nunca.
   final int rachaDia;
   final String? rachaFecha;
+
+  /// Congeladores 🧊 guardados (0..2), si ya se pagó el Tanque extra con Fichas y días de racha salvados por congelador.
+  final int congeladores;
+  final bool tanqueExtra;
+  final List<int> rachaSalvados;
   const CargaImperio({
     required this.estado,
     required this.mjTotal,
@@ -57,6 +62,9 @@ class CargaImperio {
     this.esteticas = const {},
     this.rachaDia = 0,
     this.rachaFecha,
+    this.congeladores = 0,
+    this.tanqueExtra = false,
+    this.rachaSalvados = const [],
   });
 
   factory CargaImperio.desdeJson(Map<String, dynamic> j) {
@@ -78,9 +86,14 @@ class CargaImperio {
       esteticas: j['esteticas'] is List ? {for (final e in j['esteticas'] as List) '$e'} : const {},
       rachaDia: _ent(j['racha_dia']),
       rachaFecha: j['racha_fecha']?.toString(),
+      congeladores: _ent(j['congeladores']),
+      tanqueExtra: j['tanque_extra'] == true,
+      rachaSalvados: _enteros(j['racha_salvados']),
     );
   }
 }
+
+List<int> _enteros(Object? v) => v is List ? [for (final e in v) _ent(e)] : const [];
 
 class ResultadoGuardar {
   final double mjTotal;
@@ -113,8 +126,13 @@ class ReclamoRacha {
   /// Saldos después del reclamo.
   final int ciruelas;
   final int fichas;
+
+  /// Congeladores 🧊 gastados para salvar la racha, los que quedan y los días salvados.
+  final int congelados;
+  final int? congeladores;
+  final List<int>? rachaSalvados;
   const ReclamoRacha({required this.dia, required this.ya, required this.ciruelasGanadas, required this.ficha, required this.ciruelas,
-      required this.fichas});
+      required this.fichas, this.congelados = 0, this.congeladores, this.rachaSalvados});
 
   factory ReclamoRacha.desdeJson(Map<String, dynamic> j) => ReclamoRacha(
         dia: _ent(j['dia']),
@@ -123,6 +141,42 @@ class ReclamoRacha {
         ficha: j['ficha'] == true,
         ciruelas: _ent(j['ciruelas']),
         fichas: _ent(j['fichas']),
+        congelados: _ent(j['congelados']),
+        congeladores: _entN(j['congeladores']),
+        rachaSalvados: j['racha_salvados'] is List ? _enteros(j['racha_salvados']) : null,
+      );
+}
+
+/// Respuesta de `imperio_cofre`: días con cagada real esta semana (lunes a domingo, hora local) y si se abrió.
+class EstadoCofre {
+  final int dias;
+  final int meta;
+
+  /// Se puede abrir ya (llegó a la meta y no se abrió esta semana).
+  final bool listo;
+  final bool reclamado;
+
+  /// Se abrió en esta misma llamada.
+  final bool reclamadoAhora;
+  final int semanasRacha;
+  final int fichas;
+  final int ciruelas;
+  final int fichasGanadas;
+  final int ciruelasGanadas;
+  const EstadoCofre({required this.dias, this.meta = 3, required this.listo, required this.reclamado, this.reclamadoAhora = false,
+      required this.semanasRacha, required this.fichas, required this.ciruelas, this.fichasGanadas = 0, this.ciruelasGanadas = 0});
+
+  factory EstadoCofre.desdeJson(Map<String, dynamic> j) => EstadoCofre(
+        dias: _ent(j['dias']),
+        meta: _entN(j['meta']) ?? 3,
+        listo: j['listo'] == true,
+        reclamado: j['reclamado'] == true,
+        reclamadoAhora: j['reclamado_ahora'] == true,
+        semanasRacha: _ent(j['semanas_racha']),
+        fichas: _ent(j['fichas']),
+        ciruelas: _ent(j['ciruelas']),
+        fichasGanadas: _ent(j['fichas_ganadas']),
+        ciruelasGanadas: _ent(j['ciruelas_ganadas']),
       );
 }
 
@@ -140,10 +194,22 @@ class NubeImperio {
     return ResultadoGuardar(mjTotal: _dbl(j['mj_total']), recortado: j['recortado'] == true, guardado: _fecha(j['guardado']));
   }
 
-  /// Devuelve las fichas que quedan, o -1 si no había. Ya no se usa: la Cagada fresca viene con cada cagada real.
+  /// Gasta 1 Ficha (Cagada fresca de la hoja de Fichas). Devuelve las que quedan, o -1 si no había.
   Future<int> usarFicha() async {
     final r = await conReintento(() => db.rpc('imperio_usar_ficha'));
     return _ent(r);
+  }
+
+  /// Gasta Fichas en un uso de la hoja de Fichas: 'sin_espera' (1), 'tanque_extra' (2) o 'congelador' (3).
+  /// Devuelve las que quedan, -1 si no alcanzan o -2 si ya no se puede. Sin reintento para no cobrar dos veces.
+  Future<int> usarFichas(String que) async => _ent(await db.rpc('imperio_usar_fichas', params: {'p_que': que}));
+
+  /// Estado del Cofre del Trono de esta semana. Con [reclamar] lo abre si toca (una vez por semana en el servidor).
+  Future<EstadoCofre> cofre({bool reclamar = false}) async {
+    final r = reclamar
+        ? await db.rpc('imperio_cofre', params: {'p_reclamar': true})
+        : await conReintento(() => db.rpc('imperio_cofre'));
+    return EstadoCofre.desdeJson(Map<String, dynamic>.from(r as Map));
   }
 
   /// Pide la Ciruela que salió al pujar. Devuelve el saldo, o -1 si hoy ya se llegó al tope.

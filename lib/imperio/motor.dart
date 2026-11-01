@@ -1,4 +1,4 @@
-// Motor del Imperio Cagón, fase 1. Dart puro (sin Flutter) para poder probarlo.
+// Motor del Imperio Cagón (fase 1 y 2). Dart puro (sin Flutter) para poder probarlo.
 // Todo lo que depende del tiempo recibe `ahora` (ms epoch del reloj corregido con el servidor) y el azar viene inyectado.
 // La pantalla llama `tick()` ~1 vez por segundo, `pujar()` en cada toque y guarda `toJson()` en la nube.
 
@@ -68,7 +68,22 @@ class ResultadoOffline {
 
   /// Contó x1,5 por el buff del tipo 6.
   final bool conBonus;
-  const ResultadoOffline(this.segundosAusente, this.segundosContados, this.ganado, this.tanqueLleno, this.conBonus);
+
+  /// Contó al 100% por el Guardia nocturno (y se gastó).
+  final bool conGuardia;
+  const ResultadoOffline(this.segundosAusente, this.segundosContados, this.ganado, this.tanqueLleno, this.conBonus, {this.conGuardia = false});
+}
+
+/// Lo que hizo una habilidad de Maná.
+class ResultadoHabilidad {
+  final String id;
+
+  /// MJ ganados (Chorro a presión); negativo si el Chorro falló.
+  final double mj;
+
+  /// El Chorro a presión falló.
+  final bool fallo;
+  const ResultadoHabilidad(this.id, this.mj, this.fallo);
 }
 
 class ResultadoCagadas {
@@ -146,7 +161,32 @@ const Map<String, (String, String, String, String, String)> _textosEfecto = {
   'pujo_loco': ('🍑', 'Pujo loco', 'Crazy push', 'Pujos x777', 'Pushes x777'),
   'constructor': ('🧱', 'Constructor', 'Builder', 'Edificios a mitad de precio', 'Buildings at half price'),
   'offline_bonus': ('🌋', 'Offline x1,5', 'Offline x1.5', 'El próximo offline cuenta x1,5', 'Next offline counts x1.5'),
+  'jalon_doble': ('🚽', 'Jalón doble', 'Double flush', 'Producción x2', 'Production x2'),
+  'pujo_sagrado': ('🙌', 'Pujo sagrado', 'Holy push', 'Pujos x10', 'Pushes x10'),
+  'plomero_bono': ('🧰', 'Plomero', 'Plumber', 'Producción x3', 'Production x3'),
 };
+
+// Números de la fase 2 (Maná, alquilables, consumibles).
+const double multiplicadorPujoSagrado = 10;
+const double probFalloChorro = 0.15;
+const Duration chorroGana = Duration(minutes: 15), chorroPierde = Duration(minutes: 5);
+const double alargueAguanta = 0.1;
+
+/// Pujos por segundo del Primo pujador.
+const double pujosPrimo = 10;
+
+/// Cada cuánto compra la Cuadrilla del barrio.
+const Duration cicloCuadrilla = Duration(minutes: 1);
+const Duration duracionBonoPlomero = Duration(minutes: 1);
+
+/// Tope offline del Guardia nocturno.
+const Duration topeGuardia = Duration(hours: 8);
+
+/// Día real local (días desde epoch) de [ms]: el Súper Plomero regala 1 vez por día.
+int diaLocal(int ms) {
+  final d = DateTime.fromMillisecondsSinceEpoch(ms);
+  return DateTime.utc(d.year, d.month, d.day).millisecondsSinceEpoch ~/ Duration.millisecondsPerDay;
+}
 
 /// El juego: una `Partida` más las cagadas totales y las Fichas que manda el servidor.
 /// Efectos que se quedan al jalar la cadena: vienen de cagadas reales o Ciruelas, no de MJ.
@@ -182,6 +222,12 @@ class Imperio {
   /// Números que vienen de los flags remotos (por defecto, los de siempre).
   final Ajustes ajustes;
   final Random _azar;
+
+  /// Segundos activos con la Cuadrilla desde su última compra (no se guarda).
+  double _segCuadrilla = 0;
+
+  /// MJ del regalo diario del Súper Plomero que la pantalla aún no anunció.
+  double _regaloPlomero = 0;
 
   Imperio({Partida? partida, this.cagadas = 0, this.fichas = 0, this.ciruelas = 0, Set<String>? esteticas, Random? azar,
       this.ajustes = Ajustes.porDefecto})
@@ -227,6 +273,22 @@ class Imperio {
   int? tipoActivo(int ahora) => _p.tipoBuff != null && _p.tipoBuffHasta > ahora ? _p.tipoBuff : null;
   bool robotActivo(int ahora) => _p.robotHasta > ahora;
 
+  /// Alquiler activo. Con duración: hasta su fin. El Guardia (sin duración): desde que se alquila hasta el próximo offline.
+  bool alquiladoActivo(String id, int ahora) {
+    final fin = _p.alquilados[id];
+    if (fin == null) return false;
+    return objetoPorId(id)?.duracion == null || fin > ahora;
+  }
+
+  /// Algo destapa solo: Robot, Robot Turbo o Súper Plomero.
+  bool _destapaSolo(int ahora) => robotActivo(ahora) || alquiladoActivo('robot_turbo', ahora) || tieneObjetoRollos('super_plomero') > 0;
+
+  /// Cuenta un destape. Con el Plomero por horas alquilado: producción x3 por 1 min.
+  void _destapado(int ahora) {
+    _p.destapes++;
+    if (alquiladoActivo('plomero_horas', ahora)) _extender('plomero_bono', ahora, duracionBonoPlomero);
+  }
+
   /// Hay Fiebre (de mojón dorado o de Trono): producción x7.
   bool enFiebre(int ahora) => _activo('fiebre_dorada', ahora) || _activo('fiebre_trono', ahora);
 
@@ -261,6 +323,12 @@ class Imperio {
     var s = 1.0;
     if (_activo('cagada_fresca', ahora)) s += 1;
     if (_activo('ambientador', ahora)) s += 0.25;
+    if (_activo('pino', ahora)) s += 0.5;
+    if (_activo('abuela', ahora)) s += 2;
+    if (_activo('greca', ahora)) s += 1;
+    if (_activo('reina_pepiada', ahora)) s += 0.5;
+    if (_activo('jalon_doble', ahora)) s += 1;
+    if (_activo('plomero_bono', ahora)) s += 2;
     final t = tipoActivo(ahora);
     if (t == 4) s += 1;
     if (t == 7) s += 2;
@@ -287,6 +355,7 @@ class Imperio {
     for (final (nivel, _) in nivelesMejoraEdificio) {
       if (mejoraComprada(idMejoraEdificio(id, nivel))) x *= 2;
     }
+    if (_p.pintura.contains(id)) x *= 1 + bonoPintura;
     return n * e.mpsBase * x;
   }
 
@@ -346,8 +415,10 @@ class Imperio {
     return s;
   }
 
+  /// Efectos del pujo: los temporales (tope x4) y, por fuera del tope, Pujo loco x777 y Pujo sagrado x10.
   double _conEfectosPujo(double v, int ahora) {
-    final t = v * multiplicadorPujoTemporal(ahora);
+    var t = v * multiplicadorPujoTemporal(ahora);
+    if (_activo('pujo_sagrado', ahora)) t *= multiplicadorPujoSagrado;
     return _activo('pujo_loco', ahora) ? t * multiplicadorPujoLoco : t;
   }
 
@@ -375,10 +446,12 @@ class Imperio {
 
   /// Ritmo que se manda al guardar (`p_mps`, lo usa el servidor para el antitrampa): lo mayor entre el MJ/s sin efectos y
   /// 15 pujos por segundo sin efectos. Así quien vive del Dedo no queda con un ritmo de 0 que le rechace el guardado.
-  double ritmoEfectivo() {
+  /// Con [ahora] y el Primo pujador alquilado, suma sus 10 pujos por segundo.
+  double ritmoEfectivo([int? ahora]) {
     final m = mpsSinEfectos();
     final pujo = (1 + aporteDedos) * _multiplicadorClic * multiplicadorRollos + _pctPujo() * m;
-    return max(m, pujo * pujosPorSegundoRitmo);
+    final primo = ahora != null && alquiladoActivo('primo', ahora) ? pujosPrimo : 0;
+    return max(m, pujo * (pujosPorSegundoRitmo + primo));
   }
 
   /// Un toque al Mojón. Puede salir épico (`probabilidadEpicoActual`), que vale `ajustes.epicoMultiplicador` (x10).
@@ -399,16 +472,16 @@ class Imperio {
 
   // ---------- Edificios ----------
 
-  /// Se puede comprar: su candado de cagadas está abierto y tienes los Rollos de Oro que pide (0 en la fase 1).
+  /// Se puede comprar: su candado de cagadas está abierto y ganaste los Rollos de Oro que pide (0 en la fase 1). Gastarlos no lo cierra.
   bool edificioAbierto(String id) {
     final e = edificioPorId(id);
-    return e != null && cagadas >= e.candado && _p.rollos >= e.rollos;
+    return e != null && cagadas >= e.candado && _p.rollosGanados >= e.rollos;
   }
 
   /// Sale en la lista: los de la fase 1 siempre (abiertos o con su candado); los de la fase 2 cuando ya tienes sus rollos.
   bool edificioVisible(String id) {
     final e = edificioPorId(id);
-    return e != null && (e.fase1 || _p.rollos >= e.rollos);
+    return e != null && (e.fase1 || _p.rollosGanados >= e.rollos);
   }
 
   /// Se muestra como "???": no tienes ninguno y no has ganado la mitad de su precio base.
@@ -522,8 +595,8 @@ class Imperio {
     return fin > ahora ? Duration(milliseconds: fin - ahora) : null;
   }
 
-  /// Compra con MJ. Consumible: al inventario (hasta 5). Robot: se activa ya; si sigue activo suma 30 min, hasta 1 h en total.
-  /// Con [conCiruelas] ya se pagó en el servidor: no cobra MJ.
+  /// Compra con MJ. Consumible: al inventario (hasta 5). Alquilable: se activa ya; si sigue activo suma su duración, hasta
+  /// el doble desde ahora (Robot: 30 min, hasta 1 h). Con [conCiruelas] ya se pagó en el servidor: no cobra MJ.
   bool comprarObjeto(String id, int ahora, {bool conCiruelas = false}) {
     if (conCiruelas ? !_cabeObjeto(id, ahora) : !puedeComprarObjeto(id, ahora)) return false;
     final o = objetoPorId(id)!;
@@ -532,16 +605,24 @@ class Imperio {
       if (enInventario(id) >= o.maxInventario) return false;
       _p.inventario[id] = enInventario(id) + 1;
     } else {
-      final dur = o.duracion!.inMilliseconds;
-      if (robotActivo(ahora)) {
-        _p.robotHasta = min(_p.robotHasta + dur, ahora + topeAlquiler.inMilliseconds);
-      } else {
-        _p.robotHasta = ahora + dur;
-        if (o.espera != null) _p.esperas[id] = ahora + o.espera!.inMilliseconds;
-      }
+      _alquilar(o, ahora);
     }
     _p.saldo -= precio;
     return true;
+  }
+
+  /// Fin del alquiler si se vuelve a alquilar [o] ahora: suma su duración, hasta el doble desde ahora.
+  int _finAlquiler(Objeto o, int ahora) {
+    final d = o.duracion!.inMilliseconds;
+    final fin = _p.alquilados[o.id] ?? 0;
+    return fin > ahora ? min(fin + d, ahora + 2 * d) : ahora + d;
+  }
+
+  void _alquilar(Objeto o, int ahora) {
+    final nuevo = !alquiladoActivo(o.id, ahora);
+    _p.alquilados[o.id] = o.duracion == null ? ahora : _finAlquiler(o, ahora);
+    if (nuevo && o.espera != null) _p.esperas[o.id] = ahora + o.espera!.inMilliseconds;
+    _p.alquiladosUsados.add(o.id);
   }
 
   /// Se puede comprar [id] ahora: abierto, con saldo (MJ, o Ciruelas si [conCiruelas]), sin inventario lleno ni espera.
@@ -556,25 +637,52 @@ class Imperio {
     final o = objetoPorId(id);
     if (o == null || o.tipo == TipoObjeto.ficha || !objetoAbierto(id)) return false;
     if (o.tipo == TipoObjeto.consumible) return enInventario(id) < o.maxInventario;
-    if (robotActivo(ahora)) return min(_p.robotHasta + o.duracion!.inMilliseconds, ahora + topeAlquiler.inMilliseconds) > _p.robotHasta;
+    if (alquiladoActivo(id, ahora)) return o.duracion != null && _finAlquiler(o, ahora) > _p.alquilados[id]!;
     return esperaRestante(id, ahora) == null;
   }
 
   /// Usa un consumible del inventario si no hay espera. Papel doble hoja: deja pendiente el doble del próximo dorado.
+  /// Destapacaños: destapa (pide un Atasco). La Pintura marrón se usa con [usarPintura].
   bool usarObjeto(String id, int ahora) {
     final o = objetoPorId(id);
     if (o == null || o.tipo != TipoObjeto.consumible || enInventario(id) <= 0 || esperaRestante(id, ahora) != null) return false;
-    if (o.duracion == null) {
+    if (id == 'pintura') return false;
+    if (id == 'destapacanos') {
+      if (_p.atasco == null) return false;
+      _p.atasco = null;
+      _destapado(ahora);
+    } else if (o.duracion == null) {
       if (_p.papelDoble) return false;
       _p.papelDoble = true;
     } else {
       _extender(id, ahora, o.duracion!);
     }
-    _p.inventario[id] = enInventario(id) - 1;
-    if (_p.inventario[id]! <= 0) _p.inventario.remove(id);
-    if (o.espera != null) _p.esperas[id] = ahora + o.espera!.inMilliseconds;
+    _gastarConsumible(o, ahora);
     return true;
   }
+
+  void _gastarConsumible(Objeto o, int ahora) {
+    _p.inventario[o.id] = enInventario(o.id) - 1;
+    if (_p.inventario[o.id]! <= 0) _p.inventario.remove(o.id);
+    if (o.espera != null) _p.esperas[o.id] = ahora + o.espera!.inMilliseconds;
+    _p.consumiblesUsados++;
+  }
+
+  /// Edificios donde se puede poner Pintura marrón: abiertos, con unidades, que producen y sin pintura.
+  List<String> edificiosParaPintura() =>
+      [for (final e in edificios) if (e.mpsBase > 0 && cantidad(e.id) > 0 && !_p.pintura.contains(e.id)) e.id];
+
+  /// Pinta [edificio] (+10% hasta jalar la cadena). 1 por edificio.
+  bool usarPintura(String edificio, int ahora) {
+    final o = objetoPorId('pintura')!;
+    if (enInventario(o.id) <= 0 || !edificiosParaPintura().contains(edificio)) return false;
+    _p.pintura.add(edificio);
+    _gastarConsumible(o, ahora);
+    return true;
+  }
+
+  /// Edificios con Pintura marrón.
+  Set<String> get pintados => _p.pintura;
 
   /// Cagada fresca: producción x2 por 1 h (si ya estaba, suma 1 h). La da la tienda de Ciruelas.
   void activarCagadaFresca(int ahora) {
@@ -626,10 +734,33 @@ class Imperio {
       case 'robot_24h':
         _p.robotHasta = max(_p.robotHasta, ahora) + const Duration(hours: 24).inMilliseconds;
         return 0;
+      case 'congelador':
+        return 0; // vive en el servidor (racha)
     }
     // Objeto pagado con Ciruelas: 'obj_<id>'.
     if (id.startsWith('obj_')) comprarObjeto(id.substring(4), ahora, conCiruelas: true);
     return 0;
+  }
+
+  /// Cofre del Trono: 1 h de producción (las Fichas y Ciruelas las da el servidor). Devuelve los MJ ganados.
+  double aplicarPremioCofre(int ahora) {
+    final mj = 3600 * mpsSinEfectos(contarAtasco: false);
+    _ganar(mj);
+    return mj;
+  }
+
+  /// Esperas que siguen corriendo (id → ms que faltan), de la más larga a la más corta. Para la Ficha Sin espera.
+  Map<String, int> esperasActivas(int ahora) {
+    final r = [for (final MapEntry(key: id, value: fin) in _p.esperas.entries) if (fin > ahora) MapEntry(id, fin - ahora)]
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return Map.fromEntries(r);
+  }
+
+  /// Ficha Sin espera: borra la espera de [id]. false si no tenía.
+  bool quitarEspera(String id, int ahora) {
+    if ((_p.esperas[id] ?? 0) <= ahora) return false;
+    _p.esperas.remove(id);
+    return true;
   }
 
   /// Pone lo de la app del premio de la racha (producción, objetos, logro). Las Ciruelas y Fichas las da el servidor.
@@ -642,13 +773,129 @@ class Imperio {
       final o = objetoPorId(id);
       if (o == null || n <= 0) continue;
       if (o.tipo == TipoObjeto.alquilable) {
-        _p.robotHasta = max(_p.robotHasta, ahora) + o.duracion!.inMilliseconds * n;
+        _p.alquilados[id] = o.duracion == null ? ahora : max(_p.alquilados[id] ?? 0, ahora) + o.duracion!.inMilliseconds * n;
       } else {
         _p.inventario[id] = enInventario(id) + n;
       }
     }
     if (p.logro != null && logroPorId(p.logro!) != null && !_p.logros.contains(p.logro)) _p.logros.add(p.logro!);
     return mj;
+  }
+
+  // ---------- Maná de Tripa ----------
+
+  /// El Maná ya salió (candado de 15 cagadas).
+  bool get manaAbierto => cagadas >= candadoMana;
+
+  /// Maná ahora: lo guardado más lo que se llenó desde entonces (100 por hora, también offline).
+  double mana(int ahora) {
+    final lleno = max(0, ahora - _p.manaEn) / llenadoMana.inMilliseconds * manaMax;
+    return min(manaMax, _p.mana + lleno).toDouble();
+  }
+
+  void _fijarMana(double v, int ahora) {
+    _p.mana = v.clamp(0, manaMax).toDouble();
+    _p.manaEn = ahora;
+  }
+
+  /// Una cagada real llena el Maná entero.
+  void llenarMana(int ahora) => _fijarMana(manaMax, ahora);
+
+  /// Lo que falta para volver a usar la habilidad [id]. null = ya se puede.
+  Duration? esperaHabilidad(String id, int ahora) => esperaRestante('hab_$id', ahora);
+
+  /// Se puede usar [id] ahora: Maná abierto y suficiente, sin espera. Corre corre pide un Atasco.
+  bool puedeUsarHabilidad(String id, int ahora) {
+    final h = habilidadPorId(id);
+    if (h == null || !manaAbierto || mana(ahora) < h.mana || esperaHabilidad(id, ahora) != null) return false;
+    return id != 'corre_corre' || _p.atasco != null;
+  }
+
+  /// Usa la habilidad [id]: gasta su Maná y arranca su espera. null si no se puede.
+  ResultadoHabilidad? usarHabilidad(String id, int ahora) {
+    if (!puedeUsarHabilidad(id, ahora)) return null;
+    final h = habilidadPorId(id)!;
+    var mj = 0.0;
+    var fallo = false;
+    switch (id) {
+      case 'corre_corre':
+        _p.atasco = null;
+        _destapado(ahora);
+      case 'chorro':
+        final m = mpsSinEfectos(contarAtasco: false);
+        if (_azar.nextDouble() < probFalloChorro) {
+          fallo = true;
+          final pierde = min(_p.saldo, chorroPierde.inSeconds * m);
+          _p.saldo -= pierde;
+          _p.chorrosFallidos++;
+          mj = -pierde;
+        } else {
+          mj = chorroGana.inSeconds * m;
+          _ganar(mj);
+        }
+      case 'aguanta':
+        int alarga(int fin) => fin + ((fin - ahora) * alargueAguanta).round();
+        _p.efectos.updateAll((_, fin) => fin > ahora ? alarga(fin) : fin);
+        _p.alquilados.updateAll((k, fin) => objetoPorId(k)?.duracion != null && fin > ahora ? alarga(fin) : fin);
+      default:
+        if (h.duracion != null) _extender(id, ahora, h.duracion!);
+    }
+    _fijarMana(mana(ahora) - h.mana, ahora);
+    _p.esperas['hab_$id'] = ahora + h.espera.inMilliseconds;
+    _p.habilidades++;
+    return ResultadoHabilidad(id, mj, fallo);
+  }
+
+  // ---------- Objetos de Rollos de Oro ----------
+
+  /// Salen después de la primera jalada.
+  bool get objetosRollosAbiertos => _p.jaladas > 0;
+
+  /// Cuántos tienes de un objeto de Rollos (la Cadena de reserva: 1 = pendiente para la próxima jalada).
+  int tieneObjetoRollos(String id) => _p.objetosRollos[id] ?? 0;
+
+  /// Lo que falta para otra Cadena de reserva (1 por semana). null = ya se puede.
+  Duration? esperaCadena(int ahora) {
+    if (_p.cadenaReservaEn <= 0) return null;
+    final fin = _p.cadenaReservaEn + esperaCadenaReserva.inMilliseconds;
+    return fin > ahora ? Duration(milliseconds: fin - ahora) : null;
+  }
+
+  /// Se puede comprar [id] con Rollos: abiertos, alcanzan los rollos, bajo su límite (y sin espera la Cadena).
+  bool puedeComprarObjetoRollos(String id, int ahora) {
+    final o = objetoRollosPorId(id);
+    if (o == null || !objetosRollosAbiertos || _p.rollos < o.costo || tieneObjetoRollos(id) >= o.limite) return false;
+    return id != 'cadena_reserva' || esperaCadena(ahora) == null;
+  }
+
+  /// Compra con Rollos de Oro. Los gastados bajan el +% por rollo, pero no cierran edificios ni mejoras.
+  bool comprarObjetoRollos(String id, int ahora) {
+    if (!puedeComprarObjetoRollos(id, ahora)) return false;
+    final o = objetoRollosPorId(id)!;
+    _p
+      ..rollos -= o.costo
+      ..rollosGastados += o.costo;
+    _p.objetosRollos[id] = tieneObjetoRollos(id) + 1;
+    if (id == 'cadena_reserva') _p.cadenaReservaEn = ahora;
+    return true;
+  }
+
+  /// Súper Plomero: 1 h de producción la primera vez de cada día real. Lo guarda para [tomarRegaloPlomero].
+  void _revisarSuperPlomero(int ahora) {
+    if (tieneObjetoRollos('super_plomero') <= 0) return;
+    final dia = diaLocal(ahora);
+    if (_p.superPlomeroDia == dia) return;
+    _p.superPlomeroDia = dia;
+    final mj = 3600 * mpsSinEfectos(contarAtasco: false);
+    _ganar(mj);
+    _regaloPlomero += mj;
+  }
+
+  /// MJ del regalo del Súper Plomero sin anunciar (y lo marca como anunciado). 0 si no hay.
+  double tomarRegaloPlomero() {
+    final r = _regaloPlomero;
+    _regaloPlomero = 0;
+    return r;
   }
 
   /// Efectos para la barra de buffs, del que menos le queda al que más.
@@ -664,9 +911,12 @@ class Imperio {
         r.add(EfectoActivo(id, o.emoji, o.nombreEs, o.nombreEn, o.descEs, o.descEn, resta(fin)));
       }
     }
-    if (robotActivo(ahora)) {
-      final o = objetoPorId('robot')!;
-      r.add(EfectoActivo('robot', o.emoji, o.nombreEs, o.nombreEn, o.descEs, o.descEn, resta(_p.robotHasta)));
+    final sinFin = <EfectoActivo>[];
+    for (final MapEntry(key: id, value: fin) in _p.alquilados.entries) {
+      final o = objetoPorId(id);
+      if (o == null || !alquiladoActivo(id, ahora)) continue;
+      final e = EfectoActivo(id, o.emoji, o.nombreEs, o.nombreEn, o.descEs, o.descEn, o.duracion == null ? null : resta(fin));
+      (o.duracion == null ? sinFin : r).add(e);
     }
     final t = tipoActivo(ahora);
     if (t != null && t != 6) {
@@ -682,6 +932,7 @@ class Imperio {
       final x = _textosEfecto['offline_bonus']!;
       r.add(EfectoActivo('offline_bonus', x.$1, x.$2, x.$3, x.$4, x.$5, null));
     }
+    r.addAll(sinFin);
     return r;
   }
 
@@ -692,9 +943,17 @@ class Imperio {
   List<Logro> tick(int ahora, double segundos) {
     final s = segundos.isNaN ? 0.0 : segundos.clamp(0.0, 1.0).toDouble();
     if (s > 0) _ganar(mps(ahora) * s);
+    // Primo pujador: 10 pujos por segundo (sin épicos ni contadores de pujos).
+    if (s > 0 && alquiladoActivo('primo', ahora)) _ganar(valorPujo(ahora) * pujosPrimo * s);
     _p.segPartida += s;
+    _cuadrilla(ahora, s);
+    _revisarSuperPlomero(ahora);
 
+    // Laxante de la abuela: al terminar sale un Atasco seguro.
+    final abuela = _p.efectos['abuela'];
+    if (abuela != null && abuela <= ahora) _atascar(ahora, 1);
     _p.efectos.removeWhere((_, fin) => fin <= ahora);
+    _p.alquilados.removeWhere((id, fin) => objetoPorId(id)?.duracion != null && fin <= ahora);
     if (_p.tipoBuff != null && _p.tipoBuffHasta <= ahora) _p.tipoBuff = null;
     if (_p.dorado != null && _p.dorado!.hasta <= ahora) _p.dorado = null;
 
@@ -702,7 +961,8 @@ class Imperio {
     if (_p.segHastaDorado < 0) {
       _programarDorado(ahora);
     } else if (_p.dorado == null) {
-      _p.segHastaDorado -= s;
+      // Ambientador de pino: los dorados salen la mitad de seguido.
+      _p.segHastaDorado -= _activo('pino', ahora) ? s / 2 : s;
       if (_p.segHastaDorado <= 0) {
         final dur = duracionDoradoVisible.inMilliseconds * (mejoraComprada('brillo') ? 2 : 1);
         _p.dorado = DoradoVisible(ahora, ahora + dur, 0.1 + 0.8 * _azar.nextDouble(), 0.1 + 0.8 * _azar.nextDouble());
@@ -711,21 +971,40 @@ class Imperio {
     }
 
     // Atascos: ~1 cada 2 h activas, uno a la vez, en un edificio con 25 o más.
-    if (_p.atasco == null && s > 0) {
-      // El Dedo no produce MJ/s: atascarlo no haría nada.
-      final candidatos = [for (final e in edificios) if (e.mpsBase > 0 && cantidad(e.id) >= minimoParaAtasco) e.id];
-      if (candidatos.isNotEmpty && _azar.nextDouble() < s / segundosPorAtasco) {
-        _p.atasco = Atasco(candidatos[_azar.nextInt(candidatos.length)], ahora);
-        _p.vioPrimerAtasco = true;
-      }
-    }
-    if (_p.atasco != null && robotActivo(ahora)) {
+    if (_p.atasco == null && s > 0 && _azar.nextDouble() < s / segundosPorAtasco) _atascar(ahora, minimoParaAtasco);
+    if (_p.atasco != null && _destapaSolo(ahora)) {
       _p.atasco = null;
-      _p.destapes++;
+      _destapado(ahora);
     }
 
     _p.ultimaVez = ahora;
     return revisarLogros();
+  }
+
+  /// Atasca un edificio al azar con [minimo] unidades o más (si no hay otro Atasco). El Dedo no produce MJ/s: no se atasca.
+  void _atascar(int ahora, int minimo) {
+    if (_p.atasco != null) return;
+    final candidatos = [for (final e in edificios) if (e.mpsBase > 0 && cantidad(e.id) >= minimo) e.id];
+    if (candidatos.isEmpty) return;
+    _p.atasco = Atasco(candidatos[_azar.nextInt(candidatos.length)], ahora);
+    _p.vioPrimerAtasco = true;
+  }
+
+  /// Cuadrilla del barrio: cada minuto activo compra el edificio abierto más barato, si alcanza.
+  void _cuadrilla(int ahora, double s) {
+    if (!alquiladoActivo('cuadrilla', ahora)) {
+      _segCuadrilla = 0;
+      return;
+    }
+    _segCuadrilla += s;
+    if (_segCuadrilla < cicloCuadrilla.inSeconds) return;
+    _segCuadrilla -= cicloCuadrilla.inSeconds;
+    String? barato;
+    for (final e in edificios) {
+      if (e.mpsBase <= 0 || !edificioAbierto(e.id)) continue;
+      if (barato == null || precioEdificio(e.id, ahora) < precioEdificio(barato, ahora)) barato = e.id;
+    }
+    if (barato != null) comprarEdificio(barato, ahora);
   }
 
   void _programarDorado(int ahora) {
@@ -801,7 +1080,7 @@ class Imperio {
     if (a.toques < toquesAtasco) return ResultadoDestape(a.edificio, a.toques, toquesAtasco - a.toques, false, false, 0);
     final perfecto = ahora - a.desde < tiempoDestapePerfecto.inMilliseconds;
     _p.atasco = null;
-    _p.destapes++;
+    _destapado(ahora);
     var premio = 0.0;
     if (perfecto) {
       _p.destapesPerfectos++;
@@ -814,9 +1093,11 @@ class Imperio {
   // ---------- Offline ----------
 
   /// Tope offline: 2 h (la base de los ajustes), 4 h o 8 h según los tanques. Nunca menos que la base.
+  /// Suma el Tanque extra (Fichas) y los Tanques de lujo (Rollos, +1 h c/u).
   Duration get topeOffline {
     final h = mejoraComprada('tanque_8') ? 8.0 : (mejoraComprada('tanque_4') ? 4.0 : 0.0);
-    return Duration(seconds: (max(h, ajustes.offlineTopeH) * 3600).round());
+    final extra = _p.horasExtraTanque + tieneObjetoRollos('tanque_lujo');
+    return Duration(seconds: ((max(h, ajustes.offlineTopeH) + extra) * 3600).round());
   }
 
   /// Qué parte cuenta offline: 25% (la base de los ajustes), 50% o 75% según las válvulas. Nunca menos que la base.
@@ -824,27 +1105,33 @@ class Imperio {
       max(mejoraComprada('valvula_75') ? 0.75 : (mejoraComprada('valvula_50') ? 0.5 : 0.0), ajustes.offlinePorcentaje).toDouble();
 
   /// Cobra el tiempo fuera (sin efectos temporales, sin Atascos ni dorados). x1,5 si quedó el buff del tipo 6 (y se gasta).
+  /// Guardia nocturno: cuenta al 100% con tope de 8 h (o el del tanque si es más) y se gasta.
   ResultadoOffline aplicarOffline(int desdeMs, int ahoraMs) {
     final ausente = max(0, ahoraMs - desdeMs) / 1000.0;
-    final tope = topeOffline.inSeconds.toDouble();
     _p.ultimaVez = ahoraMs;
     _p.dorado = null;
     _p.atasco?.desde = ahoraMs; // vuelve a verse ahora
+    // La Arepa reina pepiada solo corre con la app abierta: se corre su fin lo que estuviste fuera.
+    final arepa = _p.efectos['reina_pepiada'];
+    if (arepa != null && arepa > desdeMs && ahoraMs > desdeMs) _p.efectos['reina_pepiada'] = arepa + (ahoraMs - desdeMs);
     if (ausente < minimoOffline.inSeconds) return ResultadoOffline(ausente, 0, 0, false, false);
+    final guardia = _p.alquilados.remove('guardia') != null;
+    final tope = guardia ? max(topeOffline.inSeconds, topeGuardia.inSeconds).toDouble() : topeOffline.inSeconds.toDouble();
     final contados = min(ausente, tope);
     final bonus = _p.offlineBonus;
     _p.offlineBonus = false;
-    final ganado = contados * mpsSinEfectos(contarAtasco: false) * porcentajeOffline * (bonus ? 1.5 : 1);
+    final ganado = contados * mpsSinEfectos(contarAtasco: false) * (guardia ? 1.0 : porcentajeOffline) * (bonus ? 1.5 : 1);
     _ganar(ganado);
-    return ResultadoOffline(ausente, contados, ganado, ausente >= tope, bonus);
+    return ResultadoOffline(ausente, contados, ganado, ausente >= tope, bonus, conGuardia: guardia);
   }
 
   // ---------- Cagadas reales ----------
 
   /// Cobra cagadas reales nuevas: una Descarga por cada una (15 min x (1 + 0,1 x peso)), una sola Fiebre de Trono
-  /// y el buff del tipo más reciente por 1 h. Las Fichas no cambian aquí (las da el servidor).
+  /// y el buff del tipo más reciente por 1 h. Llenan el Maná de Tripa. Las Fichas no cambian aquí (las da el servidor).
   ResultadoCagadas aplicarCagadas(List<CagadaReal> nuevas, int ahora) {
     if (nuevas.isEmpty) return const ResultadoCagadas(0, [], null, false);
+    llenarMana(ahora);
     final orden = [...nuevas]..sort((a, b) => a.creada.compareTo(b.creada));
     final enFiebreDorada = _activo('fiebre_dorada', ahora);
     final base = duracionDescarga.inSeconds * mpsSinEfectos(contarAtasco: false);
@@ -878,12 +1165,12 @@ class Imperio {
   /// Rollos de Oro que da todo lo ganado en la historia: piso((mjTotal / divisor) ^ exponente).
   int get rollosTotales => rollosPorMj(_p.mjTotal, ajustes);
 
-  /// Rollos que da jalar ahora: los totales menos los que ya tienes. Nunca negativo.
-  int get rollosPorGanar => max(0, rollosTotales - _p.rollos);
+  /// Rollos que da jalar ahora: los totales menos los que ya ganaste (los gastados cuentan). Nunca negativo.
+  int get rollosPorGanar => max(0, rollosTotales - _p.rollosGanados);
 
   /// MJ (históricos) que faltan para que jalar dé un rollo más que ahora.
   double get mjParaSiguienteRollo {
-    final meta = mjParaRollos(max(rollosTotales, _p.rollos) + 1, ajustes);
+    final meta = mjParaRollos(max(rollosTotales, _p.rollosGanados) + 1, ajustes);
     return max(0, meta - _p.mjTotal);
   }
 
@@ -899,8 +1186,13 @@ class Imperio {
   /// dorado y los contadores de la corrida (pujos recientes, segPartida). Se queda: mjTotal, logros, rollos, jaladas,
   /// estadísticas históricas, el buff del tipo, el bono offline y los efectos que vienen de cagadas reales o
   /// Ciruelas (Cagada fresca, Fiebre de Trono). No mira las cagadas: eso lo valida el servidor en `imperio_jalar`.
+  /// Fase 2: se van los alquilados y la Pintura; se quedan las esperas de habilidades (`hab_*`), el Maná y los objetos
+  /// de Rollos. La Cadena de reserva pendiente se gasta: devuelve 1 edificio de cada tipo que tenías.
   int jalar() {
     final ganados = rollosPorGanar;
+    final habilidadesEnEspera = {for (final e in _p.esperas.entries) if (e.key.startsWith('hab_')) e.key: e.value};
+    final reserva = tieneObjetoRollos('cadena_reserva') > 0;
+    final devueltos = {for (final MapEntry(key: id, value: n) in _p.edificios.entries) if (n > 0) id: 1};
     _p
       ..rollos += ganados
       ..jaladas += 1
@@ -908,8 +1200,9 @@ class Imperio {
       ..edificios = {}
       ..mejoras = {}
       ..inventario = {}
-      ..esperas = {}
-      ..robotHasta = 0
+      ..esperas = habilidadesEnEspera
+      ..alquilados = {}
+      ..pintura = {}
       ..atasco = null
       ..dorado = null
       ..segHastaDorado = -1
@@ -917,6 +1210,11 @@ class Imperio {
       ..pujosRecientes = []
       ..segPartida = 0;
     _p.efectos.removeWhere((id, _) => !efectosQueSobrevivenJalada.contains(id));
+    if (reserva) {
+      _p.edificios = devueltos;
+      _p.objetosRollos.remove('cadena_reserva');
+    }
+    _segCuadrilla = 0;
     revisarLogros();
     return ganados;
   }

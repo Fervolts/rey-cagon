@@ -114,7 +114,16 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   bool rachaPendiente = false;
 
   /// Estado de la racha para hoy (fecha local). null sin datos del servidor.
-  EstadoRacha? get racha => _rachaDia == null ? null : estadoRacha(_rachaDia!, _rachaFecha, fechaLocal(DateTime.now()));
+  EstadoRacha? get racha =>
+      _rachaDia == null ? null : estadoRacha(_rachaDia!, _rachaFecha, fechaLocal(DateTime.now()), congeladores: congeladores);
+
+  /// Congeladores 🧊 guardados (0 a 2, del servidor), si ya gastó el Tanque extra y los días de la racha salvados con 🧊.
+  int congeladores = 0;
+  bool tanqueExtra = false;
+  List<int> rachaSalvados = const [];
+
+  /// Cofre del Trono de esta semana (RPC `imperio_cofre`). null mientras no llega o sin la migración.
+  EstadoCofre? cofre;
 
   /// Sube cada vez que cae una Ciruela 🫐 (pujo o cagada): la pantalla la hace volar al chip.
   final ValueNotifier<int> ciruelaCae = ValueNotifier(0);
@@ -200,6 +209,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     _actualizarBucle();
     notifyListeners();
     if (!sinConexion) unawaited(_cargarCadena());
+    if (!sinConexion) unawaited(cargarCofre());
   }
 
   /// Trae el estado de la cadena. Si el servidor tiene más jaladas que la partida, la jalada se marcó pero el
@@ -226,7 +236,23 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   void _leerRacha(CargaImperio carga) {
     _rachaDia = carga.rachaDia;
     _rachaFecha = leerFecha(carga.rachaFecha);
+    congeladores = carga.congeladores;
+    tanqueExtra = carga.tanqueExtra;
+    rachaSalvados = carga.rachaSalvados;
+    if (tanqueExtra) imperio.partida.horasExtraTanque = 1;
     rachaPendiente = racha?.reclamado == false;
+  }
+
+  /// Trae el Cofre del Trono de la semana. Nunca lanza: sin RPC o sin red el chip no sale.
+  Future<void> cargarCofre() async {
+    try {
+      final c = await nube.cofre();
+      if (_cerrado) return;
+      cofre = c;
+      notifyListeners();
+    } catch (_) {
+      _error('cofre');
+    }
   }
 
   /// Ciruelas que el servidor sacó con las cagadas reales nuevas (5% cada una): vuelan y se anotan.
@@ -298,6 +324,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       _sumarLogros(imperio.revisarLogros());
       notifyListeners();
       await _cargarCadena();
+      unawaited(cargarCofre());
     } catch (_) {
       _error('recargar');
       if (!sinConexion) {
@@ -464,6 +491,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     }
     final antes = imperio.ciruelas;
     imperio.ciruelas = r;
+    if (id == 'congelador') congeladores = min(2, congeladores + 1);
     final mj = imperio.aplicarOfertaCiruela(id, ahora);
     _anotar('ciruelas_gastar', {'id': id, 'precio': antes - r, 'saldo': r, 'mj': mj});
     _hecho(true);
@@ -512,6 +540,13 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     imperio.fichas = r.fichas;
     _rachaDia = r.dia;
     _rachaFecha = fechaLocal(DateTime.now());
+    if (r.congeladores != null) congeladores = r.congeladores!;
+    if (r.rachaSalvados != null) rachaSalvados = r.rachaSalvados!;
+    if (!r.ya && r.congelados > 0) {
+      imperio.partida.congeladosUsados += r.congelados;
+      _anotar('congelador_usar', {'cantidad': r.congelados, 'dia': r.dia, 'quedan': congeladores});
+      _sumarLogros(imperio.revisarLogros());
+    }
     if (!r.ya) {
       final logro = premioDia(r.dia).logro;
       final yaLoTenia = logro != null && imperio.partida.logros.contains(logro);
@@ -525,6 +560,98 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     }
     notifyListeners();
     return r;
+  }
+
+  /// Ficha 🎟️ por la Cagada fresca (x2 por 1 h). false si no le quedaban. Lanza el error de red.
+  Future<bool> usarFichaFresca() async {
+    final int r;
+    try {
+      r = await nube.usarFicha();
+    } catch (_) {
+      _error('fichas_usar');
+      rethrow;
+    }
+    if (_cerrado) return false;
+    if (r < 0) {
+      notifyListeners();
+      return false;
+    }
+    imperio.fichas = r;
+    imperio.activarCagadaFresca(ahora);
+    _anotar('fichas_usar', {'que': 'cagada_fresca', 'precio': 1, 'saldo': r});
+    return _fichasHechas();
+  }
+
+  /// Gasta Fichas en 'sin_espera' (borra la espera de [espera]), 'tanque_extra' (+1 h de tope offline, una vez)
+  /// o 'congelador' (+1 🧊, hasta 2). El servidor valida y descuenta. false si no alcanzaba o no cabe. Lanza el error de red.
+  Future<bool> usarFichas(String que, {String? espera}) async {
+    if (que == 'sin_espera' && (espera == null || imperio.esperaRestante(espera, ahora) == null)) return false;
+    final int r;
+    try {
+      r = await nube.usarFichas(que);
+    } catch (_) {
+      _error('fichas_usar');
+      rethrow;
+    }
+    if (_cerrado) return false;
+    if (r == -2 && que == 'congelador') congeladores = 2;
+    if (r == -2 && que == 'tanque_extra') {
+      tanqueExtra = true;
+      imperio.partida.horasExtraTanque = 1;
+    }
+    if (r < 0) {
+      notifyListeners();
+      return false;
+    }
+    final antes = imperio.fichas;
+    imperio.fichas = r;
+    switch (que) {
+      case 'sin_espera':
+        imperio.quitarEspera(espera!, ahora);
+      case 'tanque_extra':
+        tanqueExtra = true;
+        imperio.partida.horasExtraTanque = 1;
+      case 'congelador':
+        congeladores = min(2, congeladores + 1);
+    }
+    _anotar('fichas_usar', {'que': que, 'precio': antes - r, 'saldo': r, 'espera': ?espera});
+    return _fichasHechas();
+  }
+
+  bool _fichasHechas() {
+    _hecho(true);
+    notifyListeners();
+    unawaited(_guardarLocal());
+    unawaited(_guardarNube());
+    return true;
+  }
+
+  /// Abre el Cofre del Trono: el servidor da Fichas (o Ciruelas si no caben); aquí, 1 h de producción.
+  /// null si no estaba listo. Lanza el error de red sin tocar la partida.
+  Future<EstadoCofre?> reclamarCofre() async {
+    final EstadoCofre c;
+    try {
+      c = await nube.cofre(reclamar: true);
+    } catch (_) {
+      _error('cofre_reclamar');
+      rethrow;
+    }
+    if (_cerrado) return null;
+    cofre = c;
+    if (!c.reclamadoAhora) {
+      notifyListeners();
+      return null;
+    }
+    imperio.fichas = c.fichas;
+    imperio.ciruelas = c.ciruelas;
+    final p = imperio.partida;
+    p.cofres += 1;
+    p.semanasRacha = c.semanasRacha;
+    final mj = imperio.aplicarPremioCofre(ahora);
+    _sumarLogros(imperio.revisarLogros());
+    _anotar('cofre_reclamar', {'dias': c.dias, 'fichas': c.fichasGanadas, 'ciruelas': c.ciruelasGanadas, 'semanas': c.semanasRacha, 'mj': mj});
+    _fichasHechas();
+    return c;
   }
 
   bool comprarEdificio(String id, int n) {
@@ -544,14 +671,47 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   bool comprarObjeto(String id) {
-    final ok = imperio.comprarObjeto(id, ahora);
-    if (ok) _compra('objeto_compra', {'id': id});
+    final t = ahora;
+    final o = objetoPorId(id);
+    final precio = imperio.precioObjeto(id, t);
+    final ok = imperio.comprarObjeto(id, t);
+    if (ok) {
+      _compra('objeto_compra', {'id': id});
+      if (o?.tipo == TipoObjeto.alquilable) _anotar('alquilar', {'id': id, 'precio': precio, 'hasta': imperio.partida.alquilados[id]});
+    }
     return _hecho(ok);
   }
 
   bool usarObjeto(String id) {
     final ok = imperio.usarObjeto(id, ahora);
-    if (ok) _anotar('objeto_uso', {'id': id});
+    if (ok) {
+      _anotar('objeto_uso', {'id': id});
+      _anotar('consumible_usar', {'id': id, 'quedan': imperio.enInventario(id)});
+    }
+    return _hecho(ok);
+  }
+
+  /// Pone Pintura marrón en [edificio].
+  bool usarPintura(String edificio) {
+    final ok = imperio.usarPintura(edificio, ahora);
+    if (ok) _anotar('consumible_usar', {'id': 'pintura', 'edificio': edificio, 'quedan': imperio.enInventario('pintura')});
+    return _hecho(ok);
+  }
+
+  /// Usa una habilidad de Maná. null si no se pudo.
+  ResultadoHabilidad? usarHabilidad(String id) {
+    final t = ahora;
+    final r = imperio.usarHabilidad(id, t);
+    if (r != null) _anotar('mana_usar', {'id': id, 'mana': imperio.mana(t).round(), 'mj': r.mj, 'fallo': r.fallo});
+    _hecho(r != null);
+    return r;
+  }
+
+  /// Compra un objeto de Rollos de Oro (gasta Rollos: baja el +% por rollo).
+  bool comprarObjetoRollos(String id) {
+    final costo = objetoRollosPorId(id)?.costo ?? 0;
+    final ok = imperio.comprarObjetoRollos(id, ahora);
+    if (ok) _anotar('rollos_gastar', {'id': id, 'costo': costo, 'quedan': imperio.partida.rollos, 'tiene': imperio.tieneObjetoRollos(id)});
     return _hecho(ok);
   }
 
@@ -700,7 +860,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       // Ritmo efectivo (MJ/s o pujos del Dedo, lo mayor): el antitrampa del servidor lo usa como techo.
       // _mps_edificios y _pujo: los lee la tarjeta de cartera del chat (el servidor no confía en los números del cliente).
       final estado = {...imperio.toJson(), '_mps_edificios': imperio.mpsSinEfectos(), '_pujo': imperio.valorPujo(ahora)};
-      final r = await nube.guardar(estado, imperio.mjTotal, imperio.ritmoEfectivo());
+      final r = await nube.guardar(estado, imperio.mjTotal, imperio.ritmoEfectivo(ahora));
       if (r.recortado) aceptarRecorte(imperio.partida, r.mjTotal);
     } catch (_) {
       _error('guardar_nube');
