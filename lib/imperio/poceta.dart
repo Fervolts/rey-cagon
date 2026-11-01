@@ -53,7 +53,7 @@ class Poceta extends StatefulWidget {
   /// Emojis de los efectos activos que no tienen dibujo propio (objetos, robot, papel...).
   final List<String> efectos;
 
-  /// Cuántos dedos hay. Se dibujan hasta [topeDedos]; los demás van en el número.
+  /// Cuántos dedos hay. Rodean la poceta hasta cerrar el anillo ([topeDedos]); los demás van en el número.
   final int dedos;
 
   /// La pestaña se ve. Si no, el ticker se para.
@@ -62,7 +62,7 @@ class Poceta extends StatefulWidget {
   /// Solo para pruebas: dibuja la escena quieta en este segundo, como con movimiento completo.
   final double? instante;
 
-  static const topeDedos = 6;
+  static const topeDedos = 24;
 
   @override
   State<Poceta> createState() => _PocetaState();
@@ -87,9 +87,30 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
   // Boca de la taza en toilet.png: la misma fracción que usa inodoro.dart (.33, .47).
   static const _boca = Offset(_lado * .33 - _lado / 2, _lado * .47 - _lado / 2);
 
-  // Dónde va cada dedo (grados, 0 = derecha, 90 = abajo), en el orden en que se van poniendo.
-  static const _angulosDedos = [140.0, 200.0, 80.0, 170.0, 110.0, 50.0];
-  static const _radioDedos = 88.0;
+  // Los dedos van en un anillo alrededor de la poceta: [Poceta.topeDedos] puestos fijos, el 0 abajo (90 grados) y
+  // los demás en sentido horario. Se llenan en orden de bits invertidos (0, 12, 6, 18, 3...): cada dedo nuevo cae
+  // en el hueco más grande, el anillo se ve parejo con pocos y los que ya estaban no se mueven.
+  static final _ordenDedos = _bitsInvertidos(Poceta.topeDedos);
+  // Un poco más ancho que alto: el tanque de la poceta no tapa los dedos de arriba a la derecha.
+  static const _radioDedos = 100.0, _altoDedos = 90.0;
+
+  static List<int> _bitsInvertidos(int n) {
+    var bits = 0;
+    while ((1 << bits) < n) {
+      bits++;
+    }
+    final orden = <int>[];
+    for (var k = 0; k < (1 << bits); k++) {
+      var r = 0;
+      for (var b = 0; b < bits; b++) {
+        if (k & (1 << b) != 0) r |= 1 << (bits - 1 - b);
+      }
+      // Con n que no es potencia de 2 se escala el puesto al anillo y se saltan los repetidos.
+      final puesto = (r * n) >> bits;
+      if (!orden.contains(puesto)) orden.add(puesto);
+    }
+    return orden;
+  }
 
   late final Ticker _ticker = createTicker(_tic);
   final _reloj = Stopwatch()..start();
@@ -244,16 +265,28 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
 
     _ambienteVivo(hijos, cx, t, vivo);
 
-    // Dedos alrededor, apuntando a la poceta.
+    // Dedos en anillo, apuntando a la poceta. El pinchazo da la vuelta como una ola. Todos van bajo un solo
+    // ColorFiltered (una capa para el anillo, no una por dedo); lo que llevan puesto va aparte, sin teñir.
     final nDedos = min(widget.dedos, Poceta.topeDedos);
-    for (var i = 0; i < nDedos; i++) {
-      final a = _angulosDedos[i] * pi / 180;
-      var r = _radioDedos;
-      if (vivo) {
-        final f = (t * 1.3 + i * .37) % 1;
-        if (f < .15) r -= 7 * sin(pi * f / .15);
+    if (nDedos > 0) {
+      final dedos = <Widget>[], puestos = <Widget>[];
+      for (var k = 0; k < nDedos; k++) {
+        final i = _ordenDedos[k];
+        final a = pi / 2 + 2 * pi * i / Poceta.topeDedos;
+        var r = 1.0;
+        if (vivo) {
+          final f = (t * .9 - i / Poceta.topeDedos) % 1;
+          if (f < .15) r -= .075 * sin(pi * f / .15);
+        }
+        final o = Offset(cos(a) * _radioDedos * r, sin(a) * _altoDedos * r);
+        final (dedo, puesto) = _dedo(i, a);
+        dedos.add(_en(cx, o, 32, dedo));
+        if (puesto != null) puestos.add(_en(cx, o, 32, puesto));
       }
-      hijos.add(_en(cx, Offset(cos(a) * r, sin(a) * r), 32, _dedo(i, a)));
+      final tinte = _tinte(widget.bano.colorDedo);
+      final anillo = Stack(clipBehavior: Clip.none, children: dedos);
+      hijos.add(Positioned.fill(child: tinte == null ? anillo : ColorFiltered(colorFilter: ColorFilter.matrix(tinte), child: anillo)));
+      hijos.addAll(puestos);
     }
 
     // Fiebre: candela debajo.
@@ -361,7 +394,7 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
 
     // Más dedos de los que caben: el número en una placa.
     if (widget.dedos > Poceta.topeDedos) {
-      // Abajo, entre la poceta y el borde: ahí no pasa ningún dedo.
+      // Abajo, entre el anillo de dedos y el borde.
       encima.add(Positioned(
         left: cx - 26,
         bottom: 4,
@@ -388,16 +421,17 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
         Shadow(color: Color(0xE6000000), offset: Offset(-1.2, -1.2)),
       ]);
 
-  // Un dedo con su apariencia (la mejor mejora comprada) y lo único que lleva puesto.
-  Widget _dedo(int i, double a) {
+  // Matrices sobre la luz del emoji: conservan el volumen (un tinte plano lo dejaba como una mancha).
+  static List<double>? _tinte(ColorDedo c) => switch (c) {
+        ColorDedo.oro => const <double>[.40, 1.36, .14, 0, -150, .34, 1.14, .12, 0, -150, .10, .30, .03, 0, -40, 0, 0, 0, 1, 0],
+        ColorDedo.acero => const <double>[.53, 1.79, .18, 0, -330, .53, 1.79, .18, 0, -322, .55, 1.86, .19, 0, -310, 0, 0, 0, 1, 0],
+        ColorDedo.latex => const <double>[.13, .43, .04, 0, 115, .13, .43, .04, 0, 115, .14, .46, .05, 0, 122, 0, 0, 0, 1, 0],
+        ColorDedo.piel => null,
+      };
+
+  // Un dedo con su apariencia (la mejor mejora comprada), sin teñir, y aparte lo único que lleva puesto.
+  (Widget, Widget?) _dedo(int i, double a) {
     final b = widget.bano;
-    // Matrices sobre la luz del emoji: conservan el volumen (un tinte plano lo dejaba como una mancha).
-    final tinte = switch (b.colorDedo) {
-      ColorDedo.oro => const <double>[.40, 1.36, .14, 0, -150, .34, 1.14, .12, 0, -150, .10, .30, .03, 0, -40, 0, 0, 0, 1, 0],
-      ColorDedo.acero => const <double>[.53, 1.79, .18, 0, -330, .53, 1.79, .18, 0, -322, .55, 1.86, .19, 0, -310, 0, 0, 0, 1, 0],
-      ColorDedo.latex => const <double>[.13, .43, .04, 0, 115, .13, .43, .04, 0, 115, .14, .46, .05, 0, 122, 0, 0, 0, 1, 0],
-      ColorDedo.piel => null,
-    };
     final impar = i.isOdd;
     final (archivo, giro, espejo) = switch (b.formaDedo) {
       FormaDedo.mano => ('raised_hand', a - pi / 2, false),
@@ -407,7 +441,6 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
     };
     final esPie = archivo == 'foot';
     Widget img = Image.asset('assets/emoji/$archivo.png', width: 26, height: 26, filterQuality: FilterQuality.medium);
-    if (tinte != null) img = ColorFiltered(colorFilter: ColorFilter.matrix(tinte), child: img);
     if (espejo) img = Transform.flip(flipX: true, child: img);
     final adorno = b.adornoDedo;
     // Sin girar, el dedo apunta hacia arriba: la punta arriba y la base abajo.
@@ -417,12 +450,11 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
       '💍' => (Offset(esPie ? 6 : 0, esPie ? 0 : -2), 10.0),
       _ => (Offset(0, esPie ? 5 : 8), 12.0),
     };
-    return Transform.rotate(
-      angle: giro,
-      child: Stack(alignment: Alignment.center, clipBehavior: Clip.none, children: [
-        img,
-        if (adorno != null) Transform.translate(offset: donde, child: Emoji(adorno, tamano: tam)),
-      ]),
+    return (
+      Transform.rotate(angle: giro, child: Center(child: img)),
+      adorno == null
+          ? null
+          : Transform.rotate(angle: giro, child: Center(child: Transform.translate(offset: donde, child: Emoji(adorno, tamano: tam)))),
     );
   }
 
