@@ -9,6 +9,7 @@ import 'emoji.dart';
 import 'genero.dart';
 import 'idioma.dart';
 import 'main.dart' show db;
+import 'presumir.dart' show AvisoExpediente, bordeExpediente, colorExpediente;
 import 'racha.dart';
 import 'tema.dart';
 
@@ -176,7 +177,7 @@ Future<Set<String>> porRevelar(Iterable<String> ganados) async {
 
 Future<void> marcarRevelado(String clave) async => _sumar(await _prefs(), _revelados, [clave]);
 
-/// El toast "🤫 Logro secreto: …". Si son varios, uno detrás de otro (los encola el ScaffoldMessenger).
+/// El toast de logro secreto (un expediente desclasificado, ver presumir.dart). Si son varios, uno detrás de otro (los encola el ScaffoldMessenger).
 void avisarLogrosSecretos(BuildContext context, Iterable<String> claves) {
   final catalogo = {for (final l in logrosSecretos) l.clave: l};
   final m = ScaffoldMessenger.maybeOf(context);
@@ -187,23 +188,10 @@ void avisarLogrosSecretos(BuildContext context, Iterable<String> claves) {
     HapticFeedback.mediumImpact();
     m.showSnackBar(SnackBar(
       behavior: SnackBarBehavior.floating,
-      backgroundColor: acento,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(radio)), side: BorderSide(color: acentoTexto, width: 2)),
+      backgroundColor: colorExpediente,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(radio)), side: BorderSide(color: bordeExpediente, width: 2)),
       duration: const Duration(seconds: 3),
-      content: Row(
-        children: [
-          const Emoji('🤫', tamano: 28),
-          const SizedBox(width: 10),
-          Emoji(l.emoji, tamano: 28),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              tr('Logro secreto: ${l.nombre}', 'Secret achievement: ${l.nombre}'),
-              style: const TextStyle(color: acentoTexto, fontWeight: FontWeight.w900),
-            ),
-          ),
-        ],
-      ),
+      content: AvisoExpediente(emoji: l.emoji, nombre: l.nombre),
     ));
   }
 }

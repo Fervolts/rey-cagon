@@ -1,16 +1,15 @@
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:share_plus/share_plus.dart';
 
 import 'accesorios.dart';
 import 'animaciones.dart';
+import 'compartir.dart';
 import 'emoji.dart';
 import 'idioma.dart';
 import 'nuclear.dart';
+import 'presumir.dart' show HistoriaCalendario;
 import 'tema.dart';
 
 /// Rachas del día al estilo del anunciador de DotA. Siempre en inglés, en los dos idiomas: es el chiste.
@@ -112,24 +111,13 @@ class _AnuncioState extends State<_Anuncio> with TickerProviderStateMixin {
   Future<void> _compartir() async {
     if (_compartiendo) return;
     setState(() => _compartiendo = true);
-    try {
-      final caja = _historia.currentContext!.findRenderObject() as RenderRepaintBoundary;
-      final imagen = await caja.toImage(pixelRatio: 3);
-      final png = (await imagen.toByteData(format: ui.ImageByteFormat.png))!.buffer.asUint8List();
-      imagen.dispose();
-      await SharePlus.instance.share(ShareParams(
-        files: [XFile.fromData(png, mimeType: 'image/png', name: 'rey-cagon-racha.png')],
-        fileNameOverrides: ['rey-cagon-racha.png'],
-        text: tr('${nombreRacha(widget.n)} ¿Tú cuántas llevas? https://play.google.com/store/apps/details?id=com.ahimismito.rey_cagon',
-            '${nombreRacha(widget.n)} How many have you done? https://play.google.com/store/apps/details?id=com.ahimismito.rey_cagon'),
-      ));
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(tr('No se pudo compartir', 'Could not share'))));
-      }
-    } finally {
-      if (mounted) setState(() => _compartiendo = false);
-    }
+    final mensajero = ScaffoldMessenger.maybeOf(context);
+    final ok = await compartirImagen(context, _historia,
+        nombre: 'rey-cagon-racha.png',
+        texto: tr('${nombreRacha(widget.n)} ¿Tú cuántas llevas? https://play.google.com/store/apps/details?id=com.ahimismito.rey_cagon',
+            '${nombreRacha(widget.n)} How many have you done? https://play.google.com/store/apps/details?id=com.ahimismito.rey_cagon'));
+    if (!ok && mounted) mensajero?.showSnackBar(SnackBar(content: Text(tr('No se pudo compartir', 'Could not share'))));
+    if (mounted) setState(() => _compartiendo = false);
   }
 
   @override
@@ -314,80 +302,18 @@ class _Historia extends StatelessWidget {
   final String? lugar;
 
   @override
-  Widget build(BuildContext context) {
-    final (colores, _) = estiloRacha(n);
-    final nombre = perfil?['username'] as String?;
-    final gris = Colors.white.withValues(alpha: .75);
-    return SizedBox(
-      width: ancho,
-      height: alto,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: const Color(0xFF0B0A09),
-          gradient: RadialGradient(
-            center: const Alignment(0, -.25),
-            radius: .75,
-            colors: [colores.last.withValues(alpha: .5), const Color(0xFF0B0A09)],
-          ),
+  Widget build(BuildContext context) => SizedBox(
+        width: ancho,
+        height: alto,
+        // La hoja del calendario de hoy con fuego (presumir.dart); el letrero sigue siendo el de aquí.
+        child: HistoriaCalendario(
+          n: n,
+          foto: perfil != null ? Avatar(perfil!, tamano: 96) : null,
+          letrero: _Letrero(nombreRacha(n) ?? '', colores: estiloRacha(n).$1, tamano: 44),
+          usuario: perfil?['username'] as String?,
+          lugar: lugar,
         ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(22, 26, 22, 22),
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                color: acento,
-                child: Text(tr('REY CAGÓN', 'KING OF THE THRONE'),
-                    style: const TextStyle(color: acentoTexto, fontWeight: FontWeight.w900, letterSpacing: 4, fontSize: 14)),
-              ),
-              const Spacer(flex: 3),
-              if (perfil != null) Avatar(perfil!, tamano: 150) else const Emoji('💩', tamano: 150),
-              const Spacer(flex: 2),
-              Transform.rotate(
-                angle: -.07,
-                child: _Letrero(nombreRacha(n)!, colores: colores, tamano: 60),
-              ),
-              const SizedBox(height: 18),
-              if (nombre != null)
-                Text('@$nombre',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 22)),
-              const SizedBox(height: 6),
-              Text(
-                [tr('$n cagadas hoy', '$n poops today'), ?lugar].join(' · '),
-                textAlign: TextAlign.center,
-                style: TextStyle(color: gris, fontSize: 14, letterSpacing: .5),
-              ),
-              const Spacer(flex: 3),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(border: Border.all(color: Colors.white.withValues(alpha: .25))),
-                child: Row(
-                  children: [
-                    const Emoji('🚽', tamano: 48),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(tr('¿Tú cuántas llevas?', 'How many have you done?'),
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
-                          const SizedBox(height: 2),
-                          Text(tr('Bájala en Google Play', 'Get it on Google Play'), style: TextStyle(color: gris, fontSize: 12)),
-                          Text('Rey Cagón · King of the Throne', style: TextStyle(color: gris, fontSize: 12)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+      );
 }
 
 /// Texto grueso con borde negro, degradado y brillo, como el de los juegos.

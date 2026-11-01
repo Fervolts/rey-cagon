@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../chat.dart' show aceptoReglas, nombreSala;
 import '../idioma.dart';
 import '../main.dart' show conReintento, db, textoError;
+import '../presumir.dart' show preguntarLogroImperio;
 import '../vitrina.dart' show PantallaVitrina;
 import 'catalogo.dart';
 import 'control.dart';
@@ -63,19 +64,7 @@ class PantallaLogrosImperio extends StatelessWidget {
 /// [guardar] sube la partida antes de publicar: un logro recién ganado todavía no está en la nube.
 /// Si el servidor aún no lo ve (había otro guardado en curso), guarda de nuevo y reintenta.
 Future<void> presumirLogroImperio(BuildContext context, String id, {Future<void> Function()? guardar}) async {
-  final l = logros.where((x) => x.id == id).firstOrNull;
-  final nombre = l == null ? '' : tr(l.nombreEs, l.nombreEn);
-  final presumir = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(nombre.isEmpty ? tr('¡Logro del Imperio! 🏆', 'Empire achievement! 🏆') : tr('¡Logro: $nombre! 🏆', 'Achievement: $nombre! 🏆')),
-      content: Text(tr('¿Lo presumes en $nombreSala?', 'Show it off in $nombreSala?')),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('NO', 'NO'))),
-        FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('PRESUMIR', 'SHOW OFF'))),
-      ],
-    ),
-  );
+  final presumir = await preguntarLogroImperio(context, id);
   if (presumir != true || !context.mounted || !await aceptoReglas(context)) return;
   bool sinLogro(Object e) => e is PostgrestException && e.message == _sinLogro;
   Future<void> publicar() => db.from('mensajes').insert({
