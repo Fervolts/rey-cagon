@@ -90,6 +90,42 @@ List<LogroSecreto> get logrosSecretos => <LogroSecreto>[
         detalle: tr('Cagaste un viernes 13', 'You pooped on Friday the 13th'),
         ladoSecreto: false,
       ),
+      // Los del TRONO (lib/trono_vivo.dart). Ninguno registra una cagada.
+      (
+        clave: 'trono_mosca',
+        emoji: '🪰',
+        nombre: tr('Matamoscas', 'Fly swatter'),
+        detalle: tr('Aplastaste la mosca del trono', 'You swatted the throne fly'),
+        ladoSecreto: false,
+      ),
+      (
+        clave: 'trono_pujo',
+        emoji: '💨',
+        nombre: tr('Pujo eterno', 'The long push'),
+        detalle: tr('Mantuviste CAGUÉ apretado 3 segundos', 'You held I POOPED for 3 seconds'),
+        ladoSecreto: false,
+      ),
+      (
+        clave: 'trono_golpe',
+        emoji: segun('🤴', '👸'),
+        nombre: tr('Golpe de estado', "Coup d'état"),
+        detalle: tr('Tocaste el título del trono 7 veces seguidas', 'You tapped the throne title 7 times in a row'),
+        ladoSecreto: false,
+      ),
+      (
+        clave: 'trono_desvelo',
+        emoji: '🌙',
+        nombre: tr('Insomnio real', 'Royal insomnia'),
+        detalle: tr('Abriste el trono a las 3 de la mañana', 'You opened the throne at 3 a.m.'),
+        ladoSecreto: false,
+      ),
+      (
+        clave: 'trono_filosofo',
+        emoji: '💡',
+        nombre: tr(segun('Filósofo del trono', 'Filósofa del trono'), 'Throne philosopher'),
+        detalle: tr('Leíste 10 frases del trono', 'You read 10 throne lines'),
+        ladoSecreto: false,
+      ),
     ];
 
 // SharedPreferences: los ganados en este teléfono (por si la tabla no existe o no hay red),
@@ -127,7 +163,21 @@ Future<void> sincronizarLogros() async {
           ignoreDuplicates: true,
         );
     await p.setStringList(_pendientes, []);
-  } catch (_) {}
+  } catch (_) {
+    // Si la base rechaza una clave (por ejemplo, una nueva antes de su migración), las demás no
+    // se quedan trabadas: se suben una por una y solo quedan pendientes las que fallan.
+    final fallan = <String>[];
+    for (final c in pendientes) {
+      try {
+        await db.from('logros').upsert({'user_id': yo, 'clave': c}, onConflict: 'user_id,clave', ignoreDuplicates: true);
+      } catch (_) {
+        fallan.add(c);
+      }
+    }
+    try {
+      await p.setStringList(_pendientes, fallan);
+    } catch (_) {}
+  }
 }
 
 /// Las claves guardadas de [uid]: las del servidor y, si es el propio, también las del teléfono.

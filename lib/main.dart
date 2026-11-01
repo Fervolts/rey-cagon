@@ -36,6 +36,7 @@ import 'imperio/pantalla.dart';
 import 'tema.dart';
 import 'secreto.dart';
 import 'tipos.dart';
+import 'trono_vivo.dart';
 import 'vivo.dart';
 import 'widget.dart';
 
@@ -750,8 +751,9 @@ class _PantallaRankingState extends State<PantallaRanking> {
           Row(
             children: [
               Expanded(
-                child: Text(widget.trono ? tr('Rey Cagón', 'King of the Throne') : tr('Ranking', 'Leaderboard'),
-                    style: texto.headlineSmall),
+                child: widget.trono
+                    ? TituloTrono(texto: tr('Rey Cagón', 'King of the Throne'), estilo: texto.headlineSmall)
+                    : Text(tr('Ranking', 'Leaderboard'), style: texto.headlineSmall),
               ),
               IconButton.outlined(
                 icon: const Icon(Icons.person_add_alt_1),
@@ -807,8 +809,9 @@ class _PantallaRankingState extends State<PantallaRanking> {
           perdiendo: aviso?.endsWith(tr('vas perdiendo', "you're losing")) ?? false,
         ),
       ),
-      const SizedBox(height: 20),
-      Center(child: Respira(activo: !_cargando && _miHoy == 0, child: _BotonCague(onTap: _cague))),
+      const SizedBox(height: 4),
+      // La mosca vuela alrededor del botón (ver trono_vivo.dart); tocarla nunca registra nada.
+      ZonaMosca(child: Respira(activo: !_cargando && _miHoy == 0, child: _BotonCague(onTap: _cague))),
       Center(
         child: TextButton.icon(
           onPressed: _deshacer,
@@ -1129,6 +1132,8 @@ class _BotonCagueState extends State<_BotonCague> with SingleTickerProviderState
   // Completo: el mojón se esconde mientras vuela y vuelve con rebote. Simple: brinca en su sitio.
   bool _volando = false;
   bool _vuelve = false;
+  // Pujo eterno (mantener apretado, trono_vivo.dart): ese toque no registra la cagada.
+  bool _pujo = false;
   late final _brinco = AnimationController(vsync: this, duration: const Duration(milliseconds: 450));
 
   @override
@@ -1140,6 +1145,10 @@ class _BotonCagueState extends State<_BotonCague> with SingleTickerProviderState
   Future<void> _rebotar() => _brinco.forward(from: 0).orCancel.catchError((_) {});
 
   void _tocar() {
+    if (_pujo) {
+      _pujo = false;
+      return;
+    }
     final caja = context.findRenderObject() as RenderBox?;
     final nivel = movimiento(context);
     final Future<void> animacion;
@@ -1188,40 +1197,57 @@ class _BotonCagueState extends State<_BotonCague> with SingleTickerProviderState
   @override
   Widget build(BuildContext context) {
     final p = paleta(context);
+    final nivel = movimiento(context);
+    final circulo = AnimatedContainer(
+      duration: const Duration(milliseconds: 100),
+      width: 200,
+      height: 200,
+      // Al apretar: en claro pasa de negro a amarillo; en oscuro, de amarillo a blanco.
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: _apretado ? (p.primario == acento ? p.texto : acento) : p.primario,
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _mojon(const Emoji('💩', tamano: 88)),
+          Text(tr('CAGUÉ', 'I POOPED'),
+              style: TextStyle(
+                color: _apretado ? acentoTexto : p.sobrePrimario,
+                fontSize: 24,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 2,
+              )),
+        ],
+      ),
+    );
     return Semantics(
       button: true,
       label: tr('Cagué', 'I pooped'),
       child: GestureDetector(
-        onTapDown: (_) => setState(() => _apretado = true),
+        onTapDown: (_) {
+          HapticFeedback.selectionClick();
+          setState(() {
+            _apretado = true;
+            _pujo = false;
+          });
+        },
         onTapUp: (_) => setState(() => _apretado = false),
         onTapCancel: () => setState(() => _apretado = false),
         onTap: _tocar,
-        child: AnimatedScale(
-          scale: _apretado ? 0.94 : 1,
-          duration: const Duration(milliseconds: 100),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 100),
-            width: 200,
-            height: 200,
-            // Al apretar: en claro pasa de negro a amarillo; en oscuro, de amarillo a blanco.
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _apretado ? (p.primario == acento ? p.texto : acento) : p.primario,
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _mojon(const Emoji('💩', tamano: 88)),
-                Text(tr('CAGUÉ', 'I POOPED'),
-                    style: TextStyle(
-                      color: _apretado ? acentoTexto : p.sobrePrimario,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 2,
-                    )),
-              ],
-            ),
-          ),
+        child: Pujo(
+          alPujar: () => _pujo = true,
+          child: nivel == Movimiento.nada
+              ? AnimatedScale(scale: _apretado ? 0.94 : 1, duration: const Duration(milliseconds: 100), child: circulo)
+              // Se aplasta al apretar y al soltar vuelve; en completo, gelatina.
+              : TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: _apretado ? 1 : 0),
+                  duration: Duration(milliseconds: _apretado ? 90 : (nivel == Movimiento.completo ? 650 : 160)),
+                  curve: _apretado || nivel != Movimiento.completo ? Curves.easeOut : Curves.elasticOut,
+                  child: circulo,
+                  builder: (context, t, child) =>
+                      Transform(alignment: Alignment.center, transform: Matrix4.diagonal3Values(1 + .05 * t, 1 - .08 * t, 1), child: child),
+                ),
         ),
       ),
     );
@@ -1458,6 +1484,8 @@ class _TarjetaHoy extends StatelessWidget {
                     style: numeros(context, tamano: 12, weight: FontWeight.w700, color: p.textoSuave)),
             ],
           ),
+          const SizedBox(height: 4),
+          FraseDelTrono(hoy: hoy),
           if (aviso != null) ...[
             const SizedBox(height: 10),
             IntrinsicHeight(
