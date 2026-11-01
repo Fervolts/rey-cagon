@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' show max, min, pi, sin;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../animaciones.dart';
@@ -121,6 +122,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
   final _cola = <(String, String, String?)>[];
   (String, String, String?)? _aviso;
   Timer? _timerAviso;
+  Atasco? _atascoAvisado; // el último Atasco que ya se avisó (por identidad)
   int _nAviso = 0; // clave del Dismissible: cada aviso nuevo es otro widget
 
   @override
@@ -161,6 +163,15 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
         _avisar('🏆', tr('Logro: ${nombreLogro(l)}', 'Achievement: ${nombreLogro(l)}'), logro: l.id);
       }
       // Súper Plomero: 1 h de producción al primer tick del día.
+      // Atasco nuevo (o el que quedó guardado): aviso arriba y vibración, para que no pase sin verse.
+      final atasco = _c.imperio.atasco;
+      if (atasco != null && !identical(atasco, _atascoAvisado)) {
+        final e = edificioPorId(atasco.edificio);
+        final nombre = e == null ? '' : tr(e.nombreEs, e.nombreEn);
+        _avisar('🪠', tr('¡Se tapó $nombre! No produce hasta que lo destapes', '$nombre is clogged! It won\'t produce until you unclog it'));
+        if (movimiento(context) != Movimiento.nada) HapticFeedback.mediumImpact();
+      }
+      _atascoAvisado = atasco;
       final regalo = _c.imperio.tomarRegaloPlomero();
       if (regalo > 0) {
         final mj = formatoMj(regalo, ingles: enIngles);
@@ -355,7 +366,10 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
 
   void _tocarAtasco() {
     final r = _c.tocarAtasco();
-    if (r == null || !r.destapado) return;
+    if (r == null) return;
+    HapticFeedback.selectionClick();
+    if (!r.destapado) return;
+    HapticFeedback.heavyImpact();
     _avisar('🪠', r.perfecto ? tr('¡Destape perfecto! +${_mj(r.premio)}', 'Perfect unclog! +${_mj(r.premio)}') : tr('¡Destapado!', 'Unclogged!'));
   }
 
@@ -457,6 +471,8 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       return Stack(
         children: [
           Positioned.fill(child: KeyedSubtree(key: _llavePoceta, child: _poceta(ahora))),
+          // Atasco: la tarjeta para destaparlo también sale en el baño, no solo en el cajón de edificios.
+          if (_c.imperio.atasco case final a?) Positioned(left: 32, right: 12, bottom: 12, child: _tarjetaAtasco(context, a)),
           // Franja del borde: solo los arrastres que empiezan aquí abren el cajón (el resto es pujar).
           Positioned(
             left: 0,
@@ -810,38 +826,56 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     );
   }
 
-  Widget _filaEdificio(BuildContext context, Edificio e, int ahora) {
+  /// El edificio atascado con el desatascador: cada toque salta un poco y llena la barra; a los [toquesAtasco] se destapa.
+  Widget _tarjetaAtasco(BuildContext context, Atasco atasco) {
     final p = paleta(context);
+    final e = edificioPorId(atasco.edificio);
+    final nombre = e == null ? '' : tr(e.nombreEs, e.nombreEn);
+    final quieto = movimiento(context) == Movimiento.nada;
+    return GestureDetector(
+      key: const Key('tarjeta_atasco'),
+      behavior: HitTestBehavior.opaque,
+      onTap: _tocarAtasco,
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: _caja(context, borde: p.primario),
+        child: Row(
+          children: [
+            if (e != null) ...[Emoji(e.emoji, tamano: 28), const SizedBox(width: 6)],
+            TweenAnimationBuilder<double>(
+              key: ValueKey(atasco.toques),
+              tween: Tween(begin: quieto ? 0 : 1, end: 0),
+              duration: const Duration(milliseconds: 220),
+              builder: (context, v, hijo) => Transform.translate(offset: Offset(0, 8 * v), child: hijo),
+              child: const Emoji('🪠', tamano: 32),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(tr('¡SE TAPÓ $nombre!', '$nombre CLOGGED!').toUpperCase(), style: TextStyle(fontWeight: FontWeight.w900, color: p.texto)),
+                  Text(tr('Toca ${toquesAtasco - atasco.toques} veces para destapar', 'Tap ${toquesAtasco - atasco.toques} times to unclog'),
+                      style: TextStyle(fontSize: 12, color: p.texto)),
+                  const SizedBox(height: 6),
+                  LinearProgressIndicator(value: atasco.toques / toquesAtasco, minHeight: 6, color: p.primario, backgroundColor: p.suave),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _filaEdificio(BuildContext context, Edificio e, int ahora) {
     final im = _c.imperio;
     final atasco = im.atasco;
     if (!im.edificioAbierto(e.id)) {
       return _fila(context, emoji: '🔒', titulo: _cagaVeces(e.candado), apagada: true);
     }
     if (atasco != null && atasco.edificio == e.id) {
-      return GestureDetector(
-        onTap: _tocarAtasco,
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 6),
-          padding: const EdgeInsets.all(10),
-          decoration: _caja(context, borde: p.primario),
-          child: Row(
-            children: [
-              const Emoji('🪠', tamano: 32),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(tr('¡ATASCADO! toca $toquesAtasco veces', 'CLOGGED! tap $toquesAtasco times'), style: TextStyle(fontWeight: FontWeight.w900, color: p.texto)),
-                    const SizedBox(height: 6),
-                    LinearProgressIndicator(value: atasco.toques / toquesAtasco, minHeight: 6, color: p.primario, backgroundColor: p.suave),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
+      return Padding(padding: const EdgeInsets.only(bottom: 6), child: _tarjetaAtasco(context, atasco));
     }
     final n = _cantidad;
     final precio = im.precioEdificioVarios(e.id, n, ahora);
@@ -1091,7 +1125,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
   }
 
   void _abrirObjetos(BuildContext context) =>
-      abrirTiendaCiruelas(context, _c, _avisar, arriba: (_) => _HojaObjetos(control: _c, avisar: _avisar));
+      abrirTiendaCiruelas(context, _c, arriba: (_, avisar) => _HojaObjetos(control: _c, avisar: avisar));
 }
 
 /// Objetos que se están pagando con Ciruelas (evita el doble toque mientras responde el servidor).
@@ -1226,12 +1260,88 @@ class _HojaObjetos extends StatelessWidget {
     );
   }
 
+  /// Por qué no se puede comprar o alquilar [o] ahora, con su emoji. null = sí se puede.
+  (String, String)? _porQueNo(Imperio im, Objeto o, int ahora, {bool conCiruelas = false}) {
+    if (!im.objetoAbierto(o.id)) {
+      return ('🔒', im.cagadas < o.candado ? _cagaVeces(o.candado) : tr('Sale con tu primer Atasco', 'Unlocks with your first Clog'));
+    }
+    final n = o.maxInventario;
+    if (o.tipo == TipoObjeto.consumible && im.enInventario(o.id) >= n) {
+      return (o.emoji, tr('Ya tienes $n/$n: usa uno primero', 'You have $n/$n: use one first'));
+    }
+    if (o.tipo == TipoObjeto.alquilable) {
+      final fin = im.partida.alquilados[o.id] ?? 0;
+      if (im.alquiladoActivo(o.id, ahora)) {
+        if (o.duracion == null) return (o.emoji, tr('Ya está activo hasta tu próximo offline', 'Already active until your next offline'));
+        if (fin >= ahora + 2 * o.duracion!.inMilliseconds) {
+          return (o.emoji, tr('Ya está al máximo: ${_cuenta(Duration(milliseconds: fin - ahora))}', 'Already maxed: ${_cuenta(Duration(milliseconds: fin - ahora))}'));
+        }
+      } else if (im.esperaRestante(o.id, ahora) case final espera?) {
+        return ('⏳', tr('Se puede alquilar otra vez en ${_cuenta(espera)}', 'You can rent it again in ${_cuenta(espera)}'));
+      }
+    }
+    if (conCiruelas) {
+      final faltan = o.ciruelas - im.ciruelas;
+      if (faltan > 0) return ('🫐', tr('Te faltan $faltan Ciruelas', 'You need $faltan more Plums'));
+    } else {
+      final faltan = im.precioObjeto(o.id, ahora) - im.saldo;
+      if (faltan > 0) return ('💸', tr('Te faltan ${_mj(faltan)} ${monedaActual().abreviatura}', 'You need ${_mj(faltan)} more ${monedaActual().abreviatura}'));
+    }
+    return null;
+  }
+
+  /// Lo que dice el aviso después de comprar o alquilar [o].
+  String _hechoTexto(Objeto o) {
+    final im = control.imperio;
+    final nombre = tr(o.nombreEs, o.nombreEn);
+    if (o.tipo == TipoObjeto.consumible) {
+      return tr('$nombre: tienes ${im.enInventario(o.id)}/${o.maxInventario}. Toca USAR', '$nombre: you have ${im.enInventario(o.id)}/${o.maxInventario}. Tap USE');
+    }
+    if (o.duracion == null) return tr('¡$nombre alquilado! Activo hasta tu próximo offline', '$nombre rented! Active until your next offline');
+    final queda = _cuenta(Duration(milliseconds: (im.partida.alquilados[o.id] ?? 0) - control.ahora));
+    return tr('¡$nombre alquilado! Activo: $queda', '$nombre rented! Active: $queda');
+  }
+
+  void _conMj(Objeto o) {
+    if (_porQueNo(control.imperio, o, control.ahora) case (final emoji, final texto)) return avisar(emoji, texto);
+    if (control.comprarObjeto(o.id)) {
+      HapticFeedback.mediumImpact();
+      avisar(o.emoji, _hechoTexto(o));
+    }
+  }
+
+  void _usar(BuildContext context, Objeto o, bool puedeUsar) {
+    final im = control.imperio;
+    final nombre = tr(o.nombreEs, o.nombreEn);
+    if (!im.objetoAbierto(o.id)) return;
+    if (im.enInventario(o.id) <= 0) return avisar(o.emoji, tr('No tienes $nombre: cómpralo primero', 'You have no $nombre: buy one first'));
+    if (im.esperaRestante(o.id, control.ahora) case final espera?) {
+      return avisar('⏳', tr('Lo puedes usar otra vez en ${_cuenta(espera)}', 'You can use it again in ${_cuenta(espera)}'));
+    }
+    if (!puedeUsar) {
+      return avisar(o.emoji, o.id == 'destapacanos'
+          ? tr('No hay ningún Atasco ahora', 'There is no Clog right now')
+          : tr('No te queda ningún edificio sin pintar', 'No unpainted building left'));
+    }
+    if (o.id == 'pintura') return unawaited(_elegirPintura(context));
+    if (!control.usarObjeto(o.id)) return;
+    HapticFeedback.mediumImpact();
+    avisar(o.emoji, switch (o.id) {
+      'destapacanos' => tr('¡Destapado!', 'Unclogged!'),
+      'papel' => tr('Listo: el próximo mojón dorado da el doble', 'Done: your next golden poop gives double'),
+      _ => o.duracion == null
+          ? tr('$nombre: usado', '$nombre: used')
+          : tr('$nombre activo: ${_cuenta(o.duracion!)}', '$nombre active: ${_cuenta(o.duracion!)}'),
+    });
+  }
+
   Future<void> _conCiruelas(Objeto o) async {
+    if (_porQueNo(control.imperio, o, control.ahora, conCiruelas: true) case (final emoji, final texto)) return avisar(emoji, texto);
     if (!_pagandoCiruelas.add(o.id)) return;
     try {
       final ok = await control.gastarCiruelas('obj_${o.id}');
-      avisar(ok ? o.emoji : '🫐',
-          ok ? tr('${o.nombreEs}: listo', '${o.nombreEn}: done') : tr('No te alcanzan las Ciruelas.', 'Not enough Plums.'));
+      if (ok) HapticFeedback.mediumImpact();
+      avisar(ok ? o.emoji : '🫐', ok ? _hechoTexto(o) : tr('No te alcanzan las Ciruelas.', 'Not enough Plums.'));
     } catch (e) {
       avisar('💩', textoError(e));
     } finally {
@@ -1257,26 +1367,42 @@ class _HojaObjetos extends StatelessWidget {
     final alquilado = o.tipo == TipoObjeto.alquilable && im.alquiladoActivo(o.id, ahora);
     final finAlquiler = im.partida.alquilados[o.id] ?? 0;
     final estiloPrecio = numeros(context, tamano: 13, weight: FontWeight.w900);
+    // Sin poder pagar igual se toca: el aviso dice por qué (falta plata, espera, ya está al máximo).
     Widget pagar({required Widget precio, required bool puede, required VoidCallback alTocar, Key? key}) => Expanded(
           child: OutlinedButton(
             key: key,
-            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8), minimumSize: const Size(0, 44)),
-            onPressed: puede ? alTocar : null,
-            child: precio,
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: const Size(0, 44),
+              foregroundColor: puede ? null : p.textoSuave,
+              side: puede ? null : BorderSide(color: p.borde),
+            ),
+            onPressed: alTocar,
+            child: Opacity(opacity: puede ? 1 : 0.45, child: precio),
           ),
         );
+    // El emoji salta cuando cambia lo que tienes (compraste, alquilaste o usaste).
+    final quieto = movimiento(context) == Movimiento.nada;
+    final emoji = TweenAnimationBuilder<double>(
+      key: ValueKey('${o.id}_${im.enInventario(o.id)}_${finAlquiler}_$alquilado'),
+      tween: Tween(begin: quieto ? 0 : 1, end: 0),
+      duration: const Duration(milliseconds: 380),
+      curve: Curves.easeOut,
+      builder: (context, v, hijo) => Transform.scale(scale: 1 + 0.45 * v, child: hijo),
+      child: Emoji(abierto ? o.emoji : '🔒', tamano: 30),
+    );
     return Opacity(
       opacity: abierto ? 1 : 0.5,
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(10),
-        decoration: _caja(context),
+        decoration: _caja(context, borde: alquilado ? acento : null),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
               children: [
-                Emoji(abierto ? o.emoji : '🔒', tamano: 30),
+                emoji,
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -1325,7 +1451,7 @@ class _HojaObjetos extends StatelessWidget {
                     key: Key('pagar_mj_${o.id}'),
                     precio: montoMj(_mj(precio), estiloPrecio, alineacion: Alignment.center),
                     puede: abierto && im.puedeComprarObjeto(o.id, ahora),
-                    alTocar: () => control.comprarObjeto(o.id),
+                    alTocar: () => _conMj(o),
                   ),
                   if (o.ciruelas > 0) ...[
                     const SizedBox(width: 6),
@@ -1341,12 +1467,14 @@ class _HojaObjetos extends StatelessWidget {
                   ],
                   if (consumible) ...[
                     const SizedBox(width: 6),
-                    FilledButton(
-                      style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
-                      onPressed: abierto && im.enInventario(o.id) > 0 && espera == null && puedeUsar
-                          ? (o.id == 'pintura' ? () => _elegirPintura(context) : () => control.usarObjeto(o.id))
-                          : null,
-                      child: Text(tr('USAR', 'USE')),
+                    Opacity(
+                      opacity: abierto && im.enInventario(o.id) > 0 && espera == null && puedeUsar ? 1 : 0.4,
+                      child: FilledButton(
+                        key: Key('usar_${o.id}'),
+                        style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
+                        onPressed: abierto ? () => _usar(context, o, puedeUsar) : null,
+                        child: Text(tr('USAR', 'USE')),
+                      ),
                     ),
                   ],
                 ],

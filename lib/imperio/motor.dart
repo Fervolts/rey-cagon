@@ -135,10 +135,14 @@ const Duration duracionDescarga = Duration(minutes: 15);
 const Duration premioDestape = Duration(minutes: 5);
 const Duration tiempoDestapePerfecto = Duration(seconds: 3);
 const int toquesAtasco = 10;
-const int minimoParaAtasco = 25;
+const int minimoParaAtasco = 10;
 
 /// Segundos de juego activo por Atasco, en promedio.
-const double segundosPorAtasco = 2 * 3600;
+const double segundosPorAtasco = 25 * 60;
+
+/// El primer Atasco sale seguro a estos segundos de juego activo (en cualquier edificio que dé MJ/s): así se conoce
+/// la mecánica y se abren el Robot y el Turbo. Con 2 h por Atasco casi nadie lo veía.
+const double segundosPrimerAtasco = 3 * 60;
 // La probabilidad y el valor del pujo épico salen de los ajustes (`epicoBase`, `epicoPorDedo`, `epicoTope`, `epicoTipo1`, `epicoMultiplicador`).
 const double multiplicadorFiebre = 7, multiplicadorPujoLoco = 777;
 
@@ -970,7 +974,8 @@ class Imperio {
       }
     }
 
-    // Atascos: ~1 cada 2 h activas, uno a la vez, en un edificio con 25 o más.
+    // Atascos: el primero seguro a los 3 min activos; después ~1 cada 25 min activos, uno a la vez, en un edificio con 10 o más.
+    if (_p.atasco == null && s > 0 && !_p.vioPrimerAtasco && _p.segPartida >= segundosPrimerAtasco) _atascar(ahora, 1);
     if (_p.atasco == null && s > 0 && _azar.nextDouble() < s / segundosPorAtasco) _atascar(ahora, minimoParaAtasco);
     if (_p.atasco != null && _destapaSolo(ahora)) {
       _p.atasco = null;

@@ -573,9 +573,9 @@ void main() {
   });
 
   group('Atascos', () {
-    test('salen en un edificio con 25 o más y lo dejan en 0', () {
+    test('salen en un edificio con 10 o más y lo dejan en 0', () {
       final imp = Imperio(azar: _AzarFijo(d: 0.0));
-      imp.partida.edificios.addAll({'dedo': 99, 'cafe': 25, 'ciruela': 3});
+      imp.partida.edificios.addAll({'dedo': 99, 'cafe': 10, 'ciruela': 3});
       imp.partida.segHastaDorado = 99999;
       imp.tick(t0, 1);
       expect(imp.atasco?.edificio, 'cafe'); // el Dedo no se atasca: no da MJ/s
@@ -583,9 +583,26 @@ void main() {
       expect(imp.mpsEdificio('cafe', t0), 0);
       expect(imp.mps(t0), closeTo(3 * imp.multiplicadorPermanente, 1e-9)); // el tick ya dio el logro gotea
       final otro = Imperio(azar: _AzarFijo(d: 0.0));
-      otro.partida.edificios.addAll({'dedo': 99, 'cafe': 24});
+      otro.partida.edificios.addAll({'dedo': 99, 'cafe': 9});
       otro.tick(t0, 1);
       expect(otro.atasco, isNull);
+    });
+
+    test('el primero sale seguro a los 3 min activos, en cualquier edificio que dé MJ/s', () {
+      final imp = Imperio(azar: _AzarFijo(d: 0.99));
+      imp.partida.edificios.addAll({'dedo': 5, 'ciruela': 1});
+      imp.partida.segHastaDorado = 99999;
+      for (var s = 0; s < segundosPrimerAtasco - 1; s++) {
+        imp.tick(t0 + s * seg, 1);
+      }
+      expect(imp.atasco, isNull);
+      imp.tick(t0 + 200 * seg, 1);
+      expect(imp.atasco?.edificio, 'ciruela');
+      expect(imp.partida.vioPrimerAtasco, isTrue);
+      // Ya visto: no vuelve a salir seguro (con este azar, nunca).
+      imp.partida.atasco = null;
+      imp.tick(t0 + 201 * seg, 1);
+      expect(imp.atasco, isNull);
     });
 
     test('10 toques; en menos de 3 s es perfecto y da 5 min del edificio', () {

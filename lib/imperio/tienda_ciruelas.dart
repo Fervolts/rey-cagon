@@ -1,8 +1,12 @@
 // Tienda del Imperio: saldo de Ciruelas 🫐, objetos (los pone pantalla.dart con [arriba]), ofertas de Ciruelas
 // (efectos al instante) y estéticas del baño (solo suerte).
 
-import 'package:flutter/material.dart';
+import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../animaciones.dart';
 import '../emoji.dart';
 import '../idioma.dart';
 import '../main.dart' show textoError;
@@ -14,20 +18,101 @@ import 'esteticas.dart';
 /// "+4%".
 String pctSuerte(double bono) => '+${(bono * 100).round()}%';
 
-/// Abre la tienda. [avisar] pone el aviso de arriba de la pantalla del Imperio; [arriba] va antes de las ofertas.
-Future<void> abrirTiendaCiruelas(BuildContext context, ControlImperio control, void Function(String emoji, String texto) avisar,
-    {WidgetBuilder? arriba}) {
+/// Lo que va arriba de las ofertas (los objetos), con el [avisar] de la hoja.
+typedef ArribaTienda = Widget Function(BuildContext context, void Function(String emoji, String texto) avisar);
+
+/// Abre la tienda. Los avisos de lo que se compra salen dentro de la hoja (el aviso de la pantalla queda tapado por ella).
+/// [arriba] va antes de las ofertas.
+Future<void> abrirTiendaCiruelas(BuildContext context, ControlImperio control, {ArribaTienda? arriba}) {
   control.anotar('tienda_ciruelas_abre');
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     backgroundColor: paleta(context).fondo,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radio)),
-    builder: (_) => ListenableBuilder(
-      listenable: control,
-      builder: (context, _) => TiendaCiruelas(control: control, avisar: avisar, arriba: arriba),
+    builder: (_) => _ConAvisos(
+      hijo: (avisar) => ListenableBuilder(
+        listenable: control,
+        builder: (context, _) => TiendaCiruelas(control: control, avisar: avisar, arriba: arriba),
+      ),
     ),
   );
+}
+
+/// La hoja con su propio aviso arriba: aparece al comprar, alquilar o cuando no se puede (y dice por qué), y vibra.
+class _ConAvisos extends StatefulWidget {
+  const _ConAvisos({required this.hijo});
+  final Widget Function(void Function(String emoji, String texto) avisar) hijo;
+
+  @override
+  State<_ConAvisos> createState() => _ConAvisosState();
+}
+
+class _ConAvisosState extends State<_ConAvisos> {
+  (String, String)? _aviso;
+  int _n = 0;
+  Timer? _timer;
+
+  void _avisar(String emoji, String texto) {
+    if (!mounted) return;
+    HapticFeedback.lightImpact();
+    _timer?.cancel();
+    setState(() {
+      _aviso = (emoji, texto);
+      _n++;
+    });
+    _timer = Timer(const Duration(milliseconds: 2600), () {
+      if (mounted) setState(() => _aviso = null);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paleta(context);
+    final a = _aviso;
+    final quieto = movimiento(context) == Movimiento.nada;
+    return Stack(
+      children: [
+        widget.hijo(_avisar),
+        if (a != null)
+          Positioned(
+            top: 8,
+            left: 16,
+            right: 16,
+            child: SafeArea(
+              bottom: false,
+              child: TweenAnimationBuilder<double>(
+                key: ValueKey(_n),
+                tween: Tween(begin: quieto ? 1 : 0, end: 1),
+                duration: const Duration(milliseconds: 180),
+                builder: (context, v, hijo) => Opacity(opacity: v, child: Transform.translate(offset: Offset(0, -12 * (1 - v)), child: hijo)),
+                child: GestureDetector(
+                  key: const Key('aviso_tienda'),
+                  onTap: () => setState(() => _aviso = null),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(color: p.fondo, border: Border.all(color: p.primario), borderRadius: BorderRadius.circular(radio)),
+                    child: Row(
+                      children: [
+                        Emoji(a.$1, tamano: 22),
+                        const SizedBox(width: 10),
+                        Expanded(child: Text(a.$2, style: TextStyle(fontWeight: FontWeight.w800, color: p.texto))),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 class TiendaCiruelas extends StatefulWidget {
@@ -37,7 +122,7 @@ class TiendaCiruelas extends StatefulWidget {
   final void Function(String emoji, String texto) avisar;
 
   /// Lo que va entre el saldo y las ofertas (los objetos).
-  final WidgetBuilder? arriba;
+  final ArribaTienda? arriba;
 
   @override
   State<TiendaCiruelas> createState() => _TiendaCiruelasState();
@@ -87,7 +172,7 @@ class _TiendaCiruelasState extends State<TiendaCiruelas> {
                 ),
               ],
             ),
-            if (widget.arriba case final arriba?) ...[const SizedBox(height: 16), arriba(context)],
+            if (widget.arriba case final arriba?) ...[const SizedBox(height: 16), arriba(context, widget.avisar)],
             const SizedBox(height: 16),
             Rotulo(tr('Ofertas de Ciruelas', 'Plum deals')),
             const SizedBox(height: 8),
