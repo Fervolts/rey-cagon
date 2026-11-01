@@ -42,7 +42,7 @@ Future<void> ofrecerComunidad(BuildContext context) async {
   final unirme = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      title: Text(tr('🚽 La comunidad del trono', '🚽 The throne community')),
+      title: TextoConEmojis(tr('🚽 La comunidad del trono', '🚽 The throne community')),
       content: Text(tr(
           'Únete a ${_nombre(link.id)} de Rey Cagón: memes, chisme del baño y adelantos de lo que viene.\n\n'
               'Es un canal: nadie ve tu número.',

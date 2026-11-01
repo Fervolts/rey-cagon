@@ -127,6 +127,20 @@ const _archivos = {
   '💰': 'money_bag',
   '💸': 'money_with_wings',
   '🪙': 'coin',
+  // El baño del Imperio: adornos y lo que hacen los edificios.
+  '🧶': 'yarn',
+  '🟫': 'brown_square',
+  '🌸': 'cherry_blossom',
+  '🪴': 'potted_plant',
+  '🎨': 'artist_palette',
+  '🪣': 'bucket',
+  '👀': 'eyes',
+  '💍': 'ring',
+  '🦶': 'foot',
+  '✋': 'raised_hand',
+  '🫖': 'teapot',
+  '💉': 'syringe',
+  '🫙': 'jar',
 };
 
 // Las mismas claves sin FE0F, para encontrar '🌶' igual que '🌶️'.
@@ -176,4 +190,47 @@ void registrarLicencias() {
       await rootBundle.loadString('assets/fonts/LICENSE-OFL.txt'),
     );
   });
+}
+
+/// Un emoji dentro de un texto: con tono de piel, uniones (ZWJ) y banderas.
+// El analizador no conoce \p{Extended_Pictographic}; Dart sí.
+final _emojiEnTexto = RegExp(
+    // ignore: valid_regexps
+    r'(?:\p{Extended_Pictographic}|\p{Regional_Indicator})(?:\u{FE0F}|[\u{1F3FB}-\u{1F3FF}]|\u{200D}\p{Extended_Pictographic}|\p{Regional_Indicator})*',
+    unicode: true);
+
+/// Parte [texto] en tramos de texto y emojis dibujados con [Emoji].
+///
+/// En algunos teléfonos (Samsung) el texto que va después de un emoji del sistema sale con los espacios anchísimos:
+/// la línea se queda con la fuente del emoji. Con el emoji como widget aparte eso no pasa.
+List<InlineSpan> spansConEmojis(String texto, {TextStyle? estilo, double tamano = 18}) {
+  final partes = <InlineSpan>[];
+  var desde = 0;
+  for (final m in _emojiEnTexto.allMatches(texto)) {
+    // ©, ®, ™ y compañía también son "pictográficos": sin FE0F se quedan como letra.
+    if (m.group(0)!.runes.first < 0x2000 && !m.group(0)!.contains('\u{FE0F}')) continue;
+    if (m.start > desde) partes.add(TextSpan(text: texto.substring(desde, m.start), style: estilo));
+    partes.add(WidgetSpan(alignment: PlaceholderAlignment.middle, child: Emoji(m.group(0)!, tamano: tamano)));
+    desde = m.end;
+  }
+  if (desde < texto.length) partes.add(TextSpan(text: texto.substring(desde), style: estilo));
+  return partes;
+}
+
+/// [Text] que dibuja sus emojis con [Emoji] (ver [spansConEmojis]). El emoji sale un poco más grande que la letra.
+class TextoConEmojis extends StatelessWidget {
+  const TextoConEmojis(this.texto, {super.key, this.style, this.maxLines, this.overflow, this.textAlign});
+
+  final String texto;
+  final TextStyle? style;
+  final int? maxLines;
+  final TextOverflow? overflow;
+  final TextAlign? textAlign;
+
+  @override
+  Widget build(BuildContext context) {
+    final tam = (style?.fontSize ?? DefaultTextStyle.of(context).style.fontSize ?? 14) * 1.2;
+    return Text.rich(TextSpan(children: spansConEmojis(texto, tamano: tam)),
+        style: style, maxLines: maxLines, overflow: overflow, textAlign: textAlign);
+  }
 }

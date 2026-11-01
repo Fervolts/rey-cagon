@@ -266,7 +266,7 @@ class _PantallaAvisosState extends State<PantallaAvisos> {
     final avisos = _avisos;
     return Scaffold(
       appBar: AppBar(
-        title: Text(tr('📰 LECTURA DEL BAÑO', '📰 BATHROOM READING')),
+        title: TextoConEmojis(tr('📰 LECTURA DEL BAÑO', '📰 BATHROOM READING')),
         actions: [
           if (_soyAdmin)
             IconButton(
@@ -275,7 +275,7 @@ class _PantallaAvisosState extends State<PantallaAvisos> {
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaPopups())).then((_) => _cargar()),
             ),
           if (avisos?.any((a) => a['anuncio'] != true) ?? false)
-            TextButton(onPressed: _borrarTodo, child: Text(tr('🚽 JALAR', '🚽 FLUSH'))),
+            TextButton(onPressed: _borrarTodo, child: TextoConEmojis(tr('🚽 JALAR', '🚽 FLUSH'))),
         ],
       ),
       body: avisos == null
@@ -315,7 +315,7 @@ extension on _PantallaAvisosState {
             for (final (clave, nombre) in [(null, tr('TODO', 'ALL')), for (final f in filtros) (f.key, f.value.$1)])
               Padding(
                 padding: const EdgeInsets.only(right: 8),
-                child: ChoiceChip(label: Text(nombre), selected: _filtro == clave, onSelected: (_) => _filtrar(clave)),
+                child: ChoiceChip(label: TextoConEmojis(nombre), selected: _filtro == clave, onSelected: (_) => _filtrar(clave)),
               ),
           ]),
         ),
@@ -388,7 +388,7 @@ class _FilaAviso extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(
+              TextoConEmojis(
                 // Los títulos del push ya traen su emoji; aquí va en la columna de la izquierda.
                 anuncio ? '${aviso['titulo']}' : '${aviso['titulo']}'.replaceFirst(_emojiInicial, ''),
                 style: TextStyle(fontWeight: nuevo ? FontWeight.w800 : FontWeight.w600),
@@ -396,7 +396,7 @@ class _FilaAviso extends StatelessWidget {
               if (cuerpo.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
-                  child: Text(cuerpo, maxLines: 3, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.textoSuave, fontSize: 13)),
+                  child: TextoConEmojis(cuerpo, maxLines: 3, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.textoSuave, fontSize: 13)),
                 ),
               const SizedBox(height: 4),
               Text(

@@ -15,19 +15,15 @@ import 'animaciones.dart';
 import 'avisos.dart';
 import 'cagadon.dart' show TarjetaReto;
 import 'popups.dart' show PantallaPopups;
+import 'presumir.dart';
 import 'emoji.dart';
 import 'idioma.dart';
-import 'imperio/catalogo.dart' as imperio show logros;
-import 'imperio/formato.dart' show formatoMj;
 import 'imperio/tarjeta_cartera.dart';
-import 'peso.dart';
-import 'racha.dart';
 import 'main.dart' show db, esDeRed;
 import 'panel.dart';
 import 'perfil.dart' show PantallaPerfil;
 import 'teclado_emojis.dart';
 import 'tema.dart';
-import 'tipos.dart';
 
 // Mismos números que public.hitos() en supabase/migrations/…_chat.sql.
 const hitos = [10, 30, 50, 100, 200, 300, 500, 1000];
@@ -159,17 +155,7 @@ Future<void> ofrecerPresumir(BuildContext context, int total) async {
   final desbloqueo = desbloqueos.where((d) => d.minimo == total).firstOrNull;
   final esHito = hitos.contains(total);
   if (!esHito && desbloqueo == null) return;
-  final presumir = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(esHito ? tr('¡$total cagadas! 👑', '$total poops! 👑') : tr('¡Desbloqueaste ${desbloqueo!.nombre}!', 'You unlocked ${desbloqueo.nombre}!')),
-      content: Text(tr('¿Lo presumes en $nombreSala?', 'Show it off in $nombreSala?')),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('NO', 'NO'))),
-        FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('PRESUMIR', 'SHOW OFF'))),
-      ],
-    ),
-  );
+  final presumir = esHito ? await preguntarHito(context, total) : await preguntarDesbloqueo(context, desbloqueo!);
   if (presumir != true || !context.mounted || !await aceptoReglas(context)) return;
   try {
     await db.from('mensajes').insert({
@@ -336,7 +322,7 @@ class _BandejaState extends State<_Bandeja> {
                 return ListTile(
                   leading: Avatar(h, tamano: 36),
                   title: Text(h['username'] ?? '?'),
-                  subtitle: Text(
+                  subtitle: TextoConEmojis(
                     '${h['del_usuario'] == true ? '' : tr('Tú: ', 'You: ')}${h['es_bug'] == true ? '🐞 ' : ''}${h['texto']}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1012,45 +998,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
     if (!mounted) return;
     final logrados = hitos.where((h) => h <= total).toList().reversed;
     final mios = desbloqueos.where((d) => d.minimo <= total).toList().reversed;
-    final tarjeta = await showModalBottomSheet<Map<String, dynamic>>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: .6,
-        builder: (context, scroll) => ListView(
-          controller: scroll,
-          padding: conBordeAbajo(context, const EdgeInsets.fromLTRB(16, 0, 16, 16)),
-          children: [
-            Text(tr('PRESUMIR', 'SHOW OFF'), style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 8),
-            if (ultima != null)
-              ListTile(
-                leading: Emoji(tipoEmoji(ultima['tipo'] as int?), tamano: 30),
-                title: Text(tr('Mi última cagada: ${tipos[ultima['tipo']]?.$2}', 'My latest poop: ${tipos[ultima['tipo']]?.$2}')),
-                onTap: () => Navigator.pop(context, {'tipo': 'cagada', 'id': ultima['id']}),
-              ),
-            for (final h in logrados)
-              ListTile(
-                leading: const Emoji('👑', tamano: 30),
-                title: Text(tr('Llegué a $h cagadas', 'I hit $h poops')),
-                onTap: () => Navigator.pop(context, {'tipo': 'hito', 'n': h}),
-              ),
-            for (final d in mios)
-              ListTile(
-                leading: Emoji(d.emoji, tamano: 30),
-                title: Text(tr('Desbloqueé ${d.nombre}', 'I unlocked ${d.nombre}')),
-                onTap: () => Navigator.pop(context, {'tipo': 'desbloqueo', 'emoji': d.emoji}),
-              ),
-            if (ultima == null && logrados.isEmpty && mios.isEmpty)
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(tr('Todavía no tienes nada que presumir. ¡A cagar!', 'Nothing to show off yet. Go drop a deuce!')),
-              ),
-          ],
-        ),
-      ),
-    );
+    final tarjeta = await elegirPresumir(context, ultima: ultima, total: total, hitos: logrados, mios: mios);
     if (tarjeta != null) await _enviar(tarjeta: tarjeta);
   }
 
@@ -1177,7 +1125,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
             context: context,
             builder: (context) => SafeArea(
               child: Column(mainAxisSize: MainAxisSize.min, children: [
-                ListTile(title: Text(tr('📌 ¿Cuánto tiempo se queda arriba?', '📌 How long does it stay on top?'))),
+                ListTile(title: TextoConEmojis(tr('📌 ¿Cuánto tiempo se queda arriba?', '📌 How long does it stay on top?'))),
                 for (final (d, nombre) in [(1, tr('1 día', '1 day')), (3, tr('3 días', '3 days')), (7, tr('1 semana', '1 week')), (30, tr('1 mes', '1 month'))])
                   ListTile(title: Text(nombre), onTap: () => Navigator.pop(context, d)),
               ]),
@@ -1932,20 +1880,6 @@ class _PantallaHiloState extends State<_PantallaHilo> with ConTecladoEmojis {
   }
 }
 
-/// Tarjeta de logro del Imperio. Si el id no está en el catálogo de esta versión, una genérica.
-(String, String, String) _logroImperio(Object? id) {
-  final l = imperio.logros.where((x) => x.id == '$id').firstOrNull;
-  if (l == null) return ('🏆', tr('LOGRO DEL IMPERIO', 'EMPIRE ACHIEVEMENT'), tr('Desbloqueado en el Imperio', 'Unlocked in the Empire'));
-  return ('🏆', tr('LOGRO: ${l.nombreEs.toUpperCase()}', 'ACHIEVEMENT: ${l.nombreEn.toUpperCase()}'), tr(l.descEs, l.descEn));
-}
-
-/// 1ST, 2ND, 3RD, 4TH, 11TH, 21ST... para la tarjeta de jalada en inglés.
-String _ordinal(Object? n) {
-  final v = n is num ? n.toInt() : 0;
-  final sufijo = (v % 100 >= 11 && v % 100 <= 13) ? 'TH' : switch (v % 10) { 1 => 'ST', 2 => 'ND', 3 => 'RD', _ => 'TH' };
-  return '$v$sufijo';
-}
-
 class _Tarjeta extends StatelessWidget {
   const _Tarjeta(this.t);
 
@@ -1955,51 +1889,12 @@ class _Tarjeta extends StatelessWidget {
   Widget build(BuildContext context) {
     if (t['tipo'] == 'reto' || t['tipo'] == 'reto_fin') return TarjetaReto(id: t['id'] as int, compacta: true);
     if (t['tipo'] == 'cartera') return TarjetaCartera(t);
-    final (emoji, titulo, sub) = switch (t['tipo']) {
-      'hito' => ('👑', tr('LLEGÓ A ${t['n']} CAGADAS', 'HIT ${t['n']} POOPS'), t['reina'] == true ? tr('Arrodíllense ante la reina', 'Bow down to the queen') : tr('Arrodíllense ante el rey', 'Bow down to the king')),
-      'desbloqueo' => (
-          t['emoji'] as String,
-          tr('DESBLOQUEÓ ${(desbloqueos.where((d) => d.emoji == t['emoji']).firstOrNull?.nombre ?? '').toUpperCase()}', 'UNLOCKED ${(desbloqueos.where((d) => d.emoji == t['emoji']).firstOrNull?.nombre ?? '').toUpperCase()}'),
-          tr('A las ${t['minimo']} cagadas', 'At ${t['minimo']} poops'),
-        ),
-      'cagada' => (
-          tipoEmoji(t['mojon'] as int?),
-          tr('CAGADA #${t['n']}', 'POOP #${t['n']}'),
-          tr('Le salió: ${tipos[t['mojon']]?.$2 ?? '?'}', 'Came out as: ${tipos[t['mojon']]?.$2 ?? '?'}') +
-              (pesos[t['peso']] == null ? '' : ' · ${tr('Peso', 'Weight')}: ${pesos[t['peso']]!.$1} ${pesos[t['peso']]!.$2}'),
-        ),
-      'racha' => (
-          estiloRacha(t['n'] as int).$2,
-          nombreRacha(t['n'] as int) ?? '',
-          tr('Cagó ${t['n']} veces hoy', 'Pooped ${t['n']} times today'),
-        ),
-      'logro_imperio' => _logroImperio(t['id']),
-      'jalada' => (
-          '🚽',
-          tr('JALÓ LA CADENA POR ${t['n']}ª VEZ', 'FLUSHED THE CHAIN FOR THE ${_ordinal(t['n'])} TIME'),
-          tr('+${formatoMj(((t['rollos'] as num?) ?? 0).toDouble())} Rollos de Oro', '+${formatoMj(((t['rollos'] as num?) ?? 0).toDouble(), ingles: true)} Golden Rolls'),
-        ),
-      _ => ('💩', '', ''),
-    };
+    final propia = tarjetaPresumir(t);
+    if (propia != null) return propia;
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(border: Border.all(color: acento, width: 2), borderRadius: BorderRadius.circular(radio)),
-      child: Row(children: [
-        Emoji(emoji, tamano: 40),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(titulo,
-                style: TextStyle(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1,
-                  fontStyle: t['tipo'] == 'racha' ? FontStyle.italic : null,
-                  color: t['tipo'] == 'racha' ? estiloRacha(t['n'] as int).$1.last : null,
-                )),
-            Text(sub, style: TextStyle(color: paleta(context).textoSuave, fontSize: 12)),
-          ]),
-        ),
-      ]),
+      child: const Emoji('💩', tamano: 40),
     );
   }
 }
@@ -2034,10 +1929,11 @@ class _TextoConLinks extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final base = DefaultTextStyle.of(context).style;
+    final tam = (base.fontSize ?? 14) * 1.2;
     final partes = <InlineSpan>[];
     var desde = 0;
     for (final m in _link.allMatches(texto)) {
-      if (m.start > desde) partes.add(TextSpan(text: texto.substring(desde, m.start)));
+      if (m.start > desde) partes.addAll(spansConEmojis(texto.substring(desde, m.start), tamano: tam));
       final url = m.group(0)!;
       partes.add(TextSpan(
         text: url,
@@ -2046,7 +1942,7 @@ class _TextoConLinks extends StatelessWidget {
       ));
       desde = m.end;
     }
-    if (desde < texto.length) partes.add(TextSpan(text: texto.substring(desde)));
+    if (desde < texto.length) partes.addAll(spansConEmojis(texto.substring(desde), tamano: tam));
     return Text.rich(TextSpan(style: base, children: partes));
   }
 }

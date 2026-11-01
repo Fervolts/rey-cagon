@@ -402,7 +402,7 @@ class _FilaAmigo extends StatelessWidget {
                 _ => onBloquear(),
               },
               itemBuilder: (_) => [
-                PopupMenuItem(value: 'retar', child: Text(tr('⚔️  Retar a un Cagadón', '⚔️  Challenge to a Poop-Off'))),
+                PopupMenuItem(value: 'retar', child: TextoConEmojis(tr('⚔️  Retar a un Cagadón', '⚔️  Challenge to a Poop-Off'))),
                 PopupMenuItem(value: 'dejar', child: Text(tr('Dejar de seguir', 'Unfollow'))),
                 PopupMenuItem(value: 'bloquear', child: Text(tr('Bloquear', 'Block'))),
               ],

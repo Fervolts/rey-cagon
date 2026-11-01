@@ -24,7 +24,7 @@ Future<void> retar(BuildContext context, String uid, String nombre) async {
   final ok = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      title: Text(tr('⚔️ Cagadón', '⚔️ Poop-Off')),
+      title: TextoConEmojis(tr('⚔️ Cagadón', '⚔️ Poop-Off')),
       content: Text(tr(
           '¿Retas a $nombre? Gana el que cague más hoy, hasta las 11:59 p. m. '
               'Si empatan, gana el que llegó primero.',
@@ -125,7 +125,7 @@ class _InvitacionState extends State<_Invitacion> {
           if (_otro != null) Avatar(_otro!, tamano: 30),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
+            child: TextoConEmojis(
               _meRetaron
                   ? tr('⚔️ $nombre te retó a un Cagadón', '⚔️ $nombre challenged you to a Poop-Off')
                   : tr('⏳ Esperando a que $nombre acepte tu Cagadón', '⏳ Waiting for $nombre to accept your Poop-Off'),
@@ -216,7 +216,7 @@ class _TarjetaRetoState extends State<TarjetaReto> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: acento, width: 2), borderRadius: BorderRadius.circular(radio)),
       child: Column(children: [
-        Text(fin ? (ganador == null ? tr('🤝 CAGADÓN EMPATADO', '🤝 POOP-OFF TIED') : tr('🏆 CAGADÓN TERMINADO', '🏆 POOP-OFF OVER')) : tr('⚔️ CAGADÓN EN VIVO · HOY', '⚔️ POOP-OFF LIVE · TODAY'),
+        TextoConEmojis(fin ? (ganador == null ? tr('🤝 CAGADÓN EMPATADO', '🤝 POOP-OFF TIED') : tr('🏆 CAGADÓN TERMINADO', '🏆 POOP-OFF OVER')) : tr('⚔️ CAGADÓN EN VIVO · HOY', '⚔️ POOP-OFF LIVE · TODAY'),
             style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)),
         const SizedBox(height: 8),
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [

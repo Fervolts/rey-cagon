@@ -19,9 +19,9 @@ Future<void> verPopup(BuildContext context, Map<String, dynamic> a) => showDialo
           title: Column(children: [
             Emoji((a['emoji'] as String?) ?? '📢', tamano: 56),
             const SizedBox(height: 12),
-            Text('${a['titulo']}', textAlign: TextAlign.center),
+            TextoConEmojis('${a['titulo']}', textAlign: TextAlign.center),
           ]),
-          content: SingleChildScrollView(child: Text('${a['texto']}', textAlign: TextAlign.center)),
+          content: SingleChildScrollView(child: TextoConEmojis('${a['texto']}', textAlign: TextAlign.center)),
           actionsAlignment: MainAxisAlignment.center,
           actions: [
             if (boton != null && url != null) ...[
@@ -105,7 +105,7 @@ class _PantallaPopupsState extends State<PantallaPopups> {
     final p = paleta(context);
     final lista = _lista;
     return Scaffold(
-      appBar: AppBar(title: Text(tr('📢 POP-UPS', '📢 POP-UPS'))),
+      appBar: AppBar(title: TextoConEmojis(tr('📢 POP-UPS', '📢 POP-UPS'))),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           final ok = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => const _EditorPopup()));
@@ -128,7 +128,7 @@ class _PantallaPopupsState extends State<PantallaPopups> {
                     final hasta = DateTime.parse(a['hasta'] as String).toLocal();
                     return ListTile(
                       leading: Emoji((a['emoji'] as String?) ?? '📢', tamano: 30),
-                      title: Text('${a['titulo']}', maxLines: 1, overflow: TextOverflow.ellipsis),
+                      title: TextoConEmojis('${a['titulo']}', maxLines: 1, overflow: TextOverflow.ellipsis),
                       subtitle: Text(
                         '${activo ? tr('Sale hasta el ${hasta.day}/${hasta.month} ${hasta.hour.toString().padLeft(2, '0')}:${hasta.minute.toString().padLeft(2, '0')}', 'Shows until ${hasta.month}/${hasta.day} ${hasta.hour.toString().padLeft(2, '0')}:${hasta.minute.toString().padLeft(2, '0')}') : tr('Ya no sale', 'No longer showing')}'
                         '${a['push'] == true ? tr(' · con push', ' · with push') : ''}${a['boton_url'] != null ? tr(' · con botón', ' · with button') : ''}',
@@ -298,14 +298,14 @@ class _EditorPopupState extends State<_EditorPopup> {
               const SizedBox(height: 8),
               Wrap(spacing: 8, runSpacing: 8, children: [
                 for (final (valor, nombre) in const [(null, 'TODOS'), ('es', 'ESPAÑOL'), ('en', 'ENGLISH')])
-                  ChoiceChip(label: Text(nombre), selected: _idioma == valor, onSelected: (_) => setState(() => _idioma = valor)),
+                  ChoiceChip(label: TextoConEmojis(nombre), selected: _idioma == valor, onSelected: (_) => setState(() => _idioma = valor)),
               ]),
               const SizedBox(height: 16),
               Rotulo(tr('Sale por', 'Shows for')),
               const SizedBox(height: 8),
               Wrap(spacing: 8, runSpacing: 8, children: [
                 for (final MapEntry(key: d, value: nombre) in _duraciones.entries)
-                  ChoiceChip(label: Text(nombre.toUpperCase()), selected: _dias == d, onSelected: (_) => setState(() => _dias = d)),
+                  ChoiceChip(label: TextoConEmojis(nombre.toUpperCase()), selected: _dias == d, onSelected: (_) => setState(() => _dias = d)),
               ]),
               const SizedBox(height: 8),
               SwitchListTile(
