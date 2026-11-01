@@ -61,7 +61,8 @@ class Poceta extends StatefulWidget {
   /// Emojis de los efectos activos que no tienen dibujo propio (objetos, robot, papel...).
   final List<String> efectos;
 
-  /// Cuántos dedos hay. Rodean la poceta hasta cerrar el anillo ([topeDedos]); los demás van en el número.
+  /// Cuántos dedos se ven. Hasta [topeDedos] (lo que deja elegir Personalizar) se dibujan todos en el arco; más que
+  /// eso es "todos": se ven [visiblesDedos] y el total va en la placa.
   final int dedos;
 
   /// La pestaña se ve. Si no, el ticker se para.
@@ -84,6 +85,9 @@ class Poceta extends StatefulWidget {
   final double? instante;
 
   static const topeDedos = 24;
+
+  /// Los que se ven con "todos" cuando hay más de [topeDedos]: una sola fila en el arco, sin tapar nada.
+  static const visiblesDedos = 12;
 
   @override
   State<Poceta> createState() => _PocetaState();
@@ -108,30 +112,11 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
   // Boca de la taza en toilet.png: la misma fracción que usa inodoro.dart (.33, .47).
   static const _boca = Offset(_lado * .33 - _lado / 2, _lado * .47 - _lado / 2);
 
-  // Los dedos van en un anillo alrededor de la poceta: [Poceta.topeDedos] puestos fijos, el 0 abajo (90 grados) y
-  // los demás en sentido horario. Se llenan en orden de bits invertidos (0, 12, 6, 18, 3...): cada dedo nuevo cae
-  // en el hueco más grande, el anillo se ve parejo con pocos y los que ya estaban no se mueven.
-  static final _ordenDedos = _bitsInvertidos(Poceta.topeDedos);
-  // Un poco más ancho que alto: el tanque de la poceta no tapa los dedos de arriba a la derecha.
-  static const _radioDedos = 100.0, _altoDedos = 90.0;
-
-  static List<int> _bitsInvertidos(int n) {
-    var bits = 0;
-    while ((1 << bits) < n) {
-      bits++;
-    }
-    final orden = <int>[];
-    for (var k = 0; k < (1 << bits); k++) {
-      var r = 0;
-      for (var b = 0; b < bits; b++) {
-        if (k & (1 << b) != 0) r |= 1 << (bits - 1 - b);
-      }
-      // Con n que no es potencia de 2 se escala el puesto al anillo y se saltan los repetidos.
-      final puesto = (r * n) >> bits;
-      if (!orden.contains(puesto)) orden.add(puesto);
-    }
-    return orden;
-  }
+  // Los dedos van en un arco por debajo de la poceta, de la altura de la taza para abajo (arriba quedan el tanque, la
+  // palanca y el papel), de [_arcoDesde] a [_arcoHasta] en radianes (0 a la derecha, pi/2 abajo). Óvalo angosto: no
+  // llega al lavamanos ni al reactor.
+  static const _arcoDesde = 0.0, _arcoHasta = pi;
+  static const _radioDedos = 70.0, _altoDedos = 80.0;
 
   late final Ticker _ticker = createTicker(_tic);
   final _reloj = Stopwatch()..start();
@@ -146,9 +131,11 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
   double _jalo = -9; // cuándo se bajó la palanca
   double _cx = 0; // centro de la escena, para saber qué se tocó
 
-  // Palanca del tanque: x relativa al centro, y desde arriba. Pivote y brazo en coordenadas de la poceta (140x140).
+  // Palanca del tanque: la manija cromada en la cara del tanque, justo bajo la tapa, que sale hacia el frente (a la
+  // izquierda). _palanca es la zona de toque (x relativa al centro, y desde arriba); _pivote, el eje de la manija en
+  // coordenadas de la poceta (140x140): el tanque de toilet.png va de x 87 a 123 y la tapa termina en y ~13.
   static const _palanca = Offset(11, 100);
-  static const _pivote = Offset(88, 20);
+  static const _pivote = Offset(97, 21);
 
   double get _ahora => _reloj.elapsedMicroseconds / 1e6;
 
@@ -351,23 +338,26 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
     final trasTaza = <Widget>[]; // la manguera y la lluvia del camión van delante de la poceta
     _camion(context, hijos, trasTaza, encima, cx, t, vivo);
 
-    // Dedos en anillo, apuntando a la poceta. El pinchazo da la vuelta como una ola. Todos van bajo un solo
-    // ColorFiltered (una capa para el anillo, no una por dedo); lo que llevan puesto va aparte, sin teñir.
-    final nDedos = min(widget.dedos, Poceta.topeDedos);
+    // Dedos en un arco por los lados y por debajo, apuntando a la poceta. Hasta [Poceta.visiblesDedos] van en una
+    // fila; los que se eligen de más (hasta [Poceta.topeDedos]) se achican y se alternan en dos filas. Con "todos" y más
+    // de [Poceta.topeDedos] se ven [Poceta.visiblesDedos] y el número va en la placa. El pinchazo recorre el arco como
+    // una ola. Todos van bajo un solo ColorFiltered (una capa, no una por dedo); lo que llevan puesto va aparte, sin teñir.
+    final nDedos = widget.dedos > Poceta.topeDedos ? Poceta.visiblesDedos : widget.dedos;
     if (nDedos > 0) {
       final dedos = <Widget>[], puestos = <Widget>[];
-      for (var k = 0; k < nDedos; k++) {
-        final i = _ordenDedos[k];
-        final a = pi / 2 + 2 * pi * i / Poceta.topeDedos;
-        var r = 1.0;
+      final apretado = ((nDedos - Poceta.visiblesDedos) / (Poceta.topeDedos - Poceta.visiblesDedos)).clamp(0.0, 1.0);
+      final tam = 28 - 9 * apretado;
+      for (var i = 0; i < nDedos; i++) {
+        final a = _arcoDesde + (_arcoHasta - _arcoDesde) * (i + .5) / nDedos;
+        var r = 1 + (i.isOdd ? .12 : -.04) * apretado;
         if (vivo) {
-          final f = (tv * .9 - i / Poceta.topeDedos) % 1;
+          final f = (tv * .9 - i / nDedos) % 1;
           if (f < .15) r -= .075 * sin(pi * f / .15);
         }
         final o = Offset(cos(a) * _radioDedos * r, sin(a) * _altoDedos * r);
-        final (dedo, puesto) = _dedo(i, a);
-        dedos.add(_en(cx, o, 32, dedo));
-        if (puesto != null) puestos.add(_en(cx, o, 32, puesto));
+        final (dedo, puesto) = _dedo(i, a, tam / 32);
+        dedos.add(_en(cx, o, tam, dedo));
+        if (puesto != null) puestos.add(_en(cx, o, tam, puesto));
       }
       final tinte = _tinte(widget.bano.colorDedo);
       final anillo = Stack(clipBehavior: Clip.none, children: dedos);
@@ -471,12 +461,25 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
       }
     }
 
-    // Objetos activos, arriba a la izquierda.
-    for (var i = 0; i < widget.efectos.length && i < 5; i++) {
+    // Objetos activos, arriba a la izquierda en una ficha (la pareja del pincel de la derecha).
+    if (widget.efectos.isNotEmpty) {
       encima.add(Positioned(
-        left: 8.0 + i * 26,
-        top: 4 + (vivo ? 2 * sin(t * 2 + i) : 0),
-        child: Emoji(widget.efectos[i], tamano: 22),
+        left: 6,
+        top: 6,
+        height: 30,
+        child: DecoratedBox(
+          decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: p.bordeFuerte), borderRadius: BorderRadius.circular(radio)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              for (var i = 0; i < widget.efectos.length && i < 5; i++)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 1),
+                  child: Transform.translate(offset: Offset(0, vivo ? 1.5 * sin(t * 2 + i) : 0), child: Emoji(widget.efectos[i], tamano: 20)),
+                ),
+            ]),
+          ),
+        ),
       ));
     }
 
@@ -537,18 +540,21 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
 
     // Más dedos de los que caben: el número en una placa.
     if (widget.dedos > Poceta.topeDedos) {
-      // Abajo, entre el anillo de dedos y el borde.
+      // Justo debajo del arco de dedos, centrada (el canal de la cloaca queda libre).
       encima.add(Positioned(
-        left: cx - 26,
-        bottom: 4,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-          decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: p.bordeFuerte), borderRadius: BorderRadius.circular(radio)),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            const Emoji('👆', tamano: 14),
-            const SizedBox(width: 3),
-            Text('x${widget.dedos}', style: numeros(context, tamano: 11, weight: FontWeight.w800)),
-          ]),
+        left: cx - 50,
+        width: 100,
+        top: _cy + _altoDedos + 16,
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+            decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: p.bordeFuerte), borderRadius: BorderRadius.circular(radio)),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Emoji('👆', tamano: 14),
+              const SizedBox(width: 3),
+              Text('x${widget.dedos}', style: numeros(context, tamano: 11, weight: FontWeight.w800)),
+            ]),
+          ),
         ),
       ));
     }
@@ -573,7 +579,7 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
       };
 
   // Un dedo con su apariencia (la mejor mejora comprada), sin teñir, y aparte lo único que lleva puesto.
-  (Widget, Widget?) _dedo(int i, double a) {
+  (Widget, Widget?) _dedo(int i, double a, double s) {
     final b = widget.bano;
     final impar = i.isOdd;
     final (archivo, giro, espejo) = switch (b.formaDedo) {
@@ -583,7 +589,7 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
       FormaDedo.normal => ('backhand_index_pointing_up', a - pi / 2, false),
     };
     final esPie = archivo == 'foot';
-    Widget img = Image.asset('assets/emoji/$archivo.png', width: 26, height: 26, filterQuality: FilterQuality.medium);
+    Widget img = Image.asset('assets/emoji/$archivo.png', width: 26 * s, height: 26 * s, filterQuality: FilterQuality.medium);
     if (espejo) img = Transform.flip(flipX: true, child: img);
     final adorno = b.adornoDedo;
     // Sin girar, el dedo apunta hacia arriba: la punta arriba y la base abajo.
@@ -597,7 +603,7 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
       Transform.rotate(angle: giro, child: Center(child: img)),
       adorno == null
           ? null
-          : Transform.rotate(angle: giro, child: Center(child: Transform.translate(offset: donde, child: Emoji(adorno, tamano: tam)))),
+          : Transform.rotate(angle: giro, child: Center(child: Transform.translate(offset: donde * s, child: Emoji(adorno, tamano: tam * s)))),
     );
   }
 
@@ -772,7 +778,8 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
     if (e >= 3.2 && e < 6.5) grito(boquilla.dx + 26, boquilla.dy - 30 + 3 * sin(t * 9), 'FLUUUSH', const Color(0xFF8FD3F5), 16, .08);
   }
 
-  // Criadero de moscas: vuelan alrededor de la poceta con senos sumados (parece al azar y no da vueltas en redondo).
+  // Criadero de moscas: vuelan en una franja encima del tanque con senos sumados (parece al azar y no da vueltas en
+  // redondo); no tapan la taza.
   void _moscas(List<Widget> hijos, double cx, double tv, bool vivo) {
     final m = widget.bano.moscas;
     if (m == 0) return;
@@ -783,12 +790,12 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
       final esReina = reina && i == n;
       final f = i * 1.37 + .5;
       final u = tv * (esReina ? .45 : .9);
-      final x = 85 * (.6 * sin(u * .9 + f) + .4 * sin(u * 2.3 + f * 2.1));
-      final y = 55 * (.6 * cos(u * .7 + f * 1.3) + .4 * sin(u * 1.9 + f * .7));
+      final x = 20 + 62 * (.6 * sin(u * .9 + f) + .4 * sin(u * 2.3 + f * 2.1));
+      final y = 18 * (.6 * cos(u * .7 + f * 1.3) + .4 * sin(u * 1.9 + f * .7));
       final vx = .54 * cos(u * .9 + f) + .92 * cos(u * 2.3 + f * 2.1);
       final zum = vivo ? Offset(1.2 * sin(tv * 47 + i), 1.2 * cos(tv * 53 + i * 2)) : Offset.zero;
-      final o = Offset(cx + x, 140 + y) + zum;
-      final tam = esReina ? 24.0 : 16.0;
+      final o = Offset(cx + x, 52 + y) + zum;
+      final tam = esReina ? 18.0 : 13.0;
       Widget w = Emoji('🪰', tamano: tam);
       if (vx > 0) w = Transform.flip(flipX: true, child: w);
       bichos.add(Positioned(left: o.dx - tam / 2, top: o.dy - tam / 2, width: tam, height: tam, child: w));
@@ -850,17 +857,18 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
     }
   }
 
-  // "+N" sueltos de la producción pasiva: ~4 por segundo, más con apuro (tope 14); pasado el tope crecen y se doran.
+  // "+N" sueltos de la producción pasiva: ~4 por segundo, más con apuro (tope 6, para que no se amontonen); pasado el
+  // tope crecen un poco y se doran. Suben tenues por encima del tanque, no sobre la taza.
   void _sueltos(BuildContext context, List<Widget> encima, double cx, double t) {
     final apuro = widget.apuro.isFinite ? widget.apuro : 1.0;
-    final r = (4 * apuro).clamp(2.0, 14.0);
+    final r = (4 * apuro).clamp(2.0, 6.0);
     final extra = (4 * apuro / 14 - 1).clamp(0.0, 1.0);
     final texto = '+${formatoMj(widget.mps / r, ingles: enIngles)}';
     for (var k = ((t - .9) * r).floor() + 1; k <= (t * r).floor(); k++) {
       final f = (t - k / r) / .9;
       if (f < 0 || f > 1) continue;
-      encima.add(_suelto(context, cx + 180 * (_h(k * 1.0) - .5), 100 + 60 * _h(k + .37) - 50 * f, texto, .65 * (1 - f),
-          extra > 0 ? 12 + 6 * extra : 12, extra > 0 ? acento : Colors.white));
+      encima.add(_suelto(context, cx + 220 * (_h(k * 1.0) - .5), 58 + 14 * _h(k + .37) - 40 * f, texto, .5 * (1 - f),
+          11 + 2 * extra, extra > 0 ? acento : Colors.white));
     }
   }
 
@@ -1253,7 +1261,9 @@ class _Rayas extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter old) => true;
 }
 
-// Palanca del tanque: gris si la cadena no está lista; amarilla y con halo que late cuando sí (t != null = animada).
+// Palanca del tanque: una placa cromada atornillada a la cara del tanque y la manija que sale hacia el frente, bajo la
+// tapa. Gris si la cadena no está lista; amarilla y con halo que late cuando sí (t != null = animada). Al jalar, la
+// manija gira hacia abajo sobre su eje (en reposo ya cae un poquito, como una de verdad).
 class _Palanca extends CustomPainter {
   final bool lista;
   final double baja;
@@ -1261,34 +1271,44 @@ class _Palanca extends CustomPainter {
   _Palanca(this.lista, this.baja, this.t);
 
   static const _pivote = _PocetaState._pivote;
+  static const _largo = 18.0;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final a = .6 * baja;
-    final punta = _pivote + Offset(-cos(a), sin(a)) * 14;
-    final color = lista ? acento : const Color(0xFF8C8C8C);
+    final a = .15 + .5 * baja;
+    final punta = _pivote + Offset(-cos(a), sin(a)) * _largo;
+    final color = lista ? acento : const Color(0xFFB4BAC0);
+    const negro = Color(0xFF1A1A1A);
+    final borde = Paint()
+      ..color = negro
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
     if (lista) {
       final latido = t == null ? 1.0 : .5 + .5 * sin(t! * 5);
-      canvas.drawCircle(punta, 7 + 2 * latido, Paint()..color = acento.withValues(alpha: .25 + .25 * latido));
+      canvas.drawCircle(punta, 7 + 2.5 * latido, Paint()..color = acento.withValues(alpha: .25 + .25 * latido));
     }
-    canvas.drawRect(Rect.fromCenter(center: _pivote, width: 8, height: 6), Paint()..color = const Color(0xFFD9DEE3));
-    canvas.drawRect(Rect.fromCenter(center: _pivote, width: 8, height: 6), Paint()
-      ..color = const Color(0xFF1A1A1A)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1);
+    // La placa: cuadrada, en la cara del tanque.
+    final placa = Rect.fromCenter(center: _pivote, width: 11, height: 11);
+    canvas.drawRect(placa, Paint()..color = const Color(0xFFD9DEE3));
+    canvas.drawRect(placa, borde);
+    // La manija: brazo grueso y el agarre más ancho en la punta.
     canvas.drawLine(_pivote, punta, Paint()
-      ..color = const Color(0xFF1A1A1A)
-      ..strokeWidth = 5.5
+      ..color = negro
+      ..strokeWidth = 6
       ..strokeCap = StrokeCap.square);
     canvas.drawLine(_pivote, punta, Paint()
       ..color = color
-      ..strokeWidth = 3.5
+      ..strokeWidth = 4
       ..strokeCap = StrokeCap.square);
-    canvas.drawCircle(punta, 3.5, Paint()..color = color);
-    canvas.drawCircle(punta, 3.5, Paint()
-      ..color = const Color(0xFF1A1A1A)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1);
+    canvas.save();
+    canvas.translate(punta.dx, punta.dy);
+    canvas.rotate(-a);
+    final agarre = Rect.fromCenter(center: Offset.zero, width: 7, height: 8);
+    canvas.drawRect(agarre, Paint()..color = color);
+    canvas.drawRect(agarre, borde);
+    canvas.restore();
+    // El eje.
+    canvas.drawRect(Rect.fromCenter(center: _pivote, width: 4, height: 4), Paint()..color = negro);
   }
 
   @override

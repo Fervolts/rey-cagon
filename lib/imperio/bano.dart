@@ -19,7 +19,8 @@ import '../emoji.dart';
 import 'esteticas.dart';
 
 /// El edificio más alto que tienes: cambia el ambiente del baño. `publico` es el baño de clase media (el nombre se
-/// queda: se guarda en la vista de Personalizar).
+/// queda: se guarda en la vista de Personalizar). `camion`, `planta`, `cloaca` y `granja` ya no son ambientes (ni el
+/// automático ni Personalizar los dan); se quedan solo para no romper nombres guardados.
 enum AmbienteBano { casa, publico, camion, planta, cloaca, granja, mina, templo, volcan, laxante, agujero }
 
 /// Color de los dedos: la mejor mejora comprada.
@@ -30,17 +31,15 @@ enum FormaDedo { normal, ambidiestro, pie, mano }
 
 const _niveles = [1, 5, 10, 25, 50, 100, 150, 200];
 
-// Edificio que pone cada ambiente, del más alto al más bajo.
+// Edificio que pone cada ambiente, del más alto al más bajo. Solo escenas de verdad: el camión, la planta, la cloaca y
+// el criadero de moscas son cosas dentro del baño, no un baño aparte, así que no entran (sus valores siguen en el enum
+// porque la vista guardada los nombra; un 'camion' viejo se ignora y queda el automático).
 const _ambientes = [
   ('agujero', AmbienteBano.agujero),
   ('laxante_tiempo', AmbienteBano.laxante),
   ('volcan', AmbienteBano.volcan),
   ('templo', AmbienteBano.templo),
   ('mina', AmbienteBano.mina),
-  ('granja', AmbienteBano.granja),
-  ('cloaca', AmbienteBano.cloaca),
-  ('planta', AmbienteBano.planta),
-  ('camion', AmbienteBano.camion),
   ('bano', AmbienteBano.publico),
 ];
 
@@ -388,7 +387,8 @@ class FondoBano extends StatelessWidget {
     return [
       en(f, tam, botella),
       en(Bano.frasco + const Offset(16, 12), 14, const RotatedBox(quarterTurns: 1, child: Emoji('🥄', tamano: 14))),
-      if (e.lecheNuclear) en(f + Offset(-tam / 2 - 2, -tam / 4), 14, const Emoji('☢️', tamano: 14)),
+      // Nuclear: el símbolo va como etiqueta pegada a la botella, no suelto al lado.
+      if (e.lecheNuclear) en(f + Offset(tam / 4, tam / 5), 12, const Emoji('☢️', tamano: 12)),
     ];
   }
 }
@@ -1396,7 +1396,7 @@ class PintorMejorasPoceta extends CustomPainter {
         ..color = const Color(0xFF3B82C4);
       final c = p(.755, .30);
       canvas.drawCircle(c, 1.6, Paint()..color = ondas.color);
-      for (final r in const [5.0, 9.0, 13.0]) {
+      for (final r in const [4.0, 7.0, 10.0]) {
         canvas.drawArc(Rect.fromCircle(center: c, radius: r), -pi * .75, pi * .5, false, ondas);
       }
     }

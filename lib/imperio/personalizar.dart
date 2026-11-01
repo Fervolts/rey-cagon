@@ -18,10 +18,6 @@ import 'poceta.dart';
 /// Edificio que da cada ambiente (para el emoji y el nombre del botón). La casa no tiene.
 const _edificioDe = {
   AmbienteBano.publico: 'bano',
-  AmbienteBano.camion: 'camion',
-  AmbienteBano.planta: 'planta',
-  AmbienteBano.cloaca: 'cloaca',
-  AmbienteBano.granja: 'granja',
   AmbienteBano.mina: 'mina',
   AmbienteBano.templo: 'templo',
   AmbienteBano.volcan: 'volcan',

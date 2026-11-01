@@ -178,10 +178,10 @@ void main() {
     testWidgets('no sale sin La cadena del trono (y no deja hueco)', (tester) async {
       await _montar(tester, _barra(botonJalar(Imperio(), _listo)));
       expect(find.byKey(const Key('boton_jalar')), findsNothing);
-      expect(find.text('OBJETOS'), findsOneWidget);
+      expect(find.text('TIENDA'), findsOneWidget);
       expect(find.text('SALA'), findsOneWidget);
       // Dos botones: cada uno ocupa la mitad.
-      expect(tester.getSize(find.ancestor(of: find.text('OBJETOS'), matching: find.byType(Expanded))).width, closeTo(147, 1));
+      expect(tester.getSize(find.ancestor(of: find.text('TIENDA'), matching: find.byType(Expanded))).width, closeTo(147, 1));
       expect(tester.takeException(), isNull);
     });
 

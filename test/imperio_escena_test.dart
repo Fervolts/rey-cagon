@@ -38,9 +38,28 @@ void main() {
     });
 
     test('el ambiente elegido manda solo si está desbloqueado', () {
-      expect(_bano(cant, mejoras, vista: {'ambiente': 'camion'}).ambiente, AmbienteBano.camion);
+      expect(_bano(cant, mejoras, vista: {'ambiente': 'publico'}).ambiente, AmbienteBano.publico);
+      expect(_bano(cant, mejoras, vista: {'ambiente': 'casa'}).ambiente, AmbienteBano.casa);
       expect(_bano(cant, mejoras, vista: {'ambiente': 'volcan'}).ambiente, AmbienteBano.templo);
       expect(_bano(cant, mejoras, vista: {'ambiente': 'nada'}).ambiente, AmbienteBano.templo);
+    });
+
+    test('camión, planta, cloaca y moscas no son escenas', () {
+      // Una vista vieja que eligió uno de ellos se ignora y queda el automático.
+      for (final viejo in const ['camion', 'planta', 'cloaca', 'granja']) {
+        expect(_bano(cant, mejoras, vista: {'ambiente': viejo}).ambiente, AmbienteBano.templo);
+      }
+      // Sin templo, el automático cae en la clase media, no en el edificio más alto (la cloaca o el criadero).
+      final sinTemplo = {...cant}..remove('templo');
+      expect(_bano(sinTemplo, mejoras).ambiente, AmbienteBano.publico);
+      expect(_bano({'camion': 1, 'planta': 1, 'cloaca': 1, 'granja': 1}, const {}).ambiente, AmbienteBano.casa);
+      const fuera = [AmbienteBano.camion, AmbienteBano.planta, AmbienteBano.cloaca, AmbienteBano.granja];
+      final todos = EstadoBano.ambientesDesbloqueados((id) => 1);
+      expect(todos.where(fuera.contains), isEmpty);
+      expect(todos.toSet(), {
+        AmbienteBano.casa, AmbienteBano.publico, AmbienteBano.mina, AmbienteBano.templo, AmbienteBano.volcan, AmbienteBano.laxante,
+        AmbienteBano.agujero
+      });
     });
 
     test('la vista viaja en la partida y se limpia al leer', () {
@@ -112,6 +131,21 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
+    testWidgets('con más de 24 dedos se ven 12 y el número va en la placa', (tester) async {
+      int dedosVisibles() => find
+          .byWidgetPredicate((w) =>
+              w is Image && w.image is AssetImage && (w.image as AssetImage).assetName.contains('backhand_index') && (w.width ?? 0) > 15)
+          .evaluate()
+          .length;
+      await poner(tester, Poceta(alTocar: () => (texto: '+1', epico: false), mps: 1, dedos: 300, instante: 12));
+      expect(dedosVisibles(), Poceta.visiblesDedos);
+      expect(find.text('x300'), findsOneWidget);
+      await poner(tester, Poceta(alTocar: () => (texto: '+1', epico: false), mps: 1, dedos: 20, instante: 12));
+      expect(dedosVisibles(), 20);
+      expect(find.textContaining('x2'), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    });
+
     testWidgets('sin cadena (jalar null) la palanca no existe', (tester) async {
       var jaladas = 0;
       await poner(tester, Poceta(alTocar: () => (texto: '+1', epico: false), mps: 1, alJalar: () => jaladas++));
@@ -161,12 +195,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     expect(vista['ocultos'], ['alfombra']);
 
-    // Solo los ambientes desbloqueados tienen botón.
+    // Solo los ambientes desbloqueados tienen botón, y el camión y el criadero no son escenas.
     expect(find.byKey(const Key('ambiente_volcan')), findsNothing);
-    await tester.ensureVisible(find.byKey(const Key('ambiente_camion')));
-    await tester.tap(find.byKey(const Key('ambiente_camion')));
+    expect(find.byKey(const Key('ambiente_camion')), findsNothing);
+    expect(find.byKey(const Key('ambiente_granja')), findsNothing);
+    await tester.ensureVisible(find.byKey(const Key('ambiente_casa')));
+    await tester.tap(find.byKey(const Key('ambiente_casa')));
     await tester.pump(const Duration(milliseconds: 50));
-    expect(vista['ambiente'], 'camion');
+    expect(vista['ambiente'], 'casa');
 
     await tester.tap(find.byKey(const Key('personalizar_todo')));
     await tester.pump(const Duration(milliseconds: 50));
