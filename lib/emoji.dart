@@ -90,7 +90,7 @@ const _archivos = {
   // Imperio.
   '🏭': 'factory',
   '👆': 'backhand_index_pointing_up',
-  '🫐': 'blueberries',
+  '🫐': 'plum', // Ciruela: durazno Fluent recoloreado (no hay ciruela en Fluent).
   '🫓': 'flatbread',
   '🚻': 'restroom',
   '🚛': 'articulated_lorry',
@@ -110,6 +110,7 @@ const _archivos = {
   '🧲': 'magnet',
   '🪻': 'hyacinth',
   '🧴': 'lotion_bottle',
+  '🛒': 'shopping_cart',
   '💊': 'pill',
   '🪠': 'plunger',
   '🟡': 'yellow_circle',

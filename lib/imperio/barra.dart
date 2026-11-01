@@ -71,7 +71,7 @@ class BarraImperio extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(13, 4, 13, 10),
       child: Row(
         children: [
-          boton('🧴', tr('OBJETOS', 'ITEMS'), alObjetos),
+          boton('🛒', tr('TIENDA', 'SHOP'), alObjetos),
           if (jalar.visible)
             boton('🚽', tr('JALAR', 'FLUSH'), alJalar,
                 key: const Key('boton_jalar'),

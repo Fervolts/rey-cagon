@@ -1,4 +1,5 @@
-// Tienda de Ciruelas 🫐: ofertas (efectos al instante) y estéticas del baño (solo suerte).
+// Tienda del Imperio: saldo de Ciruelas 🫐, objetos (los pone pantalla.dart con [arriba]), ofertas de Ciruelas
+// (efectos al instante) y estéticas del baño (solo suerte).
 
 import 'package:flutter/material.dart';
 
@@ -13,8 +14,9 @@ import 'esteticas.dart';
 /// "+4%".
 String pctSuerte(double bono) => '+${(bono * 100).round()}%';
 
-/// Abre la tienda. [avisar] pone el aviso de arriba de la pantalla del Imperio.
-Future<void> abrirTiendaCiruelas(BuildContext context, ControlImperio control, void Function(String emoji, String texto) avisar) {
+/// Abre la tienda. [avisar] pone el aviso de arriba de la pantalla del Imperio; [arriba] va antes de las ofertas.
+Future<void> abrirTiendaCiruelas(BuildContext context, ControlImperio control, void Function(String emoji, String texto) avisar,
+    {WidgetBuilder? arriba}) {
   control.anotar('tienda_ciruelas_abre');
   return showModalBottomSheet<void>(
     context: context,
@@ -23,16 +25,19 @@ Future<void> abrirTiendaCiruelas(BuildContext context, ControlImperio control, v
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radio)),
     builder: (_) => ListenableBuilder(
       listenable: control,
-      builder: (context, _) => TiendaCiruelas(control: control, avisar: avisar),
+      builder: (context, _) => TiendaCiruelas(control: control, avisar: avisar, arriba: arriba),
     ),
   );
 }
 
 class TiendaCiruelas extends StatefulWidget {
-  const TiendaCiruelas({super.key, required this.control, required this.avisar});
+  const TiendaCiruelas({super.key, required this.control, required this.avisar, this.arriba});
 
   final ControlImperio control;
   final void Function(String emoji, String texto) avisar;
+
+  /// Lo que va entre el saldo y las ofertas (los objetos).
+  final WidgetBuilder? arriba;
 
   @override
   State<TiendaCiruelas> createState() => _TiendaCiruelasState();
@@ -82,8 +87,9 @@ class _TiendaCiruelasState extends State<TiendaCiruelas> {
                 ),
               ],
             ),
+            if (widget.arriba case final arriba?) ...[const SizedBox(height: 16), arriba(context)],
             const SizedBox(height: 16),
-            Rotulo(tr('Tienda', 'Shop')),
+            Rotulo(tr('Ofertas de Ciruelas', 'Plum deals')),
             const SizedBox(height: 8),
             for (final o in ofertasCiruela)
               _fila(

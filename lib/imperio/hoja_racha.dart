@@ -1,4 +1,4 @@
-// Hoja de la racha del Imperio: cuadrícula de 30 días y botón RECLAMAR.
+// Pop-up de la racha del Imperio: barra de 30 días, el premio de hoy en grande, lo que viene y RECLAMAR.
 
 import 'package:flutter/material.dart';
 
@@ -41,17 +41,20 @@ String textoPremio(PremioRacha p) {
   return partes.join(' + ');
 }
 
-/// Abre la hoja. Se puede reclamar desde aquí si hoy toca.
+/// Abre el pop-up (centrado, fondo oscurecido). Se puede reclamar desde aquí si hoy toca.
 Future<void> mostrarHojaRacha(BuildContext context, ControlImperio control, void Function(String emoji, String texto) avisar) {
   control.anotar('racha_abre');
-  return showModalBottomSheet<void>(
+  return showDialog<void>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: paleta(context).fondo,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radio)),
-    builder: (_) => ListenableBuilder(
-      listenable: control,
-      builder: (context, _) => HojaRacha(control: control, avisar: avisar),
+    barrierColor: Colors.black.withValues(alpha: 0.75),
+    builder: (contexto) => Dialog(
+      backgroundColor: paleta(contexto).fondo,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radio), side: const BorderSide(color: acento, width: 2)),
+      child: ListenableBuilder(
+        listenable: control,
+        builder: (context, _) => HojaRacha(control: control, avisar: avisar),
+      ),
     ),
   );
 }
@@ -91,109 +94,181 @@ class _HojaRachaState extends State<HojaRacha> {
     final p = paleta(context);
     final estado = widget.control.racha ?? const EstadoRacha(1, false, 0);
     final hoy = premioDia(estado.dia);
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                const Emoji('🔥', tamano: 36),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(tr('RACHA DEL IMPERIO', 'EMPIRE STREAK'), style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: 0.6, color: p.texto)),
-                      Text(tr('Día ${estado.dia} de $diasRacha', 'Day ${estado.dia} of $diasRacha'),
-                          key: const Key('racha_dia'), style: numeros(context, tamano: 13, color: p.textoSuave)),
-                    ],
-                  ),
-                ),
+    final hechos = estado.previos + (estado.reclamado ? 1 : 0);
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(tr('RACHA DIARIA', 'DAILY STREAK'),
+                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1.2, color: p.textoSuave)),
+              ),
+              InkResponse(
+                onTap: () => Navigator.pop(context),
+                radius: 20,
+                child: Icon(Icons.close, size: 22, color: p.textoSuave),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          // El día grande, como en cualquier juego: 🔥 12
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Emoji('🔥', tamano: 44),
+              const SizedBox(width: 8),
+              Text(tr('Día ${estado.dia}', 'Day ${estado.dia}'),
+                  key: const Key('racha_dia'), style: numeros(context, tamano: 34, weight: FontWeight.w900, color: p.texto)),
+              Text(' /$diasRacha', style: numeros(context, tamano: 16, weight: FontWeight.w800, color: p.textoSuave)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _barra(context, estado, hechos),
+          const SizedBox(height: 16),
+          _premioHoy(context, hoy, estado),
+          const SizedBox(height: 14),
+          Text(tr('LO QUE VIENE', 'COMING UP'),
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 1.2, color: p.textoSuave)),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              for (var i = 1; i <= 5; i++) ...[
+                if (i > 1) const SizedBox(width: 6),
+                Expanded(child: _proximo(context, (estado.dia - 1 + i) % diasRacha + 1)),
               ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-                tr('Entra cada día y reclama. Si se te pasa un día, vuelves al día 1.',
-                    'Come back every day and claim. Miss a day and you go back to day 1.'),
-                style: TextStyle(fontSize: 12, color: p.textoSuave)),
-            const SizedBox(height: 12),
-            GridView.count(
-              crossAxisCount: 6,
-              mainAxisSpacing: 4,
-              crossAxisSpacing: 4,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              children: [for (var d = 1; d <= diasRacha; d++) _casilla(context, d, estado)],
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: acento), borderRadius: BorderRadius.circular(radio)),
-              child: Text(
-                  estado.reclamado
-                      ? tr('Hoy te llevaste: ${textoPremio(hoy)}', 'Today you got: ${textoPremio(hoy)}')
-                      : tr('Hoy toca: ${textoPremio(hoy)}', 'Today: ${textoPremio(hoy)}'),
-                  style: TextStyle(fontWeight: FontWeight.w800, color: p.texto)),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 52,
-              child: estado.reclamado
-                  ? OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: Text(tr('VUELVE MAÑANA', 'COME BACK TOMORROW'), style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.8)),
-                    )
-                  : FilledButton(
-                      key: const Key('boton_reclamar'),
-                      onPressed: _ocupado ? null : _reclamar,
-                      child: Text(tr('RECLAMAR', 'CLAIM'), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 0.8)),
-                    ),
-            ),
-          ],
-        ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 54,
+            child: estado.reclamado
+                ? OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(tr('VUELVE MAÑANA', 'COME BACK TOMORROW'), style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.8)),
+                  )
+                : FilledButton(
+                    key: const Key('boton_reclamar'),
+                    onPressed: _ocupado ? null : _reclamar,
+                    child: Text(tr('RECLAMAR', 'CLAIM'), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: 1)),
+                  ),
+          ),
+          const SizedBox(height: 8),
+          Text(tr('Si se te pasa un día, vuelves al día 1.', 'Miss a day and you go back to day 1.'),
+              textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: p.textoSuave)),
+        ],
       ),
     );
   }
 
-  Widget _casilla(BuildContext context, int d, EstadoRacha e) {
+  /// 30 rayitas: hechas en acento, hoy con borde, las metas (Ficha y trofeo) marcadas debajo.
+  Widget _barra(BuildContext context, EstadoRacha e, int hechos) {
     final p = paleta(context);
-    final hecho = d <= e.previos || (d == e.dia && e.reclamado);
-    final esHoy = d == e.dia;
-    final partes = partesPremio(premioDia(d));
-    final fondo = esHoy && !hecho ? acento : p.tarjeta;
-    final tinta = esHoy && !hecho ? acentoTexto : p.texto;
-    return Opacity(
-      opacity: hecho ? 0.45 : 1,
-      child: Container(
-        decoration: BoxDecoration(
-          color: fondo,
-          border: Border.all(color: esHoy ? acento : (hecho ? p.borde : p.bordeFuerte)),
-          borderRadius: BorderRadius.circular(radio),
-        ),
-        padding: const EdgeInsets.all(2),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+    return Column(
+      children: [
+        Row(
           children: [
-            Text('$d', style: numeros(context, tamano: 10, weight: FontWeight.w900, color: tinta)),
-            if (hecho)
-              Icon(Icons.check, size: 18, color: p.texto)
-            else
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (final (emoji, texto) in partes.take(2)) ...[
-                      Emoji(emoji, tamano: 14),
-                      if (texto.isNotEmpty) Text(texto, style: numeros(context, tamano: 9, weight: FontWeight.w800, color: tinta)),
-                    ],
-                  ],
+            for (var d = 1; d <= diasRacha; d++) ...[
+              if (d > 1) const SizedBox(width: 2),
+              Expanded(
+                child: Container(
+                  height: d == e.dia ? 14 : 10,
+                  decoration: BoxDecoration(
+                    color: d <= hechos ? acento : p.tarjeta,
+                    border: Border.all(color: d == e.dia ? acento : p.borde),
+                  ),
                 ),
               ),
+            ],
           ],
         ),
+        const SizedBox(height: 4),
+        LayoutBuilder(
+          builder: (context, c) => SizedBox(
+            height: 18,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                for (var d = 1; d <= diasRacha; d++)
+                  if (premioDia(d).ficha || premioDia(d).logro != null)
+                    Positioned(
+                      left: (d - 0.5) / diasRacha * c.maxWidth - 9,
+                      child: Opacity(opacity: d <= hechos ? 0.4 : 1, child: Emoji(premioDia(d).logro != null ? '🏆' : '🎟️', tamano: 18)),
+                    ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// La tarjeta grande con el premio de hoy.
+  Widget _premioHoy(BuildContext context, PremioRacha hoy, EstadoRacha e) {
+    final p = paleta(context);
+    final listo = e.reclamado;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
+      decoration: BoxDecoration(
+        color: listo ? p.tarjeta : acento,
+        border: Border.all(color: acento, width: 2),
+        borderRadius: BorderRadius.circular(radio),
+      ),
+      child: Column(
+        children: [
+          Text(listo ? tr('YA RECLAMASTE HOY', 'CLAIMED TODAY') : tr('PREMIO DE HOY', "TODAY'S PRIZE"),
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 1.2, color: listo ? p.textoSuave : acentoTexto)),
+          const SizedBox(height: 8),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final (emoji, texto) in partesPremio(hoy)) ...[
+                  Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: Emoji(emoji, tamano: 48)),
+                  if (texto.isNotEmpty)
+                    Text(texto, style: numeros(context, tamano: 22, weight: FontWeight.w900, color: listo ? p.texto : acentoTexto)),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(textoPremio(hoy),
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: listo ? p.texto : acentoTexto)),
+        ],
+      ),
+    );
+  }
+
+  /// Casilla chica de un día que viene.
+  Widget _proximo(BuildContext context, int d) {
+    final p = paleta(context);
+    final partes = partesPremio(premioDia(d));
+    return Container(
+      height: 64,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: p.borde), borderRadius: BorderRadius.circular(radio)),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(tr('Día $d', 'Day $d'), style: numeros(context, tamano: 10, weight: FontWeight.w800, color: p.textoSuave)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final (emoji, texto) in partes.take(2)) ...[
+                  Emoji(emoji, tamano: 22),
+                  if (texto.isNotEmpty) Text(texto, style: numeros(context, tamano: 11, weight: FontWeight.w900, color: p.texto)),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

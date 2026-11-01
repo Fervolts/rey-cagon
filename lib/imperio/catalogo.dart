@@ -279,8 +279,11 @@ class Objeto {
   /// Pide haber visto el primer Atasco (Robot destapador).
   final bool pideAtasco;
 
+  /// Precio en Ciruelas (0 = no se vende con Ciruelas). El mismo que `obj_<id>` en `imperio_gastar_ciruelas`.
+  final int ciruelas;
+
   const Objeto(this.id, this.emoji, this.nombreEs, this.nombreEn, this.descEs, this.descEn, this.tipo,
-      {this.duracion, this.minutosPrecio = 0, this.espera, this.candado = 0, this.maxInventario = 0, this.pideAtasco = false});
+      {this.duracion, this.minutosPrecio = 0, this.espera, this.candado = 0, this.maxInventario = 0, this.pideAtasco = false, this.ciruelas = 0});
 }
 
 /// Tiempo máximo acumulado al volver a alquilar el Robot.
@@ -290,13 +293,13 @@ const List<Objeto> objetos = [
   Objeto('cagada_fresca', '💩', 'Cagada fresca', 'Fresh dump', 'Producción x2', 'Production x2', TipoObjeto.ficha,
       duracion: Duration(hours: 1), candado: 1),
   Objeto('ambientador', '🧴', 'Ambientador criollo', 'Homemade air freshener', 'Producción +25%', 'Production +25%', TipoObjeto.consumible,
-      duracion: Duration(minutes: 20), minutosPrecio: 10, espera: Duration(hours: 1), candado: 5, maxInventario: 5),
+      duracion: Duration(minutes: 20), minutosPrecio: 10, espera: Duration(hours: 1), candado: 5, maxInventario: 5, ciruelas: 2),
   Objeto('laxante', '💊', 'Laxante express', 'Express laxative', 'Pujos x2', 'Pushes x2', TipoObjeto.consumible,
-      duracion: Duration(minutes: 5), minutosPrecio: 3, espera: Duration(minutes: 30), candado: 5, maxInventario: 5),
+      duracion: Duration(minutes: 5), minutosPrecio: 3, espera: Duration(minutes: 30), candado: 5, maxInventario: 5, ciruelas: 1),
   Objeto('papel', '🧻', 'Papel doble hoja', 'Two-ply paper', 'El próximo mojón dorado da el doble', 'Your next golden poop gives double',
-      TipoObjeto.consumible, minutosPrecio: 5, espera: Duration(hours: 1), candado: 5, maxInventario: 5),
+      TipoObjeto.consumible, minutosPrecio: 5, espera: Duration(hours: 1), candado: 5, maxInventario: 5, ciruelas: 2),
   Objeto('robot', '🤖', 'Robot destapador', 'Plunger bot', 'Destapa solo cada Atasco', 'Unclogs every Clog by itself', TipoObjeto.alquilable,
-      duracion: Duration(minutes: 30), minutosPrecio: 20, espera: Duration(hours: 4), candado: 10, pideAtasco: true),
+      duracion: Duration(minutes: 30), minutosPrecio: 20, espera: Duration(hours: 4), candado: 10, pideAtasco: true, ciruelas: 3),
 ];
 
 final Map<String, Objeto> _objetoPorId = {for (final o in objetos) o.id: o};

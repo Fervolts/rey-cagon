@@ -523,28 +523,41 @@ class Imperio {
   }
 
   /// Compra con MJ. Consumible: al inventario (hasta 5). Robot: se activa ya; si sigue activo suma 30 min, hasta 1 h en total.
-  bool comprarObjeto(String id, int ahora) {
-    final o = objetoPorId(id);
-    if (o == null || o.tipo == TipoObjeto.ficha || !objetoAbierto(id)) return false;
-    final precio = precioObjeto(id, ahora);
-    if (precio > _p.saldo) return false;
+  /// Con [conCiruelas] ya se pagó en el servidor: no cobra MJ.
+  bool comprarObjeto(String id, int ahora, {bool conCiruelas = false}) {
+    if (conCiruelas ? !_cabeObjeto(id, ahora) : !puedeComprarObjeto(id, ahora)) return false;
+    final o = objetoPorId(id)!;
+    final precio = conCiruelas ? 0.0 : precioObjeto(id, ahora);
     if (o.tipo == TipoObjeto.consumible) {
       if (enInventario(id) >= o.maxInventario) return false;
       _p.inventario[id] = enInventario(id) + 1;
     } else {
       final dur = o.duracion!.inMilliseconds;
       if (robotActivo(ahora)) {
-        final fin = min(_p.robotHasta + dur, ahora + topeAlquiler.inMilliseconds);
-        if (fin <= _p.robotHasta) return false;
-        _p.robotHasta = fin;
+        _p.robotHasta = min(_p.robotHasta + dur, ahora + topeAlquiler.inMilliseconds);
       } else {
-        if (esperaRestante(id, ahora) != null) return false;
         _p.robotHasta = ahora + dur;
         if (o.espera != null) _p.esperas[id] = ahora + o.espera!.inMilliseconds;
       }
     }
     _p.saldo -= precio;
     return true;
+  }
+
+  /// Se puede comprar [id] ahora: abierto, con saldo (MJ, o Ciruelas si [conCiruelas]), sin inventario lleno ni espera.
+  bool puedeComprarObjeto(String id, int ahora, {bool conCiruelas = false}) {
+    final o = objetoPorId(id);
+    if (o == null || !_cabeObjeto(id, ahora)) return false;
+    return conCiruelas ? o.ciruelas > 0 && ciruelas >= o.ciruelas : precioObjeto(id, ahora) <= _p.saldo;
+  }
+
+  /// [id] se puede recibir ahora (sin mirar el precio).
+  bool _cabeObjeto(String id, int ahora) {
+    final o = objetoPorId(id);
+    if (o == null || o.tipo == TipoObjeto.ficha || !objetoAbierto(id)) return false;
+    if (o.tipo == TipoObjeto.consumible) return enInventario(id) < o.maxInventario;
+    if (robotActivo(ahora)) return min(_p.robotHasta + o.duracion!.inMilliseconds, ahora + topeAlquiler.inMilliseconds) > _p.robotHasta;
+    return esperaRestante(id, ahora) == null;
   }
 
   /// Usa un consumible del inventario si no hay espera. Papel doble hoja: deja pendiente el doble del próximo dorado.
@@ -599,6 +612,8 @@ class Imperio {
         _p.robotHasta = max(_p.robotHasta, ahora) + const Duration(hours: 24).inMilliseconds;
         return 0;
     }
+    // Objeto pagado con Ciruelas: 'obj_<id>'.
+    if (id.startsWith('obj_')) comprarObjeto(id.substring(4), ahora, conCiruelas: true);
     return 0;
   }
 

@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../animaciones.dart';
 import '../emoji.dart';
 import '../idioma.dart';
+import '../main.dart' show textoError;
 import '../tema.dart';
 import 'bano.dart';
 import 'barra.dart';
@@ -437,93 +438,93 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     final p = paleta(context);
     final im = _c.imperio;
     final moneda = monedaActual();
+    final racha = _c.racha;
+    final rollos = im.partida.rollos;
+    // Chips en una sola fila, todos del mismo ancho y alto.
+    final chips = <Widget>[
+      GestureDetector(
+        onTap: () => _avisar('🎟️', tr('${im.fichas} Fichas para los minijuegos del ARCADE', '${im.fichas} Tokens for the ARCADE minigames')),
+        child: _chip(context, '🎟️', '${im.fichas}'),
+      ),
+      // Ciruelas: abre la tienda. La llave es el destino de la ciruela que vuela.
+      GestureDetector(
+        key: const Key('chip_ciruelas'),
+        onTap: () => _abrirObjetos(context),
+        child: KeyedSubtree(key: _llaveCiruelas, child: _chip(context, '🫐', '${im.ciruelas}', borde: acento)),
+      ),
+      GestureDetector(
+        onTap: () => _avisar('💩', tr('x${_mj(im.multiplicadorCagadas)} por tus ${im.cagadas} cagadas reales',
+            'x${_mj(im.multiplicadorCagadas)} from your ${im.cagadas} real poops')),
+        child: _chip(context, '💩', 'x${_mj(im.multiplicadorCagadas)}'),
+      ),
+      if (racha != null)
+        GestureDetector(
+          key: const Key('chip_racha'),
+          onTap: () => mostrarHojaRacha(context, _c, _avisar),
+          child: _chip(context, '🔥', '${racha.dia}/$diasRacha', borde: racha.reclamado ? null : acento),
+        ),
+      if (rollos > 0)
+        GestureDetector(
+          key: const Key('chip_rollos'),
+          onTap: () => _avisar('🧻', tr('${_mj(rollos.toDouble())} Rollos de Oro: todo produce ${_pctRollos(im)} para siempre',
+              '${_mj(rollos.toDouble())} Golden Rolls: everything makes ${_pctRollos(im)} forever')),
+          child: _chip(context, '🧻', '${_mj(rollos.toDouble())} · ${_pctRollos(im)}'),
+        ),
+    ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => _avisar('💩', moneda.nombre),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+          Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _avisar('💩', moneda.nombre),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Flexible(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: montoMj(_mj(im.saldo), numeros(context, tamano: 32, weight: FontWeight.w900)),
-                        ),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: montoMj(_mj(im.saldo), numeros(context, tamano: 32, weight: FontWeight.w900)),
                       ),
-                      const SizedBox(width: 6),
-                      // Presumir la cartera: en el chat o como imagen para historias.
-                      Tooltip(
-                        message: tr('Presumir cartera', 'Show off your wallet'),
-                        child: InkWell(
-                          key: const Key('boton_cartera'),
-                          onTap: () => compartirCartera(context, _c),
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: _caja(context),
-                            child: Icon(Icons.ios_share, size: 16, color: p.texto),
-                          ),
-                        ),
+                      // MJ/s y MJ por toque en una sola línea: si no caben, se encogen (nunca se parten).
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(tr('${_mj(im.mps(ahora))} por seg  ·  ${_mj(im.valorPujo(ahora))} por toque',
+                                '${_mj(im.mps(ahora))} per sec  ·  ${_mj(im.valorPujo(ahora))} per tap'),
+                            maxLines: 1, softWrap: false, style: numeros(context, tamano: 13, color: p.textoSuave)),
                       ),
                     ],
                   ),
-                  // MJ/s y MJ/pujo en una sola línea: si no caben, se encogen (nunca se parten).
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text('${_mj(im.mps(ahora))} /s   ${_mj(im.valorPujo(ahora))} /pujo',
-                        maxLines: 1, softWrap: false, style: numeros(context, tamano: 14, color: p.textoSuave)),
-                  ),
-                ],
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+              // Presumir la cartera: en el chat o como imagen para historias.
+              Tooltip(
+                message: tr('Presumir cartera', 'Show off your wallet'),
+                child: InkWell(
+                  key: const Key('boton_cartera'),
+                  onTap: () => compartirCartera(context, _c),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: _caja(context),
+                    child: Icon(Icons.ios_share, size: 18, color: p.texto),
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          const SizedBox(height: 10),
+          Row(
             children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _chip(context, '🎟️', '${im.fichas}'),
-                  const SizedBox(width: 6),
-                  // Ciruelas: abre la tienda. La llave es el destino de la ciruela que vuela.
-                  GestureDetector(
-                    key: const Key('chip_ciruelas'),
-                    onTap: () => abrirTiendaCiruelas(context, _c, _avisar),
-                    child: KeyedSubtree(key: _llaveCiruelas, child: _chip(context, '🫐', '${im.ciruelas}', borde: acento)),
-                  ),
-                  const SizedBox(width: 6),
-                  GestureDetector(
-                    onTap: () => _avisar('💩', tr('x${_mj(im.multiplicadorCagadas)} por tus ${im.cagadas} cagadas reales',
-                        'x${_mj(im.multiplicadorCagadas)} from your ${im.cagadas} real poops')),
-                    child: _chip(context, '💩', 'x${_mj(im.multiplicadorCagadas)}'),
-                  ),
-                ],
-              ),
-              if (_c.racha case final r?) ...[
-                const SizedBox(height: 6),
-                GestureDetector(
-                  key: const Key('chip_racha'),
-                  onTap: () => mostrarHojaRacha(context, _c, _avisar),
-                  child: _chip(context, '🔥', '${r.dia}/$diasRacha', borde: r.reclamado ? null : acento),
-                ),
-              ],
-              if (im.partida.rollos > 0) ...[
-                const SizedBox(height: 6),
-                GestureDetector(
-                  key: const Key('chip_rollos'),
-                  onTap: () => _avisar('🧻', tr('${_mj(im.partida.rollos.toDouble())} Rollos de Oro: todo produce ${_pctRollos(im)} para siempre',
-                      '${_mj(im.partida.rollos.toDouble())} Golden Rolls: everything makes ${_pctRollos(im)} forever')),
-                  child: _chip(context, '🧻', '${_mj(im.partida.rollos.toDouble())} (${_pctRollos(im)})'),
-                ),
+              for (var i = 0; i < chips.length; i++) ...[
+                if (i > 0) const SizedBox(width: 6),
+                Expanded(flex: i == chips.length - 1 && rollos > 0 ? 2 : 1, child: chips[i]),
               ],
             ],
           ),
@@ -535,11 +536,15 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
   String _pctRollos(Imperio im) => porcentajeRollos(im.partida.rollos, im.ajustes.rolloPct);
 
   Widget _chip(BuildContext context, String emoji, String texto, {Color? borde}) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
         decoration: _caja(context, borde: borde),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [Emoji(emoji, tamano: 16), const SizedBox(width: 5), Text(texto, style: numeros(context, tamano: 13, weight: FontWeight.w800))],
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [Emoji(emoji, tamano: 16), const SizedBox(width: 5), Text(texto, style: numeros(context, tamano: 13, weight: FontWeight.w800))],
+          ),
         ),
       );
 
@@ -688,7 +693,8 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     // El Dedo no produce por segundo: suma a cada pujo. Los millonarios con mejoras de pujo muestran las dos cosas.
     final pujo = im.pujoEdificio(e.id, ahora);
     final porSegundo = '${_mj(im.mpsEdificio(e.id, ahora))} /s';
-    final detalle = e.pujoBase > 0 ? '+${_mj(pujo)} /pujo' : (pujo > 0 ? '$porSegundo · +${_mj(pujo)} /pujo' : porSegundo);
+    final porToque = tr('+${_mj(pujo)} por toque', '+${_mj(pujo)} per tap');
+    final detalle = e.pujoBase > 0 ? porToque : (pujo > 0 ? '$porSegundo · $porToque' : porSegundo);
     final abierto = _abiertos.contains(e.id);
     final ofertas = misterio ? const <Mejora>[] : im.mejorasDeEdificio(e.id);
     final siguiente = misterio ? null : im.siguienteMejora(e.id);
@@ -920,18 +926,14 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     );
   }
 
-  void _abrirObjetos(BuildContext context) => showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: paleta(context).fondo,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radio)),
-        builder: (_) => ListenableBuilder(
-          listenable: _c,
-          builder: (context, _) => _HojaObjetos(control: _c, avisar: _avisar),
-        ),
-      );
+  void _abrirObjetos(BuildContext context) =>
+      abrirTiendaCiruelas(context, _c, _avisar, arriba: (_) => _HojaObjetos(control: _c, avisar: _avisar));
 }
 
+/// Objetos que se están pagando con Ciruelas (evita el doble toque mientras responde el servidor).
+final Set<String> _pagandoCiruelas = {};
+
+/// Sección OBJETOS de la tienda: cada uno se paga con MJ o con Ciruelas.
 class _HojaObjetos extends StatelessWidget {
   const _HojaObjetos({required this.control, required this.avisar});
   final ControlImperio control;
@@ -942,44 +944,47 @@ class _HojaObjetos extends StatelessWidget {
     final p = paleta(context);
     final im = control.imperio;
     final ahora = control.ahora;
-    final moneda = monedaActual().abreviatura;
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Rotulo(tr('Objetos', 'Items')),
-            const SizedBox(height: 10),
-            for (final o in objetos) _fila(context, p, im, o, ahora, moneda),
-          ],
-        ),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Rotulo(tr('Objetos', 'Items')),
+        const SizedBox(height: 8),
+        for (final o in objetos) _fila(context, p, im, o, ahora),
+      ],
     );
   }
 
-  Widget _fila(BuildContext context, Paleta p, Imperio im, Objeto o, int ahora, String moneda) {
+  Future<void> _conCiruelas(Objeto o) async {
+    if (!_pagandoCiruelas.add(o.id)) return;
+    try {
+      final ok = await control.gastarCiruelas('obj_${o.id}');
+      avisar(ok ? o.emoji : '🫐',
+          ok ? tr('${o.nombreEs}: listo', '${o.nombreEn}: done') : tr('No te alcanzan las Ciruelas.', 'Not enough Plums.'));
+    } catch (e) {
+      avisar('💩', textoError(e));
+    } finally {
+      _pagandoCiruelas.remove(o.id);
+    }
+  }
+
+  Widget _fila(BuildContext context, Paleta p, Imperio im, Objeto o, int ahora) {
     final abierto = im.objetoAbierto(o.id);
     final espera = im.esperaRestante(o.id, ahora);
     final precio = im.precioObjeto(o.id, ahora);
     // La Cagada fresca no se compra: sale sola 1 h después de cada cagada real.
     final esFicha = o.tipo == TipoObjeto.ficha;
     final fresca = esFicha ? im.efectosActivos(ahora).where((e) => e.id == o.id).firstOrNull?.restante : null;
-    final candado = im.cagadas < o.candado
-        ? _cagaVeces(o.candado)
-        : tr('Sale con tu primer Atasco', 'Unlocks with your first Clog');
-    final botones = <Widget>[
-      if (o.tipo == TipoObjeto.consumible) ...[
-        OutlinedButton(
-          onPressed: abierto && precio <= im.saldo && im.enInventario(o.id) < o.maxInventario ? () => control.comprarObjeto(o.id) : null,
-          child: Text(tr('COMPRAR', 'BUY')),
-        ),
-        const SizedBox(width: 6),
-        FilledButton(onPressed: abierto && im.enInventario(o.id) > 0 && espera == null ? () => control.usarObjeto(o.id) : null, child: Text(tr('USAR', 'USE'))),
-      ],
-      if (o.tipo == TipoObjeto.alquilable)
-        FilledButton(onPressed: abierto && precio <= im.saldo ? () => control.comprarObjeto(o.id) : null, child: Text(tr('ALQUILAR', 'RENT'))),
-    ];
+    final candado = im.cagadas < o.candado ? _cagaVeces(o.candado) : tr('Sale con tu primer Atasco', 'Unlocks with your first Clog');
+    final consumible = o.tipo == TipoObjeto.consumible;
+    final estiloPrecio = numeros(context, tamano: 13, weight: FontWeight.w900);
+    Widget pagar({required Widget precio, required bool puede, required VoidCallback alTocar, Key? key}) => Expanded(
+          child: OutlinedButton(
+            key: key,
+            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8), minimumSize: const Size(0, 44)),
+            onPressed: puede ? alTocar : null,
+            child: precio,
+          ),
+        );
     return Opacity(
       opacity: abierto ? 1 : 0.5,
       child: Container(
@@ -987,7 +992,7 @@ class _HojaObjetos extends StatelessWidget {
         padding: const EdgeInsets.all(10),
         decoration: _caja(context),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
               children: [
@@ -1002,32 +1007,60 @@ class _HojaObjetos extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (!esFicha)
-                  montoMj(_mj(precio), numeros(context, tamano: 13, weight: FontWeight.w800)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                if (o.tipo == TipoObjeto.consumible) Text('${im.enInventario(o.id)}/${o.maxInventario}', style: numeros(context, tamano: 12, color: p.textoSuave)),
-                if (esFicha)
-                  Expanded(
-                    child: Text(
-                        fresca != null
-                            ? tr('Activa: ${_cuenta(fresca)}', 'Active: ${_cuenta(fresca)}')
-                            : tr('Gratis 1 h después de cada cagada real', 'Free for 1 h after each real poop'),
-                        style: numeros(context, tamano: 12, color: p.textoSuave)),
-                  ),
+                if (consumible) Text('${im.enInventario(o.id)}/${o.maxInventario}', style: numeros(context, tamano: 13, color: p.textoSuave)),
                 if (espera != null) ...[
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
                   const Emoji('⏳', tamano: 14),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 3),
                   Text(_cuenta(espera), style: numeros(context, tamano: 12, color: p.textoSuave)),
                 ],
-                const Spacer(),
-                ...botones,
               ],
             ),
+            if (esFicha)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                    fresca != null
+                        ? tr('Activa: ${_cuenta(fresca)}', 'Active: ${_cuenta(fresca)}')
+                        : tr('Gratis 1 h después de cada cagada real', 'Free for 1 h after each real poop'),
+                    style: numeros(context, tamano: 12, color: p.textoSuave)),
+              )
+            else ...[
+              const SizedBox(height: 8),
+              Text(consumible ? tr('COMPRAR CON', 'BUY WITH') : tr('ALQUILAR CON', 'RENT WITH'),
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1, color: p.textoSuave)),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  pagar(
+                    key: Key('pagar_mj_${o.id}'),
+                    precio: montoMj(_mj(precio), estiloPrecio, alineacion: Alignment.center),
+                    puede: abierto && im.puedeComprarObjeto(o.id, ahora),
+                    alTocar: () => control.comprarObjeto(o.id),
+                  ),
+                  if (o.ciruelas > 0) ...[
+                    const SizedBox(width: 6),
+                    pagar(
+                      key: Key('pagar_ciruelas_${o.id}'),
+                      precio: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [Text('${o.ciruelas} ', style: estiloPrecio), const Emoji('🫐', tamano: 18)],
+                      ),
+                      puede: abierto && !_pagandoCiruelas.contains(o.id) && im.puedeComprarObjeto(o.id, ahora, conCiruelas: true),
+                      alTocar: () => _conCiruelas(o),
+                    ),
+                  ],
+                  if (consumible) ...[
+                    const SizedBox(width: 6),
+                    FilledButton(
+                      style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
+                      onPressed: abierto && im.enInventario(o.id) > 0 && espera == null ? () => control.usarObjeto(o.id) : null,
+                      child: Text(tr('USAR', 'USE')),
+                    ),
+                  ],
+                ],
+              ),
+            ],
           ],
         ),
       ),

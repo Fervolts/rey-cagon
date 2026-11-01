@@ -148,6 +148,22 @@ void main() {
       expect(imp.partida.robotHasta, t0 + 48 * hora);
     });
 
+    test('objetos con Ciruelas: precio igual en la base, no cobra MJ', () {
+      final mig = File('supabase/migrations/20261101140000_imperio_objetos_ciruelas.sql').readAsStringSync();
+      for (final o in objetos.where((o) => o.ciruelas > 0)) {
+        expect(mig, contains("when 'obj_${o.id}' then ${o.ciruelas}"), reason: o.id);
+      }
+      final imp = Imperio(cagadas: 100, ciruelas: 0);
+      imp.partida.saldo = 0;
+      expect(imp.puedeComprarObjeto('laxante', t0, conCiruelas: true), isFalse);
+      imp.ciruelas = 5;
+      expect(imp.puedeComprarObjeto('laxante', t0, conCiruelas: true), isTrue);
+      expect(imp.puedeComprarObjeto('laxante', t0), isFalse);
+      imp.aplicarOfertaCiruela('obj_laxante', t0);
+      expect(imp.enInventario('laxante'), 1);
+      expect(imp.partida.saldo, 0);
+    });
+
     test('oferta desconocida no hace nada', () {
       final imp = Imperio();
       expect(imp.aplicarOfertaCiruela('nada', t0), 0);
