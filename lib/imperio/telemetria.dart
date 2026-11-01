@@ -46,6 +46,7 @@ Future<int> _enviarPorRpc(List<Map<String, Object?>> lote) async {
 /// - `cadena_abre` {puede}: tocó JALAR (`puede` = estaba encendido)
 /// - `cadena_jala` {rollos, jaladas}: jaló la cadena (rollos ganados en esta jalada, jaladas en total)
 /// - `cartera_comparte` {destino}: presumió la cartera (`chat` = tarjeta en la sala general, `fuera` = imagen para historias)
+/// - `bano_compartir` {}: presumió su baño en la sala general (tarjeta 'bano', foto del baño que arma el servidor)
 /// - `ciruela_suerte` {origen, cantidad, saldo}: cayeron Ciruelas (`pujo` = al pujar, tope diario; `cagada` = al cargar, por cagadas reales)
 /// - `ciruelas_gastar` {id, precio, saldo, mj}: compró en la tienda de Ciruelas (id de `ofertasCiruela`; mj = producción ganada al instante)
 /// - `estetica_compra` {id, saldo, bono}: compró una estética del baño (bono = suerte total después de comprar)

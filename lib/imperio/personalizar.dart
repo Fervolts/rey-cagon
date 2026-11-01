@@ -14,6 +14,7 @@ import 'bano.dart';
 import 'catalogo.dart';
 import 'control.dart';
 import 'poceta.dart';
+import 'tarjeta_bano.dart' show presumirBano;
 
 /// Edificio que da cada ambiente (para el emoji y el nombre del botón). La casa no tiene.
 const _edificioDe = {
@@ -39,7 +40,13 @@ Future<void> abrirPersonalizar(BuildContext context, ControlImperio control) asy
     isScrollControlled: true,
     backgroundColor: paleta(context).fondo,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radio)),
-    builder: (_) => FractionallySizedBox(heightFactor: .92, child: Personalizar(control: control)),
+    // Con su propio Scaffold para que los avisos (al compartir el baño) salgan encima de la hoja y no detrás.
+    builder: (_) => FractionallySizedBox(
+      heightFactor: .92,
+      child: ScaffoldMessenger(
+        child: Scaffold(backgroundColor: paleta(context).fondo, body: Personalizar(control: control)),
+      ),
+    ),
   );
   unawaited(control.guardarTodo());
 }
@@ -127,6 +134,12 @@ class _PersonalizarState extends State<Personalizar> {
               children: [
                 Text(tr('Solo cambia cómo se ve. Lo que produces sigue igual.', 'Only changes the look. Your production stays the same.'),
                     style: TextStyle(fontSize: 12, color: p.textoSuave)),
+                const SizedBox(height: 10),
+                OutlinedButton(
+                  key: const Key('personalizar_compartir'),
+                  onPressed: () => presumirBano(context, widget.control),
+                  child: TextoConEmojis(tr('📸 COMPARTIR MI BAÑO', '📸 SHARE MY BATHROOM')),
+                ),
                 const SizedBox(height: 14),
                 _titulo(context, tr('AMBIENTE', 'SCENE')),
                 Wrap(

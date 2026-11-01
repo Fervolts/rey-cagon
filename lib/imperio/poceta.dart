@@ -45,6 +45,7 @@ class Poceta extends StatefulWidget {
     this.jalar,
     this.alJalar,
     this.cartelJalar = false,
+    this.llenar = false,
     @visibleForTesting this.instante,
   });
 
@@ -80,6 +81,9 @@ class Poceta extends StatefulWidget {
 
   /// El cartelito "JALAR ⬇" sobre la palanca (solo la primera vez que queda lista).
   final bool cartelJalar;
+
+  /// Ocupa todo el alto que le den: sale más pared arriba y más piso abajo, la poceta queda igual.
+  final bool llenar;
 
   /// Solo para pruebas: dibuja la escena quieta en este segundo, como con movimiento completo.
   final double? instante;
@@ -130,6 +134,7 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
   Timer? _tics; // con movimiento "simple": un "+N" suelto cada tanto, sin ticker fijo
   double _jalo = -9; // cuándo se bajó la palanca
   double _cx = 0; // centro de la escena, para saber qué se tocó
+  double _arriba = 0; // con llenar: pared de más encima de la escena
 
   // Palanca del tanque: la manija cromada en la cara del tanque, justo bajo la tapa, que sale hacia el frente (a la
   // izquierda). _palanca es la zona de toque (x relativa al centro, y desde arriba); _pivote, el eje de la manija en
@@ -182,7 +187,7 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
       widget.alPersonalizar!();
       return;
     }
-    if (widget.jalar != null && Rect.fromCenter(center: Offset(_cx + _palanca.dx, _palanca.dy), width: 48, height: 48).contains(o)) {
+    if (widget.jalar != null && Rect.fromCenter(center: Offset(_cx + _palanca.dx, _arriba + _palanca.dy), width: 48, height: 48).contains(o)) {
       _jalar();
       return;
     }
@@ -269,28 +274,139 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
           child: DecoratedBox(
             position: DecorationPosition.foreground,
             decoration: BoxDecoration(border: Border.symmetric(horizontal: BorderSide(color: p.borde))),
-            child: SizedBox(
-              height: Bano.altura(widget.bano),
-              width: double.infinity,
-              child: ClipRect(
-                child: LayoutBuilder(
-                  builder: (context, caja) => ValueListenableBuilder<double>(
-                    valueListenable: _t,
-                    // El fondo no depende del tick: se arma una vez y se repinta solo si cambia el baño.
-                    child: RepaintBoundary(child: FondoBano(estado: widget.bano)),
-                    builder: (context, t, fondo) {
+            child: LayoutBuilder(builder: (context, fuera) {
+              final nativo = Bano.altura(widget.bano);
+              final alto = widget.llenar && fuera.hasBoundedHeight && fuera.maxHeight > nativo ? fuera.maxHeight : nativo;
+              // Lo que sobra: un poco más de pared arriba y el resto de piso hacia uno.
+              _arriba = ((alto - nativo) * .4).roundToDouble();
+              final abajo = alto - nativo - _arriba;
+              return SizedBox(
+                height: alto,
+                width: double.infinity,
+                child: ClipRect(
+                  child: LayoutBuilder(
+                    builder: (context, caja) {
                       _cx = caja.maxWidth / 2;
-                      final vivo = fijo != null || _mov == Movimiento.completo;
-                      return _dibujo(context, caja.maxWidth / 2, fijo ?? (_mov == Movimiento.nada ? 0 : t), vivo, fondo!);
+                      final escena = ValueListenableBuilder<double>(
+                        valueListenable: _t,
+                        // El fondo no depende del tick: se arma una vez y se repinta solo si cambia el baño.
+                        child: RepaintBoundary(child: FondoBano(estado: widget.bano)),
+                        builder: (context, t, fondo) {
+                          final vivo = fijo != null || _mov == Movimiento.completo;
+                          return _dibujo(context, caja.maxWidth / 2, fijo ?? (_mov == Movimiento.nada ? 0 : t), vivo, fondo!);
+                        },
+                      );
+                      if (alto == nativo && widget.efectos.isEmpty && widget.alPersonalizar == null) return escena;
+                      return Stack(children: [
+                        if (_arriba > 0) Positioned(top: 0, left: 0, right: 0, height: _arriba, child: _pared(nativo)),
+                        if (abajo > 0)
+                          Positioned(
+                            top: _arriba + nativo,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            child: RepaintBoundary(child: CustomPaint(painter: _PintorSuelo(widget.bano), child: const SizedBox.expand())),
+                          ),
+                        Positioned(top: _arriba, left: 0, right: 0, height: nativo, child: escena),
+                        if (alto > nativo || widget.efectos.isNotEmpty)
+                          Positioned.fill(
+                            child: ValueListenableBuilder<double>(
+                              valueListenable: _t,
+                              builder: (context, t, _) {
+                                final vivo = fijo != null || _mov == Movimiento.completo;
+                                return Stack(children: _esquinas(context, fijo ?? (_mov == Movimiento.nada ? 0 : t), vivo, nativo, abajo));
+                              },
+                            ),
+                          )
+                        else
+                          ..._esquinas(context, 0, false, nativo, abajo),
+                      ]);
                     },
                   ),
                 ),
-              ),
-            ),
+              );
+            }),
           ),
         ),
       ),
     );
+  }
+
+  // La franja de arriba de la pared, estirada hacia el techo: sigue la pintura, el cable del bombillo, las columnas
+  // y el tinte del ambiente sin dibujar nada nuevo.
+  Widget _pared(double nativo) => RepaintBoundary(
+        child: ClipRect(
+          child: OverflowBox(
+            alignment: Alignment.topCenter,
+            minHeight: nativo,
+            maxHeight: nativo,
+            child: LayoutBuilder(
+              builder: (context, caja) => Transform(
+                alignment: Alignment.topCenter,
+                transform: Matrix4.diagonal3Values(1, _arriba / 2, 1),
+                child: CustomPaint(painter: PintorBano(widget.bano), size: Size(caja.maxWidth, nativo)),
+              ),
+            ),
+          ),
+        ),
+      );
+
+  // Lo que va pegado a las esquinas de todo el espacio (no de la escena): objetos activos, pincel y, sin bombillo,
+  // el parpadeo de la luz también en la pared y el piso de más.
+  List<Widget> _esquinas(BuildContext context, double t, bool vivo, double nativo, double abajo) {
+    final p = paleta(context);
+    final l = <Widget>[];
+    if (vivo && !widget.bano.bombillo && (_arriba > 0 || abajo > 0)) {
+      final g = t % 7.3;
+      if (g < .08 || (g > .16 && g < .22) || (g > .3 && g < .5)) {
+        const sombra = ColoredBox(color: Color(0x47000000));
+        if (_arriba > 0) l.add(Positioned(top: 0, left: 0, right: 0, height: _arriba, child: sombra));
+        if (abajo > 0) l.add(Positioned(top: _arriba + nativo, left: 0, right: 0, bottom: 0, child: sombra));
+      }
+    }
+
+    // Objetos activos, arriba a la izquierda en una ficha (la pareja del pincel de la derecha).
+    if (widget.efectos.isNotEmpty) {
+      l.add(Positioned(
+        left: 6,
+        top: 6,
+        height: 30,
+        child: DecoratedBox(
+          decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: p.bordeFuerte), borderRadius: BorderRadius.circular(radio)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              for (var i = 0; i < widget.efectos.length && i < 5; i++)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 1),
+                  child: Transform.translate(offset: Offset(0, vivo ? 1.5 * sin(t * 2 + i) : 0), child: Emoji(widget.efectos[i], tamano: 20)),
+                ),
+            ]),
+          ),
+        ),
+      ));
+    }
+
+    // Pincel de Personalizar, arriba a la derecha.
+    if (widget.alPersonalizar != null) {
+      l.add(Positioned(
+        right: 6,
+        top: 6,
+        width: 30,
+        height: 30,
+        child: Semantics(
+          container: true,
+          button: true,
+          label: tr('Personalizar el baño', 'Customize the bathroom'),
+          onTap: widget.alPersonalizar,
+          child: DecoratedBox(
+            decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: p.bordeFuerte), borderRadius: BorderRadius.circular(radio)),
+            child: const Center(child: Emoji('🎨', tamano: 18)),
+          ),
+        ),
+      ));
+    }
+    return l;
   }
 
   // Relativo al centro de la poceta.
@@ -461,28 +577,6 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
       }
     }
 
-    // Objetos activos, arriba a la izquierda en una ficha (la pareja del pincel de la derecha).
-    if (widget.efectos.isNotEmpty) {
-      encima.add(Positioned(
-        left: 6,
-        top: 6,
-        height: 30,
-        child: DecoratedBox(
-          decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: p.bordeFuerte), borderRadius: BorderRadius.circular(radio)),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              for (var i = 0; i < widget.efectos.length && i < 5; i++)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 1),
-                  child: Transform.translate(offset: Offset(0, vivo ? 1.5 * sin(t * 2 + i) : 0), child: Emoji(widget.efectos[i], tamano: 20)),
-                ),
-            ]),
-          ),
-        ),
-      ));
-    }
-
     // Con "nada": el último pujo queda fijo arriba.
     if (_ultimoTexto != null) {
       encima.add(Positioned(
@@ -515,26 +609,6 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
         width: 48,
         height: 48,
         child: Semantics(container: true, button: true, label: tr('Jalar la cadena', 'Flush'), onTap: _jalar, child: const SizedBox.expand()),
-      ));
-    }
-
-    // Pincel de Personalizar, arriba a la derecha.
-    if (widget.alPersonalizar != null) {
-      encima.add(Positioned(
-        right: 6,
-        top: 6,
-        width: 30,
-        height: 30,
-        child: Semantics(
-          container: true,
-          button: true,
-          label: tr('Personalizar el baño', 'Customize the bathroom'),
-          onTap: widget.alPersonalizar,
-          child: DecoratedBox(
-            decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: p.bordeFuerte), borderRadius: BorderRadius.circular(radio)),
-            child: const Center(child: Emoji('🎨', tamano: 18)),
-          ),
-        ),
       ));
     }
 
@@ -1313,4 +1387,70 @@ class _Palanca extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter old) => true;
+}
+
+// El piso de más, hacia uno: sigue la perspectiva y los colores del piso de bano.dart (y, con cloaca, la pared de
+// ladrillo del sótano), con el mismo tinte y la misma penumbra. y = 0 es el borde de abajo de la escena.
+class _PintorSuelo extends CustomPainter {
+  _PintorSuelo(this.estado);
+
+  final EstadoBano estado;
+
+  @override
+  bool shouldRepaint(_PintorSuelo old) => old.estado != estado;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final e = estado;
+    final w = size.width, cx = w / 2;
+    if (e.cloaca > 0) {
+      canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFF1A1714));
+      final junta = Paint()
+        ..strokeWidth = 1
+        ..color = const Color(0xFF2E2620);
+      for (var f = 0; f * 10.0 < size.height; f++) {
+        final y = f * 10.0;
+        canvas.drawLine(Offset(0, y), Offset(w, y), junta);
+        for (var x = (f.isEven ? 0.0 : 14.0); x < w; x += 28) {
+          canvas.drawLine(Offset(x, y), Offset(x, y + 10), junta);
+        }
+      }
+    } else {
+      // Mismas baldosas: fuga en -260 y filas que crecen ~25% cada una (la última de la escena mide 24).
+      const h = Bano.alto, fuga = -260.0;
+      final marmol = e.lujo('est_piso');
+      final a = marmol ? const Color(0xFFF3EFE6) : (e.ceramica ? const Color(0xFFE4E7EA) : const Color(0xFFB4A88F));
+      final b = marmol ? const Color(0xFFD9D3C7) : (e.ceramica ? const Color(0xFFB7C0C8) : const Color(0xFF8A7F69));
+      double xEn(double xb, double y) => cx + (xb - cx) * (y + h - fuga) / (h - fuga);
+      final pincel = Paint()..isAntiAlias = false;
+      var y0 = 0.0, alto = 30.0;
+      for (var f = 0; y0 < size.height; f++) {
+        final y1 = y0 + alto;
+        final n = (w / 2 / 46 * (h - fuga) / (y0 + h - fuga)).ceil() + 1;
+        for (var c = -n; c < n; c++) {
+          final xb0 = cx + c * 46.0, xb1 = xb0 + 46;
+          // Es la fila 6 de la escena en adelante (par): alterna igual que si siguiera.
+          pincel.color = (c + f).isEven ? a : b;
+          canvas.drawPath(
+              Path()
+                ..moveTo(xEn(xb0, y0), y0)
+                ..lineTo(xEn(xb1, y0), y0)
+                ..lineTo(xEn(xb1, y1), y1)
+                ..lineTo(xEn(xb0, y1), y1)
+                ..close(),
+              pincel);
+        }
+        y0 = y1;
+        alto *= 1.25;
+      }
+    }
+    final tinte = switch (e.ambiente) {
+      AmbienteBano.volcan => const Color(0xFFFF5A1F).withValues(alpha: .10),
+      AmbienteBano.laxante => const Color(0xFF8A4FFF).withValues(alpha: .10),
+      AmbienteBano.agujero => const Color(0xFF3A1A6B).withValues(alpha: .16),
+      _ => null,
+    };
+    if (tinte != null) canvas.drawRect(Offset.zero & size, Paint()..color = tinte);
+    if (!e.bombillo && !e.lujo('est_lampara')) canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0x24000000));
+  }
 }

@@ -23,6 +23,7 @@ import 'logros.dart' show presumirLogroImperio;
 import 'moneda_app.dart';
 import 'motor.dart';
 import 'personalizar.dart';
+import 'tarjeta_bano.dart' show presumirBano;
 import 'poceta.dart';
 import 'racha_imperio.dart' show diasRacha;
 import 'sala.dart';
@@ -71,16 +72,20 @@ BoxDecoration _caja(BuildContext context, {Color? borde, Color? fondo}) {
 
 /// Pestaña IMPERIO: el clicker. [activo] = la pestaña se ve (el bucle solo corre así).
 class PantallaImperio extends StatefulWidget {
-  const PantallaImperio({super.key, required this.activo});
+  const PantallaImperio({super.key, required this.activo, this.control});
 
   final bool activo;
+
+  /// Para pruebas: un control ya armado en vez del que carga de la nube.
+  @visibleForTesting
+  final ControlImperio? control;
 
   @override
   State<PantallaImperio> createState() => _PantallaImperioState();
 }
 
 class _PantallaImperioState extends State<PantallaImperio> with TickerProviderStateMixin {
-  final _c = ControlImperio();
+  late final ControlImperio _c = widget.control ?? ControlImperio();
   late final AnimationController _pulso = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
   bool _dialogoAbierto = false;
 
@@ -96,6 +101,13 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
   final _llaveCiruelas = GlobalKey();
   final _vuelos = <(int, Offset, Offset)>[];
   int _nVuelo = 0;
+
+  // Cajón de edificios: entra desde la izquierda sobre el baño. 0 = cerrado, 1 = abierto.
+  late final AnimationController _cajon = AnimationController(vsync: this, duration: const Duration(milliseconds: 220))
+    ..addStatusListener((_) {
+      if (mounted) setState(() {});
+    });
+  double _anchoCajon = 1; // ancho de la zona, para que el arrastre siga al dedo
 
   // Desplegables de mejoras abiertos: id del edificio o 'poceta'.
   final _abiertos = <String>{};
@@ -134,6 +146,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     _c.ciruelaCae.removeListener(_alCaerCiruela);
     _c.dispose();
     _pulso.dispose();
+    _cajon.dispose();
     super.dispose();
   }
 
@@ -352,7 +365,14 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     } else if (_pulso.isAnimating) {
       _pulso.stop();
     }
-    return Scaffold(
+    final abierto = _cajon.value > 0 || _cajon.isAnimating;
+    return PopScope(
+      // Atrás cierra el cajón antes de salir (solo si la pestaña se ve).
+      canPop: !(abierto && widget.activo),
+      onPopInvokedWithResult: (hecho, _) {
+        if (!hecho) _abrirCajon(false);
+      },
+      child: Scaffold(
       backgroundColor: p.fondo,
       body: SafeArea(
         child: LayoutBuilder(
@@ -363,10 +383,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                 children: [
                   _cabecera(context, ahora),
                   if (_c.sinConexion) _sinConexion(context),
-                  KeyedSubtree(key: _llavePoceta, child: _poceta(ahora)),
-                  _barraEfectos(context, ahora),
-                  _pestanas(context),
-                  Expanded(child: _listaEdificios(context, ahora)),
+                  Expanded(child: _zona(context, ahora)),
                   _botonesAbajo(context),
                 ],
               ),
@@ -386,6 +403,146 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
               if (_aviso != null) Positioned(top: 8, left: 16, right: 16, child: _banner(context, _aviso!)),
             ],
           ),
+        ),
+      ),
+      ),
+    );
+  }
+
+  // ---------- Cajón de edificios ----------
+
+  void _abrirCajon(bool abrir) {
+    if (movimiento(context) == Movimiento.nada) {
+      _cajon.value = abrir ? 1 : 0;
+    } else if (abrir) {
+      _cajon.forward();
+    } else {
+      _cajon.reverse();
+    }
+  }
+
+  void _arrastrarCajon(DragUpdateDetails d) => _cajon.value += (d.primaryDelta ?? 0) / _anchoCajon;
+
+  // Se suelta: con impulso va hacia donde iba; si no, abre si pasó la mitad.
+  void _soltarCajon(DragEndDetails d) {
+    final v = d.primaryVelocity ?? 0;
+    _abrirCajon(v.abs() > 300 ? v > 0 : _cajon.value > .5);
+  }
+
+  /// Cuántas cosas del cajón se pueden comprar ya (lo mismo que resaltan las filas y las ▼).
+  int _comprables(int ahora) {
+    final im = _c.imperio;
+    var n = _alcanzan(im.mejorasPoceta());
+    for (final e in edificios) {
+      if (!im.edificioVisible(e.id) || !im.edificioAbierto(e.id) || im.atasco?.edificio == e.id) continue;
+      if (im.precioEdificioVarios(e.id, _cantidad, ahora) <= im.saldo) n++;
+      if (!im.edificioMisterioso(e.id)) n += _alcanzan(im.mejorasDeEdificio(e.id));
+    }
+    return n;
+  }
+
+  // El baño a todo el alto, la pestaña del cajón en el borde izquierdo y el cajón encima.
+  Widget _zona(BuildContext context, int ahora) {
+    return LayoutBuilder(builder: (context, zona) {
+      _anchoCajon = max(zona.maxWidth, 1);
+      const altoPestana = 132.0;
+      return Stack(
+        children: [
+          Positioned.fill(child: KeyedSubtree(key: _llavePoceta, child: _poceta(ahora))),
+          // Franja del borde: solo los arrastres que empiezan aquí abren el cajón (el resto es pujar).
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: 24,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onHorizontalDragUpdate: _arrastrarCajon,
+              onHorizontalDragEnd: _soltarCajon,
+            ),
+          ),
+          Positioned(left: 0, top: max(0, (zona.maxHeight - altoPestana) / 2), height: altoPestana, child: _pestanaCajon(context, ahora)),
+          AnimatedBuilder(
+            animation: _cajon,
+            builder: (context, hijo) => Positioned.fill(
+              child: Offstage(
+                offstage: _cajon.value == 0,
+                child: FractionalTranslation(translation: Offset(_cajon.value - 1, 0), child: hijo),
+              ),
+            ),
+            child: _panelCajon(context, ahora),
+          ),
+        ],
+      );
+    });
+  }
+
+  Widget _pestanaCajon(BuildContext context, int ahora) {
+    final p = paleta(context);
+    final atasco = _c.imperio.atasco != null;
+    final n = _comprables(ahora);
+    final aviso = atasco || n > 0;
+    return Semantics(
+      button: true,
+      label: tr('Abrir edificios', 'Open buildings'),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _abrirCajon(true),
+        onHorizontalDragUpdate: _arrastrarCajon,
+        onHorizontalDragEnd: _soltarCajon,
+        child: Container(
+          width: 30,
+          decoration: BoxDecoration(
+            color: p.tarjeta,
+            border: Border(top: BorderSide(color: p.primario), right: BorderSide(color: p.primario), bottom: BorderSide(color: p.primario)),
+            borderRadius: const BorderRadius.horizontal(right: Radius.circular(radio)),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Column(
+            children: [
+              // Con atasco, el desatascador avisa que hay que entrar a destapar.
+              Emoji(atasco ? '🪠' : '🏗️', tamano: 18),
+              const SizedBox(height: 4),
+              Expanded(
+                child: RotatedBox(
+                  quarterTurns: 1,
+                  child: Center(
+                    child: Text(tr('EDIFICIOS', 'BUILDINGS'),
+                        maxLines: 1, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 1.2, color: p.texto)),
+                  ),
+                ),
+              ),
+              if (aviso)
+                Container(
+                  constraints: const BoxConstraints(minWidth: 18),
+                  height: 16,
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  decoration: BoxDecoration(color: p.primario, borderRadius: BorderRadius.circular(radio)),
+                  alignment: Alignment.center,
+                  child: Text(atasco ? '!' : (n > 99 ? '99+' : '$n'), style: numeros(context, tamano: 10, weight: FontWeight.w900, color: p.sobrePrimario)),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _panelCajon(BuildContext context, int ahora) {
+    final p = paleta(context);
+    return GestureDetector(
+      // Opaco: con el cajón abierto no se puja por detrás. Arrastrar a la izquierda lo cierra.
+      behavior: HitTestBehavior.opaque,
+      onHorizontalDragUpdate: _arrastrarCajon,
+      onHorizontalDragEnd: _soltarCajon,
+      child: DecoratedBox(
+        decoration: BoxDecoration(color: p.fondo, border: Border(right: BorderSide(color: p.primario))),
+        child: Column(
+          children: [
+            _pestanas(context, alCerrar: () => _abrirCajon(false)),
+            _barraEfectos(context, ahora),
+            Expanded(child: _listaEdificios(context, ahora)),
+          ],
         ),
       ),
     );
@@ -503,6 +660,21 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                 ),
               ),
               const SizedBox(width: 8),
+              // Mandar la foto del baño (como lo tengas personalizado) al chat.
+              Tooltip(
+                message: tr('Compartir mi baño', 'Share my bathroom'),
+                child: InkWell(
+                  key: const Key('boton_foto_bano'),
+                  onTap: () => presumirBano(context, _c),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: _caja(context),
+                    child: Icon(Icons.photo_camera_outlined, size: 18, color: p.texto),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
               // Presumir la cartera: en el chat o como imagen para historias.
               Tooltip(
                 message: tr('Presumir cartera', 'Show off your wallet'),
@@ -577,6 +749,8 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       alJalar: () => _jalar(context, jalar),
       // El cartelito solo la primera vez que la cadena queda lista.
       cartelJalar: jalar.encendido && im.partida.jaladas == 0,
+      // El baño ocupa todo el alto de la zona: más pared y piso, la poceta igual.
+      llenar: true,
     );
   }
 
@@ -625,10 +799,11 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     );
   }
 
-  Widget _pestanas(BuildContext context) {
+  Widget _pestanas(BuildContext context, {VoidCallback? alCerrar}) {
+    final p = paleta(context);
     final visibles = _cantidadesVisibles();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+      padding: const EdgeInsets.fromLTRB(16, 8, 8, 6),
       child: Row(
         children: [
           Rotulo(tr('EDIFICIOS', 'BUILDINGS')),
@@ -638,6 +813,23 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
               if (n != cantidadesCompra.first) const SizedBox(width: 4),
               _opcion(context, 'x$n', _cantidad == n, () => setState(() => _cantidad = n)),
             ],
+          if (alCerrar != null) ...[
+            const SizedBox(width: 8),
+            Semantics(
+              button: true,
+              label: tr('Cerrar edificios', 'Close buildings'),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: alCerrar,
+                child: Container(
+                  width: 34,
+                  height: 34,
+                  decoration: _caja(context),
+                  child: Icon(Icons.close, size: 18, color: p.texto),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

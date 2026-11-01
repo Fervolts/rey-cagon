@@ -115,6 +115,7 @@ const _archivos = {
   '🪠': 'plunger',
   '🟡': 'yellow_circle',
   '🏛️': 'classical_building',
+  '🏗️': 'building_construction',
   '🕹️': 'joystick',
   '🎟️': 'admission_tickets',
   '🚰': 'potable_water',

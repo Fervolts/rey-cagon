@@ -39,6 +39,7 @@ const _errores = {
   'Esa jalada no existe o ya pasó': "That flush doesn't exist or is too old",
   'Esa jalada ya salió en el chat': 'That flush is already in the chat',
   'Espera un rato para volver a presumir tu cartera': 'Wait a while before showing off your wallet again',
+  'Espera un rato para volver a presumir tu baño': 'Wait a while before showing off your bathroom again',
   'Rollos fuera de rango': 'Rolls out of range',
   'Todavía no tienes Imperio': "You don't have an Empire yet",
   'Todavía no tienes La cadena del trono': "You don't have The throne chain yet",
