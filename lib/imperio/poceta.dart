@@ -336,7 +336,7 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
                       final escena = ValueListenableBuilder<double>(
                         valueListenable: _t,
                         // El fondo no depende del tick: se arma una vez y se repinta solo si cambia el baño.
-                        child: RepaintBoundary(child: FondoBano(estado: widget.bano)),
+                        child: RepaintBoundary(child: FondoBano(estado: widget.bano, techo: _arriba == 0)),
                         builder: (context, t, fondo) {
                           final vivo = fijo != null || _mov == Movimiento.completo;
                           return _dibujo(context, caja.maxWidth / 2, fijo ?? (_mov == Movimiento.nada ? 0 : t), vivo, fondo!);
@@ -379,9 +379,10 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
   }
 
   // La franja de arriba de la pared, estirada hacia el techo: sigue la pintura, el cable del bombillo, las columnas
-  // y el tinte del ambiente sin dibujar nada nuevo.
+  // y el tinte del ambiente sin dibujar nada nuevo. La mancha de humedad no se estira: va pegada al techo nuevo.
   Widget _pared(double nativo) => RepaintBoundary(
-        child: ClipRect(
+        child: Stack(fit: StackFit.expand, children: [
+          ClipRect(
           child: OverflowBox(
             alignment: Alignment.topCenter,
             minHeight: nativo,
@@ -390,11 +391,13 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
               builder: (context, caja) => Transform(
                 alignment: Alignment.topCenter,
                 transform: Matrix4.diagonal3Values(1, _arriba / 2, 1),
-                child: CustomPaint(painter: PintorBano(widget.bano), size: Size(caja.maxWidth, nativo)),
+                child: CustomPaint(painter: PintorBano(widget.bano, techo: false, estirar: true), size: Size(caja.maxWidth, nativo)),
               ),
             ),
           ),
         ),
+          CustomPaint(painter: PintorMancha(widget.bano)),
+        ]),
       );
 
   // Lo que va pegado a las esquinas de todo el espacio (no de la escena): objetos activos, pincel y, sin bombillo,

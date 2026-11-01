@@ -401,9 +401,12 @@ abstract final class Bano {
 
 /// Lo quieto de la escena: el fondo pintado y los emojis que no se mueven. Ponerlo dentro de un RepaintBoundary.
 class FondoBano extends StatelessWidget {
-  const FondoBano({super.key, required this.estado});
+  const FondoBano({super.key, required this.estado, this.techo = true});
 
   final EstadoBano estado;
+
+  /// false: hay pared de más encima y la mancha de humedad va allá arriba (ver [PintorMancha]).
+  final bool techo;
 
   @override
   Widget build(BuildContext context) {
@@ -413,7 +416,7 @@ class FondoBano extends StatelessWidget {
       Widget en(Offset o, double tam, Widget hijo) => Positioned(left: cx + o.dx - tam / 2, top: o.dy - tam / 2, width: tam, height: tam, child: hijo);
       final v = Bano.ventana.shift(Offset(cx, 0)).deflate(3);
       final hijos = <Widget>[
-        Positioned.fill(child: CustomPaint(painter: PintorBano(e), isComplex: true, willChange: false)),
+        Positioned.fill(child: CustomPaint(painter: PintorBano(e, techo: techo), isComplex: true, willChange: false)),
         // Lo que se ve por la ventana.
         if (e.ambiente == AmbienteBano.volcan)
           Positioned.fromRect(rect: v, child: const ClipRect(child: Align(alignment: Alignment(0, 1.4), child: Emoji('🌋', tamano: 44)))),
@@ -495,14 +498,53 @@ void pintarPisoDeMas(Canvas canvas, Size size, EstadoBano e) {
   }
 }
 
-/// El fondo pintado. Solo se repinta si cambia el [EstadoBano].
-class PintorBano extends CustomPainter {
-  PintorBano(this.estado);
+/// Mancha de humedad que baja del techo (y = 0 del lienzo): borde irregular y dos chorreaditos.
+void pintarMancha(Canvas canvas, double cx) {
+  final c = Offset(cx - 66, 0);
+  final mancha = Path()
+    ..moveTo(c.dx - 46, 0)
+    ..cubicTo(c.dx - 48, 14, c.dx - 30, 20, c.dx - 32, 30)
+    ..cubicTo(c.dx - 30, 40, c.dx - 12, 36, c.dx - 8, 30)
+    ..cubicTo(c.dx + 2, 42, c.dx + 18, 34, c.dx + 20, 24)
+    ..cubicTo(c.dx + 34, 26, c.dx + 44, 12, c.dx + 40, 0)
+    ..close();
+  canvas.drawPath(mancha, Paint()..color = const Color(0x2E5A3A12));
+  canvas.drawOval(Rect.fromCenter(center: c + const Offset(-6, 6), width: 52, height: 30), Paint()..color = const Color(0x1F5A3A12));
+  final chorro = Paint()..color = const Color(0x265A3A12);
+  canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(c.dx - 22, 30, 4, 18), const Radius.circular(2)), chorro);
+  canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(c.dx + 8, 32, 3, 11), const Radius.circular(2)), chorro);
+}
+
+/// Solo la mancha de humedad, para el techo de verdad cuando la pared se estira hacia arriba.
+class PintorMancha extends CustomPainter {
+  PintorMancha(this.estado);
 
   final EstadoBano estado;
 
   @override
-  bool shouldRepaint(PintorBano old) => old.estado != estado;
+  bool shouldRepaint(PintorMancha old) => old.estado != estado;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (!estado.ceramica) pintarMancha(canvas, size.width / 2);
+  }
+}
+
+/// El fondo pintado. Solo se repinta si cambia el [EstadoBano].
+class PintorBano extends CustomPainter {
+  PintorBano(this.estado, {this.techo = true, this.estirar = false});
+
+  final EstadoBano estado;
+
+  /// El borde de arriba del lienzo es el techo: ahí cuelga la mancha de humedad.
+  final bool techo;
+
+  /// Para estirar su franja de arriba como pared de más: sin el resplandor de la lámpara, que llega al borde
+  /// y estirado se vuelve una franja clara.
+  final bool estirar;
+
+  @override
+  bool shouldRepaint(PintorBano old) => old.estado != estado || old.techo != techo || old.estirar != estirar;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -607,22 +649,7 @@ class PintorBano extends CustomPainter {
         canvas.drawPath(p, borde);
       }
     }
-    if (!e.ceramica) {
-      // Mancha de humedad que baja del techo: borde irregular y dos chorreaditos.
-      final c = Offset(cx - 66, 0);
-      final mancha = Path()
-        ..moveTo(c.dx - 46, 0)
-        ..cubicTo(c.dx - 48, 14, c.dx - 30, 20, c.dx - 32, 30)
-        ..cubicTo(c.dx - 30, 40, c.dx - 12, 36, c.dx - 8, 30)
-        ..cubicTo(c.dx + 2, 42, c.dx + 18, 34, c.dx + 20, 24)
-        ..cubicTo(c.dx + 34, 26, c.dx + 44, 12, c.dx + 40, 0)
-        ..close();
-      canvas.drawPath(mancha, Paint()..color = const Color(0x2E5A3A12));
-      canvas.drawOval(Rect.fromCenter(center: c + const Offset(-6, 6), width: 52, height: 30), Paint()..color = const Color(0x1F5A3A12));
-      final chorro = Paint()..color = const Color(0x265A3A12);
-      canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(c.dx - 22, 30, 4, 18), const Radius.circular(2)), chorro);
-      canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(c.dx + 8, 32, 3, 11), const Radius.circular(2)), chorro);
-    }
+    if (techo && !e.ceramica) pintarMancha(canvas, cx);
   }
 
   void _azulejos(Canvas canvas, Size size, double cx) {
@@ -1166,7 +1193,7 @@ class PintorBano extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
       ..color = const Color(0xFFC8961F);
-    canvas.drawCircle(b + const Offset(0, 4), 60, Paint()..color = const Color(0x1CFFE3A0));
+    if (!estirar) canvas.drawCircle(b + const Offset(0, 4), 60, Paint()..color = const Color(0x1CFFE3A0));
     canvas.drawLine(Offset(b.dx, 0), b + const Offset(0, -6), brazo);
     canvas.drawRect(Rect.fromCenter(center: b + const Offset(0, -2), width: 8, height: 10), oro);
     for (final d in const [-26.0, -13.0, 13.0, 26.0]) {
@@ -1417,8 +1444,10 @@ class PintorBano extends CustomPainter {
       return;
     }
     // Lámpara con su luz cálida.
-    canvas.drawCircle(b + const Offset(0, 16), 70, Paint()..color = const Color(0x1AFFD27A));
-    canvas.drawCircle(b + const Offset(0, 10), 34, Paint()..color = const Color(0x1FFFD27A));
+    if (!estirar) {
+      canvas.drawCircle(b + const Offset(0, 16), 70, Paint()..color = const Color(0x1AFFD27A));
+      canvas.drawCircle(b + const Offset(0, 10), 34, Paint()..color = const Color(0x1FFFD27A));
+    }
     canvas.drawLine(Offset(b.dx, 0), b + const Offset(0, -12), cable);
     final pantalla = Path()
       ..moveTo(b.dx - 9, b.dy - 12)
