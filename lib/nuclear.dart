@@ -13,7 +13,8 @@ import 'perfil.dart' show PantallaPerfil;
 
 /// HEXA POOP (6 cagadas en un día): la explosión nuclear y la alerta que le llega a todos.
 /// El servidor anota cada HEXA en `hazanas` (trigger cagadas_hazana). Al abrir o volver a la
-/// app se buscan las de otros de las últimas 48 h que este teléfono no ha visto y explota una vez.
+/// app se buscan las de otros de hoy que este teléfono no ha visto y explota una vez. Una cuenta o un
+/// teléfono nuevo no tiene ninguna vista: con una ventana larga le salía la de hace días.
 
 const amarilloNuclear = Color(0xFFF4FF3A);
 const verdeNuclear = Color(0xFF3DDC00);
@@ -42,7 +43,11 @@ Future<void> _revisar(BuildContext context) async {
   try {
     final prefs = await SharedPreferences.getInstance();
     final vista = prefs.getInt(_claveVista) ?? 0;
-    final desde = DateTime.now().toUtc().subtract(const Duration(hours: 48)).toIso8601String();
+    // Desde la medianoche local; pasada la medianoche se cuentan igual las de las últimas 6 h.
+    final ahora = DateTime.now();
+    final medianoche = DateTime(ahora.year, ahora.month, ahora.day);
+    final seisHoras = ahora.subtract(const Duration(hours: 6));
+    final desde = (seisHoras.isBefore(medianoche) ? seisHoras : medianoche).toUtc().toIso8601String();
     // Las de gente bloqueada (en cualquier dirección) no llegan: lo filtra la política de la tabla.
     final filas = await db
         .from('hazanas')
@@ -439,7 +444,7 @@ class _AlertaNuclearState extends State<AlertaNuclear> with TickerProviderStateM
             const SizedBox(height: 4),
             Text(tr('${hazanas.first.n} cagadas en un día', '${hazanas.first.n} poops in one day'), textAlign: TextAlign.center, style: suave),
           ] else ...[
-            Text(tr('${hazanas.length} HEXA POOP EN 48 H', '${hazanas.length} HEXA POOPS IN 48 H'), textAlign: TextAlign.center, style: blanco.copyWith(color: amarilloNuclear)),
+            Text(tr('${hazanas.length} HEXA POOP HOY', '${hazanas.length} HEXA POOPS TODAY'), textAlign: TextAlign.center, style: blanco.copyWith(color: amarilloNuclear)),
             const SizedBox(height: 10),
             ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 240),
