@@ -92,9 +92,32 @@ void main() {
       final imp = Imperio();
       imp.partida.edificios.addAll({'dedo': 1, 'cafe': 1, 'inodoro': 1});
       final ids = imp.mejorasDisponibles().map((m) => m.id).toList();
-      expect(ids, ['guantes', 'dedo_1', 'faja', 'cafe_1', 'tanque_4']); // inodoro_1 no: candado de 3 cagadas
+      expect(ids, ['guantes', 'dedo_1', 'faja', 'adorno_papel', 'cafe_1', 'tanque_4', 'adorno_cortina']); // inodoro_1 no: candado de 3 cagadas
       imp.cagadas = 3;
       expect(imp.mejorasDisponibles().map((m) => m.id), contains('inodoro_1'));
+    });
+
+    test('adornos del baño: aparecen con su condición y suben la comodidad', () {
+      final imp = Imperio(partida: Partida(saldo: 1e12, mjTotal: 1e12));
+      expect(imp.mejorasPoceta().where((m) => m.familia == FamiliaMejora.adorno), isEmpty);
+      imp.partida.edificios['ciruela'] = 1;
+      expect(imp.mejorasPoceta().map((m) => m.id), contains('adorno_bombillo'));
+      expect(imp.mejorasPoceta().map((m) => m.id), isNot(contains('adorno_papel')));
+      expect(imp.multiplicadorComodidad, 1);
+      final antes = imp.multiplicadorPermanente;
+      expect(imp.comprarMejora('adorno_bombillo'), isTrue);
+      expect(imp.multiplicadorComodidad, closeTo(1.02, 1e-9));
+      expect(imp.multiplicadorPermanente, closeTo(antes * 1.02, 1e-9));
+      imp.partida.edificios['arepa'] = 9;
+      expect(imp.mejorasPoceta().map((m) => m.id), isNot(contains('adorno_alfombra')));
+      imp.partida.edificios['arepa'] = 10;
+      expect(imp.mejorasPoceta().map((m) => m.id), contains('adorno_alfombra'));
+      for (final id in comodidadAdornos.keys) {
+        expect(mejoraPorId(id)!.familia, FamiliaMejora.adorno);
+        expect(mejoraPorId(id)!.edificio, isNull);
+        imp.partida.mejoras.add(id);
+      }
+      expect(imp.multiplicadorComodidad, closeTo(1.28, 1e-9));
     });
 
     test('mejoras de clic: x2 y % de MJ/s', () {
@@ -165,7 +188,7 @@ void main() {
       expect(imp.mejorasDeEdificio('cafe').map((m) => m.id), ['cafe_1']);
       expect(imp.mejorasDeEdificio('ciruela').map((m) => m.id), ['ciruela_1']);
       expect(imp.mejorasDeEdificio('planta'), isEmpty);
-      expect(imp.mejorasPoceta().map((m) => m.id), ['tanque_4']);
+      expect(imp.mejorasPoceta().map((m) => m.id), ['adorno_bombillo', 'adorno_papel', 'tanque_4']);
       expect(imp.siguienteMejora('ciruela')?.id, 'ciruela_5');
       expect(imp.siguienteMejora('dedo')?.id, 'dedo_5');
       imp.partida.mejoras.addAll({'ciruela_1'});
@@ -193,7 +216,7 @@ void main() {
           expect(m.nombreEn, isNotEmpty);
         }
       }
-      expect(mejoras.length, 83);
+      expect(mejoras.length, 91);
       expect(mejoras.map((m) => m.id).toSet().length, mejoras.length);
     });
   });

@@ -7,6 +7,7 @@ import '../emoji.dart';
 import '../idioma.dart';
 import '../main.dart' show textoError;
 import '../tema.dart';
+import 'bano.dart';
 import 'barra.dart';
 import 'bienvenida.dart';
 import 'cadena.dart';
@@ -438,11 +439,6 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
   Widget _poceta(int ahora) {
     final im = _c.imperio;
     final efectos = im.efectosActivos(ahora);
-    // Mejoras compradas que no son de un edificio (tanque, válvula, imán, brillo, incienso) y las de pujo (guantes...).
-    final accesorios = <String>[];
-    for (final m in mejoras) {
-      if ((m.edificio == null || m.familia == FamiliaMejora.clic) && im.mejoraComprada(m.id) && !accesorios.contains(m.emoji)) accesorios.add(m.emoji);
-    }
     const conDibujo = {'fiebre_dorada', 'fiebre_trono', 'pujo_loco'};
     final otros = <String>[];
     for (final e in efectos) {
@@ -454,7 +450,8 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       fiebre: im.enFiebre(ahora),
       pujoLoco: efectos.any((e) => e.id == 'pujo_loco'),
       efectos: otros,
-      accesorios: accesorios,
+      // Lo que se ve en el baño sale de lo comprado: adornos, mejoras de la poceta y de cada edificio.
+      bano: EstadoBano.desde(comprada: im.mejoraComprada, cantidad: im.cantidad),
       dedos: im.cantidad('dedo'),
       activo: widget.activo,
     );
@@ -620,7 +617,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     );
   }
 
-  /// Primera fila de la lista: las mejoras de la poceta (tanque, válvula, imán, brillo, incienso...).
+  /// Primera fila de la lista: las mejoras del baño (adornos, tanque, válvula, imán, brillo, incienso...).
   Widget _filaPoceta(BuildContext context) {
     final im = _c.imperio;
     final ofertas = im.mejorasPoceta();
@@ -630,7 +627,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       child: _fila(
         context,
         emoji: '🚽',
-        titulo: tr('TU POCETA', 'YOUR TOILET'),
+        titulo: tr('TU BAÑO', 'YOUR BATHROOM'),
         detalle: ofertas.isEmpty
             ? tr('Sin mejoras por ahora', 'No upgrades for now')
             : tr('${ofertas.length} ${ofertas.length == 1 ? 'mejora' : 'mejoras'}', '${ofertas.length} ${ofertas.length == 1 ? 'upgrade' : 'upgrades'}'),

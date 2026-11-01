@@ -232,8 +232,17 @@ class Imperio {
   /// +`ajustes.rolloPct` por cada Rollo de Oro (jalar la cadena). No se pierde nunca.
   double get multiplicadorRollos => 1 + _p.rollos * ajustes.rolloPct;
 
-  /// Cagadas x logros x rollos: lo que no se acaba.
-  double get multiplicadorPermanente => multiplicadorCagadas * multiplicadorLogros * multiplicadorRollos;
+  /// Comodidad del baño: 1 + la suma de lo que da cada adorno comprado (hasta x1,28).
+  double get multiplicadorComodidad {
+    var s = 1.0;
+    comodidadAdornos.forEach((id, pct) {
+      if (mejoraComprada(id)) s += pct;
+    });
+    return s;
+  }
+
+  /// Cagadas x logros x rollos x comodidad: lo que no se acaba.
+  double get multiplicadorPermanente => multiplicadorCagadas * multiplicadorLogros * multiplicadorRollos * multiplicadorComodidad;
 
   /// Suma de efectos temporales sobre la producción (objetos + tipo), tope x4. No incluye la Fiebre.
   double multiplicadorProduccionTemporal(int ahora) {

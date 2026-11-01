@@ -58,7 +58,7 @@ final Map<String, Edificio> _edificioPorId = {for (final e in edificios) e.id: e
 Edificio? edificioPorId(String id) => _edificioPorId[id];
 
 /// Familias de mejoras (pestaña MEJORAS).
-enum FamiliaMejora { clic, edificio, idle, dorado, incienso }
+enum FamiliaMejora { clic, edificio, idle, dorado, incienso, adorno }
 
 /// Mejora que se compra una vez y queda.
 class Mejora {
@@ -177,7 +177,7 @@ List<Mejora> _mejorasPujo() => [
 const String edificioCadena = 'bano';
 const int unidadesCadena = 10;
 
-/// Las 83 mejoras de la fase 1 (82 + La cadena del trono).
+/// Las 91 mejoras de la fase 1 (82 + La cadena del trono + 8 adornos del baño).
 final List<Mejora> mejoras = [
   // Clic (5 del Dedo + 6 de los millonarios)
   Mejora('guantes', '🧤', 'Guantes de látex', 'Latex gloves', 'Pujo x2', 'Push x2', 100, FamiliaMejora.clic, (p) => _n(p, 'dedo') >= 1, edificio: 'dedo'),
@@ -210,7 +210,32 @@ final List<Mejora> mejoras = [
   // Incienso (1)
   Mejora('lavanda', '🪻', 'Incienso de lavanda', 'Lavender incense', 'Cada logro da +1,5% en vez de +1%', 'Each achievement gives +1.5% instead of +1%', 1e6,
       FamiliaMejora.incienso, (p) => p.logros.length >= 10),
+  // Adornos del baño (8): sin edificio, salen en TU BAÑO; cada uno suma comodidad (+% de MJ/s permanente).
+  Mejora('adorno_bombillo', '💡', 'Bombillo nuevo', 'New light bulb', 'Comodidad +2%', 'Comfort +2%', 500, FamiliaMejora.adorno, (p) => _n(p, 'ciruela') >= 1),
+  Mejora('adorno_papel', '🧻', 'Rollo en su porta', 'Roll on a holder', 'Comodidad +2%', 'Comfort +2%', 4000, FamiliaMejora.adorno, (p) => _n(p, 'cafe') >= 1),
+  Mejora('adorno_forro', '🧶', 'Forro de peluche para la tapa', 'Fuzzy lid cover', 'Comodidad +3%', 'Comfort +3%', 30000, FamiliaMejora.adorno,
+      (p) => _n(p, 'arepa') >= 1),
+  Mejora('adorno_alfombra', '🟫', 'Alfombrita en U', 'U-shaped bath mat', 'Comodidad +3%', 'Comfort +3%', 250000, FamiliaMejora.adorno,
+      (p) => _n(p, 'arepa') >= 10),
+  Mejora('adorno_cortina', '🌸', 'Cortina de flores', 'Flowery shower curtain', 'Comodidad +4%', 'Comfort +4%', 2e6, FamiliaMejora.adorno,
+      (p) => _n(p, 'inodoro') >= 1),
+  Mejora('adorno_matica', '🪴', 'Matica', 'Little plant', 'Comodidad +4%', 'Comfort +4%', 15e6, FamiliaMejora.adorno, (p) => _n(p, 'bano') >= 1),
+  Mejora('adorno_ceramica', '🧱', 'Cerámica nueva', 'New tiles', 'Comodidad +5%', 'Comfort +5%', 120e6, FamiliaMejora.adorno,
+      (p) => _n(p, 'camion') >= 1),
+  Mejora('adorno_pintura', '🎨', 'Mano de pintura', 'Fresh paint', 'Comodidad +5%', 'Comfort +5%', 1e9, FamiliaMejora.adorno, (p) => _n(p, 'planta') >= 1),
 ];
+
+/// Comodidad que da cada adorno del baño: id → parte (0,02 = +2% de MJ/s).
+const Map<String, double> comodidadAdornos = {
+  'adorno_bombillo': 0.02,
+  'adorno_papel': 0.02,
+  'adorno_forro': 0.03,
+  'adorno_alfombra': 0.03,
+  'adorno_cortina': 0.04,
+  'adorno_matica': 0.04,
+  'adorno_ceramica': 0.05,
+  'adorno_pintura': 0.05,
+};
 
 final Map<String, Mejora> _mejoraPorId = {for (final m in mejoras) m.id: m};
 
