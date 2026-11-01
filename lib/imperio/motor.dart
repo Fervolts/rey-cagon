@@ -135,14 +135,15 @@ const Duration duracionDescarga = Duration(minutes: 15);
 const Duration premioDestape = Duration(minutes: 5);
 const Duration tiempoDestapePerfecto = Duration(seconds: 3);
 const int toquesAtasco = 10;
-const int minimoParaAtasco = 10;
+const int minimoParaAtasco = 1;
 
-/// Segundos de juego activo por Atasco, en promedio.
-const double segundosPorAtasco = 25 * 60;
+/// Segundos de juego activo por Atasco, en promedio. Es un freno del juego: molesta desde el principio y en cualquier
+/// edificio (con 25 min y 10 unidades mínimo casi no salía y se avanzaba demasiado rápido).
+const double segundosPorAtasco = 4 * 60;
 
 /// El primer Atasco sale seguro a estos segundos de juego activo (en cualquier edificio que dé MJ/s): así se conoce
-/// la mecánica y se abren el Robot y el Turbo. Con 2 h por Atasco casi nadie lo veía.
-const double segundosPrimerAtasco = 3 * 60;
+/// la mecánica y se abren el Robot y el Turbo.
+const double segundosPrimerAtasco = 60;
 // La probabilidad y el valor del pujo épico salen de los ajustes (`epicoBase`, `epicoPorDedo`, `epicoTope`, `epicoTipo1`, `epicoMultiplicador`).
 const double multiplicadorFiebre = 7, multiplicadorPujoLoco = 777;
 
@@ -974,7 +975,7 @@ class Imperio {
       }
     }
 
-    // Atascos: el primero seguro a los 3 min activos; después ~1 cada 25 min activos, uno a la vez, en un edificio con 10 o más.
+    // Atascos: el primero seguro al minuto activo; después ~1 cada 4 min activos, uno a la vez, en cualquier edificio.
     if (_p.atasco == null && s > 0 && !_p.vioPrimerAtasco && _p.segPartida >= segundosPrimerAtasco) _atascar(ahora, 1);
     if (_p.atasco == null && s > 0 && _azar.nextDouble() < s / segundosPorAtasco) _atascar(ahora, minimoParaAtasco);
     if (_p.atasco != null && _destapaSolo(ahora)) {
@@ -987,11 +988,22 @@ class Imperio {
   }
 
   /// Atasca un edificio al azar con [minimo] unidades o más (si no hay otro Atasco). El Dedo no produce MJ/s: no se atasca.
+  /// Pesa la raíz de lo que produce cada uno: el que más da se tapa más seguido, pero no siempre el mismo.
   void _atascar(int ahora, int minimo) {
     if (_p.atasco != null) return;
     final candidatos = [for (final e in edificios) if (e.mpsBase > 0 && cantidad(e.id) >= minimo) e.id];
     if (candidatos.isEmpty) return;
-    _p.atasco = Atasco(candidatos[_azar.nextInt(candidatos.length)], ahora);
+    final pesos = [for (final id in candidatos) sqrt(max(_produccionCruda(id), 1e-9))];
+    var r = _azar.nextDouble() * pesos.fold(0.0, (a, b) => a + b);
+    var elegido = candidatos.last;
+    for (var k = 0; k < candidatos.length; k++) {
+      r -= pesos[k];
+      if (r < 0) {
+        elegido = candidatos[k];
+        break;
+      }
+    }
+    _p.atasco = Atasco(elegido, ahora);
     _p.vioPrimerAtasco = true;
   }
 
@@ -1117,7 +1129,7 @@ class Imperio {
   double get porcentajeOffline =>
       max(mejoraComprada('valvula_75') ? 0.75 : (mejoraComprada('valvula_50') ? 0.5 : 0.0), ajustes.offlinePorcentaje).toDouble();
 
-  /// Cobra el tiempo fuera (sin efectos temporales, sin Atascos ni dorados). x1,5 si quedó el buff del tipo 6 (y se gasta).
+  /// Cobra el tiempo fuera (sin efectos temporales ni dorados). El Atasco que quedó sigue tapado fuera: ese edificio no cuenta. x1,5 si quedó el buff del tipo 6 (y se gasta).
   /// Guardia nocturno: cuenta al 100% con tope de 8 h (o el del tanque si es más) y se gasta.
   ResultadoOffline aplicarOffline(int desdeMs, int ahoraMs) {
     final ausente = max(0, ahoraMs - desdeMs) / 1000.0;
@@ -1133,7 +1145,7 @@ class Imperio {
     final contados = min(ausente, tope);
     final bonus = _p.offlineBonus;
     _p.offlineBonus = false;
-    final ganado = contados * mpsSinEfectos(contarAtasco: false) * (guardia ? 1.0 : porcentajeOffline) * (bonus ? 1.5 : 1);
+    final ganado = contados * mpsSinEfectos() * (guardia ? 1.0 : porcentajeOffline) * (bonus ? 1.5 : 1);
     _ganar(ganado);
     return ResultadoOffline(ausente, contados, ganado, ausente >= tope, bonus, conGuardia: guardia);
   }

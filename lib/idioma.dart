@@ -57,6 +57,7 @@ const _errores = {
   'Tarjeta desconocida': 'Unknown card',
   'Todavía no': 'Not yet',
   'Todavía no has desbloqueado eso': "You haven't unlocked that yet",
+  'Eso es un premio exclusivo': 'That is an exclusive prize',
   'Todavía no llegas a ese número': "You haven't reached that number yet",
   'Ya tienen un Cagadón hoy': 'You already have a Poop-Off today',
 };

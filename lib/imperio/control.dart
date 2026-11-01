@@ -4,7 +4,7 @@ import 'dart:math';
 import 'package:flutter/widgets.dart';
 
 import '../fresca.dart' show frescaHasta;
-import '../main.dart' show db;
+import '../main.dart' show db, esDeRed;
 import 'flags.dart';
 import 'motor.dart';
 import 'nube.dart';
@@ -141,6 +141,9 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   int _ultimoAviso = 0;
   double _desdeLocal = 0, _desdeNube = 0;
 
+  /// Un guardado en la nube falló con la app en el fondo: se repite al volver.
+  bool _pendienteNube = false;
+
   // Telemetría: sesión abierta, último tiempo fuera, lo visto en el tick anterior y errores ya anotados.
   ContadorSesion? _sesion;
   double _offlineS = 0;
@@ -253,8 +256,8 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       if (_cerrado) return;
       cofre = c;
       notifyListeners();
-    } catch (_) {
-      _error('cofre');
+    } catch (e) {
+      _error('cofre', e);
     }
   }
 
@@ -328,8 +331,8 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       notifyListeners();
       await _cargarCadena();
       unawaited(cargarCofre());
-    } catch (_) {
-      _error('recargar');
+    } catch (e) {
+      _error('recargar', e);
       if (!sinConexion) {
         sinConexion = true;
         notifyListeners();
@@ -357,6 +360,10 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     _actualizarBucle();
     if (!_enPrimerPlano && antes) unawaited(_cargado ? guardarTodo() : _vaciarTelemetria());
     if (_enPrimerPlano && !antes && _visible) unawaited(recargarCagadas());
+    if (_enPrimerPlano && !antes && _pendienteNube) {
+      _pendienteNube = false;
+      unawaited(_guardarNube());
+    }
   }
 
   void _actualizarBucle() {
@@ -478,8 +485,8 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       _anotar('ciruela_suerte', {'origen': 'pujo', 'cantidad': 1, 'saldo': r});
       notifyListeners();
       unawaited(_guardarLocal());
-    } catch (_) {
-      _error('ciruela');
+    } catch (e) {
+      _error('ciruela', e);
     } finally {
       _pidiendoCiruela = false;
     }
@@ -491,8 +498,8 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     final int r;
     try {
       r = await nube.gastarCiruelas(id);
-    } catch (_) {
-      _error('ciruelas_gastar');
+    } catch (e) {
+      _error('ciruelas_gastar', e);
       rethrow;
     }
     if (_cerrado) return false;
@@ -517,8 +524,8 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     final int r;
     try {
       r = await nube.comprarEstetica(id);
-    } catch (_) {
-      _error('estetica_compra');
+    } catch (e) {
+      _error('estetica_compra', e);
       rethrow;
     }
     if (_cerrado) return false;
@@ -541,8 +548,8 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     final ReclamoRacha r;
     try {
       r = await nube.reclamarRacha(fechaTexto(fechaLocal(DateTime.now())));
-    } catch (_) {
-      _error('racha');
+    } catch (e) {
+      _error('racha', e);
       rethrow;
     }
     rachaPendiente = false;
@@ -578,8 +585,8 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     final int r;
     try {
       r = await nube.usarFicha();
-    } catch (_) {
-      _error('fichas_usar');
+    } catch (e) {
+      _error('fichas_usar', e);
       rethrow;
     }
     if (_cerrado) return false;
@@ -600,8 +607,8 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     final int r;
     try {
       r = await nube.usarFichas(que);
-    } catch (_) {
-      _error('fichas_usar');
+    } catch (e) {
+      _error('fichas_usar', e);
       rethrow;
     }
     if (_cerrado) return false;
@@ -643,8 +650,8 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     final EstadoCofre c;
     try {
       c = await nube.cofre(reclamar: true);
-    } catch (_) {
-      _error('cofre_reclamar');
+    } catch (e) {
+      _error('cofre_reclamar', e);
       rethrow;
     }
     if (_cerrado) return null;
@@ -784,12 +791,13 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// `error` {donde}, como mucho uno cada 10 min por sitio (sin red, recargar falla en cada vuelta).
-  void _error(String donde) {
+  /// `error` {donde, tipo, red}: el tipo es la clase de la excepción (sin el mensaje, que puede traer datos).
+  void _error(String donde, [Object? e]) {
     final t = DateTime.now().millisecondsSinceEpoch;
     final antes = _errores[donde];
     if (antes != null && t - antes < 600000) return;
     _errores[donde] = t;
-    _anotar('error', {'donde': donde});
+    _anotar('error', {'donde': donde, if (e != null) 'tipo': '${e.runtimeType}', if (e != null) 'red': esDeRed(e)});
   }
 
   Future<void> _vaciarTelemetria() async {
@@ -812,8 +820,8 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       final int n;
       try {
         n = await nube.jalar();
-      } catch (_) {
-        _error('jalar');
+      } catch (e) {
+        _error('jalar', e);
         rethrow;
       }
       final ganados = imperio.jalar();
@@ -851,8 +859,8 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     };
     try {
       await nube.guardarLocal(_userId, estado, imperio.mjTotal, imperio.mpsSinEfectos());
-    } catch (_) {
-      _error('guardar_local');
+    } catch (e) {
+      _error('guardar_local', e);
     }
   }
 
@@ -878,10 +886,16 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
         _anotar('guardado_recortado', {'mj_app': imperio.mjTotal, 'mj_servidor': r.mjTotal});
         aceptarRecorte(imperio.partida, r.mjTotal);
       }
-    } catch (_) {
-      _error('guardar_nube');
-      sinConexion = true;
-      if (!_cerrado) notifyListeners();
+    } catch (e) {
+      // Android corta la red unos segundos después de mandar la app al fondo: ese guardado se repite al volver
+      // (lo local ya quedó). No es error ni "sin conexión".
+      if (!_enPrimerPlano) {
+        _pendienteNube = true;
+      } else {
+        _error('guardar_nube', e);
+        sinConexion = true;
+        if (!_cerrado) notifyListeners();
+      }
     } finally {
       _guardandoNube = false;
     }

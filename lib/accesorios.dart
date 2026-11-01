@@ -32,6 +32,14 @@ List<Desbloqueo> get desbloqueos => <Desbloqueo>[
   (ranura: 'avatar', emoji: '🏆', nombre: tr('Un año cagando', 'A year of pooping'), minimo: 365),
 ];
 
+/// Premios exclusivos: no salen con cagadas, los da el servidor (tabla premios) a quien llegó lejos en el Imperio
+/// antes de un reinicio. Mismo catálogo que las filas `exclusivo` de la tabla desbloqueos.
+List<Desbloqueo> get exclusivos => <Desbloqueo>[
+  (ranura: 'mascota', emoji: '🪙', nombre: tr('Moneda de la Temporada 1', 'Season 1 coin'), minimo: 1),
+  (ranura: 'mascota', emoji: '🪠', nombre: tr('Destapador de oro', 'Golden plunger'), minimo: 1),
+  (ranura: 'sombrero', emoji: '👑', nombre: tr('Corona del Imperio', 'Empire crown'), minimo: 1),
+];
+
 /// Desde estas cagadas la mascota pasea alrededor del avatar.
 const mascotaSeMueve = 50;
 

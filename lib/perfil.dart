@@ -876,7 +876,15 @@ class _EditarPerfilState extends State<_EditarPerfil> {
         .maybeSingle()
         .then((r) => mounted ? setState(() => _secreto = _secreto || r?['placer_desbloqueado'] == true) : null)
         .catchError((_) => null);
+    // Premios exclusivos que dio el servidor (solo se ven los tuyos).
+    db
+        .from('premios')
+        .select('ranura, emoji')
+        .then((filas) => mounted ? setState(() => _premios = {for (final f in filas) '${f['ranura']}|${f['emoji']}'}) : null)
+        .catchError((_) => null);
   }
+
+  Set<String> _premios = {};
 
   int get _total => (widget.perfil['total'] as num?)?.toInt() ?? 0;
 
@@ -918,6 +926,7 @@ class _EditarPerfilState extends State<_EditarPerfil> {
       else
         (emoji: null, minimo: 0),
       for (final d in desbloqueos.where((d) => d.ranura == ranura)) (emoji: d.emoji, minimo: d.minimo),
+      for (final d in exclusivos.where((d) => d.ranura == ranura && _premios.contains('${d.ranura}|${d.emoji}'))) (emoji: d.emoji, minimo: 0),
     ];
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),

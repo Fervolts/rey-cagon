@@ -573,22 +573,38 @@ void main() {
   });
 
   group('Atascos', () {
-    test('salen en un edificio con 10 o más y lo dejan en 0', () {
+    test('salen en cualquier edificio que dé MJ/s, pesando lo que produce, y lo dejan en 0', () {
       final imp = Imperio(azar: _AzarFijo(d: 0.0));
-      imp.partida.edificios.addAll({'dedo': 99, 'cafe': 10, 'ciruela': 3});
+      imp.partida.edificios.addAll({'dedo': 99, 'cafe': 10, 'ciruela': 1});
       imp.partida.segHastaDorado = 99999;
       imp.tick(t0, 1);
-      expect(imp.atasco?.edificio, 'cafe'); // el Dedo no se atasca: no da MJ/s
+      expect(imp.atasco?.edificio, 'ciruela'); // el Dedo no se atasca: no da MJ/s; con 1 ya se puede
       expect(imp.partida.vioPrimerAtasco, isTrue);
-      expect(imp.mpsEdificio('cafe', t0), 0);
-      expect(imp.mps(t0), closeTo(3 * imp.multiplicadorPermanente, 1e-9)); // el tick ya dio el logro gotea
-      final otro = Imperio(azar: _AzarFijo(d: 0.0));
-      otro.partida.edificios.addAll({'dedo': 99, 'cafe': 9});
+      expect(imp.mpsEdificio('ciruela', t0), 0);
+      // Con el azar al tope sale el último: el que más produce pesa más pero no es el único.
+      final otro = Imperio(azar: _AzarFijo(d: 0.999999));
+      otro.partida.edificios.addAll({'dedo': 99, 'cafe': 10, 'ciruela': 1});
+      otro.partida.segPartida = segundosPrimerAtasco; // sale el primero seguro (con este azar no saldría al azar)
       otro.tick(t0, 1);
-      expect(otro.atasco, isNull);
+      expect(otro.atasco?.edificio, 'cafe');
+      final nada = Imperio(azar: _AzarFijo(d: 0.0));
+      nada.partida.edificios.addAll({'dedo': 99});
+      nada.tick(t0, 1);
+      expect(nada.atasco, isNull);
     });
 
-    test('el primero sale seguro a los 3 min activos, en cualquier edificio que dé MJ/s', () {
+    test('el Atasco que quedó sigue tapado fuera', () {
+      final imp = Imperio();
+      imp.partida.edificios.addAll({'ciruela': 10, 'cafe': 10});
+      final todo = imp.mpsSinEfectos(contarAtasco: false);
+      imp.partida.atasco = Atasco('cafe', t0);
+      imp.partida.ultimaVez = t0;
+      final r = imp.aplicarOffline(t0, t0 + 3600 * seg);
+      expect(r.ganado, lessThan(3600 * todo * imp.porcentajeOffline));
+      expect(r.ganado, closeTo(3600 * imp.mpsSinEfectos() * imp.porcentajeOffline, 1e-6));
+    });
+
+    test('el primero sale seguro al minuto activo, en cualquier edificio que dé MJ/s', () {
       final imp = Imperio(azar: _AzarFijo(d: 0.99));
       imp.partida.edificios.addAll({'dedo': 5, 'ciruela': 1});
       imp.partida.segHastaDorado = 99999;
@@ -596,12 +612,12 @@ void main() {
         imp.tick(t0 + s * seg, 1);
       }
       expect(imp.atasco, isNull);
-      imp.tick(t0 + 200 * seg, 1);
+      imp.tick(t0 + 70 * seg, 1);
       expect(imp.atasco?.edificio, 'ciruela');
       expect(imp.partida.vioPrimerAtasco, isTrue);
       // Ya visto: no vuelve a salir seguro (con este azar, nunca).
       imp.partida.atasco = null;
-      imp.tick(t0 + 201 * seg, 1);
+      imp.tick(t0 + 71 * seg, 1);
       expect(imp.atasco, isNull);
     });
 

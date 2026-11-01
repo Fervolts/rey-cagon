@@ -13,6 +13,7 @@ import '../main.dart' show textoError;
 import '../tema.dart';
 import 'ciruelas.dart';
 import 'control.dart';
+import 'saldo_fijo.dart';
 import 'esteticas.dart';
 
 /// "+4%".
@@ -148,85 +149,95 @@ class _TiendaCiruelasState extends State<TiendaCiruelas> {
     final p = paleta(context);
     final im = widget.control.imperio;
     return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                const Emoji('🫐', tamano: 36),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+      // El saldo queda fijo arriba; solo baja la lista.
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SaldoFijo(control: widget.control),
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
                     children: [
-                      Text(tr('${im.ciruelas} Ciruelas', '${im.ciruelas} Plums'),
-                          key: const Key('saldo_ciruelas'), style: numeros(context, tamano: 22, weight: FontWeight.w900)),
-                      Text(
-                          tr('Salen de vez en cuando al pujar, al cagar de verdad y en la racha.',
-                              'They drop now and then when you push, when you really poop and in the streak.'),
-                          style: TextStyle(fontSize: 12, color: p.textoSuave)),
+                      const Emoji('🫐', tamano: 36),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(tr('${im.ciruelas} Ciruelas', '${im.ciruelas} Plums'),
+                                key: const Key('saldo_ciruelas'), style: numeros(context, tamano: 22, weight: FontWeight.w900)),
+                            Text(
+                                tr('Salen de vez en cuando al pujar, al cagar de verdad y en la racha.',
+                                    'They drop now and then when you push, when you really poop and in the streak.'),
+                                style: TextStyle(fontSize: 12, color: p.textoSuave)),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
-                ),
-              ],
-            ),
-            if (widget.arriba case final arriba?) ...[const SizedBox(height: 16), arriba(context, widget.avisar)],
-            const SizedBox(height: 16),
-            Rotulo(tr('Ofertas de Ciruelas', 'Plum deals')),
-            const SizedBox(height: 8),
-            for (final o in ofertasCiruela)
-              _fila(
-                context,
-                emoji: o.emoji,
-                titulo: tr(o.nombreEs, o.nombreEn),
-                detalle: o.id == 'congelador'
-                    ? '${tr(o.descEs, o.descEn)} · ${widget.control.congeladores}/$maxCongeladores'
-                    : tr(o.descEs, o.descEn),
-                precio: o.precio,
-                boton: _boton(
-                  context,
-                  o.id == 'congelador' && widget.control.congeladores >= maxCongeladores ? tr('LLENO', 'FULL') : tr('COMPRAR', 'BUY'),
-                  _ocupado == null && im.ciruelas >= o.precio && !(o.id == 'congelador' && widget.control.congeladores >= maxCongeladores)
-                      ? () => _comprar(o.id, () => widget.control.gastarCiruelas(o.id), o.emoji,
-                          tr('${o.nombreEs}: listo', '${o.nombreEn}: done'))
-                      : null,
-                ),
-              ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(child: Rotulo(tr('Tu baño de lujo', 'Your luxury bathroom'))),
-                Text(tr('${pctSuerte(im.bonoSuerte)} de suerte ', '${pctSuerte(im.bonoSuerte)} luck '),
-                    key: const Key('suerte_total'), style: numeros(context, tamano: 13, weight: FontWeight.w900)),
-                const Emoji('🫐', tamano: 16),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(tr('Solo se ven bonitas y suben la suerte de que caigan Ciruelas.', 'They only look nice and raise your luck for Plums.'),
-                style: TextStyle(fontSize: 12, color: p.textoSuave)),
-            const SizedBox(height: 8),
-            for (final e in esteticas)
-              _fila(
-                context,
-                emoji: e.emoji,
-                titulo: tr(e.nombreEs, e.nombreEn),
-                detalle: tr('${pctSuerte(e.bono)} de suerte', '${pctSuerte(e.bono)} luck'),
-                precio: im.esteticas.contains(e.id) ? null : e.precio,
-                boton: im.esteticas.contains(e.id)
-                    ? Text(tr('COMPRADA', 'OWNED'), style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 0.8, color: p.textoSuave))
-                    : _boton(
+                  if (widget.arriba case final arriba?) ...[const SizedBox(height: 16), arriba(context, widget.avisar)],
+                  const SizedBox(height: 16),
+                  Rotulo(tr('Ofertas de Ciruelas', 'Plum deals')),
+                  const SizedBox(height: 8),
+                  for (final o in ofertasCiruela)
+                    _fila(
+                      context,
+                      emoji: o.emoji,
+                      titulo: tr(o.nombreEs, o.nombreEn),
+                      detalle: o.id == 'congelador'
+                          ? '${tr(o.descEs, o.descEn)} · ${widget.control.congeladores}/$maxCongeladores'
+                          : tr(o.descEs, o.descEn),
+                      precio: o.precio,
+                      boton: _boton(
                         context,
-                        tr('COMPRAR', 'BUY'),
-                        _ocupado == null && im.ciruelas >= e.precio
-                            ? () => _comprar(e.id, () => widget.control.comprarEstetica(e.id), e.emoji,
-                                tr('${e.nombreEs}: ${pctSuerte(e.bono)} de suerte', '${e.nombreEn}: ${pctSuerte(e.bono)} luck'))
+                        o.id == 'congelador' && widget.control.congeladores >= maxCongeladores ? tr('LLENO', 'FULL') : tr('COMPRAR', 'BUY'),
+                        _ocupado == null && im.ciruelas >= o.precio && !(o.id == 'congelador' && widget.control.congeladores >= maxCongeladores)
+                            ? () => _comprar(o.id, () => widget.control.gastarCiruelas(o.id), o.emoji,
+                                tr('${o.nombreEs}: listo', '${o.nombreEn}: done'))
                             : null,
                       ),
+                    ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(child: Rotulo(tr('Tu baño de lujo', 'Your luxury bathroom'))),
+                      Text(tr('${pctSuerte(im.bonoSuerte)} de suerte ', '${pctSuerte(im.bonoSuerte)} luck '),
+                          key: const Key('suerte_total'), style: numeros(context, tamano: 13, weight: FontWeight.w900)),
+                      const Emoji('🫐', tamano: 16),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(tr('Solo se ven bonitas y suben la suerte de que caigan Ciruelas.', 'They only look nice and raise your luck for Plums.'),
+                      style: TextStyle(fontSize: 12, color: p.textoSuave)),
+                  const SizedBox(height: 8),
+                  for (final e in esteticas)
+                    _fila(
+                      context,
+                      emoji: e.emoji,
+                      titulo: tr(e.nombreEs, e.nombreEn),
+                      detalle: tr('${pctSuerte(e.bono)} de suerte', '${pctSuerte(e.bono)} luck'),
+                      precio: im.esteticas.contains(e.id) ? null : e.precio,
+                      boton: im.esteticas.contains(e.id)
+                          ? Text(tr('COMPRADA', 'OWNED'), style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 0.8, color: p.textoSuave))
+                          : _boton(
+                              context,
+                              tr('COMPRAR', 'BUY'),
+                              _ocupado == null && im.ciruelas >= e.precio
+                                  ? () => _comprar(e.id, () => widget.control.comprarEstetica(e.id), e.emoji,
+                                      tr('${e.nombreEs}: ${pctSuerte(e.bono)} de suerte', '${e.nombreEn}: ${pctSuerte(e.bono)} luck'))
+                                  : null,
+                            ),
+                    ),
+                ],
               ),
-          ],
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }
