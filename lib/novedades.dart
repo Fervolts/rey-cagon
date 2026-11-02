@@ -21,6 +21,17 @@ class VersionNovedades {
 
 /// El historial público, de la más nueva a la más vieja. Al sacar una versión nueva se agrega arriba.
 const historialNovedades = <VersionNovedades>[
+  VersionNovedades('2.13.0', '2026-11-05', [
+    ('🎨', 'Tienda de estilo en el Imperio: temas para toda la app, efectos al apretar CAGUÉ y movimientos para tu avatar. Lo que compras se queda aunque jales la cadena.',
+        'Style shop in the Empire: themes for the whole app, effects when you press CAGUÉ and moves for your avatar. What you buy stays even when you pull the chain.'),
+    ('🏆', 'Ranking del Imperio global y entre amigos, por mojonólares o por Rollos de Oro. Desliza hacia abajo para actualizarlo.',
+        'Global and friends Empire ranking, by Poopbucks or by Golden Rolls. Pull down to refresh it.'),
+    ('👤', 'Tu Imperio sale en tu perfil: mojonólares, rollos y jaladas.', 'Your Empire shows on your profile: Poopbucks, rolls and pulls.'),
+    ('🚽', '19 de noviembre, Día Mundial del Retrete: todo x3 en el Imperio y un logro que solo sale ese día.',
+        'November 19, World Toilet Day: everything x3 in the Empire and an achievement you can only get that day.'),
+    ('🎄', 'En diciembre: hallaca dorada en el Imperio y gorro de Santa para quien cague en Navidad.',
+        'In December: golden hallaca in the Empire and a Santa hat for whoever poops at Christmas.'),
+  ]),
   VersionNovedades('2.12.3', '2026-11-02', [
     ('💰', 'Precios del Imperio rebalanceados: el juego dura más y ya no te quedas trancado esperando.',
         'Imperio prices rebalanced: the game lasts longer and you no longer get stuck waiting.'),
