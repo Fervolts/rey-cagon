@@ -30,6 +30,18 @@ bool usarCopiaLocal({
   return mjLocal > mjServidor;
 }
 
+/// Qué hacer cuando el servidor tiene más jaladas ([jaladasCadena]) que la partida ([jaladasPartida]).
+/// Si el estado guardado en el servidor ya lleva esas jaladas ([jaladasEstadoServidor]), la partida del servidor es la
+/// buena (un reinicio o un guardado de otro teléfono): se adopta. Si no, la jalada se marcó pero el guardado se perdió:
+/// se jala aquí. Jalar con la partida vieja después de un reinicio regalaría Rollos con MJ que ya no existen.
+enum ArregloCadena { nada, jalar, adoptar }
+
+ArregloCadena arregloCadena({required int jaladasCadena, required int jaladasPartida, int? jaladasEstadoServidor}) {
+  if (jaladasCadena <= jaladasPartida) return ArregloCadena.nada;
+  if (jaladasEstadoServidor != null && jaladasEstadoServidor >= jaladasCadena) return ArregloCadena.adoptar;
+  return ArregloCadena.jalar;
+}
+
 int _jaladasDe(Map<String, dynamic>? estado) => (estado?['jaladas'] as num?)?.toInt() ?? 0;
 
 /// Desde cuándo se cobra el tiempo fuera: la marca más reciente (ms, reloj del servidor) entre las que haya.
@@ -171,9 +183,11 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     // Flags antes que la nube: imperio_cargar consume las cagadas nuevas en el servidor y, apagado, se perderían.
     flags = await flagsF;
     if (apagado) return _apagar();
+    Map<String, dynamic>? estadoNube;
     _ocupadoNube = true;
     try {
       final carga = await nube.cargar();
+      estadoNube = carga.estado;
       _desfase = carga.ahora.millisecondsSinceEpoch - DateTime.now().millisecondsSinceEpoch;
       final vacio = carga.nuevo || carga.estado.isEmpty;
       final local1 = usarCopiaLocal(mjLocal: mjLocal, mjServidor: carga.mjTotal, servidorVacio: vacio,
@@ -221,7 +235,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     unawaited(_guardarLocal());
     _actualizarBucle();
     notifyListeners();
-    if (!sinConexion) unawaited(_cargarCadena());
+    if (!sinConexion) unawaited(_cargarCadena(estadoServidor: estadoNube));
     if (!sinConexion) unawaited(_cargarProgreso());
     if (!sinConexion) unawaited(cargarCofre());
   }
@@ -247,15 +261,25 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  /// Trae el estado de la cadena. Si el servidor tiene más jaladas que la partida, la jalada se marcó pero el
-  /// guardado se perdió (se cayó la red justo después): se reinicia la corrida aquí y se guarda.
-  Future<void> _cargarCadena() async {
+  /// Trae el estado de la cadena. Si el servidor tiene más jaladas que la partida, mira [estadoServidor] (el de la
+  /// última carga) con [arregloCadena]: o adopta la partida del servidor (reinicio) o jala aquí (guardado perdido).
+  Future<void> _cargarCadena({Map<String, dynamic>? estadoServidor}) async {
     try {
       final c = await nube.cadena();
       if (_cerrado) return;
       cadena = c;
       final p = imperio.partida;
-      if (c.jaladas > p.jaladas) {
+      final arreglo = arregloCadena(jaladasCadena: c.jaladas, jaladasPartida: p.jaladas,
+          jaladasEstadoServidor: estadoServidor == null ? null : _jaladasDe(estadoServidor));
+      if (arreglo == ArregloCadena.adoptar) {
+        final viejo = imperio;
+        imperio = Imperio.desdeJson(estadoServidor,
+            cagadas: viejo.cagadas, fichas: viejo.fichas, ciruelas: viejo.ciruelas, esteticas: viejo.esteticas, ajustes: viejo.ajustes,
+            cagadasCandado: viejo.cagadasCandado, pases: viejo.pases);
+        _anotar('partida_adoptada', {'jaladas': c.jaladas});
+        _mirarCambios(anotar: false);
+        unawaited(_guardarLocal());
+      } else if (arreglo == ArregloCadena.jalar) {
         imperio.jalar();
         p.jaladas = c.jaladas;
         _mirarCambios(anotar: false);
@@ -358,7 +382,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       _ponerFresca();
       _sumarLogros(imperio.revisarLogros());
       notifyListeners();
-      await _cargarCadena();
+      await _cargarCadena(estadoServidor: carga.estado);
       unawaited(_cargarProgreso());
       unawaited(cargarCofre());
     } catch (e) {

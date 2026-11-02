@@ -61,4 +61,19 @@ void main() {
       expect(p.saldo, 4000);
     });
   });
+
+  group('arregloCadena', () {
+    test('mismas jaladas: nada', () {
+      expect(arregloCadena(jaladasCadena: 3, jaladasPartida: 3, jaladasEstadoServidor: 3), ArregloCadena.nada);
+    });
+    test('reinicio con la app abierta: adopta la del servidor', () {
+      expect(arregloCadena(jaladasCadena: 4, jaladasPartida: 3, jaladasEstadoServidor: 4), ArregloCadena.adoptar);
+    });
+    test('guardado perdido tras jalar: jala aquí', () {
+      expect(arregloCadena(jaladasCadena: 4, jaladasPartida: 3, jaladasEstadoServidor: 3), ArregloCadena.jalar);
+    });
+    test('sin estado del servidor: jala aquí', () {
+      expect(arregloCadena(jaladasCadena: 2, jaladasPartida: 1), ArregloCadena.jalar);
+    });
+  });
 }

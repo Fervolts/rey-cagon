@@ -45,6 +45,7 @@ Future<int> _enviarPorRpc(List<Map<String, Object?>> lote) async {
 /// - `mejoras_abre` {edificio}: desplegó las mejoras de un edificio (`poceta` = las de TU POCETA)
 /// - `cadena_abre` {puede}: tocó JALAR (`puede` = estaba encendido)
 /// - `cadena_jala` {rollos, jaladas}: jaló la cadena (rollos ganados en esta jalada, jaladas en total)
+/// - `partida_adoptada` {jaladas}: el servidor tenía más jaladas y su partida ya las llevaba (reinicio): se usó esa
 /// - `cartera_comparte` {destino}: presumió la cartera (`chat` = tarjeta en la sala general, `fuera` = imagen para historias)
 /// - `personalizar_abre` {}: abrió la hoja Personalizar el baño
 /// - `bano_compartir` {}: presumió su baño en la sala general (tarjeta 'bano', foto del baño que arma el servidor)
