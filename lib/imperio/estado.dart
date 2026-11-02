@@ -155,6 +155,11 @@ class Partida {
   Atasco? atasco;
   bool vioPrimerAtasco;
 
+  /// Atasco programado al salir de la app (ms epoch, 0 = ninguno) y el edificio que se atasca.
+  /// Se resuelve al volver dentro de la cuenta offline y se borra siempre.
+  int atascoOfflineEn;
+  String atascoOfflineEdificio;
+
   /// Segundos de juego activo que faltan para el próximo mojón dorado. Negativo = sin programar.
   double segHastaDorado;
   DoradoVisible? dorado;
@@ -253,6 +258,8 @@ class Partida {
     this.horasExtraTanque = 0,
     this.atasco,
     this.vioPrimerAtasco = false,
+    this.atascoOfflineEn = 0,
+    this.atascoOfflineEdificio = '',
     this.segHastaDorado = -1,
     this.dorado,
     this.papelDoble = false,
@@ -336,6 +343,8 @@ class Partida {
         'horas_extra_tanque': horasExtraTanque,
         'atasco': atasco?.toJson(),
         'vio_atasco': vioPrimerAtasco,
+        if (atascoOfflineEn > 0) 'atasco_offline_en': atascoOfflineEn,
+        if (atascoOfflineEn > 0) 'atasco_offline_e': atascoOfflineEdificio,
         'seg_dorado': segHastaDorado,
         'dorado': dorado?.toJson(),
         'papel_doble': papelDoble,
@@ -408,6 +417,8 @@ class Partida {
       horasExtraTanque: max(0, _ent(j['horas_extra_tanque'])),
       atasco: Atasco.desdeJson(j['atasco']),
       vioPrimerAtasco: _bool(j['vio_atasco']),
+      atascoOfflineEn: max(0, _ent(j['atasco_offline_en'])),
+      atascoOfflineEdificio: j['atasco_offline_e'] is String ? j['atasco_offline_e'] as String : '',
       segHastaDorado: _dbl(j['seg_dorado'], -1),
       dorado: DoradoVisible.desdeJson(j['dorado']),
       papelDoble: _bool(j['papel_doble']),

@@ -34,6 +34,10 @@ Future<int> _enviarPorRpc(List<Map<String, Object?>> lote) async {
 /// - `atasco_aparece` {edificio}
 /// - `atasco_destapa` {ms, perfecto, robot}
 /// - `atasco_pierde` {}
+/// - `atasco_offline` {edificio, minutos, mj_perdidos, robot}: al volver, el Atasco sorteado al salir cayó dentro del
+///   tiempo contado. minutos = desde que se fue hasta el Atasco; robot = lo destapó solo un Robot, Robot Turbo o Súper
+///   Plomero (entonces mj_perdidos = 0)
+/// - `atasco_offline_aviso` {edificio, minutos}: al salir se programó el aviso local del Atasco offline (minutos hasta él)
 /// - `logro` {id}
 /// - `offline` {segundos, tope_lleno, ganado}
 /// - `descarga` {cagadas, ganado}

@@ -599,6 +599,10 @@ class Ajustes {
   /// Las válvulas (50%, 75%) y los tanques (4 h, 8 h) siguen siendo esos valores, pero nunca menos que la base.
   final double offlinePorcentaje, offlineTopeH;
 
+  /// Atasco offline: al salir de la app se sortea cuándo se atasca un edificio, en minutos desde la salida:
+  /// [atascoOfflineMinimoMin] + exponencial de media ([atascoOfflineMediaMin] - mínimo). Media total ~45 min.
+  final double atascoOfflineMediaMin, atascoOfflineMinimoMin;
+
   /// Cada unidad de un edificio cuesta esto por la anterior.
   final double precioCrecimiento;
   final double precioGuantes, precioFaja;
@@ -638,6 +642,8 @@ class Ajustes {
     this.doradoMaxMin = 15,
     this.offlinePorcentaje = 0.25,
     this.offlineTopeH = 2,
+    this.atascoOfflineMediaMin = 45,
+    this.atascoOfflineMinimoMin = 10,
     this.precioCrecimiento = 1.15,
     this.precioGuantes = 100,
     this.precioFaja = 500,

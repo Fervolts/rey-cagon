@@ -5,7 +5,7 @@ import 'package:flutter/widgets.dart';
 
 import '../fresca.dart' show frescaHasta;
 import '../main.dart' show db, esDeRed;
-import '../recordatorio.dart' show cancelarAvisoImperio, programarAvisoImperio;
+import '../recordatorio.dart' show cancelarAvisoImperio, programarAvisoAtasco, programarAvisoImperio;
 import 'estilos.dart';
 import 'estilos_mios.dart';
 import 'flags.dart';
@@ -185,6 +185,8 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     // Flags antes que la nube: imperio_cargar consume las cagadas nuevas en el servidor y, apagado, se perderían.
     flags = await flagsF;
     if (apagado) return _apagar();
+    // Volvió (también tras matar la app): los avisos de la app cerrada ya no hacen falta.
+    unawaited(cancelarAvisoImperio().catchError((_) {}));
     Map<String, dynamic>? estadoNube;
     _ocupadoNube = true;
     try {
@@ -362,7 +364,16 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       _offlineS = r.segundosAusente;
       _anotar('offline', {'segundos': r.segundosAusente.round(), 'tope_lleno': r.tanqueLleno, 'ganado': r.ganado});
     }
-    if (r.ganado > 0) offlinePendiente = r;
+    final atascado = r.atascoEdificio;
+    if (atascado != null) {
+      _anotar('atasco_offline', {
+        'edificio': atascado,
+        'minutos': ((r.atascoEn - (imperio.partida.ultimaVez - r.segundosAusente * 1000)) / 60000).round(),
+        'mj_perdidos': r.mjPerdidos,
+        'robot': r.atascoCubierto,
+      });
+    }
+    if (r.ganado > 0 || (atascado != null && !r.atascoCubierto)) offlinePendiente = r;
   }
 
   void _aplicarNuevas(List<CagadaNueva> nuevas) {
@@ -425,6 +436,8 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     final antes = _enPrimerPlano;
     _enPrimerPlano = state == AppLifecycleState.resumed;
     _actualizarBucle();
+    // Antes de guardar: el Atasco offline sorteado queda en la partida.
+    if (!_enPrimerPlano && antes && _cargado) _programarAtascoOffline();
     if (!_enPrimerPlano && antes) unawaited(_cargado ? guardarTodo() : _vaciarTelemetria());
     if (!_enPrimerPlano && antes && _cargado) unawaited(_programarAvisoCerrado());
     if (_enPrimerPlano && !antes) unawaited(cancelarAvisoImperio().catchError((_) {}));
@@ -444,6 +457,29 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     } catch (_) {
       // Sin permiso de notificaciones o en pruebas: no pasa nada.
     }
+  }
+
+  /// Al salir de la app: sortea el Atasco offline ([Imperio.programarAtascoOffline]) y, si nada lo destapa solo, deja un
+  /// aviso local para esa hora (`atasco_offline_aviso`).
+  void _programarAtascoOffline() {
+    final AtascoOffline? a;
+    try {
+      a = imperio.programarAtascoOffline(ahora);
+    } catch (_) {
+      return;
+    }
+    if (a == null || a.cubierto) return;
+    final e = edificioPorId(a.edificio);
+    if (e == null) return;
+    final minutos = (a.en - ahora) / 60000;
+    unawaited(() async {
+      try {
+        final ok = await programarAvisoAtasco(Duration(milliseconds: max(0, a!.en - ahora)), edificioEs: e.nombreEs, edificioEn: e.nombreEn);
+        if (ok) _anotar('atasco_offline_aviso', {'edificio': e.id, 'minutos': minutos.round()});
+      } catch (_) {
+        // Sin permiso de notificaciones o en pruebas: no pasa nada.
+      }
+    }());
   }
 
   void _actualizarBucle() {

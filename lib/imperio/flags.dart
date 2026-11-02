@@ -27,6 +27,9 @@ class FlagsImperio {
   /// Tope offline sin tanques, en horas.
   final double offlineTopeH;
 
+  /// Atasco offline: minutos de media y mínimo hasta que se atasca un edificio con la app cerrada (45 y 10).
+  final double atascoOfflineMediaMin, atascoOfflineMinimoMin;
+
   /// Cada unidad de un edificio cuesta esto por la anterior.
   final double precioCrecimiento;
   final double precioGuantes, precioFaja;
@@ -81,6 +84,8 @@ class FlagsImperio {
     this.doradoIntervaloMin = const [5, 15],
     this.offlinePorcentaje = 0.25,
     this.offlineTopeH = 2,
+    this.atascoOfflineMediaMin = 45,
+    this.atascoOfflineMinimoMin = 10,
     this.precioCrecimiento = 1.15,
     this.precioGuantes = 100,
     this.precioFaja = 500,
@@ -119,6 +124,8 @@ class FlagsImperio {
         doradoMaxMin: doradoIntervaloMin.length > 1 ? doradoIntervaloMin[1].toDouble() : 15,
         offlinePorcentaje: offlinePorcentaje,
         offlineTopeH: offlineTopeH,
+        atascoOfflineMediaMin: atascoOfflineMediaMin,
+        atascoOfflineMinimoMin: atascoOfflineMinimoMin,
         precioCrecimiento: precioCrecimiento,
         precioGuantes: precioGuantes,
         precioFaja: precioFaja,
@@ -179,6 +186,8 @@ class FlagsImperio {
       doradoIntervaloMin: intervalo(),
       offlinePorcentaje: numero('offline_porcentaje', d.offlinePorcentaje, 0, 1),
       offlineTopeH: numero('offline_tope_h', d.offlineTopeH, 0.5, 24),
+      atascoOfflineMediaMin: numero('atasco_offline_media_min', d.atascoOfflineMediaMin, 5, 1440),
+      atascoOfflineMinimoMin: numero('atasco_offline_min_min', d.atascoOfflineMinimoMin, 1, 240),
       precioCrecimiento: numero('precio_crecimiento', d.precioCrecimiento, 1.01, 2),
       precioGuantes: numero('precio_guantes', d.precioGuantes, 1, 1e6),
       precioFaja: numero('precio_faja', d.precioFaja, 1, 1e7),

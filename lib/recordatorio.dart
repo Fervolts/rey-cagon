@@ -147,7 +147,7 @@ NotificationDetails get _detallesImperio => NotificationDetails(
 /// Programa el aviso del Imperio para dentro de [en]. Si cae de noche (antes de las 9 o desde las 22), pasa a las 9.
 /// [nombreEs] / [nombreEn] = lo que ya alcanza; null = se llenó la poceta.
 Future<void> programarAvisoImperio(Duration en, {String? nombreEs, String? nombreEn}) async {
-  await cancelarAvisoImperio();
+  await notificaciones.cancel(id: _idImperio);
   final prefs = await SharedPreferences.getInstance();
   if (!(prefs.getBool(clavePocetaLocal) ?? true)) return;
   var cuando = tz.TZDateTime.now(tz.local).add(en < const Duration(minutes: 15) ? const Duration(minutes: 15) : en);
@@ -168,4 +168,32 @@ Future<void> programarAvisoImperio(Duration en, {String? nombreEs, String? nombr
   );
 }
 
-Future<void> cancelarAvisoImperio() => notificaciones.cancel(id: _idImperio);
+// Aviso del Atasco offline (id 201): se programa al salir si el Imperio sorteó un Atasco con la app cerrada y nada lo
+// destapa solo. Mismo canal e interruptor que el del Imperio; se borra al volver junto con él.
+const _idAtasco = 201;
+
+/// Programa el aviso del Atasco offline para dentro de [en] ([edificioEs] / [edificioEn] = el que se atasca). De noche
+/// pasa a las 9, como el del Imperio. false = no se programó (avisos apagados).
+Future<bool> programarAvisoAtasco(Duration en, {required String edificioEs, required String edificioEn}) async {
+  await notificaciones.cancel(id: _idAtasco);
+  final prefs = await SharedPreferences.getInstance();
+  if (!(prefs.getBool(clavePocetaLocal) ?? true)) return false;
+  var cuando = tz.TZDateTime.now(tz.local).add(en < const Duration(minutes: 1) ? const Duration(minutes: 1) : en);
+  if (cuando.hour < 9) cuando = tz.TZDateTime(tz.local, cuando.year, cuando.month, cuando.day, 9);
+  if (cuando.hour >= 22) cuando = tz.TZDateTime(tz.local, cuando.year, cuando.month, cuando.day + 1, 9);
+  await notificaciones.zonedSchedule(
+    id: _idAtasco,
+    title: tr('🪠 ¡Se te atascó la poceta!', '🪠 Your toilet got clogged!'),
+    body: tr('Destápala o tu $edificioEs deja de producir', 'Unclog it or your $edificioEn stops producing'),
+    scheduledDate: cuando,
+    notificationDetails: _detallesImperio,
+    androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+  );
+  return true;
+}
+
+/// Borra los dos avisos del Imperio (lo que alcanza o se llenó, y el del Atasco offline).
+Future<void> cancelarAvisoImperio() async {
+  await notificaciones.cancel(id: _idImperio);
+  await notificaciones.cancel(id: _idAtasco);
+}

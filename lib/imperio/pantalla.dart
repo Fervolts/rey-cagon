@@ -294,6 +294,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                 : tr('x1,5 por tu cagada tipo 6.', 'x1.5 from your type 6 poop.'),
           if (off.tanqueLleno) tr('Se llenó el tanque, compra uno más grande.', 'The tank filled up, buy a bigger one.'),
           if (off.regalo > 0) tr('Incluye +${_mj(off.regalo)} de regalo por volver.', 'Includes a +${_mj(off.regalo)} welcome back gift.'),
+          if (off.atascoEdificio != null) _lineaAtascoOffline(off),
         ]);
       }
       final d = _c.descargaPendiente;
@@ -317,6 +318,17 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       _dialogoAbierto = false;
     }
     if (mounted && (_c.offlinePendiente != null || _c.descargaPendiente != null || _c.bienvenidaPendiente || _c.rachaPendiente)) _mostrarDialogos();
+  }
+
+  /// Línea del Atasco offline en "Mientras no estabas": qué se atascó, a qué hora y cuánto se dejó de ganar.
+  String _lineaAtascoOffline(ResultadoOffline off) {
+    final e = edificioPorId(off.atascoEdificio!);
+    final nombre = e == null ? '' : tr(e.nombreEs, e.nombreEn);
+    final h = DateTime.fromMillisecondsSinceEpoch(off.atascoEn);
+    final hora = '${h.hour.toString().padLeft(2, '0')}:${h.minute.toString().padLeft(2, '0')}';
+    if (off.atascoCubierto) return tr('🤖 A las $hora se atascó tu $nombre y se destapó solo.', '🤖 Your $nombre clogged at $hora and unclogged itself.');
+    return tr('🪠 Tu $nombre se atascó a las $hora: dejaste de ganar ~${_mj(off.mjPerdidos)}. Un Robot destapador lo destapa solo; el Destapacaños, al instante.',
+        '🪠 Your $nombre clogged at $hora: you missed ~${_mj(off.mjPerdidos)}. A Plunger bot unclogs it by itself; Drain cleaner, instantly.');
   }
 
   Future<void> _dialogo(String emoji, String titulo, List<String> lineas) => showDialog<void>(

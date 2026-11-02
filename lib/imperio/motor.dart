@@ -75,8 +75,30 @@ class ResultadoOffline {
 
   /// Regalo de vuelta (ya sumado en [ganado]): 4 h de producción si estuvo fuera 2 días o más. 0 = no hubo.
   final double regalo;
+
+  /// Atasco offline que cayó dentro del tiempo contado: el edificio (null = no hubo), cuándo (ms epoch), los MJ que se
+  /// dejaron de ganar (ya descontados de [ganado]) y si lo destapó solo un Robot, Robot Turbo o Súper Plomero.
+  final String? atascoEdificio;
+  final int atascoEn;
+  final double mjPerdidos;
+  final bool atascoCubierto;
   const ResultadoOffline(this.segundosAusente, this.segundosContados, this.ganado, this.tanqueLleno, this.conBonus,
-      {this.conGuardia = false, this.regalo = 0, this.fuerzaBonus = 1});
+      {this.conGuardia = false,
+      this.regalo = 0,
+      this.fuerzaBonus = 1,
+      this.atascoEdificio,
+      this.atascoEn = 0,
+      this.mjPerdidos = 0,
+      this.atascoCubierto = false});
+}
+
+/// Atasco offline programado al salir: en [en] (ms epoch) se atasca [edificio]. [cubierto] = un Robot, Robot Turbo o
+/// Súper Plomero lo destapará solo (no hace falta avisar).
+class AtascoOffline {
+  final int en;
+  final String edificio;
+  final bool cubierto;
+  const AtascoOffline(this.en, this.edificio, this.cubierto);
 }
 
 /// Aviso local con la app cerrada: en [segundos] alcanza para [nombreEs] / [nombreEn], o se llena la poceta (null).
@@ -1220,6 +1242,8 @@ class Imperio {
       _p.atasco = null;
       _destapado(ahora);
     }
+    // Con la app abierta ya no queda Atasco offline pendiente (se sortea otro al salir).
+    if (s > 0 && _p.atascoOfflineEn > 0) _borrarAtascoOffline();
 
     _p.ultimaVez = ahora;
     return revisarLogros();
@@ -1229,20 +1253,56 @@ class Imperio {
   /// Pesa la raíz de lo que produce cada uno: el que más da se tapa más seguido, pero no siempre el mismo.
   void _atascar(int ahora, int minimo) {
     if (_p.atasco != null) return;
-    final candidatos = [for (final e in edificios) if (e.mpsBase > 0 && cantidad(e.id) >= minimo) e.id];
-    if (candidatos.isEmpty) return;
-    final pesos = [for (final id in candidatos) sqrt(max(_produccionCruda(id), 1e-9))];
-    var r = _azar.nextDouble() * pesos.fold(0.0, (a, b) => a + b);
-    var elegido = candidatos.last;
-    for (var k = 0; k < candidatos.length; k++) {
-      r -= pesos[k];
-      if (r < 0) {
-        elegido = candidatos[k];
-        break;
-      }
-    }
+    final elegido = _elegirAtascado(minimo);
+    if (elegido == null) return;
     _p.atasco = Atasco(elegido, ahora);
     _p.vioPrimerAtasco = true;
+  }
+
+  /// El edificio que se atasca (ver [_atascar]); null si no hay ninguno con [minimo] unidades que produzca.
+  String? _elegirAtascado(int minimo) {
+    final candidatos = [for (final e in edificios) if (e.mpsBase > 0 && cantidad(e.id) >= minimo) e.id];
+    if (candidatos.isEmpty) return null;
+    final pesos = [for (final id in candidatos) sqrt(max(_produccionCruda(id), 1e-9))];
+    var r = _azar.nextDouble() * pesos.fold(0.0, (a, b) => a + b);
+    for (var k = 0; k < candidatos.length; k++) {
+      r -= pesos[k];
+      if (r < 0) return candidatos[k];
+    }
+    return candidatos.last;
+  }
+
+  /// Algo destapa solo en [t] con la app cerrada: Robot o Robot Turbo alquilados hasta después de [t] (o en Indefinido,
+  /// que se renueva al volver) o el Súper Plomero.
+  bool _cubreAtascoOffline(int t) =>
+      _destapaSolo(t) || alquilerIndefinido('robot') || alquilerIndefinido('robot_turbo');
+
+  /// Al salir de la app: sortea cuándo se atasca un edificio con la app cerrada (mínimo [Ajustes.atascoOfflineMinimoMin]
+  /// minutos + exponencial, media total [Ajustes.atascoOfflineMediaMin]) y cuál (como [_atascar]). Queda guardado en la
+  /// partida y se resuelve en [aplicarOffline]. No sortea si ya hay un Atasco, si nunca vio el primero o si no hay
+  /// edificios; si ya había uno programado para después de [ahora], lo devuelve igual (no se vuelve a sortear).
+  AtascoOffline? programarAtascoOffline(int ahora) {
+    if (_p.atasco != null || !_p.vioPrimerAtasco) return null;
+    if (_p.atascoOfflineEn > ahora && edificioPorId(_p.atascoOfflineEdificio) != null && cantidad(_p.atascoOfflineEdificio) > 0) {
+      return AtascoOffline(_p.atascoOfflineEn, _p.atascoOfflineEdificio, _cubreAtascoOffline(_p.atascoOfflineEn));
+    }
+    final elegido = _elegirAtascado(minimoParaAtasco);
+    if (elegido == null) {
+      _borrarAtascoOffline();
+      return null;
+    }
+    final minimo = max(0.0, ajustes.atascoOfflineMinimoMin);
+    final resto = max(0.0, ajustes.atascoOfflineMediaMin - minimo);
+    final minutos = minimo - resto * log(1 - _azar.nextDouble());
+    final en = ahora + (minutos * 60000).round();
+    _p.atascoOfflineEn = en;
+    _p.atascoOfflineEdificio = elegido;
+    return AtascoOffline(en, elegido, _cubreAtascoOffline(en));
+  }
+
+  void _borrarAtascoOffline() {
+    _p.atascoOfflineEn = 0;
+    _p.atascoOfflineEdificio = '';
   }
 
   /// Cuadrilla del barrio: cada minuto activo compra el edificio abierto más barato, si alcanza.
@@ -1376,6 +1436,8 @@ class Imperio {
 
   /// Cobra el tiempo fuera (sin efectos temporales ni dorados). El Atasco que quedó sigue tapado fuera: ese edificio no cuenta. x1,5 si quedó el buff del tipo 6 (y se gasta).
   /// Guardia nocturno: cuenta al 100% con tope de 8 h (o el del tanque si es más) y se gasta.
+  /// Atasco offline ([programarAtascoOffline]): si cae dentro del tiempo contado y nada lo destapa solo, ese edificio
+  /// deja de contar desde ese momento y al volver queda atascado. Se borra siempre.
   ResultadoOffline aplicarOffline(int desdeMs, int ahoraMs) {
     final ausente = max(0, ahoraMs - desdeMs) / 1000.0;
     _p.ultimaVez = ahoraMs;
@@ -1384,6 +1446,8 @@ class Imperio {
     // La Arepa reina pepiada solo corre con la app abierta: se corre su fin lo que estuviste fuera.
     final arepa = _p.efectos['reina_pepiada'];
     if (arepa != null && arepa > desdeMs && ahoraMs > desdeMs) _p.efectos['reina_pepiada'] = arepa + (ahoraMs - desdeMs);
+    final atascoEn = _p.atascoOfflineEn, atascoId = _p.atascoOfflineEdificio;
+    _borrarAtascoOffline();
     if (ausente < minimoOffline.inSeconds) return ResultadoOffline(ausente, 0, 0, false, false);
     final guardia = _p.alquilados.remove('guardia') != null;
     final tope = guardia ? max(topeOffline.inSeconds, topeGuardia.inSeconds).toDouble() : topeOffline.inSeconds.toDouble();
@@ -1394,11 +1458,32 @@ class Imperio {
     _p.offlineBonusFuerza = 1;
     // El x de temporada cuenta solo por la parte del tiempo contado que cayó dentro de ella.
     final xTemporada = multiplicadorEnRango(ajustes.temporadas, desdeMs, desdeMs + (contados * 1000).round());
-    final ganado = contados * mpsSinEfectos() * (guardia ? 1.0 : porcentajeOffline) * (bonus ? 1 + 0.5 * fuerzaBonus : 1) * xTemporada;
+    final factor = (guardia ? 1.0 : porcentajeOffline) * (bonus ? 1 + 0.5 * fuerzaBonus : 1) * xTemporada;
+    final finContado = desdeMs + (contados * 1000).round();
+    final base = mpsSinEfectos(); // antes del Atasco offline: hasta ese momento producía
+    String? atascado;
+    var perdido = 0.0, cubierto = false;
+    if (atascoEn >= desdeMs && atascoEn < finContado && _p.atasco == null && edificioPorId(atascoId) != null && cantidad(atascoId) > 0) {
+      atascado = atascoId;
+      cubierto = _cubreAtascoOffline(atascoEn);
+      if (cubierto) {
+        _p.destapes++;
+      } else {
+        perdido = (finContado - atascoEn) / 1000 * _produccionCruda(atascoId) * multiplicadorPermanente * factor;
+        _p.atasco = Atasco(atascoId, ahoraMs); // vuelve a verse ahora, como el que quedó al salir
+      }
+    }
+    final ganado = max(0.0, contados * base * factor - perdido);
     final regalo = ausente >= ausenciaRegalo.inSeconds ? horasRegalo * 3600 * mpsSinEfectos(contarAtasco: false) : 0.0;
     _ganar(ganado + regalo);
     return ResultadoOffline(ausente, contados, ganado + regalo, ausente >= tope, bonus,
-        conGuardia: guardia, regalo: regalo, fuerzaBonus: fuerzaBonus);
+        conGuardia: guardia,
+        regalo: regalo,
+        fuerzaBonus: fuerzaBonus,
+        atascoEdificio: atascado,
+        atascoEn: atascado == null ? 0 : atascoEn,
+        mjPerdidos: perdido,
+        atascoCubierto: cubierto);
   }
 
   /// Qué avisar con la app cerrada y en cuánto: lo más barato que todavía no alcanza (mejora o edificio) si lo offline
@@ -1517,6 +1602,8 @@ class Imperio {
       ..indefinidos = {}
       ..pintura = {}
       ..atasco = null
+      ..atascoOfflineEn = 0
+      ..atascoOfflineEdificio = ''
       ..dorado = null
       ..segHastaDorado = -1
       ..papelDoble = false
