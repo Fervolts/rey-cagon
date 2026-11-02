@@ -277,3 +277,128 @@ from nunca n;
 select a.clave, a.variante, count(*) as usuarios, min(a.desde) as primera, max(a.desde) as ultima,
        round(100.0 * count(*) / sum(count(*)) over (partition by a.clave), 1) as pct
 from public.imperio_asignaciones a group by 1, 2 order by 1, 2;
+
+
+-- =====================================================================================================
+-- SEMANA 2.12.3 (candados justos, regalo, empujón, avisos). Cambiar `desde` al día del reinicio.
+-- Palancas si algo sale mal (tabla imperio_flags, sin sacar versión): candado_horas, candado_subida,
+-- cagadas_dia_tope. Los avisos de la poceta se apagan con push_config.poceta_activo.
+-- =====================================================================================================
+
+-- 15. Adopción: quién juega con qué versión (si la vieja sigue viva, los números de abajo se ensucian)
+with d as (select date '2026-11-02' as desde)
+select (e.creado at time zone 'America/Caracas')::date as dia, e.version_app, count(distinct e.user_id) as jugadores
+from public.imperio_eventos e
+where e.evento = 'sesion_inicio' and e.creado >= (select desde from d)
+group by 1, 2 order by 1 desc, 3 desc;
+
+
+-- 16. Candados pagados con MJ: cuántos, cuántas cagadas cubrieron y qué parte del candado.
+--     Señal de alarma: casi todos pagan casi siempre la mitad = el MJ sobra, subir candado_horas o candado_subida.
+with d as (select date '2026-11-02' as desde)
+select (e.creado at time zone 'America/Caracas')::date as dia,
+       count(*) as pagos, count(distinct e.user_id) as jugadores,
+       round(avg((e.datos->>'cagadas')::numeric / nullif((e.datos->>'pide')::numeric, 0)) * 100, 1) as pct_del_candado,
+       round(avg((e.datos->>'seg_partida')::numeric) / 3600, 1) as horas_partida
+from public.imperio_eventos e
+where e.evento = 'candado' and e.creado >= (select desde from d)
+group by 1 order by 1 desc;
+
+-- 16b. Qué parte de los que compran edificios pagó al menos un candado
+with d as (select date '2026-11-02' as desde),
+x as (
+  select e.user_id, bool_or(e.evento = 'candado') as pago
+  from public.imperio_eventos e
+  where e.evento in ('edificio', 'candado') and e.creado >= (select desde from d)
+  group by 1
+)
+select count(*) as compradores, count(*) filter (where pago) as pagaron_candado,
+       round(100.0 * avg(pago::int), 1) as pct
+from x;
+
+
+-- 17. Tope de 3 cagadas por día: cuánta gente lo pasa y cuántas cagadas no cuentan para candados
+with d as (select date '2026-11-02' as desde),
+c as (
+  select c.user_id, (c.created_at at time zone 'America/Caracas')::date as dia, count(*) as n
+  from public.cagadas c
+  join public.imperio i on i.user_id = c.user_id
+  where c.created_at >= (select desde from d)
+  group by 1, 2
+)
+select dia, count(*) as cagaron, count(*) filter (where n > public.imperio_tope_dia()) as pasaron_tope,
+       sum(greatest(n - public.imperio_tope_dia(), 0)) as cagadas_que_no_cuentan, max(n) as maximo
+from c group by dia order by dia desc;
+
+
+-- 18. Pases de la racha: cuántos tienen guardados (cada uno vale media cagada)
+select count(*) filter (where pases > 0) as con_pases, round(avg(pases), 2) as promedio, max(pases) as maximo
+from public.imperio where mj_total > 0;
+
+
+-- 19. Empujón: a cuántos les tocó y si los ayudó a volver (D1 tras el empujón)
+with d as (select date '2026-11-02' as desde),
+emp as (
+  select e.user_id, min(e.creado) as cuando from public.imperio_eventos e
+  where e.evento = 'empujon' and e.creado >= (select desde from d) group by 1
+)
+select count(*) as empujados,
+       count(*) filter (where exists (select 1 from public.imperio_eventos s where s.user_id = emp.user_id
+                        and s.evento = 'sesion_inicio' and s.creado between emp.cuando + interval '20 hours' and emp.cuando + interval '48 hours')) as volvieron_al_dia,
+       (select count(*) from public.imperio_quedados()) as quedados_hoy
+from emp;
+
+
+-- 20. Vueltas: regalo (48 h o más fuera) y tope de 6 h para el que juega poco
+with d as (select date '2026-11-02' as desde)
+select (e.creado at time zone 'America/Caracas')::date as dia,
+       count(*) as vueltas,
+       count(*) filter (where (e.datos->>'segundos')::numeric >= 172800) as con_regalo,
+       count(*) filter (where (e.datos->>'tope_lleno')::boolean) as tanque_lleno,
+       round(avg((e.datos->>'segundos')::numeric) / 3600, 1) as horas_fuera
+from public.imperio_eventos e
+where e.evento = 'offline' and e.creado >= (select desde from d)
+group by 1 order by 1 desc;
+
+
+-- 21. Avisos de la poceta: enviados, tocados y si abrieron la app, por subtipo y variante
+with d as (select date '2026-11-02' as desde)
+select subtipo, variante, count(*) as enviados, count(*) filter (where ok) as llegaron,
+       count(tocado) as tocados, round(100.0 * count(tocado) / nullif(count(*) filter (where ok), 0), 1) as pct_toque,
+       count(abrio_app) as abrieron
+from public.push_envios
+where tipo = 'poceta' and enviado >= (select desde from d)
+group by 1, 2 order by 1, 2;
+
+-- 21b. ¿Volvieron a jugar al Imperio dentro de 6 h del aviso?
+with d as (select date '2026-11-02' as desde)
+select p.subtipo, count(*) as enviados,
+       count(*) filter (where exists (select 1 from public.imperio_eventos s where s.user_id = p.user_id
+                        and s.evento = 'sesion_inicio' and s.creado between p.enviado and p.enviado + interval '6 hours')) as jugaron_6h
+from public.push_envios p
+where p.tipo = 'poceta' and p.ok and p.enviado >= (select desde from d)
+group by 1 order by 2 desc;
+
+
+-- 22. Ritmo real contra la simulación: días desde el reinicio hasta la 1.ª jalada y el 1.er Agujero, por cagadas al día.
+--     La tabla de la simulación (2.12.3): con 1,5 cagadas al día, 1.ª jalada ~día 3 a 6, Agujero ~día 41.
+with d as (select date '2026-11-02' as desde),
+r as (
+  select i.user_id,
+         (select count(*) from public.cagadas c where c.user_id = i.user_id and c.created_at >= (select desde from d))::numeric
+           / greatest(extract(epoch from now() - (select desde from d)::timestamptz) / 86400, 1) as cpd
+  from public.imperio i where i.mj_total > 0
+),
+hitos as (
+  select e.user_id,
+         min(e.creado) filter (where e.evento = 'cadena_jala') as jalada,
+         max((e.datos->>'jaladas')::int) filter (where e.evento = 'cadena_jala') as jaladas,
+         count(*) filter (where e.evento = 'edificio') as edificios
+  from public.imperio_eventos e where e.creado >= (select desde from d) group by 1
+)
+select case when r.cpd < 0.5 then 'a <0,5' when r.cpd < 1 then 'b 0,5-1' when r.cpd < 2 then 'c 1-2' else 'd 2+' end as ritmo,
+       count(*) as jugadores, count(h.jalada) as ya_jalaron,
+       round(avg(extract(epoch from h.jalada - (select desde from d)::timestamptz) / 86400), 1) as dias_1a_jalada,
+       round(avg(h.jaladas), 1) as jaladas, round(avg(h.edificios), 1) as edificios_comprados
+from r left join hitos h using (user_id)
+group by 1 order by 1;
