@@ -108,7 +108,7 @@ void main() {
           await poner(
             tester,
             Poceta(
-              alTocar: () => (texto: '+1', epico: false),
+              alTocar: () => (texto: '+1', epico: false, contado: true),
               mps: 50,
               bano: todo,
               instante: t,
@@ -129,7 +129,7 @@ void main() {
     testWidgets('el robot destapa y la cuadrilla compra sin romper nada', (tester) async {
       movimientoElegido.value = 'completo';
       Widget poceta(int destapes, int compras) => Poceta(
-            alTocar: () => (texto: '+1', epico: false),
+            alTocar: () => (texto: '+1', epico: false, contado: true),
             mps: 50,
             bano: todo,
             pujoPrimo: 120,
@@ -158,7 +158,7 @@ void main() {
         Poceta(
           alTocar: () {
             pujos++;
-            return (texto: '+1', epico: false);
+            return (texto: '+1', epico: false, contado: true);
           },
           mps: 1,
           bano: todo,

@@ -98,7 +98,7 @@ class _Escena extends StatelessWidget {
             width: alto * 4 / 3,
             height: alto,
             child: IgnorePointer(
-              child: Poceta(alTocar: () => (texto: '', epico: false), mps: 0, bano: bano, dedos: dedos, activo: false),
+              child: Poceta(alTocar: () => (texto: '', epico: false, contado: true), mps: 0, bano: bano, dedos: dedos, activo: false),
             ),
           ),
         ),

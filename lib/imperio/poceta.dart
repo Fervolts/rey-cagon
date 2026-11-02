@@ -31,7 +31,8 @@ import 'formato.dart';
 import 'moneda_app.dart';
 
 /// Lo que devuelve un toque: el texto que sube ("+12", "¡ÉPICO! +3,4 K") y si fue épico.
-typedef ToquePoceta = ({String texto, bool epico});
+/// Lo que dio un toque. [contado] false: pasó del tope de pujos por segundo y no dio nada.
+typedef ToquePoceta = ({String texto, bool epico, bool contado});
 
 class Poceta extends StatefulWidget {
   const Poceta({
@@ -132,7 +133,7 @@ class Poceta extends StatefulWidget {
   State<Poceta> createState() => _PocetaState();
 }
 
-enum _Tipo { caida, moneda, flotante, salpicon, gota, tic, primo }
+enum _Tipo { caida, moneda, flotante, salpicon, gota, tic, primo, calma }
 
 class _Particula {
   _Particula(this.id, this.tipo, this.inicio, this.vida, {this.x = 0, this.vx = 0, this.vy = 0, this.emoji = '', this.texto = '', this.epico = false});
@@ -164,6 +165,7 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
   final _particulas = <_Particula>[];
   int _id = 0;
   double _ultimoToque = -9, _ultimoEpico = -9;
+  double _ultimaCalma = -9; // el "¡CALMA!" de pasarse del tope sale cuando mucho una vez por segundo
   String? _ultimoTexto; // con movimiento "nada": queda fijo arriba
   Movimiento _mov = Movimiento.completo;
   Timer? _tics; // con movimiento "simple": un "+N" suelto cada tanto, sin ticker fijo
@@ -338,6 +340,16 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
 
   void _tocar() {
     final r = widget.alTocar();
+    // Pasado el tope de pujos por segundo el toque no dio nada: ni mojón ni plata, que no parezca que cuenta.
+    if (!r.contado) {
+      if (_mov == Movimiento.nada) return;
+      final t = _ahora;
+      if (t - _ultimaCalma < 1) return;
+      _ultimaCalma = t;
+      _agregar(_Particula(_id++, _Tipo.calma, t, .9, x: _azar.nextDouble() * 60 - 30), 2);
+      _ajustarTicker();
+      return;
+    }
     if (r.epico) HapticFeedback.heavyImpact();
     if (_mov == Movimiento.nada) {
       setState(() => _ultimoTexto = r.texto);
@@ -873,6 +885,23 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
           encima.add(_suelto(context, cx + q.x, _cy - 30 - 50 * f, q.texto, .65 * (1 - f), 12, Colors.white, key: llave));
         case _Tipo.primo:
           encima.add(_suelto(context, cx + q.x, _cy - 40 - 50 * f, q.texto, 1 - f, 14, acento, key: llave));
+        case _Tipo.calma:
+          encima.add(Positioned(
+            key: llave,
+            left: cx + q.x - 80,
+            width: 160,
+            top: _cy - 70 - 40 * f,
+            child: IgnorePointer(
+              child: Opacity(
+                opacity: f < .7 ? 1 : (1 - f) / .3,
+                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  const Emoji('🥵', tamano: 20),
+                  const SizedBox(width: 4),
+                  Text(tr('¡CALMA!', 'EASY!'), style: _contorno(numeros(context, tamano: 16, weight: FontWeight.w900, color: Colors.white))),
+                ]),
+              ),
+            ),
+          ));
       }
     }
 

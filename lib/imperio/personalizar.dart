@@ -121,7 +121,7 @@ class _PersonalizarState extends State<Personalizar> {
             child: ClipRect(
               child: IgnorePointer(
                 child: Poceta(
-                  alTocar: () => (texto: '', epico: false),
+                  alTocar: () => (texto: '', epico: false, contado: true),
                   mps: 0,
                   bano: bano,
                   dedos: dedos,

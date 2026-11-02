@@ -21,6 +21,15 @@ class VersionNovedades {
 
 /// El historial público, de la más nueva a la más vieja. Al sacar una versión nueva se agrega arriba.
 const historialNovedades = <VersionNovedades>[
+  VersionNovedades('2.14.1', '2026-11-02', [
+    ('👦', 'Los Primos se ven pujando de verdad: 10 toques por segundo, y cada uno tira su mojón a la taza.',
+        'Cousins really push now: 10 taps per second, and each one drops its poop into the bowl.'),
+    ('🏆', 'El ranking del Imperio ahora está en la pestaña RANKING: escoge CAGADAS o IMPERIO arriba.',
+        'The Empire leaderboard now lives in the LEADERBOARD tab: pick POOPS or EMPIRE at the top.'),
+    ('🥵', 'Si pujas más de 20 veces por segundo sale "¡CALMA!": esos toques de más no cuentan.',
+        'Push more than 20 times per second and you get "EASY!": those extra taps do not count.'),
+    ('🔔', 'El aviso de versión nueva sale aunque tengas la app abierta.', 'The new version notice shows up even with the app open.'),
+  ]),
   VersionNovedades('2.14.0', '2026-11-02', [
     ('💬', 'En el Baño ves quién está escribiendo: su avatar se mueve con los puntitos.',
         'In the Bathroom you can see who is typing: their avatar moves with the little dots.'),

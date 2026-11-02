@@ -390,9 +390,9 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
 
   ToquePoceta _pujar() {
     final r = _c.pujar();
-    if (!r.contado) return (texto: '', epico: false); // pasó del tope de pujos por segundo
+    if (!r.contado) return (texto: '', epico: false, contado: false); // pasó del tope de pujos por segundo
     final texto = r.epico ? tr('¡ÉPICO! +${_mj(r.ganado)}', 'EPIC! +${_mj(r.ganado)}') : '+${_mj(r.ganado)}';
-    return (texto: texto, epico: r.epico);
+    return (texto: texto, epico: r.epico, contado: true);
   }
 
   void _tocarDorado() {

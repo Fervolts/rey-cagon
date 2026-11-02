@@ -1,6 +1,8 @@
 // Escenas v2 del baño: lo que oculta Personalizar, la palanca de la poceta y la hoja de Personalizar.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rey_cagon/animaciones.dart';
+import 'package:rey_cagon/emoji.dart';
 import 'package:rey_cagon/imperio/bano.dart';
 import 'package:rey_cagon/imperio/control.dart';
 import 'package:rey_cagon/imperio/motor.dart';
@@ -98,10 +100,25 @@ void main() {
       final b = _bano({'bano': 8, 'camion': 8, 'planta': 8, 'cloaca': 8, 'granja': 8, 'ciruela': 8},
           {for (final e in ['bano', 'camion', 'planta', 'cloaca', 'granja', 'ciruela']) for (final n in [1, 5, 10, 25]) '${e}_$n'});
       for (final t in [0.5, 12.0, 45.0]) {
-        await poner(tester, Poceta(alTocar: () => (texto: '+1', epico: false), mps: 50, bano: b, dedos: 30, apuro: 9, instante: t, jalar: true, cartelJalar: true));
+        await poner(tester, Poceta(alTocar: () => (texto: '+1', epico: false, contado: true), mps: 50, bano: b, dedos: 30, apuro: 9, instante: t, jalar: true, cartelJalar: true));
         await tester.pump(const Duration(milliseconds: 50));
         expect(tester.takeException(), isNull);
       }
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('pasado el tope de pujos sale "¡CALMA!" una vez', (tester) async {
+      movimientoElegido.value = 'completo';
+      addTearDown(() => movimientoElegido.value = 'auto');
+      await poner(tester, Poceta(alTocar: () => (texto: '', epico: false, contado: false), mps: 1));
+      final origen = tester.getTopLeft(find.byType(Poceta));
+      final ancho = tester.getSize(find.byType(Poceta)).width;
+      for (var i = 0; i < 3; i++) {
+        await tester.tapAt(origen + Offset(ancho / 2, 160));
+        await tester.pump(const Duration(milliseconds: 60));
+      }
+      expect(find.text('¡CALMA!'), findsOneWidget); // tres toques seguidos: uno solo
+      expect(find.byWidgetPredicate((w) => w is Emoji && w.emoji == '🥵'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     });
 
@@ -112,7 +129,7 @@ void main() {
           Poceta(
             alTocar: () {
               pujos++;
-              return (texto: '+1', epico: false);
+              return (texto: '+1', epico: false, contado: true);
             },
             mps: 1,
             jalar: true,
@@ -137,10 +154,10 @@ void main() {
               w is Image && w.image is AssetImage && (w.image as AssetImage).assetName.contains('backhand_index') && (w.width ?? 0) > 15)
           .evaluate()
           .length;
-      await poner(tester, Poceta(alTocar: () => (texto: '+1', epico: false), mps: 1, dedos: 300, instante: 12));
+      await poner(tester, Poceta(alTocar: () => (texto: '+1', epico: false, contado: true), mps: 1, dedos: 300, instante: 12));
       expect(dedosVisibles(), Poceta.visiblesDedos);
       expect(find.text('x300'), findsOneWidget);
-      await poner(tester, Poceta(alTocar: () => (texto: '+1', epico: false), mps: 1, dedos: 20, instante: 12));
+      await poner(tester, Poceta(alTocar: () => (texto: '+1', epico: false, contado: true), mps: 1, dedos: 20, instante: 12));
       expect(dedosVisibles(), 20);
       expect(find.textContaining('x2'), findsNothing);
       await tester.pumpWidget(const SizedBox());
@@ -148,7 +165,7 @@ void main() {
 
     testWidgets('sin cadena (jalar null) la palanca no existe', (tester) async {
       var jaladas = 0;
-      await poner(tester, Poceta(alTocar: () => (texto: '+1', epico: false), mps: 1, alJalar: () => jaladas++));
+      await poner(tester, Poceta(alTocar: () => (texto: '+1', epico: false, contado: true), mps: 1, alJalar: () => jaladas++));
       final origen = tester.getTopLeft(find.byType(Poceta));
       final ancho = tester.getSize(find.byType(Poceta)).width;
       await tester.tapAt(origen + Offset(ancho / 2 + 11, 100));
@@ -159,7 +176,7 @@ void main() {
 
     testWidgets('el pincel abre Personalizar', (tester) async {
       var abiertas = 0;
-      await poner(tester, Poceta(alTocar: () => (texto: '+1', epico: false), mps: 1, alPersonalizar: () => abiertas++));
+      await poner(tester, Poceta(alTocar: () => (texto: '+1', epico: false, contado: true), mps: 1, alPersonalizar: () => abiertas++));
       final origen = tester.getTopLeft(find.byType(Poceta));
       final ancho = tester.getSize(find.byType(Poceta)).width;
       await tester.tapAt(origen + Offset(ancho - 20, 20));
