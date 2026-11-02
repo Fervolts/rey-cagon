@@ -21,6 +21,18 @@ class VersionNovedades {
 
 /// El historial público, de la más nueva a la más vieja. Al sacar una versión nueva se agrega arriba.
 const historialNovedades = <VersionNovedades>[
+  VersionNovedades('2.15.0', '2026-11-02', [
+    ('🎓', 'Recorrido por el Imperio: te enseña la poceta, los edificios, las mejoras, los atascos y la cadena con tus propios números. Sale una vez, también si ya vas avanzado.',
+        'Empire tour: it walks you through the toilet, buildings, upgrades, clogs and the chain with your own numbers. It shows up once, even if you are far along.'),
+    ('❓', 'Botón "?" arriba: "¿Qué hago ahora?" te dice la mejor jugada del momento y te lleva directo.',
+        '"?" button at the top: "What now?" tells you the best move right now and takes you there.'),
+    ('🪠', 'Se pueden tapar hasta 3 edificios a la vez, y mientras más rápido produces, más seguido se tapan. El Robot y el Destapacaños los destapan todos.',
+        'Up to 3 buildings can clog at once, and the faster you produce, the more often they clog. The Plunger bot and Drain cleaner unclog all of them.'),
+    ('💡', 'Cada alquilable tiene su "?" con lo que hace y cuánto te rinde, y el juego te avisa cuando uno te vendría bien.',
+        'Every rental has a "?" showing what it does and how much it gives you, and the game tells you when one would help.'),
+    ('📱', 'Arreglado el texto con espacios gigantes en "Mientras no estabas" en algunos Samsung.',
+        'Fixed the text with huge gaps in "While you were away" on some Samsung phones.'),
+  ]),
   VersionNovedades('2.14.1', '2026-11-02', [
     ('👦', 'Los Primos se ven pujando de verdad: 10 toques por segundo, y cada uno tira su mojón a la taza.',
         'Cousins really push now: 10 taps per second, and each one drops its poop into the bowl.'),
