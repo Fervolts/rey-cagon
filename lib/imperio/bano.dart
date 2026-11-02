@@ -15,7 +15,6 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
-import '../animaciones.dart';
 import '../emoji.dart';
 import 'esteticas.dart';
 
@@ -237,7 +236,7 @@ class EstadoBano {
   /// Estéticas premium visibles, ordenadas y unidas por coma (para comparar por valor).
   final String lujos;
 
-  /// Lo alquilado activo (primos, cuadrilla, plomero, robot, guardia): lo dibuja [FiguritasAlquiler].
+  /// Lo alquilado activo (primos, cuadrilla, plomero, robot, guardia): lo dibuja la poceta (poceta.dart), junto con su tira "trabajando ahora".
   final AlquilerBano alquiler;
 
   bool lujo(String id) => lujos.split(',').contains(id);
@@ -456,7 +455,6 @@ class FondoBano extends StatelessWidget {
         if (e.lavanda) en(Bano.lavanda, 20, const Emoji('🪻', tamano: 20)),
         ..._repisa(e, en),
         if (_letrero(e) case final l?) en(e.planta > 0 ? Bano.letreroPlanta : Bano.letrero, 26, Emoji(l, tamano: 26)),
-        if (e.alquiler != sinAlquiler) Positioned.fill(child: RepaintBoundary(child: FiguritasAlquiler(e.alquiler))),
       ];
       return Stack(clipBehavior: Clip.hardEdge, children: hijos);
     });
@@ -488,104 +486,6 @@ class FondoBano extends StatelessWidget {
       // Nuclear: el símbolo va como etiqueta pegada a la botella, no suelto al lado.
       if (e.lecheNuclear) en(f + Offset(tam / 4, tam / 5), 12, const Emoji('☢️', tamano: 12)),
     ];
-  }
-}
-
-/// Lo alquilado que está activo, en el baño. Cada cosa en su hueco, fuera de la poceta (-56..56, 86..216), de los
-/// dedos (el arco de abajo), del tobo, el bidet, el budare y los adornos:
-/// - los primos (👦, hasta 4) en fila por delante, a la derecha de la placa de los dedos y antes del bidet (a la
-///   izquierda el camión se para encima de todo), pujando: tiemblan y se aprietan;
-/// - el robot (🤖, o 🦾 el Turbo) al pie de la poceta, a la izquierda, dando saltitos;
-/// - la caja del plomero (🧰) al pie de la poceta, a la derecha;
-/// - la cuadrilla (👷) caminando de un lado a otro por delante, cerca del borde de abajo, a la izquierda de los primos;
-/// - el guardia (🔦) en la pared de la derecha, alumbrando de un lado a otro.
-/// Con movimiento "completo" se anima con su propio controlador (va en su RepaintBoundary: el fondo no se repinta);
-/// con "simple" o "nada" queda en pose quieta.
-class FiguritasAlquiler extends StatefulWidget {
-  const FiguritasAlquiler(this.alquiler, {super.key});
-
-  final AlquilerBano alquiler;
-
-  /// Dónde va cada cosa (x relativa al centro, y desde arriba de la escena). Los primos van del centro hacia el bidet.
-  static Offset primo(int i) => Offset(36 + 13.0 * i, 268);
-  static const robot = Offset(-44, 244), plomero = Offset(58, 240), guardia = Offset(150, 108);
-  static const cuadrillaY = 266.0, cuadrillaDesde = -72.0, cuadrillaHasta = 14.0;
-
-  @override
-  State<FiguritasAlquiler> createState() => _FiguritasAlquilerState();
-}
-
-class _FiguritasAlquilerState extends State<FiguritasAlquiler> with SingleTickerProviderStateMixin {
-  // Un ciclo de 8 s: la cuadrilla va y vuelve en él; lo demás repite más rápido dentro.
-  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(seconds: 8));
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _ajustar();
-  }
-
-  @override
-  void didUpdateWidget(FiguritasAlquiler viejo) {
-    super.didUpdateWidget(viejo);
-    _ajustar();
-  }
-
-  void _ajustar() {
-    if (movimiento(context) == Movimiento.completo) {
-      if (!_c.isAnimating) _c.repeat();
-    } else if (_c.isAnimating) {
-      _c.stop();
-    }
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final vivo = movimiento(context) == Movimiento.completo;
-    return LayoutBuilder(builder: (context, caja) {
-      final cx = caja.maxWidth / 2;
-      if (!vivo) return Stack(clipBehavior: Clip.none, children: _hijos(cx, null));
-      return AnimatedBuilder(animation: _c, builder: (context, _) => Stack(clipBehavior: Clip.none, children: _hijos(cx, _c.value)));
-    });
-  }
-
-  // [f] va de 0 a 1 en el ciclo de 8 s; null es la pose quieta.
-  List<Widget> _hijos(double cx, double? f) {
-    final a = widget.alquiler;
-    Widget en(Offset o, double tam, Widget hijo) => Positioned(left: cx + o.dx - tam / 2, top: o.dy - tam / 2, width: tam, height: tam, child: hijo);
-    final t = (f ?? 0) * 8; // segundos dentro del ciclo
-    final hijos = <Widget>[];
-    // Primos pujando: cada uno tiembla a su ritmo y se aprieta (se encoge un poco) cuando puja.
-    for (var i = 0; i < a.primos.clamp(0, 4); i++) {
-      final puja = f == null ? 0.0 : max(0.0, sin(t * 2 * pi * .9 + i * 1.7));
-      final dx = f == null ? 0.0 : 1.4 * sin(t * 2 * pi * 7 + i) * puja;
-      final cuerpo = Transform.scale(scaleX: 1 + .05 * puja, scaleY: 1 - .08 * puja, alignment: Alignment.bottomCenter, child: const Emoji('👦', tamano: 20));
-      hijos.add(en(FiguritasAlquiler.primo(i) + Offset(dx, 0), 20, cuerpo));
-    }
-    if (a.robot > 0) {
-      final salto = f == null ? 0.0 : -3.0 * max(0.0, sin(t * 2 * pi * .75));
-      hijos.add(en(FiguritasAlquiler.robot + Offset(0, salto), 22, Emoji(a.robot >= 2 ? '🦾' : '🤖', tamano: 22)));
-    }
-    if (a.plomero) hijos.add(en(FiguritasAlquiler.plomero, 18, const Emoji('🧰', tamano: 18)));
-    if (a.cuadrilla) {
-      // Va y vuelve: mira hacia donde camina y rebota un poquito a cada paso.
-      final ida = f == null ? .5 : (f < .5 ? f * 2 : 2 - f * 2);
-      final x = FiguritasAlquiler.cuadrillaDesde + (FiguritasAlquiler.cuadrillaHasta - FiguritasAlquiler.cuadrillaDesde) * ida;
-      final paso = f == null ? 0.0 : -1.5 * (sin(t * 2 * pi * 2.5)).abs();
-      final caminante = Transform.flip(flipX: f != null && f >= .5, child: const Emoji('👷', tamano: 20));
-      hijos.add(en(Offset(x, FiguritasAlquiler.cuadrillaY + paso), 20, caminante));
-    }
-    if (a.guardia) {
-      final giro = f == null ? 0.0 : .35 * sin(t * 2 * pi * .25);
-      hijos.add(en(FiguritasAlquiler.guardia, 20, Transform.rotate(angle: giro, child: const Emoji('🔦', tamano: 20))));
-    }
-    return hijos;
   }
 }
 

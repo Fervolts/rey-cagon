@@ -5,6 +5,9 @@
 // [FondoBano] y aquí va lo que se mueve: los dedos que pinchan, el bombillo pelado que parpadea, la gota del grifo,
 // la cucaracha, la cucharada de leche de magnesia, el chorro de café, la arepa que salta en el budare, el camión
 // vacuum que viene a descargar, el reactor de la planta, la cloaca con sus ojitos, las moscas y la palanca del tanque.
+// También lo alquilado trabajando: los primos tocando la poceta (aprietan la taza y sueltan su "+MJ"), el robot con su
+// destapador, la cuadrilla que martilla al comprar, la caja del plomero y la linterna del guardia, más la tira
+// "trabajando ahora" (alquilados.dart) con lo que le queda a cada uno.
 //
 // Barato a propósito: un solo Ticker que mueve un ValueNotifier. El fondo va en su propio RepaintBoundary como
 // `child` del ValueListenableBuilder, así que no se reconstruye ni se repinta en cada tick. Sin sombras ni saveLayer.
@@ -22,6 +25,7 @@ import '../animaciones.dart';
 import '../emoji.dart';
 import '../idioma.dart';
 import '../tema.dart';
+import 'alquilados.dart';
 import 'bano.dart';
 import 'formato.dart';
 import 'moneda_app.dart';
@@ -47,6 +51,13 @@ class Poceta extends StatefulWidget {
     this.cartelJalar = false,
     this.llenar = false,
     this.alTocarObjeto,
+    this.pujoPrimo = 0,
+    this.destapes = 0,
+    this.comprasCuadrilla = 0,
+    this.ultimaCuadrilla,
+    this.plomeroBono = false,
+    this.alquileres = const [],
+    this.alTocarAlquiler,
     @visibleForTesting this.instante,
   });
 
@@ -90,6 +101,25 @@ class Poceta extends StatefulWidget {
   /// es el de [Bano.objetoEn], o 'cucaracha' / 'camion' (los que se mueven).
   final void Function(String id)? alTocarObjeto;
 
+  /// Lo que gana un primo en un segundo (valor del pujo x 10): de aquí salen sus "+MJ". Cuántos primos hay y qué más
+  /// está alquilado viene en [bano] ([EstadoBano.alquiler]).
+  final double pujoPrimo;
+
+  /// Destapes contados hasta ahora: si sube con el robot alquilado, el robot destapa en la escena.
+  final int destapes;
+
+  /// Compras de la Cuadrilla en la sesión y el emoji del edificio de la última: si sube, la cuadrilla martilla y sale
+  /// "+1 🏠".
+  final int comprasCuadrilla;
+  final String? ultimaCuadrilla;
+
+  /// El bono del Plomero por horas (x3) está corriendo.
+  final bool plomeroBono;
+
+  /// La tira "trabajando ahora": una ficha por alquilado activo. Tocar una ficha llama a [alTocarAlquiler] y no puja.
+  final List<FichaAlquiler> alquileres;
+  final void Function(FichaAlquiler ficha)? alTocarAlquiler;
+
   /// Solo para pruebas: dibuja la escena quieta en este segundo, como con movimiento completo.
   final double? instante;
 
@@ -102,7 +132,7 @@ class Poceta extends StatefulWidget {
   State<Poceta> createState() => _PocetaState();
 }
 
-enum _Tipo { caida, moneda, flotante, salpicon, gota, tic }
+enum _Tipo { caida, moneda, flotante, salpicon, gota, tic, primo }
 
 class _Particula {
   _Particula(this.id, this.tipo, this.inicio, this.vida, {this.x = 0, this.vx = 0, this.vy = 0, this.emoji = '', this.texto = '', this.epico = false});
@@ -145,6 +175,12 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
   final _veces = <String, int>{}; // cuántas veces en esta sesión (cada 5 al bidet: chorro en la cara)
   final _donde = <String, Offset>{}; // dónde se tocó (la cucaracha se mueve: su grito sale ahí)
   static const _dura = 1.4; // lo que dura la reacción de una cosa tocada
+  double _destapeRobot = -9; // cuándo destapó el robot (lo anima un rato)
+  double _compraCuadrilla = -9; // cuándo compró la cuadrilla
+  String? _emojiCuadrilla; // el edificio que compró
+  double _toquePrimoSimple = -9; // con "simple": el toque de los primos que acompaña su "+MJ"
+  bool _enTira = false; // el toque cayó en la tira de alquilados: no puja
+  static const _duraRobot = 1.5, _duraCuadrilla = 1.4;
 
   // Palanca del tanque: la manija cromada en la cara del tanque, justo bajo la tapa, que sale hacia el frente (a la
   // izquierda). _palanca es la zona de toque (x relativa al centro, y desde arriba); _pivote, el eje de la manija en
@@ -153,6 +189,18 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
   static const _pivote = Offset(97, 21);
 
   double get _ahora => _reloj.elapsedMicroseconds / 1e6;
+
+  @override
+  void didUpdateWidget(Poceta viejo) {
+    super.didUpdateWidget(viejo);
+    if (_mov == Movimiento.nada || widget.instante != null) return;
+    final a = widget.bano.alquiler;
+    if (widget.destapes > viejo.destapes && a.robot > 0) _destapeRobot = _ahora;
+    if (widget.comprasCuadrilla > viejo.comprasCuadrilla && a.cuadrilla) {
+      _compraCuadrilla = _ahora;
+      _emojiCuadrilla = widget.ultimaCuadrilla;
+    }
+  }
 
   @override
   void dispose() {
@@ -166,7 +214,11 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
       widget.instante == null &&
       widget.activo &&
       _mov != Movimiento.nada &&
-      (_mov == Movimiento.completo || _particulas.isNotEmpty || _ahora - _jalo < .6 || _reaccionando);
+      (_mov == Movimiento.completo || _particulas.isNotEmpty || _ahora - _jalo < .6 || _reaccionando || _alquiladoTrabajando);
+
+  // Con "simple": el robot destapando, la cuadrilla martillando o el toque de los primos aún se ven.
+  bool get _alquiladoTrabajando =>
+      _ahora - _destapeRobot < _duraRobot || _ahora - _compraCuadrilla < _duraCuadrilla || _ahora - _toquePrimoSimple < .3;
 
   bool get _reaccionando => _reacciones.values.any((r) => _ahora - r < _dura);
 
@@ -186,7 +238,7 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
     } else if (_ticker.isActive) {
       _ticker.stop();
     }
-    final tics = widget.instante == null && widget.activo && _mov == Movimiento.simple && widget.mps > 0;
+    final tics = widget.instante == null && widget.activo && _mov == Movimiento.simple && (widget.mps > 0 || widget.bano.alquiler.primos > 0);
     if (tics && _tics == null) {
       _tics = Timer.periodic(const Duration(seconds: 3), (_) => _ticSimple());
     } else if (!tics && _tics != null) {
@@ -195,17 +247,30 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
     }
   }
 
-  // Movimiento "simple": un "+N" suelto cada 3 s con lo que se ganó en ese rato.
+  // Movimiento "simple": un "+N" suelto cada 3 s con lo que se ganó en ese rato. Con primos, además un toque que
+  // aprieta la taza y su "+MJ" con lo de los 3 s de todos.
   void _ticSimple() {
     if (!mounted) return;
-    final texto = '+${formatoMj(widget.mps * 3, ingles: enIngles)}';
-    _agregar(_Particula(_id++, _Tipo.tic, _ahora, 1, x: _azar.nextDouble() * 120 - 60, texto: texto), 2);
+    if (widget.mps > 0) {
+      final texto = '+${formatoMj(widget.mps * 3, ingles: enIngles)}';
+      _agregar(_Particula(_id++, _Tipo.tic, _ahora, 1, x: _azar.nextDouble() * 120 - 60, texto: texto), 2);
+    }
+    final primos = widget.bano.alquiler.primos.clamp(0, 4);
+    if (primos > 0 && widget.pujoPrimo > 0) {
+      _toquePrimoSimple = _ahora;
+      final texto = '+${formatoMj(widget.pujoPrimo * primos * 3, ingles: enIngles)}';
+      _agregar(_Particula(_id++, _Tipo.primo, _ahora, 1, x: _slotPrimo(0).dx * .5, texto: texto), 2);
+    }
     _ajustarTicker();
   }
 
   // Qué se tocó: el pincel de Personalizar, la palanca o, si no, la poceta (pujar). Una cosa del baño hace lo suyo y
   // además puja: tocar la escena nunca deja de pujar.
   void _pulsar(Offset o) {
+    if (_enTira) {
+      _enTira = false;
+      return;
+    }
     if (widget.alPersonalizar != null && o.dx >= 2 * _cx - 46 && o.dy <= 46) {
       widget.alPersonalizar!();
       return;
@@ -339,7 +404,7 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
                       final escena = ValueListenableBuilder<double>(
                         valueListenable: _t,
                         // El fondo no depende del tick: se arma una vez y se repinta solo si cambia el baño. Lo alquilado
-                        // que se ve (FiguritasAlquiler) se anima solo dentro: el TickerMode lo para fuera de la pestaña.
+                        // se dibuja con el resto de la escena (_alquilados); el TickerMode para lo animado fuera de la pestaña.
                         child: TickerMode(
                             enabled: widget.activo, child: RepaintBoundary(child: FondoBano(estado: widget.bano, techo: _arriba == 0))),
                         builder: (context, t, fondo) {
@@ -347,7 +412,7 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
                           return _dibujo(context, caja.maxWidth / 2, fijo ?? (_mov == Movimiento.nada ? 0 : t), vivo, fondo!);
                         },
                       );
-                      if (alto == nativo && widget.efectos.isEmpty && widget.alPersonalizar == null) return escena;
+                      if (alto == nativo && widget.efectos.isEmpty && widget.alPersonalizar == null && widget.alquileres.isEmpty) return escena;
                       return Stack(children: [
                         if (_arriba > 0) Positioned(top: 0, left: 0, right: 0, height: _arriba, child: _pared(nativo)),
                         if (abajoFuera > 0)
@@ -371,6 +436,7 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
                           )
                         else
                           ..._esquinas(context, 0, false, nativo, abajoFuera),
+                        if (widget.alquileres.isNotEmpty) _tira(),
                       ]);
                     },
                   ),
@@ -463,6 +529,173 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
     return l;
   }
 
+  // La tira "trabajando ahora", arriba de la escena, entre la ficha de objetos y el pincel (si caben en la misma
+  // altura). Quieta: no está en el tick. El Listener marca el toque para que [_pulsar] no puje con él.
+  Widget _tira() {
+    final arriba = _arriba < 34;
+    return Positioned(
+      top: _arriba + 6,
+      left: arriba && widget.efectos.isNotEmpty ? 130 : 40,
+      right: arriba && widget.alPersonalizar != null ? 40 : 6,
+      child: Listener(
+        onPointerDown: (_) => _enTira = true,
+        child: RepaintBoundary(child: TiraAlquiler(widget.alquileres, alTocar: widget.alTocarAlquiler)),
+      ),
+    );
+  }
+
+  // Lo que aprietan los primos la taza en [t] (0 a 1): con movimiento completo, cada toque de cualquiera; con "simple",
+  // el del tic de 3 s; con "nada", nunca.
+  double _pulsoPrimos(double t, bool vivo) {
+    final n = widget.bano.alquiler.primos.clamp(0, 4);
+    if (n == 0) return 0;
+    if (!vivo) {
+      final d = t - _toquePrimoSimple;
+      return d >= 0 && d < .12 ? sin(pi * d / .12) : 0;
+    }
+    var m = 0.0;
+    for (var i = 0; i < n; i++) {
+      m = max(m, _pulsoPrimo(i, t));
+    }
+    return m;
+  }
+
+  // El toque del primo [i] en [t]: sube y baja en 0,12 s al empezar cada toque.
+  static double _pulsoPrimo(int i, double t) {
+    final d = t - inicioToquePrimo(i, toquePrimo(i, t));
+    return d >= 0 && d < .12 ? sin(pi * d / .12) : 0;
+  }
+
+  // Dónde va cada primo, relativo al centro de la poceta: a los lados de la taza, primero abajo y luego más arriba.
+  static const _primos = [Offset(92, 52), Offset(-92, 52), Offset(104, 18), Offset(-104, 18)];
+  static Offset _slotPrimo(int i) => _primos[i % _primos.length];
+
+  // Un texto que sube y se apaga (para lo que no es un monto de MJ).
+  Widget _flota(double x, double y, double opacidad, Widget hijo) => Positioned(
+        left: x - 60,
+        width: 120,
+        top: y,
+        child: IgnorePointer(child: Opacity(opacity: opacidad.clamp(0.0, 1.0), child: FittedBox(fit: BoxFit.scaleDown, child: hijo))),
+      );
+
+  // Lo alquilado trabajando, alrededor de la poceta (fuera de la taza, -56..56):
+  // - primos (👦, hasta 4) a los lados con la mano (👆) hacia la taza: con movimiento completo cada uno toca
+  //   [toquesPorSegundoPrimo] veces por segundo, aprieta la taza y suelta su "+MJ" juntado (ver alquilados.dart);
+  // - robot (🤖, 🦾 el Turbo) al pie, a la izquierda, dando saltitos; cuando hay un destape se acerca y bombea;
+  // - cuadrilla (👷) caminando por delante; cuando compra, se para, pica y sale "+1" con el edificio;
+  // - plomero: su caja (🧰) con la llave que se mueve, y "x3" mientras corre su bono;
+  // - guardia (🔦) en la pared de la derecha, con el haz de luz barriendo hacia la poceta.
+  // Con "simple" o "nada" quedan en pose quieta (los eventos del robot y la cuadrilla sí se ven con "simple").
+  void _alquilados(BuildContext context, List<Widget> hijos, List<Widget> encima, double cx, double t, bool vivo) {
+    final a = widget.bano.alquiler;
+    if (a == sinAlquiler) return;
+
+    if (a.guardia) {
+      const o = Offset(150, -42);
+      final barrido = vivo ? .35 * sin(t * 2 * pi * .25) : 0.0;
+      hijos.add(Positioned.fill(
+        child: IgnorePointer(child: CustomPaint(painter: _PintorLinterna(Offset(cx + o.dx, _cy + o.dy), atan2(-o.dy, -o.dx) + barrido))),
+      ));
+      hijos.add(_en(cx, o, 20, Transform.rotate(angle: barrido, child: const Emoji('🔦', tamano: 20))));
+    }
+
+    if (a.plomero) {
+      const o = Offset(58, 90);
+      hijos.add(_en(cx, o, 18, const Emoji('🧰', tamano: 18)));
+      final giro = vivo ? .4 * sin(t * (widget.plomeroBono ? 9 : 3)) : 0.0;
+      hijos.add(_en(cx, o + const Offset(12, -12), 14, Transform.rotate(angle: giro, child: const Emoji('🔧', tamano: 14))));
+      if (widget.plomeroBono) {
+        hijos.add(Positioned(
+          left: cx + o.dx - 24,
+          top: _cy + o.dy - 22,
+          child: DecoratedBox(
+            decoration: BoxDecoration(color: acento, borderRadius: BorderRadius.circular(radio)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 3),
+              child: Text('x3', style: numeros(context, tamano: 9, weight: FontWeight.w900, color: Colors.black)),
+            ),
+          ),
+        ));
+      }
+    }
+
+    if (a.cuadrilla) {
+      const desde = -72.0, hasta = 14.0, y = 116.0;
+      final e = t - _compraCuadrilla;
+      final pica = e >= 0 && e < _duraCuadrilla;
+      // Va y vuelve en 8 s; picando se queda donde estaba cuando compró.
+      final f = ((pica ? _compraCuadrilla : t) % 8) / 8;
+      final ida = vivo ? (f < .5 ? f * 2 : 2 - f * 2) : .5;
+      final x = desde + (hasta - desde) * ida;
+      final paso = vivo && !pica ? -1.5 * sin(t * 2 * pi * 2.5).abs() : 0.0;
+      hijos.add(_en(cx, Offset(x, y + paso), 20, Transform.flip(flipX: vivo && !pica && f >= .5, child: const Emoji('👷', tamano: 20))));
+      if (pica) {
+        hijos.add(_en(cx, Offset(x + 14, y - 8), 16,
+            Transform.rotate(angle: .9 * sin(e * 18), alignment: Alignment.bottomLeft, child: const Emoji('⛏️', tamano: 16))));
+        final g = e / _duraCuadrilla;
+        encima.add(_flota(cx + x, _cy + y - 34 - 40 * g, 1 - g, Row(mainAxisSize: MainAxisSize.min, children: [
+          Text('+1', style: _contorno(numeros(context, tamano: 14, weight: FontWeight.w900, color: acento))),
+          if (_emojiCuadrilla != null) ...[const SizedBox(width: 2), Emoji(_emojiCuadrilla!, tamano: 16)],
+        ])));
+      }
+    }
+
+    if (a.robot > 0) {
+      const casa = Offset(-44, 94), junto = Offset(-60, 16);
+      final e = t - _destapeRobot;
+      var pos = casa;
+      if (e >= 0 && e < _duraRobot) {
+        // Se acerca a la taza, bombea con el destapador, se oye el destape y vuelve.
+        final va = Curves.easeOut.transform((e / .25).clamp(0.0, 1.0));
+        final vuelve = Curves.easeIn.transform(((e - 1.2) / .3).clamp(0.0, 1.0));
+        pos = Offset.lerp(casa, junto, va * (1 - vuelve))!;
+        if (e > .2 && e < 1.2) hijos.add(_en(cx, _boca + Offset(-8, -6 + 6 * sin(e * 25)), 22, const Emoji('🪠', tamano: 22)));
+        if (e > .3 && e < .6) hijos.add(_en(cx, _boca, 40, Opacity(opacity: 1 - (e - .3) / .3, child: const Emoji('💥', tamano: 40))));
+        final g = e / _duraRobot;
+        encima.add(_flota(cx + junto.dx, _cy + junto.dy - 50 - 40 * g, 1 - g,
+            Text(tr('¡Destapado!', 'Unclogged!'), style: _contorno(numeros(context, tamano: 13, weight: FontWeight.w900, color: acento)))));
+      } else if (vivo) {
+        pos = casa + Offset(8 * sin(t * .6), -3 * max(0.0, sin(t * 2 * pi * .75)));
+      }
+      hijos.add(_en(cx, pos, 24, Emoji(a.robot >= 2 ? '🦾' : '🤖', tamano: 24)));
+    }
+
+    final n = a.primos.clamp(0, 4);
+    if (n == 0) return;
+    final simple = vivo ? 0.0 : _pulsoPrimos(t, false);
+    final cada = cadaFlotantePrimo(n);
+    final texto = '+${formatoMj(montoFlotantePrimo(widget.pujoPrimo, n), ingles: enIngles)}';
+    final estilo = _contorno(numeros(context, tamano: 15, weight: FontWeight.w900, color: acento));
+    for (var i = 0; i < n; i++) {
+      final o = _slotPrimo(i);
+      final lado = o.dx > 0 ? 1.0 : -1.0; // los de la derecha tocan hacia la izquierda
+      final pulso = vivo ? _pulsoPrimo(i, t) : simple;
+      hijos.add(_en(cx, o, 24, Transform.scale(
+        scaleX: 1 + .04 * pulso,
+        scaleY: 1 - .06 * pulso,
+        alignment: Alignment.bottomCenter,
+        child: Transform.flip(flipX: lado < 0, child: const Emoji('👦', tamano: 24)),
+      )));
+      hijos.add(_en(cx, o + Offset(-lado * (20 + 6 * pulso), 2), 16,
+          Transform.rotate(angle: -lado * pi / 2, child: const Emoji('👆', tamano: 16))));
+      if (!vivo || widget.pujoPrimo <= 0) continue;
+      // Su "+MJ": uno cada [cada] toques, con lo que ganó en ellos.
+      final ahora = toquePrimo(i, t);
+      for (var k = ahora - 3; k <= ahora; k++) {
+        if (k < 0 || (k + i) % cada != 0) continue;
+        final e = t - inicioToquePrimo(i, k);
+        if (e < 0 || e >= .8) continue;
+        final g = e / .8;
+        encima.add(Positioned(
+          left: cx + o.dx * .55 - 60,
+          width: 120,
+          top: _cy - 40 - 60 * g,
+          child: IgnorePointer(child: Opacity(opacity: 1 - g, child: montoMj(texto, estilo, alineacion: Alignment.center))),
+        ));
+      }
+    }
+  }
+
   // Relativo al centro de la poceta.
   Widget _en(double cx, Offset o, double tam, Widget hijo, {Key? key}) =>
       Positioned(key: key, left: cx + o.dx - tam / 2, top: _cy + o.dy - tam / 2, width: tam, height: tam, child: hijo);
@@ -482,6 +715,8 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
     // Apretón al tocar.
     final s = t - _ultimoToque;
     var escala = s >= 0 && s < .14 ? 1 - .08 * sin(pi * s / .14) : 1.0;
+    // Los primos también la aprietan (menos que un toque tuyo) cada vez que tocan.
+    escala = min(escala, 1 - .035 * _pulsoPrimos(t, vivo));
     if (vivo) escala *= 1 + .015 * sin(t * 2.4);
 
     // Temblor: calor, pujo loco y el golpe del épico.
@@ -577,6 +812,7 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
     }
 
     hijos.addAll(trasTaza);
+    _alquilados(context, hijos, encima, cx, t, vivo);
     _moscas(hijos, cx, vivo ? tv : 3.3, vivo);
 
     if (vivo) {
@@ -623,6 +859,8 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
           ));
         case _Tipo.tic:
           encima.add(_suelto(context, cx + q.x, _cy - 30 - 50 * f, q.texto, .65 * (1 - f), 12, Colors.white, key: llave));
+        case _Tipo.primo:
+          encima.add(_suelto(context, cx + q.x, _cy - 40 - 50 * f, q.texto, 1 - f, 14, acento, key: llave));
       }
     }
 
@@ -1767,6 +2005,29 @@ class _Palanca extends CustomPainter {
 
 // El piso de más, hacia uno: sigue la perspectiva y los colores del piso de bano.dart (y, con cloaca, la pared de
 // ladrillo del sótano), con el mismo tinte y la misma penumbra. y = 0 es el borde de abajo de la escena.
+/// El haz de la linterna del guardia: un cono tenue desde [origen] hacia [angulo] que se apaga hacia la punta.
+class _PintorLinterna extends CustomPainter {
+  _PintorLinterna(this.origen, this.angulo);
+
+  final Offset origen;
+  final double angulo;
+  static const _largo = 120.0, _abre = .22;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cono = Path()
+      ..moveTo(origen.dx, origen.dy)
+      ..lineTo(origen.dx + _largo * cos(angulo - _abre), origen.dy + _largo * sin(angulo - _abre))
+      ..lineTo(origen.dx + _largo * cos(angulo + _abre), origen.dy + _largo * sin(angulo + _abre))
+      ..close();
+    final luz = const RadialGradient(colors: [Color(0x55FFF3B0), Color(0x00FFF3B0)]).createShader(Rect.fromCircle(center: origen, radius: _largo));
+    canvas.drawPath(cono, Paint()..shader = luz);
+  }
+
+  @override
+  bool shouldRepaint(_PintorLinterna viejo) => viejo.origen != origen || viejo.angulo != angulo;
+}
+
 class _PintorSuelo extends CustomPainter {
   _PintorSuelo(this.estado);
 

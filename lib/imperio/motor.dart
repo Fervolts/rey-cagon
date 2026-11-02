@@ -287,6 +287,12 @@ class Imperio {
   /// Segundos activos con la Cuadrilla desde su última compra (no se guarda).
   double _segCuadrilla = 0;
 
+  /// Compras de la Cuadrilla en esta sesión y la última que hizo (no se guardan): la pantalla las anima.
+  int _comprasCuadrilla = 0;
+  String? _ultimaCuadrilla;
+  int get comprasCuadrilla => _comprasCuadrilla;
+  String? get ultimaCuadrilla => _ultimaCuadrilla;
+
   /// MJ del regalo diario del Súper Plomero que la pantalla aún no anunció.
   double _regaloPlomero = 0;
 
@@ -1319,7 +1325,10 @@ class Imperio {
       if (e.mpsBase <= 0 || !edificioAbierto(e.id)) continue;
       if (barato == null || precioEdificio(e.id, ahora) < precioEdificio(barato, ahora)) barato = e.id;
     }
-    if (barato != null) comprarEdificio(barato, ahora);
+    if (barato != null && comprarEdificio(barato, ahora)) {
+      _comprasCuadrilla++;
+      _ultimaCuadrilla = barato;
+    }
   }
 
   void _programarDorado(int ahora) {

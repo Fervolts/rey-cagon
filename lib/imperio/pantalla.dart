@@ -10,6 +10,7 @@ import '../emoji.dart';
 import '../idioma.dart';
 import '../main.dart' show textoError;
 import '../tema.dart';
+import 'alquilados.dart';
 import 'bano.dart';
 import 'barra.dart';
 import 'bienvenida.dart';
@@ -802,9 +803,15 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     final im = _c.imperio;
     final efectos = im.efectosActivos(ahora);
     const conDibujo = {'fiebre_dorada', 'fiebre_trono', 'pujo_loco'};
+    // Lo alquilado no va en la fila de efectos: lo dibuja la poceta (y su tira "trabajando ahora"). El bono del plomero
+    // tampoco mientras el plomero está, que ya lleva su "x3".
+    final plomero = im.alquiladoActivo('plomero_horas', ahora);
+    final plomeroBono = efectos.any((e) => e.id == 'plomero_bono');
     final otros = <String>[];
     for (final e in efectos) {
-      if (!conDibujo.contains(e.id) && !otros.contains(e.emoji)) otros.add(e.emoji);
+      if (conDibujo.contains(e.id) || otros.contains(e.emoji)) continue;
+      if (objetoPorId(e.id)?.tipo == TipoObjeto.alquilable || (plomero && e.id == 'plomero_bono')) continue;
+      otros.add(e.emoji);
     }
     final jalar = botonJalar(im, _c.cadena);
     return Poceta(
@@ -821,10 +828,18 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
         // Lo alquilado activo también se ve: los primos pujando, la cuadrilla, el plomero, el robot y el guardia.
         primos: im.alquiladoActivo('primo', ahora) ? im.primosActivos() : 0,
         cuadrilla: im.alquiladoActivo('cuadrilla', ahora),
-        plomero: im.alquiladoActivo('plomero_horas', ahora),
+        plomero: plomero,
         robot: im.alquiladoActivo('robot_turbo', ahora) ? 2 : (im.alquiladoActivo('robot', ahora) ? 1 : 0),
         guardia: im.alquiladoActivo('guardia', ahora),
       )),
+      // Cada primo puja de verdad pujosPrimo veces por segundo; la poceta lo enseña en menos toques que lo juntan.
+      pujoPrimo: im.valorPujo(ahora) * pujosPrimo,
+      destapes: im.partida.destapes,
+      comprasCuadrilla: im.comprasCuadrilla,
+      ultimaCuadrilla: edificioPorId(im.ultimaCuadrilla ?? '')?.emoji,
+      plomeroBono: plomeroBono,
+      alquileres: fichasAlquiler(im, ahora),
+      alTocarAlquiler: (f) => _avisar(f.emoji, avisoAlquiler(f)),
       dedos: min(im.cantidad('dedo'), (im.partida.vista['dedos'] as int?) ?? im.cantidad('dedo')),
       activo: widget.activo,
       // Cuánto más rápido va que lo normal (fiebre, pujo loco...): acelera la escena.
