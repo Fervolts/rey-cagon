@@ -63,6 +63,16 @@ class FlagsImperio {
   final double alquilerDescuento, calorFactor, calorTope, calorVidaMediaH;
   final int maxPrimos;
 
+  /// `pujos_max_seg`: pujos de la mano que cuentan por segundo ([Ajustes.topePujosSeg]).
+  final int topePujosSeg;
+
+  /// `version_minima`: build mínimo para jugar el Imperio. Con uno menor la pestaña pide actualizar; el servidor
+  /// ignora los guardados de versiones más viejas (imperio_guardar, p_version). 0 = sin mínimo.
+  final int versionMinima;
+
+  /// Si un cliente con este build debe dejar de jugar el Imperio. Sin build conocido (web, error) no se bloquea.
+  bool bloqueaVersion(int? build) => versionMinima > 0 && build != null && build < versionMinima;
+
   /// Cuántas veces el precio del catálogo cuestan los edificios (`escala_edificios`) y las mejoras (`escala_mejoras`).
   /// Calibrado con la telemetría de un jugador que spamea (test/imperio_loco_test.dart): con 1 y 1 llegaba al tope en
   /// unas 6 horas de juego (día 2), antes de juntar las cagadas para jalar la cadena; con 10 y 100 llega hacia las 25.
@@ -107,6 +117,8 @@ class FlagsImperio {
     this.calorTope = 10,
     this.calorVidaMediaH = 6,
     this.maxPrimos = 4,
+    this.topePujosSeg = 20,
+    this.versionMinima = 0,
     this.escalaEdificios = 10,
     this.escalaMejoras = 100,
     this.estiloPrecioMult = 1,
@@ -147,6 +159,7 @@ class FlagsImperio {
         calorTope: calorTope,
         calorVidaMediaH: calorVidaMediaH,
         maxPrimos: maxPrimos,
+        topePujosSeg: topePujosSeg,
         escalaEdificios: escalaEdificios,
         escalaMejoras: escalaMejoras,
         temporadas: temporadas,
@@ -209,6 +222,8 @@ class FlagsImperio {
       calorTope: numero('calor_tope', d.calorTope, 1, 100),
       calorVidaMediaH: numero('calor_vida_media_h', d.calorVidaMediaH, 0.25, 168),
       maxPrimos: numero('max_primos', d.maxPrimos.toDouble(), 1, 8).round(),
+      topePujosSeg: numero('pujos_max_seg', d.topePujosSeg.toDouble(), 5, 50).round(),
+      versionMinima: numero('version_minima', d.versionMinima.toDouble(), 0, 1e9).round(),
       escalaEdificios: numero('escala_edificios', d.escalaEdificios, 1, 1000),
       escalaMejoras: numero('escala_mejoras', d.escalaMejoras, 1, 10000),
       estiloPrecioMult: numero('estilo_precio_mult', d.estiloPrecioMult, 0.01, 1000),

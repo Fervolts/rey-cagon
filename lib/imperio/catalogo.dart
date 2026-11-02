@@ -305,7 +305,7 @@ const List<Objeto> objetos = [
   Objeto('papel', '🧻', 'Papel doble hoja', 'Two-ply paper', 'El próximo mojón dorado da el doble', 'Your next golden poop gives double',
       TipoObjeto.consumible, minutosPrecio: 5, espera: Duration(hours: 1), candado: 5, maxInventario: 5, ciruelas: 2),
   Objeto('robot', '🤖', 'Robot destapador', 'Plunger bot', 'Destapa solo cada Atasco', 'Unclogs every Clog by itself', TipoObjeto.alquilable,
-      duracion: Duration(minutes: 30), minutosPrecio: 20, candado: 10, pideAtasco: true, ciruelas: 3),
+      duracion: Duration(minutes: 30), minutosPrecio: 20, candado: 4, pideAtasco: true, ciruelas: 3),
   // Fase 2: alquilables (candado 15 y 30).
   Objeto('robot_turbo', '🦾', 'Robot destapador Turbo', 'Turbo plunger bot', 'Destapa solo y el Atasco no frena la producción',
       'Unclogs by itself and Clogs don\'t slow production', TipoObjeto.alquilable,
@@ -567,7 +567,8 @@ const List<Candado> candadosFase1 = [
   Candado(1, 'Fichas de cagada y Cagada fresca', 'Poop tokens and Fresh dump'),
   Candado(3, 'Bidet', 'Bidet'),
   Candado(5, 'Baño público y los consumibles', 'Public restroom and consumables'),
-  Candado(10, 'Robot destapador, Camión vacuum y Planta de tratamiento', 'Plunger bot, Vacuum truck and Treatment plant'),
+  Candado(4, 'Robot destapador', 'Plunger bot'),
+  Candado(10, 'Camión vacuum y Planta de tratamiento', 'Vacuum truck and Treatment plant'),
   Candado(15, 'Maná de Tripa y la segunda tanda de objetos', 'Gut Mana and the second batch of items'),
   Candado(30, 'Robot Turbo y Guardia nocturno', 'Turbo bot and Night watchman'),
 ];
@@ -637,6 +638,10 @@ class Ajustes {
   final double alquilerDescuento, calorFactor, calorTope, calorVidaMediaH;
   final int maxPrimos;
 
+  /// Pujos de la mano que cuentan por segundo (ventana deslizante de 1 s); los de más no dan nada. Los Primos no
+  /// pasan por aquí. También es el ritmo de pujos que se manda al guardar ([Imperio.ritmoEfectivo]).
+  final int topePujosSeg;
+
   const Ajustes({
     this.doradoMinMin = 5,
     this.doradoMaxMin = 15,
@@ -665,6 +670,7 @@ class Ajustes {
     this.calorTope = 10,
     this.calorVidaMediaH = 6,
     this.maxPrimos = 4,
+    this.topePujosSeg = 20,
     this.escalaEdificios = 1,
     this.escalaMejoras = 1,
     this.temporadas = const [],

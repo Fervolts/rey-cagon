@@ -35,6 +35,7 @@ import 'ranking_amigos.dart';
 import 'sala.dart';
 import 'tienda_ciruelas.dart';
 import 'tienda_estilo.dart';
+import 'version_minima.dart';
 
 String _mj(double v) => formatoMj(v, ingles: enIngles);
 
@@ -124,6 +125,8 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
   // (emoji, texto, id del logro para PRESUMIR o null)
   final _cola = <(String, String, String?)>[];
   (String, String, String?)? _aviso;
+  (String, String, String?)? _juntos; // el aviso "+N logros" (junta los logros cuando son más de 3)
+  int _nJuntos = 0;
   Timer? _timerAviso;
   Atasco? _atascoAvisado; // el último Atasco que ya se avisó (por identidad)
   int _nAviso = 0; // clave del Dismissible: cada aviso nuevo es otro widget
@@ -161,6 +164,15 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
   void _alCambiar() {
     if (!mounted) return;
     if (widget.activo) {
+      // Más de 3 logros en cola se juntan en un solo aviso "+N logros" (si no, la cola tarda medio minuto).
+      final enCola = _cola.where((a) => a.$3 != null).length + (_cola.contains(_juntos) ? _nJuntos : 0);
+      if (_c.logrosNuevos.length + enCola > 3) {
+        _nJuntos = _c.logrosNuevos.length + enCola;
+        _c.logrosNuevos.clear();
+        _cola.removeWhere((a) => a.$3 != null || a == _juntos);
+        _juntos = ('🏆', tr('+$_nJuntos logros', '+$_nJuntos achievements'), null);
+        _avisar(_juntos!.$1, _juntos!.$2);
+      }
       while (_c.logrosNuevos.isNotEmpty) {
         final l = _c.logrosNuevos.removeAt(0);
         _avisar('🏆', tr('Logro: ${nombreLogro(l)}', 'Achievement: ${nombreLogro(l)}'), logro: l.id);
@@ -183,6 +195,10 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       if (_c.empujonPendiente) {
         _c.empujonPendiente = false;
         _avisar('🎁', tr('Empujón: producción x2 por 30 min', 'Boost: x2 production for 30 min'));
+      }
+      if (_c.cadenaSincronizadaPendiente) {
+        _c.cadenaSincronizadaPendiente = false;
+        _avisar('⛓️', tr('Tu cadena se puso al día con la nube', 'Your chain caught up with the cloud'));
       }
       _mostrarDialogos();
     }
@@ -373,6 +389,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
 
   ToquePoceta _pujar() {
     final r = _c.pujar();
+    if (!r.contado) return (texto: '', epico: false); // pasó del tope de pujos por segundo
     final texto = r.epico ? tr('¡ÉPICO! +${_mj(r.ganado)}', 'EPIC! +${_mj(r.ganado)}') : '+${_mj(r.ganado)}';
     return (texto: texto, epico: r.epico);
   }
@@ -407,6 +424,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     final p = paleta(context);
     if (_c.cargando) return Scaffold(backgroundColor: p.fondo, body: const Center(child: CircularProgressIndicator()));
     if (_c.apagado) return Scaffold(backgroundColor: p.fondo, body: Center(child: _mantenimiento(context)));
+    if (_c.versionVieja) return Scaffold(backgroundColor: p.fondo, body: const Center(child: TarjetaVersionMinima()));
     final ahora = _c.ahora;
     final dorado = _c.imperio.dorado(ahora);
     final mov = movimiento(context);
@@ -572,7 +590,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
             children: [
               Emoji(a.$1, tamano: 22),
               const SizedBox(width: 10),
-              Expanded(child: Text(a.$2, style: TextStyle(fontWeight: FontWeight.w800, color: p.texto))),
+              Expanded(child: TextoConEmojis(a.$2, style: TextStyle(fontWeight: FontWeight.w800, color: p.texto))),
               if (a.$3 != null)
                 TextButton(
                   onPressed: () {

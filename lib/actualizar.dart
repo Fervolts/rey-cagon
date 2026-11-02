@@ -6,6 +6,7 @@ import 'package:flutter/services.dart' show appFlavor;
 import 'package:in_app_update/in_app_update.dart';
 import 'package:ota_update/ota_update.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'idioma.dart';
 import 'main.dart' show supabaseUrl;
@@ -158,4 +159,35 @@ void _ofrecerReinicio(BuildContext context) {
       action: SnackBarAction(label: tr('REINICIAR', 'RESTART'), onPressed: InAppUpdate.completeFlexibleUpdate),
     ),
   );
+}
+
+/// El build instalado (versionCode), o null si no se puede leer.
+Future<int?> buildInstalado() async {
+  try {
+    return int.tryParse((await PackageInfo.fromPlatform()).buildNumber);
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Botón ACTUALIZAR de una pantalla que bloquea por versión vieja: en Play intenta la actualización
+/// inmediata y si no se puede abre la ficha de la tienda; fuera de Play revisa el manifiesto otra vez,
+/// aunque antes le hayan dado DESPUÉS.
+Future<void> abrirActualizacion(BuildContext context) async {
+  if (!esDePlay) {
+    _pospuesta = null;
+    return revisarActualizacion(context);
+  }
+  try {
+    final info = await InAppUpdate.checkForUpdate();
+    if (info.updateAvailability == UpdateAvailability.updateAvailable && info.immediateUpdateAllowed) {
+      if (await InAppUpdate.performImmediateUpdate() == AppUpdateResult.success) return;
+    }
+  } catch (_) {
+    // Sin Play Store o instalada por fuera: se abre la ficha.
+  }
+  try {
+    final id = (await PackageInfo.fromPlatform()).packageName;
+    await launchUrl(Uri.parse('https://play.google.com/store/apps/details?id=$id'), mode: LaunchMode.externalApplication);
+  } catch (_) {}
 }
