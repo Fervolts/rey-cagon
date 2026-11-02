@@ -7,7 +7,7 @@ import 'cadena.dart';
 
 /// Barra de abajo del Imperio: EDIFICIOS, TIENDA, JALAR (solo si [jalar] es visible) y SALA. Baja, para no tapar el baño.
 /// JALAR no sale hasta comprar La cadena del trono; después de la primera jalada sale para siempre. Sin hueco.
-/// EDIFICIOS abre el cajón; [avisoEdificios] va en la esquina (cuántos se pueden comprar o '!' con atasco).
+/// EDIFICIOS abre el cajón; [avisoEdificios] va en la esquina (cuántos se pueden comprar, '!' con un atasco o 'xN' con N atascos).
 class BarraImperio extends StatelessWidget {
   const BarraImperio({
     super.key,

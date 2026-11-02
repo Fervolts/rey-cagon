@@ -129,7 +129,8 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
   (String, String, String?)? _juntos; // el aviso "+N logros" (junta los logros cuando son más de 3)
   int _nJuntos = 0;
   Timer? _timerAviso;
-  Atasco? _atascoAvisado; // el último Atasco que ya se avisó (por identidad)
+  final Set<Atasco> _atascosAvisados = Set.identity(); // los Atascos que ya se avisaron (por identidad)
+  (String, String, String?)? _avisoAtascos; // el aviso "¡N atascos!" lleva un botón que abre los objetos
   int _nAviso = 0; // clave del Dismissible: cada aviso nuevo es otro widget
 
   @override
@@ -180,14 +181,24 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       }
       // Súper Plomero: 1 h de producción al primer tick del día.
       // Atasco nuevo (o el que quedó guardado): aviso arriba y vibración, para que no pase sin verse.
-      final atasco = _c.imperio.atasco;
-      if (atasco != null && !identical(atasco, _atascoAvisado)) {
-        final e = edificioPorId(atasco.edificio);
-        final nombre = e == null ? '' : tr(e.nombreEs, e.nombreEn);
-        _avisar('🪠', tr('¡Se tapó $nombre! No produce hasta que lo destapes', '$nombre is clogged! It won\'t produce until you unclog it'));
+      // Con 2 o más abiertos (y sin Robot, que los destapa en el tick) avisa cuántos hay y lleva a los objetos.
+      final atascos = _c.imperio.atascos;
+      final nuevos = atascos.where((a) => !_atascosAvisados.contains(a)).toList();
+      if (nuevos.isNotEmpty) {
+        if (atascos.length >= 2 && !_c.imperio.robotActivo(_c.ahora)) {
+          final n = atascos.length;
+          _avisoAtascos = ('🪠', tr('¡$n atascos! El Robot destapa solo', '$n clogs! The Plunger bot unclogs them by itself'), null);
+          _avisar(_avisoAtascos!.$1, _avisoAtascos!.$2);
+        } else {
+          final e = edificioPorId(nuevos.last.edificio);
+          final nombre = e == null ? '' : tr(e.nombreEs, e.nombreEn);
+          _avisar('🪠', tr('¡Se tapó $nombre! No produce hasta que lo destapes', '$nombre is clogged! It won\'t produce until you unclog it'));
+        }
         if (movimiento(context) != Movimiento.nada) HapticFeedback.mediumImpact();
       }
-      _atascoAvisado = atasco;
+      _atascosAvisados
+        ..clear()
+        ..addAll(atascos);
       final regalo = _c.imperio.tomarRegaloPlomero();
       if (regalo > 0) {
         final mj = formatoMj(regalo, ingles: enIngles);
@@ -312,6 +323,9 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
           if (off.tanqueLleno) tr('Se llenó el tanque, compra uno más grande.', 'The tank filled up, buy a bigger one.'),
           if (off.regalo > 0) tr('Incluye +${_mj(off.regalo)} de regalo por volver.', 'Includes a +${_mj(off.regalo)} welcome back gift.'),
           if (off.atascoEdificio != null) _lineaAtascoOffline(off),
+          if (off.atascos.length > 1)
+            tr('Fueron ${off.atascos.length} atascos en total (${off.atascosTapados} siguen tapados).',
+                '${off.atascos.length} clogs in total (${off.atascosTapados} still clogged).'),
         ]);
       }
       final d = _c.descargaPendiente;
@@ -513,7 +527,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     final im = _c.imperio;
     var n = _alcanzan(im.mejorasPoceta());
     for (final e in edificios) {
-      if (!im.edificioVisible(e.id) || !im.edificioAbierto(e.id) || im.atasco?.edificio == e.id) continue;
+      if (!im.edificioVisible(e.id) || !im.edificioAbierto(e.id) || im.atascado(e.id)) continue;
       if (im.precioEdificioVarios(e.id, _cantidad, ahora) <= im.saldo) n++;
       if (!im.edificioMisterioso(e.id)) n += _alcanzan(im.mejorasDeEdificio(e.id));
     }
@@ -592,6 +606,14 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
               Emoji(a.$1, tamano: 22),
               const SizedBox(width: 10),
               Expanded(child: TextoConEmojis(a.$2, style: TextStyle(fontWeight: FontWeight.w800, color: p.texto))),
+              if (a.$3 == null && a == _avisoAtascos)
+                TextButton(
+                  onPressed: () {
+                    _siguienteAviso();
+                    _abrirObjetos(context);
+                  },
+                  child: Text(tr('VER', 'SEE')),
+                ),
               if (a.$3 != null)
                 TextButton(
                   onPressed: () {
@@ -1031,6 +1053,15 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     if (atasco != null && atasco.edificio == e.id) {
       return Padding(padding: const EdgeInsets.only(bottom: 6), child: _tarjetaAtasco(context, atasco));
     }
+    // Los demás atascados salen parados: se destapan cuando les toque ser el primero (o con el Robot).
+    if (im.atascado(e.id)) {
+      return _fila(context,
+          emoji: '🪠',
+          titulo: tr(e.nombreEs, e.nombreEn),
+          detalle: tr('Atascado: no produce hasta que lo destapes', 'Clogged: no output until you unclog it'),
+          contador: im.cantidad(e.id),
+          apagada: true);
+    }
     final n = _cantidad;
     final precio = im.precioEdificioVarios(e.id, n, ahora);
     final alcanza = precio <= im.saldo;
@@ -1259,14 +1290,15 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
   Widget _botonesAbajo(BuildContext context, int ahora) {
     final jalar = botonJalar(_c.imperio, _c.cadena);
     final moneda = monedaActual().abreviatura;
-    final atasco = _c.imperio.atasco != null;
+    final atascos = _c.imperio.atascos.length;
+    final atasco = atascos > 0;
     final n = _comprables(ahora);
     return BarraImperio(
       // Abre o cierra el cajón.
       alEdificios: () => _abrirCajon(_cajon.value < 0.5),
       // Con atasco, el desatascador avisa que hay que entrar a destapar.
       atasco: atasco,
-      avisoEdificios: atasco ? '!' : (n > 0 ? (n > 99 ? '99+' : '$n') : null),
+      avisoEdificios: atasco ? (atascos >= 2 ? tr('x$atascos', 'x$atascos') : '!') : (n > 0 ? (n > 99 ? '99+' : '$n') : null),
       jalar: jalar,
       moneda: moneda,
       alObjetos: () => _abrirObjetos(context),

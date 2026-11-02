@@ -31,13 +31,15 @@ Future<int> _enviarPorRpc(List<Map<String, Object?>> lote) async {
 /// - `dorado_aparece` {}
 /// - `dorado_toca` {efecto} (nombre de `EfectoDorado`)
 /// - `dorado_pierde` {}
-/// - `atasco_aparece` {edificio}
-/// - `atasco_destapa` {ms, perfecto, robot}
-/// - `atasco_pierde` {}
-/// - `atasco_offline` {edificio, minutos, mj_perdidos, robot}: al volver, el Atasco sorteado al salir cayó dentro del
-///   tiempo contado. minutos = desde que se fue hasta el Atasco; robot = lo destapó solo un Robot, Robot Turbo o Súper
-///   Plomero (entonces mj_perdidos = 0)
-/// - `atasco_offline_aviso` {edificio, minutos}: al salir se programó el aviso local del Atasco offline (minutos hasta él)
+/// - `atasco_aparece` {edificio, abiertos}: abiertos = cuántos Atascos hay abiertos contando este (tope `atascos_max`)
+/// - `atasco_destapa` {ms, perfecto, robot}: uno por Atasco; el Robot y los que destapan todo mandan uno por cada uno
+/// - `atasco_pierde` {}: uno por cada Atasco que sigue abierto al cerrar la sesión (una vez por Atasco)
+/// - `atasco_offline` {edificio, edificios, minutos, mj_perdidos, robot}: al volver, los Atascos sorteados al salir que
+///   cayeron dentro del tiempo contado. edificio, minutos y robot son del primero; edificios = todos, en orden;
+///   minutos = desde que se fue hasta el primero; robot = al primero lo destapó solo un Robot, Robot Turbo o Súper Plomero
+///   (los cubiertos no suman a mj_perdidos); mj_perdidos suma los que no se destaparon solos
+/// - `atasco_offline_aviso` {edificio, minutos}: al salir se programó el aviso local del primer Atasco offline que nada
+///   destapa solo (minutos hasta él; un solo aviso aunque haya varios)
 /// - `logro` {id}
 /// - `offline` {segundos, tope_lleno, ganado}
 /// - `descarga` {cagadas, ganado}

@@ -15,9 +15,7 @@ Imperio _imperio({int? enMin, Random? azar}) {
     ..edificios['ciruela'] = 10
     ..vioPrimerAtasco = true;
   if (enMin != null) {
-    imp.partida
-      ..atascoOfflineEn = t0 + enMin * minuto
-      ..atascoOfflineEdificio = 'ciruela';
+    imp.partida.atascosOffline = [AtascoProgramado(t0 + enMin * minuto, 'ciruela')];
   }
   return imp;
 }

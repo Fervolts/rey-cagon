@@ -80,20 +80,20 @@ class ResultadoOffline {
   /// Regalo de vuelta (ya sumado en [ganado]): 4 h de producción si estuvo fuera 2 días o más. 0 = no hubo.
   final double regalo;
 
-  /// Atasco offline que cayó dentro del tiempo contado: el edificio (null = no hubo), cuándo (ms epoch), los MJ que se
-  /// dejaron de ganar (ya descontados de [ganado]) y si lo destapó solo un Robot, Robot Turbo o Súper Plomero.
-  final String? atascoEdificio;
-  final int atascoEn;
+  /// Atascos offline que cayeron dentro del tiempo contado, en orden de hora (cada uno: edificio, cuándo y si lo
+  /// destapó solo un Robot, Robot Turbo o Súper Plomero), y los MJ que se dejaron de ganar (ya descontados de [ganado]).
+  final List<AtascoOffline> atascos;
   final double mjPerdidos;
-  final bool atascoCubierto;
+
+  /// El primero de [atascos]: el edificio (null = no hubo), cuándo (ms epoch) y si estaba cubierto.
+  String? get atascoEdificio => atascos.isEmpty ? null : atascos.first.edificio;
+  int get atascoEn => atascos.isEmpty ? 0 : atascos.first.en;
+  bool get atascoCubierto => atascos.isNotEmpty && atascos.first.cubierto;
+
+  /// Atascos offline que quedaron tapados al volver (los no cubiertos).
+  int get atascosTapados => atascos.where((a) => !a.cubierto).length;
   const ResultadoOffline(this.segundosAusente, this.segundosContados, this.ganado, this.tanqueLleno, this.conBonus,
-      {this.conGuardia = false,
-      this.regalo = 0,
-      this.fuerzaBonus = 1,
-      this.atascoEdificio,
-      this.atascoEn = 0,
-      this.mjPerdidos = 0,
-      this.atascoCubierto = false});
+      {this.conGuardia = false, this.regalo = 0, this.fuerzaBonus = 1, this.atascos = const [], this.mjPerdidos = 0});
 }
 
 /// Atasco offline programado al salir: en [en] (ms epoch) se atasca [edificio]. [cubierto] = un Robot, Robot Turbo o
@@ -178,9 +178,21 @@ const Duration tiempoDestapePerfecto = Duration(seconds: 3);
 const int toquesAtasco = 10;
 const int minimoParaAtasco = 1;
 
-/// Segundos de juego activo por Atasco, en promedio. Es un freno del juego: molesta desde el principio y en cualquier
-/// edificio (con 25 min y 10 unidades mínimo casi no salía y se avanzaba demasiado rápido).
+/// Segundos de juego activo por Atasco, en promedio (el valor por defecto de [Ajustes.atascoSeg]). Es un freno del
+/// juego: molesta desde el principio y en cualquier edificio (con 25 min y 10 unidades mínimo casi no salía y se
+/// avanzaba demasiado rápido).
 const double segundosPorAtasco = 4 * 60;
+
+/// Azar de Atascos en juego (falso azar por presión): cada segundo activo suma `s / atascoSeg x novato x ritmo` y al
+/// pasar el umbral (sorteado entre 0,75 y 1,25) sale uno. Así no hay rachas raras ni sequías largas.
+/// Novato (menos de [segundosNovato] jugados en total): x0,6. Ritmo: hasta x1,5 pujando a [pujosRitmo] pujos/s o más.
+const double segundosNovato = 600, presionNovato = 0.6, presionRitmoMax = 0.5, pujosRitmo = 10;
+
+/// Presión que suma cada edificio comprado, con tope por compra (de varios a la vez).
+const double presionPorCompra = 0.02, presionCompraTope = 0.2;
+
+/// Ventana (ms) de los pujos que miden el ritmo.
+const int ventanaRitmo = 10000;
 
 /// El primer Atasco sale seguro a estos segundos de juego activo (en cualquier edificio que dé MJ/s): así se conoce
 /// la mecánica y se abren el Robot y el Turbo.
@@ -297,6 +309,9 @@ class Imperio {
   /// Momentos (ms) de los pujos de la mano que contaron en el último segundo, para el tope (no se guarda).
   final _toques = ListQueue<int>();
 
+  /// Momentos (ms) de los pujos que contaron en los últimos 10 s, para el ritmo de los Atascos (no se guarda).
+  final _pujosRitmo = ListQueue<int>();
+
   /// MJ del regalo diario del Súper Plomero que la pantalla aún no anunció.
   double _regaloPlomero = 0;
 
@@ -332,6 +347,18 @@ class Imperio {
   /// Consumibles guardados de un objeto.
   int enInventario(String id) => _p.inventario[id] ?? 0;
   Atasco? get atasco => _p.atasco;
+
+  /// Atascos abiertos, en orden de llegada (el primero es el que se destapa a mano).
+  List<Atasco> get atascos => _p.atascos;
+
+  /// Ese edificio está atascado (produce 0).
+  bool atascado(String id) => _p.atascos.any((a) => a.edificio == id);
+
+  /// Atascos abiertos a la vez como máximo: el ajuste (1 a 10), nunca más que los edificios que dan MJ/s.
+  int get topeAtascos {
+    final productores = edificios.where((e) => e.mpsBase > 0 && cantidad(e.id) >= minimoParaAtasco).length;
+    return min(ajustes.atascosMax.clamp(1, 10), productores);
+  }
 
   void _ganar(double mj) {
     if (mj.isNaN || mj <= 0) return;
@@ -369,6 +396,14 @@ class Imperio {
   void _destapado(int ahora) {
     _p.destapes++;
     if (alquiladoActivo('plomero_horas', ahora)) _extender('plomero_bono', ahora, duracionBonoPlomero);
+  }
+
+  /// Destapa todos los Atascos abiertos (Robot, Robot Turbo, Súper Plomero, Destapacaños, Corre corre): cada uno cuenta.
+  void _destaparTodos(int ahora) {
+    for (var k = _p.atascos.length; k > 0; k--) {
+      _destapado(ahora);
+    }
+    _p.atascos = [];
   }
 
   /// Hay Fiebre (de mojón dorado o de Trono): producción x7.
@@ -444,7 +479,7 @@ class Imperio {
 
   /// MJ/s de un edificio con todos los efectos (y el x de la temporada). 0 si está atascado.
   double mpsEdificio(String id, int ahora) {
-    if (_p.atasco?.edificio == id) return 0;
+    if (atascado(id)) return 0;
     return _produccionCruda(id) * multiplicadorPermanente * multiplicadorProduccionTemporal(ahora) * (enFiebre(ahora) ? multiplicadorFiebre : 1) *
         multiplicadorTemporadaAhora(ahora);
   }
@@ -469,7 +504,7 @@ class Imperio {
   double mpsSinEfectos({bool contarAtasco = true}) {
     var s = 0.0;
     for (final e in edificios) {
-      if (contarAtasco && _p.atasco?.edificio == e.id) continue;
+      if (contarAtasco && atascado(e.id)) continue;
       s += _produccionCruda(e.id);
     }
     return s * multiplicadorPermanente;
@@ -558,6 +593,10 @@ class Imperio {
       if (_toques.length >= tope) return const ResultadoPujo(0, false, contado: false);
       _toques.add(ahora);
     }
+    // Ritmo para la presión de Atascos: solo los pujos que contaron.
+    if (_pujosRitmo.isNotEmpty && ahora < _pujosRitmo.last) _pujosRitmo.clear();
+    _pujosRitmo.add(ahora);
+    _limpiarRitmo(ahora);
     final epico = _azar.nextDouble() < probabilidadEpicoActual(ahora);
     final ganado = valorPujo(ahora) * (epico ? ajustes.epicoMultiplicador : 1);
     _ganar(ganado);
@@ -677,6 +716,8 @@ class Imperio {
     if (precio > _p.saldo) return false;
     _p.saldo -= precio;
     _p.edificios[id] = cantidad(id) + n;
+    // Comprar acerca el próximo Atasco.
+    _p.presionAtasco += min(presionCompraTope, presionPorCompra * n);
     return true;
   }
 
@@ -915,9 +956,8 @@ class Imperio {
     if (o == null || o.tipo != TipoObjeto.consumible || enInventario(id) <= 0 || esperaRestante(id, ahora) != null) return false;
     if (id == 'pintura') return false;
     if (id == 'destapacanos') {
-      if (_p.atasco == null) return false;
-      _p.atasco = null;
-      _destapado(ahora);
+      if (_p.atascos.isEmpty) return false;
+      _destaparTodos(ahora);
     } else if (o.duracion == null) {
       if (_p.papelDoble) return false;
       _p.papelDoble = true;
@@ -1077,7 +1117,7 @@ class Imperio {
   bool puedeUsarHabilidad(String id, int ahora) {
     final h = habilidadPorId(id);
     if (h == null || !manaAbierto || mana(ahora) < h.mana || esperaHabilidad(id, ahora) != null) return false;
-    return id != 'corre_corre' || _p.atasco != null;
+    return id != 'corre_corre' || _p.atascos.isNotEmpty;
   }
 
   /// Usa la habilidad [id]: gasta su Maná y arranca su espera. null si no se puede.
@@ -1088,8 +1128,7 @@ class Imperio {
     var fallo = false;
     switch (id) {
       case 'corre_corre':
-        _p.atasco = null;
-        _destapado(ahora);
+        _destaparTodos(ahora);
       case 'chorro':
         final m = mpsSinEfectos(contarAtasco: false);
         if (_azar.nextDouble() < probFalloChorro) {
@@ -1256,33 +1295,68 @@ class Imperio {
       }
     }
 
-    // Atascos: el primero seguro al minuto activo; después ~1 cada 4 min activos, uno a la vez, en cualquier edificio.
-    if (_p.atasco == null && s > 0 && !_p.vioPrimerAtasco && _p.segPartida >= segundosPrimerAtasco) _atascar(ahora, 1);
-    if (_p.atasco == null && s > 0 && _azar.nextDouble() < s / segundosPorAtasco) _atascar(ahora, minimoParaAtasco);
-    if (_p.atasco != null && _destapaSolo(ahora)) {
-      _p.atasco = null;
-      _destapado(ahora);
-    }
-    // Con la app abierta ya no queda Atasco offline pendiente (se sortea otro al salir).
-    if (s > 0 && _p.atascoOfflineEn > 0) _borrarAtascoOffline();
+    // Atascos: el primero seguro al minuto activo; después por presión (~1 cada [Ajustes.atascoSeg] activos), varios a
+    // la vez hasta [topeAtascos], uno por edificio.
+    if (_p.atascos.isEmpty && s > 0 && !_p.vioPrimerAtasco && _p.segPartida >= segundosPrimerAtasco) _atascar(ahora, 1);
+    if (s > 0) _presionarAtasco(ahora, s);
+    if (_p.atascos.isNotEmpty && _destapaSolo(ahora)) _destaparTodos(ahora);
+    // Con la app abierta ya no quedan Atascos offline pendientes (se sortean otros al salir).
+    if (s > 0 && _p.atascosOffline.isNotEmpty) _borrarAtascoOffline();
 
     _p.ultimaVez = ahora;
     return revisarLogros();
   }
 
-  /// Atasca un edificio al azar con [minimo] unidades o más (si no hay otro Atasco). El Dedo no produce MJ/s: no se atasca.
-  /// Pesa la raíz de lo que produce cada uno: el que más da se tapa más seguido, pero no siempre el mismo.
-  void _atascar(int ahora, int minimo) {
-    if (_p.atasco != null) return;
-    final elegido = _elegirAtascado(minimo);
-    if (elegido == null) return;
-    _p.atasco = Atasco(elegido, ahora);
-    _p.vioPrimerAtasco = true;
+  void _limpiarRitmo(int ahora) {
+    while (_pujosRitmo.isNotEmpty && ahora - _pujosRitmo.first > ventanaRitmo) {
+      _pujosRitmo.removeFirst();
+    }
   }
 
-  /// El edificio que se atasca (ver [_atascar]); null si no hay ninguno con [minimo] unidades que produzca.
-  String? _elegirAtascado(int minimo) {
-    final candidatos = [for (final e in edificios) if (e.mpsBase > 0 && cantidad(e.id) >= minimo) e.id];
+  /// Factor de la presión de Atascos en [ahora]: x0,6 de novato y hasta x1,5 por el ritmo de pujos de los últimos 10 s.
+  double factorPresionAtasco(int ahora) {
+    if (_pujosRitmo.isNotEmpty && ahora < _pujosRitmo.last) _pujosRitmo.clear();
+    _limpiarRitmo(ahora);
+    final porSeg = _pujosRitmo.length / (ventanaRitmo / 1000);
+    final novato = _p.segHistoricos < segundosNovato ? presionNovato : 1.0;
+    return novato * (1 + presionRitmoMax * min(1.0, porSeg / pujosRitmo));
+  }
+
+  /// Suma la presión de [s] segundos activos y, al pasar el umbral, atasca un edificio libre y sortea el umbral
+  /// siguiente. Con el tope lleno la presión espera en el umbral.
+  void _presionarAtasco(int ahora, double s) {
+    if (_p.umbralAtasco <= 0) _p.umbralAtasco = _sortearUmbral();
+    _p.presionAtasco += s / max(1.0, ajustes.atascoSeg) * factorPresionAtasco(ahora);
+    if (_p.presionAtasco < _p.umbralAtasco) return;
+    if (_atascar(ahora, minimoParaAtasco)) {
+      _p.presionAtasco = max(0.0, _p.presionAtasco - _p.umbralAtasco);
+      _p.umbralAtasco = _sortearUmbral();
+    } else {
+      _p.presionAtasco = _p.umbralAtasco;
+    }
+  }
+
+  double _sortearUmbral() => 0.75 + 0.5 * _azar.nextDouble();
+
+  /// Atasca un edificio libre al azar con [minimo] unidades o más, si cabe en [topeAtascos]. El Dedo no produce MJ/s:
+  /// no se atasca. Pesa la raíz de lo que produce cada uno: el que más da se tapa más seguido, pero no siempre el mismo.
+  /// Devuelve si atascó.
+  bool _atascar(int ahora, int minimo) {
+    if (_p.atascos.length >= topeAtascos) return false;
+    final elegido = _elegirAtascado(minimo);
+    if (elegido == null) return false;
+    _p.atascos.add(Atasco(elegido, ahora));
+    _p.vioPrimerAtasco = true;
+    return true;
+  }
+
+  /// El edificio que se atasca (ver [_atascar]); null si no hay ninguno libre con [minimo] unidades que produzca.
+  /// [sin] = edificios que tampoco valen (los ya programados offline).
+  String? _elegirAtascado(int minimo, [Set<String> sin = const {}]) {
+    final candidatos = [
+      for (final e in edificios)
+        if (e.mpsBase > 0 && cantidad(e.id) >= minimo && !atascado(e.id) && !sin.contains(e.id)) e.id
+    ];
     if (candidatos.isEmpty) return null;
     final pesos = [for (final id in candidatos) sqrt(max(_produccionCruda(id), 1e-9))];
     var r = _azar.nextDouble() * pesos.fold(0.0, (a, b) => a + b);
@@ -1298,33 +1372,49 @@ class Imperio {
   bool _cubreAtascoOffline(int t) =>
       _destapaSolo(t) || alquilerIndefinido('robot') || alquilerIndefinido('robot_turbo');
 
-  /// Al salir de la app: sortea cuándo se atasca un edificio con la app cerrada (mínimo [Ajustes.atascoOfflineMinimoMin]
-  /// minutos + exponencial, media total [Ajustes.atascoOfflineMediaMin]) y cuál (como [_atascar]). Queda guardado en la
-  /// partida y se resuelve en [aplicarOffline]. No sortea si ya hay un Atasco, si nunca vio el primero o si no hay
-  /// edificios; si ya había uno programado para después de [ahora], lo devuelve igual (no se vuelve a sortear).
+  /// Al salir de la app: sortea cuándo y dónde se atascan edificios con la app cerrada, hasta llenar [topeAtascos]
+  /// junto con los que ya están abiertos (uno por edificio, como [_atascar]). El primero: con datos de ausencias
+  /// ([Partida.ausenciaMediaMin]) cae entre el 35% y el 65% de la ausencia media (mínimo [Ajustes.atascoOfflineMinimoMin]);
+  /// sin datos, mínimo + exponencial con media total [Ajustes.atascoOfflineMediaMin]. Cada siguiente,
+  /// [Ajustes.atascoOfflineMediaMin] x 0,6 a 1,4 después del anterior. Queda guardado en la partida y se resuelve en
+  /// [aplicarOffline]. Devuelve el primero; null si nunca vio el primer Atasco, si no hay edificios libres o si el tope
+  /// ya está lleno. Si ya había programados para después de [ahora], los deja igual (no se vuelve a sortear).
   AtascoOffline? programarAtascoOffline(int ahora) {
-    if (_p.atasco != null || !_p.vioPrimerAtasco) return null;
-    if (_p.atascoOfflineEn > ahora && edificioPorId(_p.atascoOfflineEdificio) != null && cantidad(_p.atascoOfflineEdificio) > 0) {
-      return AtascoOffline(_p.atascoOfflineEn, _p.atascoOfflineEdificio, _cubreAtascoOffline(_p.atascoOfflineEn));
+    if (!_p.vioPrimerAtasco) return null;
+    final vigentes = [
+      for (final a in _p.atascosOffline)
+        if (a.en > ahora && edificioPorId(a.edificio) != null && cantidad(a.edificio) > 0 && !atascado(a.edificio)) a
+    ];
+    if (vigentes.isNotEmpty) {
+      _p.atascosOffline = vigentes;
+      return atascosOfflineProgramados.first;
     }
-    final elegido = _elegirAtascado(minimoParaAtasco);
-    if (elegido == null) {
-      _borrarAtascoOffline();
-      return null;
-    }
+    _borrarAtascoOffline();
     final minimo = max(0.0, ajustes.atascoOfflineMinimoMin);
-    final resto = max(0.0, ajustes.atascoOfflineMediaMin - minimo);
-    final minutos = minimo - resto * log(1 - _azar.nextDouble());
-    final en = ahora + (minutos * 60000).round();
-    _p.atascoOfflineEn = en;
-    _p.atascoOfflineEdificio = elegido;
-    return AtascoOffline(en, elegido, _cubreAtascoOffline(en));
+    final media = max(minimo, ajustes.atascoOfflineMediaMin);
+    final double primero;
+    if (_p.ausenciaMediaMin > 0) {
+      primero = max(minimo, _p.ausenciaMediaMin * (0.35 + 0.3 * _azar.nextDouble()));
+    } else {
+      primero = minimo - (media - minimo) * log(1 - _azar.nextDouble());
+    }
+    var minutos = primero;
+    final elegidos = <String>{};
+    for (var k = _p.atascos.length; k < topeAtascos; k++) {
+      final elegido = _elegirAtascado(minimoParaAtasco, elegidos);
+      if (elegido == null) break;
+      elegidos.add(elegido);
+      _p.atascosOffline.add(AtascoProgramado(ahora + (minutos * 60000).round(), elegido));
+      minutos += media * (0.6 + 0.8 * _azar.nextDouble());
+    }
+    return _p.atascosOffline.isEmpty ? null : atascosOfflineProgramados.first;
   }
 
-  void _borrarAtascoOffline() {
-    _p.atascoOfflineEn = 0;
-    _p.atascoOfflineEdificio = '';
-  }
+  /// Los Atascos offline programados, en orden de hora, con si algo los destapará solo.
+  List<AtascoOffline> get atascosOfflineProgramados =>
+      [for (final a in _p.atascosOffline) AtascoOffline(a.en, a.edificio, _cubreAtascoOffline(a.en))];
+
+  void _borrarAtascoOffline() => _p.atascosOffline = [];
 
   /// Cuadrilla del barrio: cada minuto activo compra el edificio abierto más barato, si alcanza.
   void _cuadrilla(int ahora, double s) {
@@ -1419,14 +1509,16 @@ class Imperio {
 
   // ---------- Atasco ----------
 
-  /// Un toque al destapador. null si no hay Atasco. Al toque 10 se destapa; en menos de 3 s es perfecto (5 min de ese edificio).
+  /// Un toque al destapador (va al primer Atasco). null si no hay Atasco. Al toque 10 se destapa y el siguiente pasa a
+  /// ser el primero; en menos de 3 s desde que fue el primero es perfecto (5 min de ese edificio).
   ResultadoDestape? tocarAtasco(int ahora) {
     final a = _p.atasco;
     if (a == null) return null;
     a.toques++;
     if (a.toques < toquesAtasco) return ResultadoDestape(a.edificio, a.toques, toquesAtasco - a.toques, false, false, 0);
     final perfecto = ahora - a.desde < tiempoDestapePerfecto.inMilliseconds;
-    _p.atasco = null;
+    _p.atascos.removeAt(0);
+    _p.atasco?.desde = ahora; // el perfecto del siguiente cuenta desde que pasa adelante
     _destapado(ahora);
     var premio = 0.0;
     if (perfecto) {
@@ -1460,17 +1552,24 @@ class Imperio {
 
   /// Cobra el tiempo fuera (sin efectos temporales ni dorados). El Atasco que quedó sigue tapado fuera: ese edificio no cuenta. x1,5 si quedó el buff del tipo 6 (y se gasta).
   /// Guardia nocturno: cuenta al 100% con tope de 8 h (o el del tanque si es más) y se gasta.
-  /// Atasco offline ([programarAtascoOffline]): si cae dentro del tiempo contado y nada lo destapa solo, ese edificio
-  /// deja de contar desde ese momento y al volver queda atascado. Se borra siempre.
+  /// Atascos offline ([programarAtascoOffline]): cada uno que cae dentro del tiempo contado y que nada destapa solo deja
+  /// sin contar su edificio desde su hora y al volver queda atascado; los cubiertos no cuestan y suman un destape. Se
+  /// borran siempre. La ausencia (de [minimoOffline] o más) entra en la media móvil [Partida.ausenciaMediaMin].
   ResultadoOffline aplicarOffline(int desdeMs, int ahoraMs) {
     final ausente = max(0, ahoraMs - desdeMs) / 1000.0;
     _p.ultimaVez = ahoraMs;
     _p.dorado = null;
-    _p.atasco?.desde = ahoraMs; // vuelve a verse ahora
+    for (final a in _p.atascos) {
+      a.desde = ahoraMs; // vuelven a verse ahora
+    }
+    if (ausente >= minimoOffline.inSeconds) {
+      final minutos = (ausente / 60).clamp(1.0, 1440.0).toDouble();
+      _p.ausenciaMediaMin = _p.ausenciaMediaMin > 0 ? 0.7 * _p.ausenciaMediaMin + 0.3 * minutos : minutos;
+    }
     // La Arepa reina pepiada solo corre con la app abierta: se corre su fin lo que estuviste fuera.
     final arepa = _p.efectos['reina_pepiada'];
     if (arepa != null && arepa > desdeMs && ahoraMs > desdeMs) _p.efectos['reina_pepiada'] = arepa + (ahoraMs - desdeMs);
-    final atascoEn = _p.atascoOfflineEn, atascoId = _p.atascoOfflineEdificio;
+    final programados = List.of(_p.atascosOffline)..sort((a, b) => a.en.compareTo(b.en));
     _borrarAtascoOffline();
     if (ausente < minimoOffline.inSeconds) return ResultadoOffline(ausente, 0, 0, false, false);
     final guardia = _p.alquilados.remove('guardia') != null;
@@ -1484,17 +1583,22 @@ class Imperio {
     final xTemporada = multiplicadorEnRango(ajustes.temporadas, desdeMs, desdeMs + (contados * 1000).round());
     final factor = (guardia ? 1.0 : porcentajeOffline) * (bonus ? 1 + 0.5 * fuerzaBonus : 1) * xTemporada;
     final finContado = desdeMs + (contados * 1000).round();
-    final base = mpsSinEfectos(); // antes del Atasco offline: hasta ese momento producía
-    String? atascado;
-    var perdido = 0.0, cubierto = false;
-    if (atascoEn >= desdeMs && atascoEn < finContado && _p.atasco == null && edificioPorId(atascoId) != null && cantidad(atascoId) > 0) {
-      atascado = atascoId;
-      cubierto = _cubreAtascoOffline(atascoEn);
+    final base = mpsSinEfectos(); // antes de los Atascos offline: hasta su hora cada edificio producía
+    final caidos = <AtascoOffline>[];
+    var perdido = 0.0;
+    for (final a in programados) {
+      final id = a.edificio;
+      if (a.en < desdeMs || a.en >= finContado || atascado(id) || edificioPorId(id) == null || cantidad(id) <= 0) continue;
+      if (caidos.any((c) => c.edificio == id)) continue;
+      final cubierto = _cubreAtascoOffline(a.en);
+      if (!cubierto && _p.atascos.length >= topeAtascos) continue;
+      caidos.add(AtascoOffline(a.en, id, cubierto));
       if (cubierto) {
         _p.destapes++;
       } else {
-        perdido = (finContado - atascoEn) / 1000 * _produccionCruda(atascoId) * multiplicadorPermanente * factor;
-        _p.atasco = Atasco(atascoId, ahoraMs); // vuelve a verse ahora, como el que quedó al salir
+        // Por tramos: ese edificio deja de contar desde su hora hasta el fin del tiempo contado.
+        perdido += (finContado - a.en) / 1000 * _produccionCruda(id) * multiplicadorPermanente * factor;
+        _p.atascos.add(Atasco(id, ahoraMs)); // vuelve a verse ahora, como el que quedó al salir
       }
     }
     final ganado = max(0.0, contados * base * factor - perdido);
@@ -1504,10 +1608,8 @@ class Imperio {
         conGuardia: guardia,
         regalo: regalo,
         fuerzaBonus: fuerzaBonus,
-        atascoEdificio: atascado,
-        atascoEn: atascado == null ? 0 : atascoEn,
-        mjPerdidos: perdido,
-        atascoCubierto: cubierto);
+        atascos: caidos,
+        mjPerdidos: perdido);
   }
 
   /// Qué avisar con la app cerrada y en cuánto: lo más barato que todavía no alcanza (mejora o edificio) si lo offline
@@ -1625,9 +1727,10 @@ class Imperio {
       ..alquilados = {}
       ..indefinidos = {}
       ..pintura = {}
-      ..atasco = null
-      ..atascoOfflineEn = 0
-      ..atascoOfflineEdificio = ''
+      ..atascos = []
+      ..atascosOffline = []
+      ..presionAtasco = 0
+      ..umbralAtasco = 0
       ..dorado = null
       ..segHastaDorado = -1
       ..papelDoble = false

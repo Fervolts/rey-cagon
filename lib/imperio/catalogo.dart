@@ -604,6 +604,10 @@ class Ajustes {
   /// [atascoOfflineMinimoMin] + exponencial de media ([atascoOfflineMediaMin] - mínimo). Media total ~45 min.
   final double atascoOfflineMediaMin, atascoOfflineMinimoMin;
 
+  /// Atascos abiertos a la vez como máximo (uno por edificio) y segundos de juego activo por Atasco, en promedio.
+  final int atascosMax;
+  final double atascoSeg;
+
   /// Cada unidad de un edificio cuesta esto por la anterior.
   final double precioCrecimiento;
   final double precioGuantes, precioFaja;
@@ -649,6 +653,8 @@ class Ajustes {
     this.offlineTopeH = 2,
     this.atascoOfflineMediaMin = 45,
     this.atascoOfflineMinimoMin = 10,
+    this.atascosMax = 3,
+    this.atascoSeg = 240,
     this.precioCrecimiento = 1.15,
     this.precioGuantes = 100,
     this.precioFaja = 500,

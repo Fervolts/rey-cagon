@@ -17,6 +17,25 @@ Map<String, int> _mapaEnt(Object? v) {
   return {for (final e in v.entries) '${e.key}': _ent(e.value)};
 }
 
+/// Atascos guardados: `atascos` (lista) o, en partidas viejas, solo `atasco`. Uno por edificio.
+List<Atasco> _atascos(Map<String, dynamic> j) {
+  final lista = j['atascos'] is List ? j['atascos'] as List : [j['atasco']];
+  final r = <Atasco>[];
+  for (final v in lista) {
+    final a = Atasco.desdeJson(v);
+    if (a != null && r.every((b) => b.edificio != a.edificio)) r.add(a);
+  }
+  return r;
+}
+
+/// Atascos offline guardados: `atascos_offline` (lista) o, en partidas viejas, `atasco_offline_en` / `_e`.
+List<AtascoProgramado> _atascosOffline(Map<String, dynamic> j) {
+  final lista = j['atascos_offline'] is List
+      ? j['atascos_offline'] as List
+      : [{'en': j['atasco_offline_en'], 'e': j['atasco_offline_e']}];
+  return [for (final v in lista) ?AtascoProgramado.desdeJson(v)]..sort((a, b) => a.en.compareTo(b.en));
+}
+
 Map<String, double> _mapaDbl(Object? v) {
   if (v is! Map) return {};
   return {for (final e in v.entries) '${e.key}': _dbl(e.value)};
@@ -49,6 +68,20 @@ class Atasco {
   static Atasco? desdeJson(Object? v) {
     if (v is! Map || v['e'] == null) return null;
     return Atasco('${v['e']}', _ent(v['d']), _ent(v['t']));
+  }
+}
+
+/// Atasco offline programado al salir: en [en] (ms epoch) se atasca [edificio].
+class AtascoProgramado {
+  final int en;
+  final String edificio;
+  const AtascoProgramado(this.en, this.edificio);
+
+  Map<String, dynamic> toJson() => {'en': en, 'e': edificio};
+
+  static AtascoProgramado? desdeJson(Object? v) {
+    if (v is! Map || v['e'] is! String || _ent(v['en']) <= 0) return null;
+    return AtascoProgramado(_ent(v['en']), v['e'] as String);
   }
 }
 
@@ -152,13 +185,28 @@ class Partida {
   /// Horas de más en el tope offline pagadas con Fichas (Tanque extra, 0 o 1). No se borra al jalar.
   int horasExtraTanque;
 
-  Atasco? atasco;
+  /// Atascos abiertos en orden de llegada (máximo uno por edificio). Se destapa el primero.
+  List<Atasco> atascos;
+
+  /// El primero de [atascos] (null = ninguno). Asignar reemplaza toda la lista.
+  Atasco? get atasco => atascos.isEmpty ? null : atascos.first;
+  set atasco(Atasco? a) => atascos = [?a];
   bool vioPrimerAtasco;
 
-  /// Atasco programado al salir de la app (ms epoch, 0 = ninguno) y el edificio que se atasca.
-  /// Se resuelve al volver dentro de la cuenta offline y se borra siempre.
-  int atascoOfflineEn;
-  String atascoOfflineEdificio;
+  /// Atascos programados al salir de la app, en orden de hora. Se resuelven al volver dentro de la cuenta offline y
+  /// se borran siempre.
+  List<AtascoProgramado> atascosOffline;
+
+  /// Hora (ms epoch, 0 = ninguno) y edificio del primer Atasco offline programado.
+  int get atascoOfflineEn => atascosOffline.isEmpty ? 0 : atascosOffline.first.en;
+  String get atascoOfflineEdificio => atascosOffline.isEmpty ? '' : atascosOffline.first.edificio;
+
+  /// Presión del azar de Atascos en juego (sube con el tiempo activo y las compras) y el umbral sorteado en que
+  /// sale el próximo (0 = sin sortear).
+  double presionAtasco, umbralAtasco;
+
+  /// Media móvil de los minutos que el jugador pasa fuera (0 = sin datos). Programa el Atasco offline a su medida.
+  double ausenciaMediaMin;
 
   /// Segundos de juego activo que faltan para el próximo mojón dorado. Negativo = sin programar.
   double segHastaDorado;
@@ -256,10 +304,13 @@ class Partida {
     this.semanasRacha = 0,
     this.congeladosUsados = 0,
     this.horasExtraTanque = 0,
-    this.atasco,
+    Atasco? atasco,
+    List<Atasco>? atascos,
     this.vioPrimerAtasco = false,
-    this.atascoOfflineEn = 0,
-    this.atascoOfflineEdificio = '',
+    List<AtascoProgramado>? atascosOffline,
+    this.presionAtasco = 0,
+    this.umbralAtasco = 0,
+    this.ausenciaMediaMin = 0,
     this.segHastaDorado = -1,
     this.dorado,
     this.papelDoble = false,
@@ -297,6 +348,8 @@ class Partida {
         pintura = pintura ?? {},
         objetosRollos = objetosRollos ?? {},
         toques = toques ?? {},
+        atascos = atascos ?? [?atasco],
+        atascosOffline = atascosOffline ?? [],
         temporadas = temporadas ?? {} {
     // El robot viejo pasa al mapa; si ya está en el mapa gana el fin más tarde.
     if (robotHasta > (this.alquilados['robot'] ?? 0)) this.alquilados['robot'] = robotHasta;
@@ -342,9 +395,14 @@ class Partida {
         'congelados_usados': congeladosUsados,
         'horas_extra_tanque': horasExtraTanque,
         'atasco': atasco?.toJson(),
+        'atascos': [for (final a in atascos) a.toJson()],
         'vio_atasco': vioPrimerAtasco,
         if (atascoOfflineEn > 0) 'atasco_offline_en': atascoOfflineEn,
         if (atascoOfflineEn > 0) 'atasco_offline_e': atascoOfflineEdificio,
+        if (atascosOffline.isNotEmpty) 'atascos_offline': [for (final a in atascosOffline) a.toJson()],
+        'presion_atasco': presionAtasco,
+        'umbral_atasco': umbralAtasco,
+        'ausencia_media_min': ausenciaMediaMin,
         'seg_dorado': segHastaDorado,
         'dorado': dorado?.toJson(),
         'papel_doble': papelDoble,
@@ -415,10 +473,12 @@ class Partida {
       semanasRacha: max(0, _ent(j['semanas_racha'])),
       congeladosUsados: max(0, _ent(j['congelados_usados'])),
       horasExtraTanque: max(0, _ent(j['horas_extra_tanque'])),
-      atasco: Atasco.desdeJson(j['atasco']),
+      atascos: _atascos(j),
       vioPrimerAtasco: _bool(j['vio_atasco']),
-      atascoOfflineEn: max(0, _ent(j['atasco_offline_en'])),
-      atascoOfflineEdificio: j['atasco_offline_e'] is String ? j['atasco_offline_e'] as String : '',
+      atascosOffline: _atascosOffline(j),
+      presionAtasco: max(0, _dbl(j['presion_atasco'], 0)),
+      umbralAtasco: max(0, _dbl(j['umbral_atasco'], 0)),
+      ausenciaMediaMin: max(0, _dbl(j['ausencia_media_min'], 0)),
       segHastaDorado: _dbl(j['seg_dorado'], -1),
       dorado: DoradoVisible.desdeJson(j['dorado']),
       papelDoble: _bool(j['papel_doble']),

@@ -183,7 +183,9 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   ContadorSesion? _sesion;
   double _offlineS = 0;
   DoradoVisible? _doradoVisto;
-  Atasco? _atascoVisto, _atascoPerdido;
+  /// Atascos abiertos ya vistos (por identidad) y los ya anotados como perdidos (`atasco_pierde`, uno por Atasco).
+  List<Atasco> _atascosVistos = [];
+  final Set<Atasco> _atascosPerdidos = Set.identity();
   final Map<String, int> _errores = {};
 
   String get _userId => db.auth.currentUser?.id ?? 'sin_sesion';
@@ -389,12 +391,13 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     if (atascado != null) {
       _anotar('atasco_offline', {
         'edificio': atascado,
+        'edificios': [for (final a in r.atascos) a.edificio],
         'minutos': ((r.atascoEn - (imperio.partida.ultimaVez - r.segundosAusente * 1000)) / 60000).round(),
         'mj_perdidos': r.mjPerdidos,
         'robot': r.atascoCubierto,
       });
     }
-    if (r.ganado > 0 || (atascado != null && !r.atascoCubierto)) offlinePendiente = r;
+    if (r.ganado > 0 || r.atascosTapados > 0) offlinePendiente = r;
   }
 
   void _aplicarNuevas(List<CagadaNueva> nuevas) {
@@ -480,16 +483,17 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  /// Al salir de la app: sortea el Atasco offline ([Imperio.programarAtascoOffline]) y, si nada lo destapa solo, deja un
-  /// aviso local para esa hora (`atasco_offline_aviso`).
+  /// Al salir de la app: sortea los Atascos offline ([Imperio.programarAtascoOffline]) y deja UN aviso local, a la hora
+  /// del primero que nada destapa solo (`atasco_offline_aviso`).
   void _programarAtascoOffline() {
     final AtascoOffline? a;
     try {
-      a = imperio.programarAtascoOffline(ahora);
+      imperio.programarAtascoOffline(ahora);
+      a = imperio.atascosOfflineProgramados.where((x) => !x.cubierto).firstOrNull;
     } catch (_) {
       return;
     }
-    if (a == null || a.cubierto) return;
+    if (a == null) return;
     final e = edificioPorId(a.edificio);
     if (e == null) return;
     final minutos = (a.en - ahora) / 60000;
@@ -540,11 +544,9 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     final s = _sesion;
     if (s == null) return;
     _sesion = null;
-    // El motor no vence los atascos: el que sigue tapado al cerrar la sesión cuenta como perdido (una vez por atasco).
-    final a = imperio.partida.atasco;
-    if (a != null && !identical(a, _atascoPerdido)) {
-      _atascoPerdido = a;
-      _anotar('atasco_pierde');
+    // El motor no vence los atascos: cada uno que sigue tapado al cerrar la sesión cuenta como perdido (una vez por atasco).
+    for (final a in imperio.partida.atascos) {
+      if (_atascosPerdidos.add(a)) _anotar('atasco_pierde');
     }
     _anotar('sesion_fin', s.fin(imperio.mjTotal));
   }
@@ -552,18 +554,28 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   /// Compara dorado y atasco con lo visto antes (por identidad) y anota lo que apareció o se fue solo.
   void _mirarCambios({bool anotar = true}) {
     final p = imperio.partida;
-    final d = p.dorado, a = p.atasco;
+    final d = p.dorado;
     if (!identical(d, _doradoVisto)) {
       if (anotar && _doradoVisto != null) _anotar('dorado_pierde');
       if (anotar && d != null) _anotar('dorado_aparece');
       _doradoVisto = d;
     }
-    if (!identical(a, _atascoVisto)) {
-      final antes = _atascoVisto;
-      // Solo el robot lo quita en el tick; el destape a mano limpia _atascoVisto en tocarAtasco.
-      if (anotar && antes != null) _anotar('atasco_destapa', {'ms': max(0, ahora - antes.desde), 'perfecto': false, 'robot': true});
-      if (anotar && a != null) _anotar('atasco_aparece', {'edificio': a.edificio});
-      _atascoVisto = a;
+    final abiertos = p.atascos;
+    var cambio = abiertos.length != _atascosVistos.length;
+    for (var k = 0; !cambio && k < abiertos.length; k++) {
+      cambio = !identical(abiertos[k], _atascosVistos[k]);
+    }
+    if (cambio) {
+      // Solo el robot (u otro que destapa todo) los quita en el tick; el destape a mano los saca de la lista en tocarAtasco.
+      for (final antes in _atascosVistos) {
+        if (anotar && !abiertos.any((a) => identical(a, antes))) {
+          _anotar('atasco_destapa', {'ms': max(0, ahora - antes.desde), 'perfecto': false, 'robot': true});
+        }
+      }
+      for (final a in abiertos) {
+        if (anotar && !_atascosVistos.any((v) => identical(v, a))) _anotar('atasco_aparece', {'edificio': a.edificio, 'abiertos': abiertos.length});
+      }
+      _atascosVistos = List.of(abiertos);
     }
   }
 
@@ -968,7 +980,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     final t = ahora;
     final r = imperio.tocarAtasco(t);
     if (a != null && r != null && r.destapado) {
-      _atascoVisto = imperio.partida.atasco;
+      _atascosVistos.removeWhere((v) => identical(v, a));
       _anotar('atasco_destapa', {'ms': max(0, t - a.desde), 'perfecto': r.perfecto, 'robot': false});
     }
     _avisar();

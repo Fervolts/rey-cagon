@@ -577,6 +577,7 @@ void main() {
       final imp = Imperio(azar: _AzarFijo(d: 0.0));
       imp.partida.edificios.addAll({'dedo': 99, 'cafe': 10, 'ciruela': 1});
       imp.partida.segHastaDorado = 99999;
+      imp.partida.segPartida = segundosPrimerAtasco; // el primero sale seguro al minuto (los demás, por presión)
       imp.tick(t0, 1);
       expect(imp.atasco?.edificio, 'ciruela'); // el Dedo no se atasca: no da MJ/s; con 1 ya se puede
       expect(imp.partida.vioPrimerAtasco, isTrue);
@@ -694,6 +695,7 @@ void main() {
     imp.pujar(t0);
     imp.tick(t0, 1);
     imp.tick(t0 + seg, 1);
+    imp.partida.atascos = [Atasco('cafe', t0 + seg)]; // los Atascos ya no salen por azar en un tick: van por presión
     final texto = jsonEncode(imp.toJson());
     final otro = Imperio.desdeJson(jsonDecode(texto) as Map<String, dynamic>, cagadas: 12, fichas: 3);
     expect(jsonEncode(otro.toJson()), texto);
