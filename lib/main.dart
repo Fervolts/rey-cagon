@@ -37,6 +37,7 @@ import 'recordatorio.dart';
 import 'teclado_emojis.dart' show panelEmojisAbierto;
 import 'imperio/estilos_mios.dart' show iniciarEstilos;
 import 'imperio/pantalla.dart';
+import 'imperio/ranking_amigos.dart' show RankingImperio, rankingImperio;
 import 'tema.dart';
 import 'secreto.dart';
 import 'tipos.dart';
@@ -506,6 +507,8 @@ class _PantallaRankingState extends State<PantallaRanking> {
   // Cambios de modo: el podio se voltea una vez por cambio, no cada vez que recarga.
   int _vueltas = 0;
   int _vueltasVistas = 0;
+  // Deslizar para refrescar con el Imperio a la vista: lo vuelve a pedir.
+  int _vueltaImperio = 0;
   late final VoidCallback _soltar;
   late final AppLifecycleListener _ciclo;
   Timer? _relojActualizacion;
@@ -542,6 +545,11 @@ class _PantallaRankingState extends State<PantallaRanking> {
       });
     }
     if (!widget.trono) irA.addListener(_irAPeriodo);
+    if (!widget.trono) rankingImperio.addListener(_alCambiarJuego);
+  }
+
+  void _alCambiarJuego() {
+    if (mounted) setState(() {});
   }
 
   // Push de ganadores o de cierre: RANKING con ese periodo (si la pestaña aún no existía, lo toma al nacer).
@@ -550,6 +558,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
     final periodo = destino?.periodo;
     if (destino == null || destino.a != 'ranking' || destino.ranking || periodo == null || !periodos.containsKey(periodo)) return;
     destino.ranking = true;
+    rankingImperio.value = false; // los push de ganadores y cierres son de cagadas
     if (periodo == _periodo) return;
     if (alNacer) {
       _periodo = periodo;
@@ -562,6 +571,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
   @override
   void dispose() {
     irA.removeListener(_irAPeriodo);
+    rankingImperio.removeListener(_alCambiarJuego);
     secretoAbierto.removeListener(_alAbrirSecreto);
     _ciclo.dispose();
     _relojActualizacion?.cancel();
@@ -839,7 +849,10 @@ class _PantallaRankingState extends State<PantallaRanking> {
     final barra = !widget.trono && !_modoSecreto && puesto >= 3;
 
     final lista = RefreshIndicator(
-      onRefresh: _cargar,
+      onRefresh: () {
+        if (!widget.trono && rankingImperio.value) setState(() => _vueltaImperio++);
+        return _cargar();
+      },
       child: ListView(
         padding: conBordeAbajo(context, EdgeInsets.fromLTRB(16, 12, 16, barra ? 96 : 32)),
         children: [
@@ -933,10 +946,34 @@ class _PantallaRankingState extends State<PantallaRanking> {
     ];
   }
 
-  /// El ranking: periodo, alcance, podio y la tabla.
+  /// CAGADAS o IMPERIO: qué ranking muestra la pestaña.
+  Widget _juego() => SegmentedButton<bool>(
+        key: const Key('ranking_juego'),
+        segments: [
+          ButtonSegment(value: false, icon: const Emoji('💩', tamano: 18), label: _UnaLinea(tr('CAGADAS', 'POOPS'))),
+          ButtonSegment(value: true, icon: const Emoji('🏭', tamano: 18), label: _UnaLinea(tr('IMPERIO', 'EMPIRE'))),
+        ],
+        selected: {rankingImperio.value},
+        showSelectedIcon: false,
+        style: _compacto,
+        onSelectionChanged: (s) => rankingImperio.value = s.first,
+      );
+
+  /// El ranking: cagadas (periodo, alcance, podio y la tabla) o el Imperio.
   List<Widget> _ranking() {
     final maximo = _filas.isEmpty ? 0 : _filas.first['total'] as int;
+    if (rankingImperio.value) {
+      return [
+        _juego(),
+        const SizedBox(height: 8),
+        _alcance(),
+        const SizedBox(height: 10),
+        RankingImperio(soloAmigos: _soloSiguiendo, vuelta: _vueltaImperio, alTocar: (id) => _abrir(PantallaPerfil(usuarioId: id))),
+      ];
+    }
     return [
+      _juego(),
+      const SizedBox(height: 8),
       Row(
         children: [
           Expanded(child: _periodos()),

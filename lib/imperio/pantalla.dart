@@ -738,12 +738,12 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                 ),
               ),
               const SizedBox(width: 8),
-              // Ranking del Imperio con la gente que sigues.
+              // Ranking del Imperio: vive en la pestaña RANKING, este botón lleva ahí.
               Tooltip(
-                message: tr('Ranking entre amigos', 'Friends ranking'),
+                message: tr('Ranking del Imperio', 'Empire leaderboard'),
                 child: InkWell(
                   key: const Key('boton_ranking_imperio'),
-                  onTap: () => abrirRankingImperio(context),
+                  onTap: verRankingImperio,
                   child: Container(
                     width: 40,
                     height: 40,

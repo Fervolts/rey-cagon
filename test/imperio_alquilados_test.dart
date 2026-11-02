@@ -22,12 +22,11 @@ Imperio _imperio() {
 
 void main() {
   group('Toques de los primos', () {
-    test('se ven unos 3-4 toques por segundo por primo, no los 10 pujos', () {
-      expect(toquesPorSegundoPrimo, inInclusiveRange(3, 4));
-      expect(toquesPorSegundoPrimo, lessThan(pujosPrimo));
+    test('se ven los 10 toques por segundo de cada primo', () {
+      expect(toquesPorSegundoPrimo, pujosPrimo);
       for (var i = 0; i < 4; i++) {
         final toques = toquePrimo(i, 10.999) - toquePrimo(i, 1);
-        expect(toques, inInclusiveRange(34, 36), reason: 'primo $i');
+        expect(toques, inInclusiveRange(99, 100), reason: 'primo $i');
       }
     });
 
@@ -39,22 +38,14 @@ void main() {
       }
     });
 
-    test('con más primos, menos "+MJ" por primo', () {
-      expect([for (var n = 1; n <= 4; n++) cadaFlotantePrimo(n)], [2, 2, 3, 4]);
-    });
-
-    test('los "+MJ" de un primo suman lo que gana de verdad', () {
+    test('los "+MJ" de un primo, uno por toque, suman lo que gana de verdad', () {
       const porSegundo = 120.0; // valor del pujo x pujosPrimo
-      for (var primos = 1; primos <= 4; primos++) {
-        final cada = cadaFlotantePrimo(primos);
+      for (var i = 0; i < 4; i++) {
         var suma = 0.0;
-        // 60 s: los "+MJ" que salen (los toques k con (k + i) % cada == 0), como los dibuja la poceta.
-        for (var i = 0; i < primos; i++) {
-          for (var k = 0; inicioToquePrimo(i, k) < 60; k++) {
-            if ((k + i) % cada == 0) suma += montoFlotantePrimo(porSegundo, primos);
-          }
+        for (var k = 0; inicioToquePrimo(i, k) < 60; k++) {
+          suma += montoFlotantePrimo(porSegundo);
         }
-        expect(suma, closeTo(porSegundo * 60 * primos, porSegundo * primos * 1.2), reason: '$primos primos');
+        expect(suma, closeTo(porSegundo * 60, porSegundo * .2), reason: 'primo $i');
       }
     });
   });

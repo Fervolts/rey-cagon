@@ -1,9 +1,11 @@
 // Ranking del Imperio: amigos (tú y la gente que sigues) o global, por MJ ganados en la partida o por Rollos de Oro
 // (RPC `imperio_ranking`). Si el servidor todavía no la tiene, cae a `imperio_ranking_amigos` (solo amigos).
+// Vive en la pestaña RANKING (selector CAGADAS / IMPERIO); el botón 🏆 del Imperio lleva ahí con [verRankingImperio].
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import '../accesorios.dart' show Avatar;
+import '../avisos.dart' show ir;
 import '../emoji.dart';
 import '../idioma.dart';
 import '../main.dart' show conReintento, db, textoError;
@@ -70,31 +72,38 @@ List<FilaRankingImperio> filasRanking(Object? respuesta, {String? ordenLocal}) {
 /// True si el error dice que la función no existe en el servidor (migración sin aplicar).
 bool faltaFuncion(Object e) => e is PostgrestException && (e.code == 'PGRST202' || e.code == '42883');
 
-/// Abre la hoja con el ranking.
-Future<void> abrirRankingImperio(BuildContext context) {
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: paleta(context).fondo,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radio)),
-    builder: (_) => const _HojaRanking(),
-  );
+/// true = la pestaña RANKING muestra el Imperio en vez de las cagadas.
+final rankingImperio = ValueNotifier<bool>(false);
+
+/// Lleva a la pestaña RANKING con el Imperio a la vista.
+void verRankingImperio() {
+  rankingImperio.value = true;
+  ir('ranking');
 }
 
-class _HojaRanking extends StatefulWidget {
-  const _HojaRanking();
+/// El ranking del Imperio dentro de la lista de la pestaña RANKING. [soloAmigos] sale del selector de la pantalla
+/// (SOLO MIS AMIGOS / TODOS); el orden MJ / ROLLOS es suyo. Cambiar [vuelta] lo vuelve a pedir (deslizar para refrescar).
+class RankingImperio extends StatefulWidget {
+  const RankingImperio({super.key, required this.soloAmigos, this.vuelta = 0, this.alTocar});
+
+  final bool soloAmigos;
+  final int vuelta;
+
+  /// Tocar a otro: abre su perfil. Si es null, lo abre aquí.
+  final void Function(String userId)? alTocar;
 
   @override
-  State<_HojaRanking> createState() => _HojaRankingState();
+  State<RankingImperio> createState() => _RankingImperioState();
 }
 
-class _HojaRankingState extends State<_HojaRanking> {
-  String _alcance = 'amigos';
+class _RankingImperioState extends State<RankingImperio> {
   String _orden = 'mj';
 
   /// El servidor no tiene imperio_ranking: solo amigos, y el orden por rollos se hace aquí.
   bool _viejo = false;
   late Future<List<FilaRankingImperio>> _filas = _cargar();
+
+  String get _alcance => widget.soloAmigos || _viejo ? 'amigos' : 'global';
 
   Future<List<FilaRankingImperio>> _cargar() async {
     if (!_viejo) {
@@ -104,7 +113,6 @@ class _HojaRankingState extends State<_HojaRanking> {
       } catch (e) {
         if (!faltaFuncion(e)) rethrow;
         _viejo = true;
-        _alcance = 'amigos';
         if (mounted) setState(() {});
       }
     }
@@ -114,104 +122,74 @@ class _HojaRankingState extends State<_HojaRanking> {
 
   void _recargar() => setState(() => _filas = _cargar());
 
-  Future<void> _refrescar() async {
-    final f = _cargar();
-    setState(() => _filas = f);
-    await f.then((_) {}, onError: (_) {});
+  @override
+  void didUpdateWidget(RankingImperio viejo) {
+    super.didUpdateWidget(viejo);
+    if (viejo.soloAmigos != widget.soloAmigos || viejo.vuelta != widget.vuelta) _filas = _cargar();
   }
 
   @override
   Widget build(BuildContext context) {
     final p = paleta(context);
-    final global = _alcance == 'global' && !_viejo;
+    final global = _alcance == 'global';
     final porRollos = _orden == 'rollos';
-    return SafeArea(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.75),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  const Emoji('🏆', tamano: 22),
-                  const SizedBox(width: 8),
-                  Expanded(child: Rotulo(global ? tr('Imperio global', 'Global Empire') : tr('Imperio entre amigos', 'Empire among friends'))),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                switch ((global, porRollos)) {
-                  (false, false) => tr('Tú y la gente que sigues, por mojonólares ganados en la partida.',
-                      'You and the people you follow, by Poopbucks earned this game.'),
-                  (false, true) => tr('Tú y la gente que sigues, por Rollos de Oro ganados.', 'You and the people you follow, by Golden Rolls earned.'),
-                  (true, false) => tr('Los 100 mejores Imperios, por mojonólares ganados en la partida.',
-                      'The top 100 Empires, by Poopbucks earned this game.'),
-                  (true, true) => tr('Los 100 mejores Imperios, por Rollos de Oro ganados.', 'The top 100 Empires, by Golden Rolls earned.'),
-                },
-                style: TextStyle(color: p.textoSuave, fontSize: 12),
-              ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  if (!_viejo) ...[
-                    _chip('ranking_imperio_amigos', tr('AMIGOS', 'FRIENDS'), _alcance == 'amigos', () => _alcance = 'amigos'),
-                    _chip('ranking_imperio_global', tr('GLOBAL', 'GLOBAL'), _alcance == 'global', () => _alcance = 'global'),
-                    const SizedBox(width: 10),
-                  ],
-                  _chip('ranking_imperio_por_mj', 'MJ', !porRollos, () => _orden = 'mj'),
-                  _chip('ranking_imperio_por_rollos', tr('ROLLOS', 'ROLLS'), porRollos, () => _orden = 'rollos'),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Flexible(
-                child: FutureBuilder<List<FilaRankingImperio>>(
-                  future: _filas,
-                  builder: (context, s) {
-                    if (s.hasError) {
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(textoError(s.error!), style: TextStyle(color: p.textoSuave)),
-                          TextButton(onPressed: _recargar, child: Text(tr('Reintentar', 'Retry'))),
-                        ],
-                      );
-                    }
-                    if (!s.hasData) return const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()));
-                    final filas = s.data!;
-                    final vacio = filas.where((f) => !f.yo).isEmpty;
-                    return RefreshIndicator(
-                      onRefresh: _refrescar,
-                      child: ListView.separated(
-                        shrinkWrap: true,
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        itemCount: vacio ? 1 : filas.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 6),
-                        itemBuilder: (context, i) {
-                          if (!vacio) return _fila(context, filas[i], porRollos);
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            child: Text(
-                                global
-                                    ? tr('Todavía nadie ha ganado mojonólares en esta partida.', 'Nobody has earned Poopbucks this game yet.')
-                                    : tr('Sigue a alguien para competir con su Imperio.', 'Follow someone to compete with their Empire.'),
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: p.textoSuave)),
-                          );
-                        },
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            _chip('ranking_imperio_por_mj', tr('POR MJ', 'BY PB'), !porRollos, () => _orden = 'mj'),
+            const SizedBox(width: 8),
+            _chip('ranking_imperio_por_rollos', tr('POR ROLLOS', 'BY ROLLS'), porRollos, () => _orden = 'rollos'),
+          ],
         ),
-      ),
+        const SizedBox(height: 6),
+        Text(
+          switch ((global, porRollos)) {
+            (false, false) => tr('Tú y la gente que sigues, por mojonólares ganados en la partida.', 'You and the people you follow, by Poopbucks earned this game.'),
+            (false, true) => tr('Tú y la gente que sigues, por Rollos de Oro ganados.', 'You and the people you follow, by Golden Rolls earned.'),
+            (true, false) => tr('Los 100 mejores Imperios, por mojonólares ganados en la partida.', 'The top 100 Empires, by Poopbucks earned this game.'),
+            (true, true) => tr('Los 100 mejores Imperios, por Rollos de Oro ganados.', 'The top 100 Empires, by Golden Rolls earned.'),
+          },
+          style: TextStyle(color: p.textoSuave, fontSize: 12),
+        ),
+        const SizedBox(height: 10),
+        FutureBuilder<List<FilaRankingImperio>>(
+          future: _filas,
+          builder: (context, s) {
+            if (s.hasError) {
+              return Column(
+                children: [
+                  Text(textoError(s.error!), style: TextStyle(color: p.textoSuave)),
+                  TextButton(onPressed: _recargar, child: Text(tr('Reintentar', 'Retry'))),
+                ],
+              );
+            }
+            if (!s.hasData) return const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()));
+            final filas = s.data!;
+            if (filas.where((f) => !f.yo).isEmpty) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Text(
+                    global
+                        ? tr('Todavía nadie ha ganado mojonólares en esta partida.', 'Nobody has earned Poopbucks this game yet.')
+                        : tr('Sigue a alguien para competir con su Imperio.', 'Follow someone to compete with their Empire.'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: p.textoSuave)),
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < filas.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 6),
+                  _fila(context, filas[i], porRollos),
+                ],
+              ],
+            );
+          },
+        ),
+      ],
     );
   }
 
@@ -243,7 +221,11 @@ class _HojaRankingState extends State<_HojaRanking> {
     ]);
     return InkWell(
       key: Key('ranking_imperio_${f.puesto}'),
-      onTap: f.yo || f.userId == null ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => PantallaPerfil(usuarioId: f.userId!))),
+      onTap: f.yo || f.userId == null
+          ? null
+          : () => widget.alTocar != null
+              ? widget.alTocar!(f.userId!)
+              : Navigator.push(context, MaterialPageRoute(builder: (_) => PantallaPerfil(usuarioId: f.userId!))),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
@@ -269,7 +251,13 @@ class _HojaRankingState extends State<_HojaRanking> {
               child: Text(f.yo ? tr('Tú', 'You') : f.nombre,
                   maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.texto, fontWeight: FontWeight.w700)),
             ),
-            if (porRollos) ...[mj, const SizedBox(width: 10), rollos] else ...[if (f.rollos > 0) ...[rollos, const SizedBox(width: 10)], mj],
+            const SizedBox(width: 8),
+            // Lo que ordena arriba y grande, lo otro debajo: en una sola línea se montaban con nombres largos.
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: porRollos ? [rollos, mj] : [mj, if (f.rollos > 0) rollos],
+            ),
           ],
         ),
       ),

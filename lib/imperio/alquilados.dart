@@ -1,9 +1,8 @@
 // Lo alquilado que está trabajando, a la vista: la tira "trabajando ahora" junto a la poceta y las cuentas puras que
 // usa la poceta para dibujar a los primos tocando (poceta.dart dibuja a cada alquilado).
 //
-// Los primos pujan de verdad 10 veces por segundo cada uno ([pujosPrimo], en el motor). En pantalla solo se ven
-// [toquesPorSegundoPrimo] toques por primo, y un "+MJ" cada [cadaFlotantePrimo] toques que junta lo de esos pujos:
-// sumados, los "+MJ" de un primo dan lo que gana de verdad.
+// Los primos pujan de verdad 10 veces por segundo cada uno ([pujosPrimo], en el motor) y en pantalla se ve cada pujo,
+// igual que un toque tuyo: el dedo aprieta, cae un mojón a la taza y sale su "+MJ" con lo de ese pujo.
 
 import 'dart:math';
 
@@ -14,8 +13,8 @@ import '../idioma.dart';
 import '../tema.dart';
 import 'motor.dart';
 
-/// Toques que se ven por segundo de cada primo (la economía va aparte: [pujosPrimo]).
-const toquesPorSegundoPrimo = 3.5;
+/// Toques que se ven por segundo de cada primo: todos sus pujos.
+const toquesPorSegundoPrimo = pujosPrimo;
 
 /// Desfase de cada primo, para que no toquen todos a la vez (en segundos).
 double fasePrimo(int i) => i / 4 / toquesPorSegundoPrimo;
@@ -26,12 +25,12 @@ int toquePrimo(int i, double t) => ((t - fasePrimo(i)) * toquesPorSegundoPrimo).
 /// En qué segundo empieza el toque [k] del primo [i].
 double inicioToquePrimo(int i, int k) => fasePrimo(i) + k / toquesPorSegundoPrimo;
 
-/// Cada cuántos toques de un primo sale su "+MJ": con más primos, menos seguido (no se amontonan).
-int cadaFlotantePrimo(int primos) => max(2, primos);
+/// Lo que dice el "+MJ" de cada toque: un pujo. [pujoPrimoPorSegundo] es lo de un primo en un segundo
+/// (valor del pujo x [pujosPrimo]).
+double montoFlotantePrimo(double pujoPrimoPorSegundo) => pujoPrimoPorSegundo / toquesPorSegundoPrimo;
 
-/// Lo que dice cada "+MJ" de un primo: lo que gana en los toques que junta. [pujoPrimoPorSegundo] es lo de un primo
-/// en un segundo (valor del pujo x [pujosPrimo]).
-double montoFlotantePrimo(double pujoPrimoPorSegundo, int primos) => pujoPrimoPorSegundo * cadaFlotantePrimo(primos) / toquesPorSegundoPrimo;
+/// Cada cuántos toques de un primo sale plata de la taza (con 10 por segundo, en todos sería una nube).
+const cadaMonedaPrimo = 3;
 
 /// Una ficha de la tira: el alquilable, su emoji y lo que dice (lo que le queda, ∞ o cuántos primos).
 typedef FichaAlquiler = ({String id, String emoji, String texto});

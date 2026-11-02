@@ -560,10 +560,10 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
     return m;
   }
 
-  // El toque del primo [i] en [t]: sube y baja en 0,12 s al empezar cada toque.
+  // El toque del primo [i] en [t]: sube y baja en 0,07 s al empezar cada toque (son 10 por segundo).
   static double _pulsoPrimo(int i, double t) {
     final d = t - inicioToquePrimo(i, toquePrimo(i, t));
-    return d >= 0 && d < .12 ? sin(pi * d / .12) : 0;
+    return d >= 0 && d < .07 ? sin(pi * d / .07) : 0;
   }
 
   // Dónde va cada primo, relativo al centro de la poceta: a los lados de la taza, primero abajo y luego más arriba.
@@ -580,7 +580,7 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
 
   // Lo alquilado trabajando, alrededor de la poceta (fuera de la taza, -56..56):
   // - primos (👦, hasta 4) a los lados con la mano (👆) hacia la taza: con movimiento completo cada uno toca
-  //   [toquesPorSegundoPrimo] veces por segundo, aprieta la taza y suelta su "+MJ" juntado (ver alquilados.dart);
+  //   [toquesPorSegundoPrimo] veces por segundo (cada pujo), aprieta la taza, tira un mojón y suelta su "+MJ";
   // - robot (🤖, 🦾 el Turbo) al pie, a la izquierda, dando saltitos; cuando hay un destape se acerca y bombea;
   // - cuadrilla (👷) caminando por delante; cuando compra, se para, pica y sale "+1" con el edificio;
   // - plomero: su caja (🧰) con la llave que se mueve, y "x3" mientras corre su bono;
@@ -663,9 +663,8 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
     final n = a.primos.clamp(0, 4);
     if (n == 0) return;
     final simple = vivo ? 0.0 : _pulsoPrimos(t, false);
-    final cada = cadaFlotantePrimo(n);
-    final texto = '+${formatoMj(montoFlotantePrimo(widget.pujoPrimo, n), ingles: enIngles)}';
-    final estilo = _contorno(numeros(context, tamano: 15, weight: FontWeight.w900, color: acento));
+    final texto = '+${formatoMj(montoFlotantePrimo(widget.pujoPrimo), ingles: enIngles)}';
+    final estilo = _contorno(numeros(context, tamano: 14, weight: FontWeight.w900, color: Colors.white));
     for (var i = 0; i < n; i++) {
       final o = _slotPrimo(i);
       final lado = o.dx > 0 ? 1.0 : -1.0; // los de la derecha tocan hacia la izquierda
@@ -676,20 +675,33 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
         alignment: Alignment.bottomCenter,
         child: Transform.flip(flipX: lado < 0, child: const Emoji('👦', tamano: 24)),
       )));
-      hijos.add(_en(cx, o + Offset(-lado * (20 + 6 * pulso), 2), 16,
-          Transform.rotate(angle: -lado * pi / 2, child: const Emoji('👆', tamano: 16))));
+      final mano = o + Offset(-lado * (20 + 6 * pulso), 2);
+      hijos.add(_en(cx, mano, 16, Transform.rotate(angle: -lado * pi / 2, child: const Emoji('👆', tamano: 16))));
       if (!vivo || widget.pujoPrimo <= 0) continue;
-      // Su "+MJ": uno cada [cada] toques, con lo que ganó en ellos.
+      // Cada toque, como uno tuyo: un mojón que salta de la mano a la taza (.3 s), la plata cada [cadaMonedaPrimo]
+      // toques y el "+MJ" de ese pujo (.8 s). Todo sale de t, sin partículas guardadas.
       final ahora = toquePrimo(i, t);
-      for (var k = ahora - 3; k <= ahora; k++) {
-        if (k < 0 || (k + i) % cada != 0) continue;
+      for (var k = max(0, ahora - 7); k <= ahora; k++) {
         final e = t - inicioToquePrimo(i, k);
         if (e < 0 || e >= .8) continue;
+        // Un poco distinto cada toque, sin azar: sale del número del toque.
+        final r = ((k * 37 + i * 11) % 17) / 16 - .5;
+        if (e < .3) {
+          final g = Curves.easeIn.transform(e / .3);
+          final destino = _boca + Offset(lado * 6 + r * 14, 0);
+          final pos = Offset.lerp(mano, destino, g)! + Offset(0, -34 * sin(pi * g));
+          hijos.add(_en(cx, pos, 22 * (1 - .4 * g), const Emoji('💩', tamano: 22)));
+        }
+        if ((k + i) % cadaMonedaPrimo == 0 && e >= .22 && e < .8) {
+          final f = (e - .22) / .58;
+          hijos.add(_en(cx, Offset(_boca.dx + lado * 20 + r * 50 * f, _boca.dy - 20 - 80 * Curves.easeOut.transform(f)), 20,
+              Opacity(opacity: 1 - f, child: Emoji(k.isEven ? '💸' : '💰', tamano: 20))));
+        }
         final g = e / .8;
         encima.add(Positioned(
-          left: cx + o.dx * .55 - 60,
+          left: cx + o.dx * .55 + r * 30 - 60,
           width: 120,
-          top: _cy - 40 - 60 * g,
+          top: _cy - 40 - 70 * g,
           child: IgnorePointer(child: Opacity(opacity: 1 - g, child: montoMj(texto, estilo, alineacion: Alignment.center))),
         ));
       }
