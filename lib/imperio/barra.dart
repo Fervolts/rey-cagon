@@ -102,7 +102,7 @@ class BarraImperio extends StatelessWidget {
         children: [
           boton(atasco ? '🪠' : '🏗️', tr('EDIFICIOS', 'BUILDINGS'), alEdificios,
               key: const Key('boton_edificios'), aviso: avisoEdificios, resaltado: atasco),
-          boton('🛒', tr('TIENDA', 'SHOP'), alObjetos),
+          boton('🛒', tr('TIENDA', 'SHOP'), alObjetos, key: const Key('boton_tienda')),
           if (jalar.visible)
             boton('🚽', tr('JALAR', 'FLUSH'), alJalar,
                 key: const Key('boton_jalar'),

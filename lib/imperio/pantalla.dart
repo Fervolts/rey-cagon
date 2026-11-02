@@ -32,7 +32,9 @@ import 'motor.dart';
 import 'personalizar.dart';
 import 'tarjeta_bano.dart' show presumirBano;
 import 'poceta.dart';
+import 'que_hago.dart';
 import 'racha_imperio.dart' show diasRacha;
+import 'recorrido.dart';
 import 'ranking_amigos.dart';
 import 'sala.dart';
 import 'tienda_ciruelas.dart';
@@ -98,6 +100,10 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
   late final ControlImperio _c = widget.control ?? ControlImperio();
   late final AnimationController _pulso = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
   bool _dialogoAbierto = false;
+
+  // Recorrido guiado (recorrido.dart): mientras corre no salen empujones de la guía ni avisos de atascos.
+  List<PasoRecorrido>? _pasosRecorrido;
+  bool get _recorrido => _pasosRecorrido != null;
 
   // Cuántos edificios compra cada toque (x1, x10, x100, x1000) y qué botones ya salieron alguna vez.
   int _cantidad = 1;
@@ -193,7 +199,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       // Con 2 o más abiertos (y sin Robot, que los destapa en el tick) avisa cuántos hay y lleva a los objetos.
       final atascos = _c.imperio.atascos;
       final nuevos = atascos.where((a) => !_atascosAvisados.contains(a)).toList();
-      if (nuevos.isNotEmpty) {
+      if (nuevos.isNotEmpty && !_recorrido) {
         if (atascos.length >= 2 && !_c.imperio.robotActivo(_c.ahora)) {
           final n = atascos.length;
           _avisoAtascos = ('🪠', tr('¡$n atascos! El Robot destapa solo', '$n clogs! The Plunger bot unclogs them by itself'), null);
@@ -223,13 +229,40 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       }
       _revisarEmpujon();
       _mostrarDialogos();
+      _revisarRecorrido();
     }
     setState(() {});
   }
 
+  /// El recorrido sale una sola vez, cuando no hay nada más en pantalla: ni carga, ni diálogos, ni hojas, ni pendientes.
+  void _revisarRecorrido() {
+    if (_recorrido || !widget.activo || _c.cargando || _c.apagado || _c.versionVieja || _dialogoAbierto) return;
+    if (_c.bienvenidaPendiente || _c.offlinePendiente != null || _c.descargaPendiente != null || _c.rachaPendiente) return;
+    if (!(ModalRoute.isCurrentOf(context) ?? true) || _c.imperio.partida.guiaVista.contains(claveRecorrido)) return;
+    _empezarRecorrido();
+  }
+
+  void _empezarRecorrido() {
+    if (_cajon.value > 0) _abrirCajon(false);
+    _cerrarEmpujon();
+    final jalar = botonJalar(_c.imperio, _c.cadena);
+    setState(() => _pasosRecorrido = pasosRecorrido(_c.imperio, _c.ahora,
+        moneda: monedaActual().abreviatura, jalarVisible: jalar.visible, cadenaLista: jalar.encendido));
+  }
+
+  void _queHago(BuildContext context) => abrirQueHago(context, _c,
+      cadenaLista: () => botonJalar(_c.imperio, _c.cadena).encendido,
+      alIr: (s) => switch (s.ir) {
+            DestinoQueHago.edificios => _abrirCajon(true),
+            DestinoQueHago.tienda => _abrirObjetos(context),
+            DestinoQueHago.jalar => _jalar(context, botonJalar(_c.imperio, _c.cadena)),
+            DestinoQueHago.cerrar => null,
+          },
+      alRecorrido: _empezarRecorrido);
+
   /// Un empujón de la guía de los alquileres si toca: nunca encima de un aviso, de otro empujón ni con una hoja abierta.
   void _revisarEmpujon() {
-    if (_empujon != null || _aviso != null || _c.cargando || !(ModalRoute.isCurrentOf(context) ?? true)) return;
+    if (_empujon != null || _aviso != null || _recorrido || _c.cargando || !(ModalRoute.isCurrentOf(context) ?? true)) return;
     final e = _guia.siguiente(_c.imperio, _c.ahora);
     if (e == null) return;
     _timerEmpujon?.cancel();
@@ -512,6 +545,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                   left: dorado.x * (caja.maxWidth - 72),
                   top: dorado.y * (caja.maxHeight - 72),
                   child: GestureDetector(
+                    key: const Key('mojon_dorado'),
                     onTap: _tocarDorado,
                     child: ScaleTransition(
                       scale: Tween(begin: 0.9, end: 1.1).animate(CurvedAnimation(parent: _pulso, curve: Curves.easeInOut)),
@@ -544,6 +578,17 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                             _abrirObjetos(context);
                           }
                         : null,
+                  ),
+                ),
+              // Con llave: si sale o se va otro hijo de la pila (un atasco, el dorado) el recorrido no vuelve al paso 1.
+              if (_pasosRecorrido case final pasos?)
+                Positioned.fill(
+                  key: const ValueKey('recorrido'),
+                  child: RecorridoImperio(
+                    control: _c,
+                    pasos: pasos,
+                    escena: _llaveEscena,
+                    alTerminar: () => setState(() => _pasosRecorrido = null),
                   ),
                 ),
             ],
@@ -592,9 +637,10 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       _anchoCajon = max(zona.maxWidth, 1);
       return Stack(
         children: [
-          Positioned.fill(child: KeyedSubtree(key: _llavePoceta, child: _poceta(ahora))),
+          Positioned.fill(child: KeyedSubtree(key: const Key('recorrido_poceta'), child: KeyedSubtree(key: _llavePoceta, child: _poceta(ahora)))),
           // Atasco: la tarjeta para destaparlo también sale en el baño, no solo en el cajón de edificios.
-          if (_c.imperio.atasco case final a?) Positioned(left: 32, right: 12, bottom: 12, child: _tarjetaAtasco(context, a)),
+          if (_c.imperio.atasco case final a?) Positioned(
+              key: const Key('tarjeta_atasco'), left: 32, right: 12, bottom: 12, child: _tarjetaAtasco(context, a)),
           // Franja del borde: solo los arrastres que empiezan aquí abren el cajón (el resto es pujar).
           Positioned(
             left: 0,
@@ -766,6 +812,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
             children: [
               Expanded(
                 child: GestureDetector(
+                  key: const Key('recorrido_saldo'),
                   behavior: HitTestBehavior.opaque,
                   onTap: () => _avisar('💩', moneda.nombre),
                   child: Column(
@@ -865,6 +912,8 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                 if (i > 0) const SizedBox(width: 6),
                 Expanded(flex: i == chips.length - 1 && rollos > 0 ? 2 : 1, child: chips[i]),
               ],
+              const SizedBox(width: 6),
+              BotonQueHago(alTocar: () => _queHago(context)),
             ],
           ),
           if (im.manaAbierto) ...[
