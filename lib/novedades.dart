@@ -21,6 +21,20 @@ class VersionNovedades {
 
 /// El historial público, de la más nueva a la más vieja. Al sacar una versión nueva se agrega arriba.
 const historialNovedades = <VersionNovedades>[
+  VersionNovedades('2.14.0', '2026-11-02', [
+    ('💬', 'En el Baño ves quién está escribiendo: su avatar se mueve con los puntitos.',
+        'In the Bathroom you can see who is typing: their avatar moves with the little dots.'),
+    ('📣', 'Las menciones con @ se resaltan. Tócala para ver un resumen de esa persona y toca el resumen para abrir su perfil.',
+        'Mentions with @ are highlighted. Tap one to see a quick summary of that person and tap the summary to open their profile.'),
+    ('👦', 'Lo que alquilas trabaja a la vista: los Primos pujan, el robot destapa, la cuadrilla compra y una tira te dice cuánto le queda a cada uno.',
+        'What you rent works in plain sight: Cousins push, the robot unclogs, the crew buys and a strip shows how long each one has left.'),
+    ('🚽', 'La poceta también se puede tapar mientras tienes la app cerrada. Vuelve a destaparla.',
+        'The toilet can also clog while the app is closed. Come back and unclog it.'),
+    ('✋', 'Los pujos con el dedo cuentan hasta 20 por segundo. Los Primos no entran en ese tope.',
+        'Finger pushes count up to 20 per second. Cousins are not part of that limit.'),
+    ('📱', 'La app se queda siempre en vertical y la barra de abajo ya no deja un hueco encima de los iconos.',
+        'The app always stays upright and the bottom bar no longer leaves a gap above the icons.'),
+  ]),
   VersionNovedades('2.13.1', '2026-11-02', [
     ('💸', 'Los alquilables del Imperio tienen su propia sección, Alquiler, y salen más baratos mientras más grande es tu imperio.',
         'Empire rentals have their own section, Rentals, and get cheaper the bigger your empire is.'),
