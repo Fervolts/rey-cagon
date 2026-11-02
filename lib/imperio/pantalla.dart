@@ -30,6 +30,7 @@ import 'personalizar.dart';
 import 'tarjeta_bano.dart' show presumirBano;
 import 'poceta.dart';
 import 'racha_imperio.dart' show diasRacha;
+import 'ranking_amigos.dart';
 import 'sala.dart';
 import 'tienda_ciruelas.dart';
 
@@ -177,6 +178,10 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
         final mj = formatoMj(regalo, ingles: enIngles);
         _avisar('🦸', tr('El Súper Plomero te trajo +$mj', 'The Super Plumber brought you +$mj'));
       }
+      if (_c.empujonPendiente) {
+        _c.empujonPendiente = false;
+        _avisar('🎁', tr('Empujón: producción x2 por 30 min', 'Boost: x2 production for 30 min'));
+      }
       _mostrarDialogos();
     }
     setState(() {});
@@ -283,6 +288,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
               'Away ${_duracionLarga(off.segundosAusente)}. Counted ${_duracionLarga(off.segundosContados)}.'),
           if (off.conBonus) tr('x1,5 por tu cagada tipo 6.', 'x1.5 from your type 6 poop.'),
           if (off.tanqueLleno) tr('Se llenó el tanque, compra uno más grande.', 'The tank filled up, buy a bigger one.'),
+          if (off.regalo > 0) tr('Incluye +${_mj(off.regalo)} de regalo por volver.', 'Includes a +${_mj(off.regalo)} welcome back gift.'),
         ]);
       }
       final d = _c.descargaPendiente;
@@ -635,6 +641,21 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                 ),
               ),
               const SizedBox(width: 8),
+              // Ranking del Imperio con la gente que sigues.
+              Tooltip(
+                message: tr('Ranking entre amigos', 'Friends ranking'),
+                child: InkWell(
+                  key: const Key('boton_ranking_imperio'),
+                  onTap: () => abrirRankingImperio(context),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: _caja(context),
+                    child: Icon(Icons.emoji_events_outlined, size: 18, color: p.texto),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
               // Mandar la foto del baño (como lo tengas personalizado) al chat.
               Tooltip(
                 message: tr('Compartir mi baño', 'Share my bathroom'),
@@ -872,7 +893,22 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     final im = _c.imperio;
     final atasco = im.atasco;
     if (!im.edificioAbierto(e.id)) {
-      return _fila(context, emoji: '🔒', titulo: _cagaVeces(e.candado), apagada: true);
+      final faltan = im.faltanCandado(e.candado);
+      if (im.candadoPagable(e.candado)) {
+        final precio = im.precioCandado(e.candado);
+        final alcanza = precio <= im.saldo;
+        return GestureDetector(
+          onTap: alcanza ? () => _c.pagarCandado(e.candado) : null,
+          child: _fila(context,
+              emoji: '🔒',
+              titulo: _faltanCagadas(faltan),
+              detalle: tr('Toca para abrirlo con MJ', 'Tap to unlock it with MJ'),
+              derecha: _mj(precio),
+              resaltada: alcanza,
+              apagada: !alcanza),
+        );
+      }
+      return _fila(context, emoji: '🔒', titulo: faltan > 0 ? _faltanCagadas(faltan) : _cagaVeces(e.candado), apagada: true);
     }
     if (atasco != null && atasco.edificio == e.id) {
       return Padding(padding: const EdgeInsets.only(bottom: 6), child: _tarjetaAtasco(context, atasco));
@@ -1263,7 +1299,7 @@ class _HojaObjetos extends StatelessWidget {
   /// Por qué no se puede comprar o alquilar [o] ahora, con su emoji. null = sí se puede.
   (String, String)? _porQueNo(Imperio im, Objeto o, int ahora, {bool conCiruelas = false}) {
     if (!im.objetoAbierto(o.id)) {
-      return ('🔒', im.cagadas < o.candado ? _cagaVeces(o.candado) : tr('Sale con tu primer Atasco', 'Unlocks with your first Clog'));
+      return ('🔒', im.faltanCandado(o.candado) > 0 ? _faltanCagadas(im.faltanCandado(o.candado)) : tr('Sale con tu primer Atasco', 'Unlocks with your first Clog'));
     }
     final n = o.maxInventario;
     if (o.tipo == TipoObjeto.consumible && im.enInventario(o.id) >= n) {
@@ -1356,7 +1392,7 @@ class _HojaObjetos extends StatelessWidget {
     // La Cagada fresca no se compra: sale sola 1 h después de cada cagada real.
     final esFicha = o.tipo == TipoObjeto.ficha;
     final fresca = esFicha ? im.efectosActivos(ahora).where((e) => e.id == o.id).firstOrNull?.restante : null;
-    final candado = im.cagadas < o.candado ? _cagaVeces(o.candado) : tr('Sale con tu primer Atasco', 'Unlocks with your first Clog');
+    final candado = im.faltanCandado(o.candado) > 0 ? _faltanCagadas(im.faltanCandado(o.candado)) : tr('Sale con tu primer Atasco', 'Unlocks with your first Clog');
     final consumible = o.tipo == TipoObjeto.consumible;
     // Pintura: hace falta un edificio sin pintar. Destapacaños: hace falta un Atasco.
     final puedeUsar = switch (o.id) {
@@ -1488,3 +1524,4 @@ class _HojaObjetos extends StatelessWidget {
 }
 
 String _cagaVeces(int n) => n == 1 ? tr('Caga 1 vez', 'Poop once') : tr('Caga $n veces', 'Poop $n times');
+String _faltanCagadas(int n) => n == 1 ? tr('Te falta 1 cagada', '1 more poop to go') : tr('Te faltan $n cagadas', '$n more poops to go');

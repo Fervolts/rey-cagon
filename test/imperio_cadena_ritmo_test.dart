@@ -9,20 +9,32 @@
 // edificio le faltan unidades para su próxima mejora de nivel (y ya hay los rollos que pide) y todas juntas cuestan menos
 // de 1 min de ingreso, se completan.
 //
+// Candados como en el servidor: cuentan hasta 3 cagadas por día (también para la cadena), cada día abre la racha y suma un
+// pase (dos pases = una cagada), y si el próximo edificio se puede pagar con MJ y alcanza el saldo, lo paga. El empujón
+// del que se quedó atrás no entra: depende de los demás jugadores.
+//
 // Para ir más rápido que la simulación corta, compra cada 5 s de juego (hasta 300 compras seguidas, que al volver del
 // offline sobra plata) en vez de cada segundo. Las aserciones son flojas a propósito; lo importante es lo que imprime.
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rey_cagon/imperio/flags.dart';
 import 'package:rey_cagon/imperio/motor.dart';
 
 const int _seg = 1000;
 const int _hora = 3600 * _seg;
 const int _dia = 24 * _hora;
-const List<int> _sesiones = [8, 14, 20];
-const int _largoSesion = 600;
-const double _cagadasPorDia = 0.7;
-const int _dias = 230;
+// Perfil por variables de entorno (para comparar jugadores; con cualquiera puesta no corren las aserciones):
+// SES=8,14,20 (horas de inicio de cada sesión), LARGO=600 (segundos por sesión), TOQUES=5 (pujos por segundo),
+// CPD=0.7 (cagadas reales al día), DIAS=230.
+final Map<String, String> _env = Platform.environment;
+final bool _perfilPropio = ['SES', 'LARGO', 'TOQUES', 'CPD', 'DIAS'].any(_env.containsKey);
+final List<int> _sesiones = (_env['SES'] ?? '8,14,20').split(',').map(int.parse).toList();
+final int _largoSesion = int.parse(_env['LARGO'] ?? '600');
+final int _toques = int.parse(_env['TOQUES'] ?? '5');
+final double _cagadasPorDia = double.parse(_env['CPD'] ?? '0.7');
+final int _dias = int.parse(_env['DIAS'] ?? '230');
 
 class _Opcion {
   final String id;
@@ -51,6 +63,9 @@ class _Simulacion {
   final List<_Corrida> corridas = [_Corrida(0)];
   int cagadasDesde = 0;
   double mjAlEmpezar = 0;
+  int cagadasCandado = 0;
+  int pagadas = 0; // cagadas pagadas con MJ
+  final Map<int, int> cagadasPorDia = {};
   _Simulacion(int semilla, Ajustes ajustes)
       : azar = Random(semilla),
         imp = Imperio(azar: Random(semilla + 1), ajustes: ajustes);
@@ -61,7 +76,7 @@ class _Simulacion {
     return _sesiones.length * contado * pct * mps / (_sesiones.length * _largoSesion);
   }
 
-  double _ingresoPorSeg(int ahora) => imp.mpsSinEfectos(contarAtasco: false) + 5 * imp.valorPujo(ahora);
+  double _ingresoPorSeg(int ahora) => imp.mpsSinEfectos(contarAtasco: false) + _toques * imp.valorPujo(ahora);
 
   List<_Opcion> _opciones(int ahora) {
     final p = imp.partida;
@@ -95,16 +110,28 @@ class _Simulacion {
       ganancia += _offlinePorSegActivo(imp.topeOffline, imp.porcentajeOffline, imp.mpsSinEfectos(contarAtasco: false)) - offlineAntes;
       p.mejoras.remove(m.id);
       // Imán y Brillo no suben el MJ/s; la cadena tampoco, pero abre las jaladas: se compran si cuestan menos de 10 min.
-      if (m.familia == FamiliaMejora.dorado || m.id == 'cadena_trono') ganancia = m.precio <= 600 * base ? double.infinity : 0;
+      if (m.familia == FamiliaMejora.dorado || m.id == 'cadena_trono') ganancia = imp.precioMejora(m) <= 600 * base ? double.infinity : 0;
       // Las que ya casi no rinden (un x2 a un edificio viejo) se compran igual cuando cuestan menos de 1 min de ingreso,
       // como haría cualquiera que quiere la colección completa.
-      if (m.precio <= 60 * base) ganancia = double.infinity;
-      r.add(_Opcion(m.id, false, m.precio, ganancia));
+      if (imp.precioMejora(m) <= 60 * base) ganancia = double.infinity;
+      r.add(_Opcion(m.id, false, imp.precioMejora(m), ganancia));
     }
     return r;
   }
 
+  /// Paga con MJ el candado del primer edificio cerrado si se puede y alcanza el saldo.
+  void _pagarCandado() {
+    for (final e in edificios) {
+      if (imp.edificioAbierto(e.id)) continue;
+      if (imp.partida.rollosGanados < e.rollos || !imp.candadoPagable(e.candado)) return;
+      final antes = imp.partida.cagadasPagadas;
+      if (imp.pagarCandado(e.candado)) pagadas += imp.partida.cagadasPagadas - antes;
+      return;
+    }
+  }
+
   void _comprar(int ahora) {
+    _pagarCandado();
     for (var k = 0; k < 300; k++) {
       final ingreso = max(_ingresoPorSeg(ahora), 1e-9);
       _Opcion? mejor;
@@ -160,18 +187,29 @@ class _Simulacion {
     }
     var finAnterior = -1;
     for (var d = 0; d < _dias; d++) {
+      imp.pases++; // reclama la racha al abrir el día
       for (final h in _sesiones) {
         final inicio = d * _dia + h * _hora;
         if (finAnterior >= 0) imp.aplicarOffline(finAnterior, inicio);
         final nuevas = <CagadaReal>[];
         while (siguienteCagada.isNotEmpty && siguienteCagada.first <= inicio) {
-          siguienteCagada.removeAt(0);
-          nuevas.add(CagadaReal(tipo: 1 + azar.nextInt(7), creada: DateTime.utc(2026).add(Duration(milliseconds: inicio))));
+          final cuando = siguienteCagada.removeAt(0);
+          nuevas.add(CagadaReal(tipo: 1 + azar.nextInt(7), creada: DateTime.utc(2026).add(Duration(milliseconds: cuando))));
         }
         if (nuevas.isNotEmpty) {
           imp.cagadas += nuevas.length;
           imp.fichas += nuevas.length;
-          cagadasDesde += nuevas.length;
+          // Tope por día (hora de la cagada, no de la sesión): lo de más no abre candados ni cuenta para la cadena.
+          var cuentan = 0;
+          for (final c in nuevas) {
+            final dc = c.creada.difference(DateTime.utc(2026)).inDays;
+            final n = cagadasPorDia[dc] ?? 0;
+            if (n < 3) cuentan++;
+            cagadasPorDia[dc] = n + 1;
+          }
+          cagadasCandado += cuentan;
+          imp.cagadasCandado = cagadasCandado;
+          cagadasDesde += cuentan;
           imp.aplicarCagadas(nuevas, inicio);
         }
         _quizasJalar(inicio);
@@ -179,8 +217,8 @@ class _Simulacion {
         if (nuevas.isNotEmpty) imp.aplicarFrescaHasta(inicio + 3600000);
         for (var s = 0; s < _largoSesion; s++) {
           final ahora = inicio + s * _seg;
-          for (var k = 0; k < 5; k++) {
-            imp.pujar(ahora + k * 200);
+          for (var k = 0; k < _toques; k++) {
+            imp.pujar(ahora + k * 1000 ~/ _toques);
           }
           imp.tick(ahora + _seg, 1);
           final dorado = imp.dorado(ahora + _seg);
@@ -201,7 +239,7 @@ class _Simulacion {
 
 void main() {
   test('la cadena lleva a todos los edificios y mejoras', () {
-    final sim = _Simulacion(7, Ajustes.porDefecto)..correr();
+    final sim = _Simulacion(7, FlagsImperio.porDefecto.ajustes)..correr();
     final imp = sim.imp;
     final lineas = <String>['Corridas (día de inicio, días, MJ de la corrida, rollos ganados, rollos en total, edificio más alto):'];
     for (var i = 0; i < sim.corridas.length; i++) {
@@ -222,10 +260,12 @@ void main() {
       final dias = [for (final e in edificiosFase1) sim.primerDia['${e.id}_$n'] ?? 9999];
       lineas.add('  nivel $n: primera el día ${dias.reduce(min) + 1}, última el día ${dias.reduce(max) + 1}');
     }
+    lineas.add('Candados: ${sim.cagadasCandado} cagadas que cuentan, ${imp.pases} pases, ${sim.pagadas} pagadas con MJ');
     lineas.add('Al final: ${imp.cagadas} cagadas, ${imp.partida.jaladas} jaladas, ${imp.partida.rollos} rollos '
         '(x${imp.multiplicadorRollos.toStringAsExponential(2)}), ${imp.mjTotal.toStringAsExponential(2)} MJ en total');
     // ignore: avoid_print
     print(lineas.join('\n'));
+    if (_perfilPropio) return;
 
     final corridas = sim.corridas;
     expect(corridas.length, greaterThan(2));

@@ -466,7 +466,7 @@ function formatoMj(v: number, ingles = false): string {
 const tiempo = (h: number, en: boolean) =>
   h >= 48 ? `${Math.floor(h / 24)} ${en ? "days" : "días"}` : `${h} h`;
 
-type Poceta = { user_id: string; subtipo: string; mj?: number; horas?: number };
+type Poceta = { user_id: string; subtipo: string; mj?: number; horas?: number; faltan?: number; pagable?: boolean };
 
 // Variantes A/B/C por subtipo. Cada una devuelve el aviso con los números de esa persona.
 const textosPoceta: Record<string, ((p: Poceta) => Aviso)[]> = {
@@ -485,6 +485,48 @@ const textosPoceta: Record<string, ((p: Poceta) => Aviso)[]> = {
       "🥺 The toilet asked about you", "It thinks you don't love it anymore. Prove it wrong."),
     (_) => aviso("🚽 ¿Y tu imperio?", "Tus empleados de la poceta están de brazos cruzados. Ven a ponerlos a pujar 💩",
       "🚽 What about your empire?", "Your toilet crew is just sitting around. Come make them push 💩"),
+  ],
+  regalo: [
+    (p) => aviso("🎁 Te guardamos un regalo", `Llevas ${tiempo(p.horas ?? 48, false)} sin entrar. Vuelve y cobra 4 h de producción gratis 🚽`,
+      "🎁 We saved you a gift", `You've been away ${tiempo(p.horas ?? 48, true)}. Come back and collect 4 h of free production 🚽`),
+    (_) => aviso("🎁 Regalo de vuelta", "Tu poceta te tiene 4 h de producción de regalo. Solo tienes que entrar.",
+      "🎁 Welcome back gift", "Your toilet has 4 h of production waiting for you. Just open the app."),
+    (_) => aviso("🚽 Tu trono te espera con regalo", "Entra hoy y te llevas 4 h de producción gratis 💩",
+      "🚽 Your throne has a gift", "Come in today and get 4 h of free production 💩"),
+  ],
+  empujon: [
+    (_) => aviso("💪 Te quedaste un poquito atrás", "Te regalamos producción x2 por 30 min. Entra y alcanza a los demás 🚽",
+      "💪 You fell a little behind", "Here's x2 production for 30 min. Come in and catch up 🚽"),
+    (_) => aviso("🚀 Un empujón para ti", "Producción x2 por 30 min apenas entres. Dale gas a tu imperio 💨",
+      "🚀 A boost for you", "x2 production for 30 min as soon as you open. Floor it 💨"),
+    (_) => aviso("🎁 Empujoncito de regalo", "x2 de producción por 30 min, solo por entrar hoy 💩",
+      "🎁 A little boost", "x2 production for 30 min, just for coming in today 💩"),
+  ],
+  candado: [
+    (p) => aviso(`🔒 Te ${(p.faltan ?? 1) === 1 ? "falta" : "faltan"} ${cagadasEs(p.faltan ?? 1)}`,
+      p.pagable ? "Para abrir el próximo edificio. O págalas con mojonólares 💸" : "Para abrir el próximo edificio. Al trono 👑",
+      `🔒 ${cagadasEn(p.faltan ?? 1)} to go`,
+      p.pagable ? "To unlock the next building. Or pay for them with Poopbucks 💸" : "To unlock the next building. To the throne 👑"),
+    (p) => aviso("🏗️ Casi abres un edificio nuevo", `Solo ${cagadasEs(p.faltan ?? 1)} más${p.pagable ? " (o págalas con mojonólares)" : ""} y es tuyo 🚽`,
+      "🏗️ A new building is almost yours", `Just ${cagadasEn(p.faltan ?? 1)} more${p.pagable ? " (or pay with Poopbucks)" : ""} and it's yours 🚽`),
+    (p) => aviso("🚽 El candado está flojito", `A ${cagadasEs(p.faltan ?? 1)} del próximo edificio. ¿Hoy cae?`,
+      "🚽 The lock is loose", `${cagadasEn(p.faltan ?? 1)} away from the next building. Today's the day?`),
+  ],
+  jalar: [
+    (_) => aviso("⛓️ Ya puedes jalar la cadena", "Tienes las cagadas. Jálala y gana Rollos de Oro 🧻",
+      "⛓️ You can pull the chain", "You have the poops. Pull it and earn Golden Rolls 🧻"),
+    (_) => aviso("🚽 La cadena está lista", "Jala y tu imperio arranca otra vez, pero más fuerte 💩",
+      "🚽 The chain is ready", "Pull it and your empire starts over, but stronger 💩"),
+    (_) => aviso("⛓️ ¿Qué esperas?", "Ya juntaste las cagadas para jalar la cadena. Dale.",
+      "⛓️ What are you waiting for?", "You already have the poops to pull the chain. Go."),
+  ],
+  fresca: [
+    (_) => aviso("💩 Cagada fresca = x2", "Registra tu cagada de hoy y tu imperio produce el doble por 1 h",
+      "💩 Fresh poop = x2", "Log today's poop and your empire produces double for 1 h"),
+    (_) => aviso("🚽 ¿Ya cagaste hoy?", "Anótala y te damos x2 de producción por 1 hora 💸",
+      "🚽 Pooped yet today?", "Log it and get x2 production for 1 hour 💸"),
+    (_) => aviso("⏰ x2 por 1 hora", "Cada cagada que registras pone tu poceta al doble por 1 h. Al trono 👑",
+      "⏰ x2 for 1 hour", "Every poop you log doubles your toilet for 1 h. To the throne 👑"),
   ],
   constipado: [
     (p) => aviso("¿Estás constipado? 💩", `${tiempo(p.horas ?? 10, false)} sin cagar... ¿estítico? Toma agüita y vuelve al trono.`,

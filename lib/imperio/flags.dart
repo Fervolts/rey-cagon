@@ -44,11 +44,21 @@ class FlagsImperio {
   /// Cadena: cagadas reales entre jaladas (`cadena_cagadas`). El botón prefiere la cuenta que manda `imperio_cadena`.
   final int cadenaCagadas;
 
+  /// Candados pagados con MJ: horas de producción de la primera cagada (`candado_horas`) y cuánto sube cada una
+  /// (`candado_subida`).
+  final double candadoHoras, candadoSubida;
+
   /// Rollos de Oro = piso((MJ en total / `cadena_divisor`) ^ `cadena_exponente`).
   final double cadenaDivisor, cadenaExponente;
 
   /// Producción extra por Rollo de Oro (`rollo_pct`, 0,01 = +1%).
   final double rolloPct;
+
+  /// Cuántas veces el precio del catálogo cuestan los edificios (`escala_edificios`) y las mejoras (`escala_mejoras`).
+  /// Calibrado con la telemetría de un jugador que spamea (test/imperio_loco_test.dart): con 1 y 1 llegaba al tope en
+  /// unas 6 horas de juego (día 2), antes de juntar las cagadas para jalar la cadena; con 10 y 100 llega hacia las 25.
+  /// Como los MJ salen más lentos, `cadena_divisor` bajó de 1e10 a 1e8 para que la cadena dé los mismos rollos.
+  final double escalaEdificios, escalaMejoras;
 
   /// clave → variante asignada (solo las flags con variantes). Va en `sesion_inicio`.
   final Map<String, String> variantes;
@@ -69,9 +79,13 @@ class FlagsImperio {
     this.epicoTipo1 = 3,
     this.epicoMultiplicador = 10,
     this.cadenaCagadas = 5,
-    this.cadenaDivisor = 1e10,
+    this.candadoHoras = 2,
+    this.candadoSubida = 0.1,
+    this.cadenaDivisor = 1e8,
     this.cadenaExponente = 0.5,
     this.rolloPct = 0.04,
+    this.escalaEdificios = 10,
+    this.escalaMejoras = 100,
     this.variantes = const {},
   });
 
@@ -96,9 +110,13 @@ class FlagsImperio {
         epicoTipo1: epicoTipo1,
         epicoMultiplicador: epicoMultiplicador,
         cadenaCagadas: cadenaCagadas,
+        candadoHoras: candadoHoras,
+        candadoSubida: candadoSubida,
         cadenaDivisor: cadenaDivisor,
         cadenaExponente: cadenaExponente,
         rolloPct: rolloPct,
+        escalaEdificios: escalaEdificios,
+        escalaMejoras: escalaMejoras,
       );
 
   static String claveCache(String? usuario) => 'imperio_flags_${usuario ?? 'anon'}';
@@ -146,9 +164,13 @@ class FlagsImperio {
       epicoTipo1: numero('epico_tipo1_x', d.epicoTipo1, 1, 10),
       epicoMultiplicador: numero('epico_x', d.epicoMultiplicador, 1, 100),
       cadenaCagadas: numero('cadena_cagadas', d.cadenaCagadas.toDouble(), 1, 1000).round(),
+      candadoHoras: numero('candado_horas', d.candadoHoras, 0.1, 1000),
+      candadoSubida: numero('candado_subida', d.candadoSubida, 0, 10),
       cadenaDivisor: numero('cadena_divisor', d.cadenaDivisor, 1, 1e15),
       cadenaExponente: numero('cadena_exponente', d.cadenaExponente, 0.1, 1),
       rolloPct: numero('rollo_pct', d.rolloPct, 0, 1),
+      escalaEdificios: numero('escala_edificios', d.escalaEdificios, 1, 1000),
+      escalaMejoras: numero('escala_mejoras', d.escalaMejoras, 1, 10000),
       variantes: {
         for (final e in m.entries)
           if (e.key is String && e.value is Map && (e.value as Map)['variante'] is String) e.key as String: (e.value as Map)['variante'] as String,

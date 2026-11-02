@@ -1,16 +1,19 @@
+import 'dart:async';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import 'actualizar.dart' show esDePlay;
 import 'avisos.dart' show ir;
 import 'idioma.dart' show idioma, tr;
 import 'main.dart' show db;
-import 'recordatorio.dart' show notificaciones;
+import 'recordatorio.dart' show cancelarAvisoImperio, clavePocetaLocal, notificaciones;
 import 'widget.dart' show clienteDeFondo, refrescarRanking;
 
 // Mismo id que usa la Edge Function notificaciones en android.notification.channel_id.
@@ -171,7 +174,9 @@ class _FilaAvisosPocetaState extends State<FilaAvisosPoceta> {
     if (uid == null) return;
     try {
       final fila = await db.from('push_ajustes').select('poceta').eq('user_id', uid).maybeSingle();
-      if (mounted) setState(() => _activo = (fila?['poceta'] as bool?) ?? true);
+      final activo = (fila?['poceta'] as bool?) ?? true;
+      unawaited(SharedPreferences.getInstance().then((p) => p.setBool(clavePocetaLocal, activo)));
+      if (mounted) setState(() => _activo = activo);
     } catch (_) {
       // Sin la tabla todavía (o sin red): se muestra encendido y se deja tocar igual.
       if (mounted) setState(() => _activo = true);
@@ -183,6 +188,8 @@ class _FilaAvisosPocetaState extends State<FilaAvisosPoceta> {
     setState(() => _activo = v);
     try {
       await db.rpc('push_poceta', params: {'p_activo': v});
+      unawaited(SharedPreferences.getInstance().then((p) => p.setBool(clavePocetaLocal, v)));
+      if (!v) unawaited(cancelarAvisoImperio());
     } catch (_) {
       if (!mounted) return;
       setState(() => _activo = antes);

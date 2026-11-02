@@ -281,7 +281,8 @@ final List<OcultableBano> ocultablesBano = [
 ];
 
 /// Dónde va cada cosa del piso (x relativa al centro, y desde arriba). `cucaracha` y `camion` son la y de su carril.
-typedef LugaresBano = ({Offset bidet, double escalaBidet, Offset tobo, double tamTobo, Offset matica, Offset budare, double cucaracha, double camion});
+/// `budareDelante`: el budare y las arepas van delante del camión (en el piso apretado el camión pasa por detrás).
+typedef LugaresBano = ({Offset bidet, double escalaBidet, Offset tobo, double tamTobo, Offset matica, Offset budare, bool budareDelante, double cucaracha, double camion});
 
 /// Medidas de la escena. Las x son relativas al centro (cx); las y, absolutas desde arriba.
 abstract final class Bano {
@@ -326,7 +327,8 @@ abstract final class Bano {
 
   /// Las cosas del piso según cuánto piso de más hay. Sin él (tarjeta del chat, cloaca, pantallas bajitas) se quedan
   /// apretadas en la franja de piso de la escena; con él bajan y se reparten: bidet al lado de la poceta, tobo a la
-  /// izquierda, budare más abajo, matica en su esquina, la cucaracha y el camión por carriles propios.
+  /// izquierda, budare a la derecha (lejos del camión, que entra y se para por la izquierda), matica en su esquina, la
+  /// cucaracha y el camión por carriles propios. Apretadas, el budare se queda a la izquierda pero delante del camión.
   static LugaresBano lugares(EstadoBano e, double suelo) {
     if (suelo < sueloAmplio || e.cloaca > 0) {
       return (
@@ -336,6 +338,7 @@ abstract final class Bano {
         tamTobo: 30.0,
         matica: const Offset(164, 250),
         budare: const Offset(-150, 266),
+        budareDelante: true,
         cucaracha: 262.0,
         camion: 272.0,
       );
@@ -346,7 +349,8 @@ abstract final class Bano {
       tobo: const Offset(-104, 294),
       tamTobo: 40.0,
       matica: Offset(164, alto + min(suelo * .25, 56)),
-      budare: Offset(-150, alto + suelo * .33),
+      budare: Offset(112, alto + suelo * .55),
+      budareDelante: false,
       cucaracha: alto + suelo * .5,
       camion: min(alto + suelo * .82, alto + suelo - 10),
     );
@@ -366,6 +370,9 @@ abstract final class Bano {
     final b = l.bidet, k = l.escalaBidet;
     return Rect.fromLTRB(b.dx - 26 * k, b.dy - 58 * k, b.dx + 26 * k, b.dy + 4);
   }
+
+  /// Lo que ocupa el budare con sus arepas (para tocarlo).
+  static Rect cajaArepa(LugaresBano l) => Rect.fromCenter(center: l.budare + const Offset(0, -6), width: 70, height: 34);
 
   /// Lo que ocupa el tobo o, con tanque, el pipote azul.
   static Rect cajaTobo(EstadoBano e, LugaresBano l) {
@@ -391,7 +398,7 @@ abstract final class Bano {
     if (e.claseMedia >= 4 && Rect.fromCenter(center: cuadro, width: 38, height: 38).contains(p)) return 'cuadro';
     if (ventana.contains(p)) return 'ventana';
     if (e.matica && Rect.fromCenter(center: l.matica, width: 40, height: 44).contains(p)) return 'matica';
-    if (e.arepa > 0 && Rect.fromCenter(center: l.budare + const Offset(0, -6), width: 70, height: 34).contains(p)) return 'arepa';
+    if (e.arepa > 0 && cajaArepa(l).contains(p)) return 'arepa';
     if (e.claseMedia >= 8 && banera.contains(p)) return 'banera';
     if ((e.papel || e.lujo('est_papel')) && const Rect.fromLTRB(60, 122, 88, 158).contains(p)) return 'papel';
     return null;
@@ -593,7 +600,7 @@ class PintorBano extends CustomPainter {
     _cortina(canvas, size, cx);
     if (e.claseMedia >= 8) _banera(canvas, cx);
     if (e.claseMedia >= 6) _ducha(canvas, cx);
-    if (e.arepa > 0) _budare(canvas, cx, lugar);
+    if (e.arepa > 0 && !lugar.budareDelante) pintarBudare(canvas, Offset(cx + lugar.budare.dx, lugar.budare.dy), e.arepa >= 3);
     if (e.bidet > 0) _bidet(canvas, Offset(cx + lugar.bidet.dx, lugar.bidet.dy), lugar.escalaBidet);
     if (e.cloaca > 0) _sotano(canvas, size, cx);
     _bombillo(canvas, cx);
@@ -1174,9 +1181,7 @@ class PintorBano extends CustomPainter {
     }
   }
 
-  void _budare(Canvas canvas, double cx, LugaresBano l) {
-    final grande = estado.arepa >= 3;
-    final c = Offset(cx + l.budare.dx, l.budare.dy);
+  static void pintarBudare(Canvas canvas, Offset c, bool grande) {
     final rx = grande ? 34.0 : 27.0;
     // Hornilla con brasas y el budare encima.
     canvas.drawRect(Rect.fromCenter(center: c + const Offset(0, 9), width: rx * 1.4, height: 8), Paint()..color = const Color(0xFF3E3A36));

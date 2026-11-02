@@ -102,6 +102,16 @@ class ResultadoGuardar {
   const ResultadoGuardar({required this.mjTotal, required this.recortado, required this.guardado});
 }
 
+/// Respuesta de `imperio_progreso`.
+class ProgresoImperio {
+  final int cagadasCandado, pases;
+  final bool empujon;
+  const ProgresoImperio({required this.cagadasCandado, required this.pases, required this.empujon});
+
+  factory ProgresoImperio.desdeJson(Map<String, dynamic> j) =>
+      ProgresoImperio(cagadasCandado: _ent(j['cagadas_candado']), pases: _ent(j['pases']), empujon: j['empujon'] == true);
+}
+
 class EstadoCadena {
   final int cagadas;
   final int necesarias;
@@ -131,8 +141,11 @@ class ReclamoRacha {
   final int congelados;
   final int? congeladores;
   final List<int>? rachaSalvados;
+
+  /// Pases que lleva (cada día reclamado suma uno; dos valen una cagada de candado). null = servidor viejo.
+  final int? pases;
   const ReclamoRacha({required this.dia, required this.ya, required this.ciruelasGanadas, required this.ficha, required this.ciruelas,
-      required this.fichas, this.congelados = 0, this.congeladores, this.rachaSalvados});
+      required this.fichas, this.congelados = 0, this.congeladores, this.rachaSalvados, this.pases});
 
   factory ReclamoRacha.desdeJson(Map<String, dynamic> j) => ReclamoRacha(
         dia: _ent(j['dia']),
@@ -144,6 +157,7 @@ class ReclamoRacha {
         congelados: _ent(j['congelados']),
         congeladores: _entN(j['congeladores']),
         rachaSalvados: j['racha_salvados'] is List ? _enteros(j['racha_salvados']) : null,
+        pases: _entN(j['pases']),
       );
 }
 
@@ -226,6 +240,12 @@ class NubeImperio {
   Future<ReclamoRacha> reclamarRacha(String fecha) async {
     final r = await conReintento(() => db.rpc('imperio_reclamar_racha', params: {'p_fecha': fecha}));
     return ReclamoRacha.desdeJson(Map<String, dynamic>.from(r as Map));
+  }
+
+  /// Cagadas para candados (con tope por día), pases de la racha y si toca cobrar el empujón ahora.
+  Future<ProgresoImperio> progreso() async {
+    final r = await conReintento(() => db.rpc('imperio_progreso'));
+    return ProgresoImperio.desdeJson(Map<String, dynamic>.from(r as Map));
   }
 
   /// Cuántas cagadas reales lleva desde la última jalada (o desde que empezó el Imperio) y cuántas pide la cadena.

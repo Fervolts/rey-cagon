@@ -170,6 +170,15 @@ class Partida {
   /// Todos los Rollos que se ganaron (los que quedan más los gastados): abren edificios, mejoras y logros.
   int get rollosGanados => rollos + rollosGastados;
 
+  /// Cagadas de candado compradas con MJ (`Imperio.pagarCandado`). Cuentan para los candados, como mucho la mitad de lo
+  /// que pide cada uno. Jalar la cadena no las quita.
+  int cagadasPagadas;
+
+  /// Segundos activos de todas las partidas (jalar no los borra) y el primer momento en que se jugó (ms, 0 = nunca).
+  /// Dicen si juega poco (tope offline más largo).
+  double segHistoricos;
+  int primerDia;
+
   /// Veces que se jaló la cadena (el servidor lleva la cuenta buena en `imperio.jaladas`).
   int jaladas;
 
@@ -223,6 +232,9 @@ class Partida {
     this.segPartida = 0,
     this.rollos = 0,
     this.rollosGastados = 0,
+    this.cagadasPagadas = 0,
+    this.segHistoricos = 0,
+    this.primerDia = 0,
     this.jaladas = 0,
     Map<String, dynamic>? vista,
   })  : vista = vista ?? {},
@@ -290,6 +302,9 @@ class Partida {
         'seg_partida': segPartida,
         'rollos': rollos,
         'rollos_gastados': rollosGastados,
+        'cagadas_pagadas': cagadasPagadas,
+        'seg_historicos': segHistoricos,
+        'primer_dia': primerDia,
         'jaladas': jaladas,
         if (vista.isNotEmpty) 'vista': vista,
       };
@@ -349,6 +364,9 @@ class Partida {
       segPartida: segPartida < 0 ? 0 : segPartida,
       rollos: _ent(j['rollos']) < 0 ? 0 : _ent(j['rollos']),
       rollosGastados: max(0, _ent(j['rollos_gastados'])),
+      cagadasPagadas: max(0, _ent(j['cagadas_pagadas'])),
+      segHistoricos: max(0.0, _dbl(j['seg_historicos'])),
+      primerDia: max(0, _ent(j['primer_dia'])),
       jaladas: _ent(j['jaladas']) < 0 ? 0 : _ent(j['jaladas']),
       vista: _vista(j['vista']),
     );

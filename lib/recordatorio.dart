@@ -1,5 +1,6 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
@@ -129,3 +130,42 @@ Future<void> cancelarCierres() async {
     await notificaciones.cancel(id: id);
   }
 }
+
+// Aviso local del Imperio (id 200): uno solo programado a la vez. Se programa al salir de la app y se borra al volver.
+// Respeta el interruptor "Avisos de la poceta" (copia local en [clavePocetaLocal]).
+const _idImperio = 200;
+const clavePocetaLocal = 'avisos_poceta';
+
+NotificationDetails get _detallesImperio => NotificationDetails(
+  android: AndroidNotificationDetails(
+    'imperio',
+    tr('Imperio', 'Empire'),
+    channelDescription: tr('Tu poceta se llenó o ya te alcanza para algo', 'Your toilet filled up or you can afford something'),
+  ),
+);
+
+/// Programa el aviso del Imperio para dentro de [en]. Si cae de noche (antes de las 9 o desde las 22), pasa a las 9.
+/// [nombreEs] / [nombreEn] = lo que ya alcanza; null = se llenó la poceta.
+Future<void> programarAvisoImperio(Duration en, {String? nombreEs, String? nombreEn}) async {
+  await cancelarAvisoImperio();
+  final prefs = await SharedPreferences.getInstance();
+  if (!(prefs.getBool(clavePocetaLocal) ?? true)) return;
+  var cuando = tz.TZDateTime.now(tz.local).add(en < const Duration(minutes: 15) ? const Duration(minutes: 15) : en);
+  if (cuando.hour < 9) cuando = tz.TZDateTime(tz.local, cuando.year, cuando.month, cuando.day, 9);
+  if (cuando.hour >= 22) cuando = tz.TZDateTime(tz.local, cuando.year, cuando.month, cuando.day + 1, 9);
+  final (titulo, cuerpo) = nombreEs == null
+      ? (tr('🚽 Se llenó tu poceta', '🚽 Your toilet is full'),
+          tr('Ya no cabe un mojonólar más. Ven a cobrar y ponla a producir otra vez 💩', "Not one more Poopbuck fits. Come collect and get it producing again 💩"))
+      : (tr('💰 Ya te alcanza', '💰 You can afford it'),
+          tr('Tu poceta juntó para $nombreEs. Ven a comprarlo 🚽', 'Your toilet saved up for ${nombreEn ?? nombreEs}. Come buy it 🚽'));
+  await notificaciones.zonedSchedule(
+    id: _idImperio,
+    title: titulo,
+    body: cuerpo,
+    scheduledDate: cuando,
+    notificationDetails: _detallesImperio,
+    androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+  );
+}
+
+Future<void> cancelarAvisoImperio() => notificaciones.cancel(id: _idImperio);

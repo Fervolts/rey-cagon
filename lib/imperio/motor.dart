@@ -71,7 +71,18 @@ class ResultadoOffline {
 
   /// Contó al 100% por el Guardia nocturno (y se gastó).
   final bool conGuardia;
-  const ResultadoOffline(this.segundosAusente, this.segundosContados, this.ganado, this.tanqueLleno, this.conBonus, {this.conGuardia = false});
+
+  /// Regalo de vuelta (ya sumado en [ganado]): 4 h de producción si estuvo fuera 2 días o más. 0 = no hubo.
+  final double regalo;
+  const ResultadoOffline(this.segundosAusente, this.segundosContados, this.ganado, this.tanqueLleno, this.conBonus,
+      {this.conGuardia = false, this.regalo = 0});
+}
+
+/// Aviso local con la app cerrada: en [segundos] alcanza para [nombreEs] / [nombreEn], o se llena la poceta (null).
+class AvisoCerrado {
+  final double segundos;
+  final String? nombreEs, nombreEn;
+  const AvisoCerrado(this.segundos, this.nombreEs, this.nombreEn);
 }
 
 /// Lo que hizo una habilidad de Maná.
@@ -163,6 +174,7 @@ const Duration minimoOffline = Duration(minutes: 1);
 const Map<String, (String, String, String, String, String)> _textosEfecto = {
   'fiebre_dorada': ('🔥', 'Fiebre', 'Fever', 'Producción x7', 'Production x7'),
   'fiebre_trono': ('💥', 'Fiebre de Trono', 'Throne fever', 'Producción x7', 'Production x7'),
+  'empujon': ('🎁', 'Empujón', 'Boost', 'Producción x2', 'Production x2'),
   'pujo_loco': ('🍑', 'Pujo loco', 'Crazy push', 'Pujos x777', 'Pushes x777'),
   'constructor': ('🧱', 'Constructor', 'Builder', 'Edificios a mitad de precio', 'Buildings at half price'),
   'offline_bonus': ('🌋', 'Offline x1,5', 'Offline x1.5', 'El próximo offline cuenta x1,5', 'Next offline counts x1.5'),
@@ -195,7 +207,18 @@ int diaLocal(int ms) {
 
 /// El juego: una `Partida` más las cagadas totales y las Fichas que manda el servidor.
 /// Efectos que se quedan al jalar la cadena: vienen de cagadas reales o Ciruelas, no de MJ.
-const Set<String> efectosQueSobrevivenJalada = {'cagada_fresca', 'fiebre_trono'};
+const Set<String> efectosQueSobrevivenJalada = {'cagada_fresca', 'fiebre_trono', 'empujon'};
+
+/// Regalo de vuelta: quien vuelve tras [ausenciaRegalo] o más se lleva [horasRegalo] de producción.
+const Duration ausenciaRegalo = Duration(days: 2);
+const double horasRegalo = 4;
+
+/// Tope offline de quien juega poco: menos de [segundosPocoJuego] activos por día en promedio.
+const double topeOfflinePocoJuegoH = 6;
+const double segundosPocoJuego = 3600;
+
+/// Empujón (x2) para quien se quedó atrás: lo decide el servidor, una vez por semana.
+const Duration duracionEmpujon = Duration(minutes: 30);
 
 /// Rollos de Oro que dan `mj` MJ históricos: piso((mj / divisor) ^ exponente). El 1e-9 tapa el error de coma flotante
 /// (que 8e9 / 1e9 elevado a 1/3 dé 1,9999999 en vez de 2).
@@ -221,6 +244,13 @@ class Imperio {
   /// Ciruelas 🫐, la moneda premium (las cuenta el servidor). La pone el controlador.
   int ciruelas;
 
+  /// Cagadas reales que cuentan para los candados: como mucho 3 por día (las cuenta el servidor). -1 = el servidor
+  /// no las mandó y valen todas ([cagadas]).
+  int cagadasCandado;
+
+  /// Días de racha reclamados (pases diarios, los cuenta el servidor): cada uno vale media cagada de candado.
+  int pases;
+
   /// Estéticas premium compradas (ids de `esteticas`; las guarda el servidor). Solo suben la suerte de las Ciruelas.
   Set<String> esteticas;
 
@@ -235,16 +265,18 @@ class Imperio {
   double _regaloPlomero = 0;
 
   Imperio({Partida? partida, this.cagadas = 0, this.fichas = 0, this.ciruelas = 0, Set<String>? esteticas, Random? azar,
-      this.ajustes = Ajustes.porDefecto})
+      this.ajustes = Ajustes.porDefecto, this.cagadasCandado = -1, this.pases = 0})
       : partida = partida ?? Partida(),
         esteticas = esteticas ?? {},
         _azar = azar ?? Random();
 
   /// Arranca desde lo guardado en la nube.
   factory Imperio.desdeJson(Map<String, dynamic>? json,
-          {int cagadas = 0, int fichas = 0, int ciruelas = 0, Set<String>? esteticas, Random? azar, Ajustes ajustes = Ajustes.porDefecto}) =>
+          {int cagadas = 0, int fichas = 0, int ciruelas = 0, Set<String>? esteticas, Random? azar, Ajustes ajustes = Ajustes.porDefecto,
+          int cagadasCandado = -1, int pases = 0}) =>
       Imperio(
-          partida: Partida.desdeJson(json), cagadas: cagadas, fichas: fichas, ciruelas: ciruelas, esteticas: esteticas, azar: azar, ajustes: ajustes);
+          partida: Partida.desdeJson(json), cagadas: cagadas, fichas: fichas, ciruelas: ciruelas, esteticas: esteticas, azar: azar, ajustes: ajustes,
+          cagadasCandado: cagadasCandado, pases: pases);
 
   /// Estado para guardar (`'v': 1`).
   Map<String, dynamic> toJson() => partida.toJson();
@@ -327,6 +359,7 @@ class Imperio {
   double multiplicadorProduccionTemporal(int ahora) {
     var s = 1.0;
     if (_activo('cagada_fresca', ahora)) s += 1;
+    if (_activo('empujon', ahora)) s += 1;
     if (_activo('ambientador', ahora)) s += 0.25;
     if (_activo('pino', ahora)) s += 0.5;
     if (_activo('abuela', ahora)) s += 2;
@@ -475,12 +508,53 @@ class Imperio {
     return ResultadoPujo(ganado, epico);
   }
 
+  // ---------- Candados ----------
+
+  /// Lo que abre candados sin pagar: cagadas de candado (tope 3 por día) más media por cada pase diario.
+  int get puntosCandado => (cagadasCandado < 0 ? cagadas : min(cagadasCandado, cagadas)) + pases ~/ 2;
+
+  /// Cagadas de MJ que valen para un candado que pide `pide`: las pagadas, como mucho la mitad de lo que pide.
+  int _pagadasPara(int pide) => min(_p.cagadasPagadas, pide ~/ 2);
+
+  /// El candado que pide `pide` cagadas está abierto.
+  bool candadoAbierto(int pide) => pide <= 0 || puntosCandado + _pagadasPara(pide) >= pide;
+
+  /// Cagadas que le faltan al candado (0 = abierto).
+  int faltanCandado(int pide) => max(0, pide - puntosCandado - _pagadasPara(pide));
+
+  /// Se puede abrir pagando con MJ: lo que falta cabe en la mitad que se deja pagar.
+  bool candadoPagable(int pide) {
+    final f = faltanCandado(pide);
+    return f > 0 && f <= pide ~/ 2 - _pagadasPara(pide);
+  }
+
+  /// MJ para pagar lo que le falta al candado: cada cagada cuesta [Ajustes.candadoHoras] de producción sin efectos y la
+  /// n-ésima pagada sube [Ajustes.candadoSubida] x n. Mínimo 100 por cagada. 0 si no se puede pagar.
+  double precioCandado(int pide) {
+    if (!candadoPagable(pide)) return 0;
+    final base = max(100.0, ajustes.candadoHoras * 3600 * mpsSinEfectos(contarAtasco: false));
+    var mj = 0.0;
+    for (var k = 0; k < faltanCandado(pide); k++) {
+      mj += base * (1 + ajustes.candadoSubida * (_p.cagadasPagadas + k));
+    }
+    return mj.ceilToDouble();
+  }
+
+  /// Paga con MJ lo que le falta al candado. Las cagadas pagadas se quedan aunque jales la cadena.
+  bool pagarCandado(int pide) {
+    final precio = precioCandado(pide);
+    if (precio <= 0 || _p.saldo < precio) return false;
+    _p.cagadasPagadas += faltanCandado(pide);
+    _p.saldo -= precio;
+    return true;
+  }
+
   // ---------- Edificios ----------
 
   /// Se puede comprar: su candado de cagadas está abierto y ganaste los Rollos de Oro que pide (0 en la fase 1). Gastarlos no lo cierra.
   bool edificioAbierto(String id) {
     final e = edificioPorId(id);
-    return e != null && cagadas >= e.candado && _p.rollosGanados >= e.rollos;
+    return e != null && candadoAbierto(e.candado) && _p.rollosGanados >= e.rollos;
   }
 
   /// Sale en la lista: los de la fase 1 siempre (abiertos o con su candado); los de la fase 2 cuando ya tienes sus rollos.
@@ -492,7 +566,7 @@ class Imperio {
   /// Se muestra como "???": no tienes ninguno y no has ganado la mitad de su precio base.
   bool edificioMisterioso(String id) {
     final e = edificioPorId(id);
-    return e != null && cantidad(id) == 0 && _p.mjTotal < e.precioBase / 2;
+    return e != null && cantidad(id) == 0 && _p.mjTotal < e.precioBase * ajustes.escalaEdificios / 2;
   }
 
   /// Descuento de precio activo: tipo 3 (-10%) y Constructor (-50%).
@@ -509,7 +583,7 @@ class Imperio {
     final tiene = cantidad(id);
     var s = 0.0;
     for (var k = 0; k < n; k++) {
-      s += (e.precioBase * pow(ajustes.precioCrecimiento, tiene + k) * f).ceilToDouble();
+      s += (e.precioBase * ajustes.escalaEdificios * pow(ajustes.precioCrecimiento, tiene + k) * f).ceilToDouble();
     }
     return s;
   }
@@ -522,7 +596,7 @@ class Imperio {
     final e = edificioPorId(id)!;
     final f = factorPrecioEdificios(ahora);
     while (n < 10000) {
-      final p = (e.precioBase * pow(ajustes.precioCrecimiento, cantidad(id) + n) * f).ceilToDouble();
+      final p = (e.precioBase * ajustes.escalaEdificios * pow(ajustes.precioCrecimiento, cantidad(id) + n) * f).ceilToDouble();
       if (s + p > _p.saldo) break;
       s += p;
       n++;
@@ -567,7 +641,8 @@ class Imperio {
   double precioMejora(Mejora m) => switch (m.id) {
         'guantes' => ajustes.precioGuantes,
         'faja' => ajustes.precioFaja,
-        _ => m.precio,
+        'cadena_trono' => m.precio,
+        _ => m.precio * ajustes.escalaMejoras,
       };
 
   bool comprarMejora(String id) {
@@ -583,7 +658,7 @@ class Imperio {
   /// Su candado está abierto. El Robot además pide haber visto el primer Atasco.
   bool objetoAbierto(String id) {
     final o = objetoPorId(id);
-    return o != null && cagadas >= o.candado && (!o.pideAtasco || _p.vioPrimerAtasco);
+    return o != null && candadoAbierto(o.candado) && (!o.pideAtasco || _p.vioPrimerAtasco);
   }
 
   /// Precio en MJ: minutos x MJ/s sin efectos x 60, mínimo 100. La Cagada fresca da 0 (no se compra con MJ: viene con cada cagada real).
@@ -790,7 +865,7 @@ class Imperio {
   // ---------- Maná de Tripa ----------
 
   /// El Maná ya salió (candado de 15 cagadas).
-  bool get manaAbierto => cagadas >= candadoMana;
+  bool get manaAbierto => candadoAbierto(candadoMana);
 
   /// Maná ahora: lo guardado más lo que se llenó desde entonces (100 por hora, también offline).
   double mana(int ahora) {
@@ -951,6 +1026,8 @@ class Imperio {
     // Primo pujador: 10 pujos por segundo (sin épicos ni contadores de pujos).
     if (s > 0 && alquiladoActivo('primo', ahora)) _ganar(valorPujo(ahora) * pujosPrimo * s);
     _p.segPartida += s;
+    _p.segHistoricos += s;
+    if (_p.primerDia <= 0) _p.primerDia = ahora;
     _cuadrilla(ahora, s);
     _revisarSuperPlomero(ahora);
 
@@ -1117,10 +1194,17 @@ class Imperio {
 
   // ---------- Offline ----------
 
-  /// Tope offline: 2 h (la base de los ajustes), 4 h o 8 h según los tanques. Nunca menos que la base.
-  /// Suma el Tanque extra (Fichas) y los Tanques de lujo (Rollos, +1 h c/u).
+  /// Juega poco: menos de 1 h activa por día en promedio desde su primer día (sin datos aún, no).
+  bool get juegaPoco {
+    if (_p.primerDia <= 0 || _p.ultimaVez <= _p.primerDia) return false;
+    final dias = max(1.0, (_p.ultimaVez - _p.primerDia) / Duration.millisecondsPerDay);
+    return _p.segHistoricos / dias < segundosPocoJuego;
+  }
+
+  /// Tope offline: 2 h (la base de los ajustes), 4 h o 8 h según los tanques; 6 h como mínimo si juega poco. Nunca
+  /// menos que la base. Suma el Tanque extra (Fichas) y los Tanques de lujo (Rollos, +1 h c/u).
   Duration get topeOffline {
-    final h = mejoraComprada('tanque_8') ? 8.0 : (mejoraComprada('tanque_4') ? 4.0 : 0.0);
+    final h = max(mejoraComprada('tanque_8') ? 8.0 : (mejoraComprada('tanque_4') ? 4.0 : 0.0), juegaPoco ? topeOfflinePocoJuegoH : 0.0);
     final extra = _p.horasExtraTanque + tieneObjetoRollos('tanque_lujo');
     return Duration(seconds: ((max(h, ajustes.offlineTopeH) + extra) * 3600).round());
   }
@@ -1146,9 +1230,35 @@ class Imperio {
     final bonus = _p.offlineBonus;
     _p.offlineBonus = false;
     final ganado = contados * mpsSinEfectos() * (guardia ? 1.0 : porcentajeOffline) * (bonus ? 1.5 : 1);
-    _ganar(ganado);
-    return ResultadoOffline(ausente, contados, ganado, ausente >= tope, bonus, conGuardia: guardia);
+    final regalo = ausente >= ausenciaRegalo.inSeconds ? horasRegalo * 3600 * mpsSinEfectos(contarAtasco: false) : 0.0;
+    _ganar(ganado + regalo);
+    return ResultadoOffline(ausente, contados, ganado + regalo, ausente >= tope, bonus, conGuardia: guardia, regalo: regalo);
   }
+
+  /// Qué avisar con la app cerrada y en cuánto: lo más barato que todavía no alcanza (mejora o edificio) si lo offline
+  /// lo paga antes de llenar el tope; si no, cuándo se llena el tope ([AvisoCerrado.nombreEs] null). null = nada que avisar.
+  AvisoCerrado? avisoAlCerrar(int ahora) {
+    final ritmo = mpsSinEfectos(contarAtasco: false) * porcentajeOffline;
+    if (ritmo <= 0) return null;
+    final tope = topeOffline.inSeconds.toDouble();
+    AvisoCerrado? mejor;
+    void mirar(double precio, String es, String en) {
+      if (precio <= _p.saldo) return;
+      final seg = (precio - _p.saldo) / ritmo;
+      if (seg <= tope && (mejor == null || seg < mejor!.segundos)) mejor = AvisoCerrado(seg, es, en);
+    }
+
+    for (final m in mejorasDisponibles()) {
+      mirar(precioMejora(m), m.nombreEs, m.nombreEn);
+    }
+    for (final e in edificios) {
+      if (edificioVisible(e.id) && edificioAbierto(e.id) && !edificioMisterioso(e.id)) mirar(precioEdificio(e.id, ahora), e.nombreEs, e.nombreEn);
+    }
+    return mejor ?? AvisoCerrado(tope, null, null);
+  }
+
+  /// Empujón del servidor para quien se quedó atrás: x2 por 30 min (se suma si ya había uno).
+  void darEmpujon(int ahora) => _p.efectos['empujon'] = max(_p.efectos['empujon'] ?? 0, ahora) + duracionEmpujon.inMilliseconds;
 
   // ---------- Cagadas reales ----------
 
@@ -1247,5 +1357,6 @@ class Imperio {
   // ---------- Veteranos ----------
 
   /// Lo que trae un veterano: cagadas, multiplicador, Fichas y candados abiertos.
-  ResumenBienvenida bienvenida() => ResumenBienvenida(cagadas, multiplicadorCagadas, fichas, candadosAbiertos(cagadas));
+  ResumenBienvenida bienvenida() =>
+      ResumenBienvenida(cagadas, multiplicadorCagadas, fichas, candadosFase1.where((c) => candadoAbierto(c.cagadas)).length);
 }

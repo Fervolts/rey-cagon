@@ -113,8 +113,8 @@ void main() {
       expect(imp.partida.toques['arepa'], 1);
     });
 
-    test('hay 8 escondidos, ids únicos', () {
-      expect(logros.where((l) => l.oculto).length, 8);
+    test('hay 11 escondidos, ids únicos', () {
+      expect(logros.where((l) => l.oculto).length, 11);
       expect(logros.map((l) => l.id).toSet().length, logros.length);
     });
   });
@@ -124,12 +124,12 @@ void main() {
       final ocultos = {for (final l in logros) if (l.oculto) 'imperio:${l.id}'};
       final sinNada = trofeosImperio({});
       expect(sinNada.where((t) => ocultos.contains(t.clave)), isEmpty);
-      expect(sinNada.length, logros.length - 8);
-      expect(secretosImperioPorEncontrar({}), 8);
+      expect(sinNada.length, logros.length - 11);
+      expect(secretosImperioPorEncontrar({}), 11);
 
       final conUno = trofeosImperio({'metiche'});
       expect(conUno.where((t) => t.clave == 'imperio:metiche').single.ganado, isTrue);
-      expect(secretosImperioPorEncontrar({'metiche'}), 7);
+      expect(secretosImperioPorEncontrar({'metiche'}), 10);
     });
   });
 }

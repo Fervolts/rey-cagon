@@ -232,6 +232,9 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
     if (_mov == Movimiento.completo && widget.instante == null) {
       final c = _cucaracha(_cx, _ahora);
       if (c != null && !c.huye && (q - c.o).distance < 22) return 'cucaracha';
+      // El budare que va delante del camión gana el toque.
+      final l = _lugar;
+      if (l.budareDelante && widget.bano.arepa > 0 && Bano.cajaArepa(l).contains(q - Offset(_cx, 0))) return 'arepa';
       if (_cajaCamion(_cx, _ahora)?.contains(q) ?? false) return 'camion';
     }
     return Bano.objetoEn(widget.bano, q - Offset(_cx, 0), _suelo);
@@ -503,6 +506,7 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
     _cloaca(hijos, cx, t, tv, vivo);
     final trasTaza = <Widget>[]; // la manguera y la lluvia del camión van delante de la poceta
     _camion(context, hijos, trasTaza, encima, cx, t, vivo);
+    if (_lugar.budareDelante) _arepas(hijos, cx, t, vivo);
 
     // Dedos en un arco por los lados y por debajo, apuntando a la poceta. Hasta [Poceta.visiblesDedos] van en una
     // fila; los que se eligen de más (hasta [Poceta.topeDedos]) se achican y se alternan en dos filas. Con "todos" y más
@@ -935,27 +939,7 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
         if (c.huye) hijos.add(_abs(cx, c.o - Offset(cx + (c.giro > 0 ? 18 : -18), 0), 16, const Emoji('💨', tamano: 16)));
       }
     }
-    if (b.arepa > 0) {
-      final base = _lugar.budare + const Offset(0, -9);
-      final fase = t % 9;
-      var salto = vivo && fase < .6 ? fase / .6 : 0.0;
-      var alto = 28.0, vueltas = 1.0;
-      // Tocada: vuela alto y da tres vueltas.
-      if (vivo) {
-        if (_reaccion('arepa', t, 1.1) case final v?) (salto, alto, vueltas) = (v, 92.0, 3.0);
-      }
-      if (b.arepa >= 2) hijos.add(_abs(cx, base + const Offset(-5, 3), 22, const Emoji('🫓', tamano: 22)));
-      if (b.arepa >= 3) hijos.add(_abs(cx, base + const Offset(14, 3), 22, const Emoji('🫓', tamano: 22)));
-      hijos.add(_abs(
-          cx,
-          base + Offset(b.arepa >= 2 ? 3 : 0, (b.arepa >= 2 ? -4 : 0) - alto * sin(pi * salto)),
-          24,
-          Transform.rotate(angle: 2 * pi * vueltas * salto, child: const Emoji('🫓', tamano: 24))));
-      if (b.arepaBrillo) {
-        final esc = vivo ? .5 + .5 * sin(t * 2.3).abs() : .8;
-        hijos.add(_abs(cx, base + const Offset(22, -12), 12, Transform.scale(scale: esc, child: const Emoji('✨', tamano: 12))));
-      }
-    }
+    if (!_lugar.budareDelante) _arepas(hijos, cx, t, vivo);
   }
 
   // Azar fijo por número: lo mismo en cada frame, sin guardar nada.
@@ -1013,6 +997,35 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
 
   // Camión vacuum: cada 40 s (el primero a los 10 s) entra de retroceso, mete la manguera en la poceta, descarga una
   // lluvia de mojones y se va. El cuerpo va detrás de la poceta; la manguera y la lluvia, delante (trasTaza).
+  // La arepa que salta en el budare (y las de al lado). Si el budare va delante del camión, también se pinta aquí.
+  void _arepas(List<Widget> hijos, double cx, double t, bool vivo) {
+    final b = widget.bano;
+    if (b.arepa == 0) return;
+    final l = _lugar;
+    if (l.budareDelante) {
+      hijos.add(Positioned.fill(child: IgnorePointer(child: CustomPaint(painter: _Budare(Offset(cx + l.budare.dx, l.budare.dy), b.arepa >= 3)))));
+    }
+    final base = l.budare + const Offset(0, -9);
+    final fase = t % 9;
+    var salto = vivo && fase < .6 ? fase / .6 : 0.0;
+    var alto = 28.0, vueltas = 1.0;
+    // Tocada: vuela alto y da tres vueltas.
+    if (vivo) {
+      if (_reaccion('arepa', t, 1.1) case final v?) (salto, alto, vueltas) = (v, 92.0, 3.0);
+    }
+    if (b.arepa >= 2) hijos.add(_abs(cx, base + const Offset(-5, 3), 22, const Emoji('🫓', tamano: 22)));
+    if (b.arepa >= 3) hijos.add(_abs(cx, base + const Offset(14, 3), 22, const Emoji('🫓', tamano: 22)));
+    hijos.add(_abs(
+        cx,
+        base + Offset(b.arepa >= 2 ? 3 : 0, (b.arepa >= 2 ? -4 : 0) - alto * sin(pi * salto)),
+        24,
+        Transform.rotate(angle: 2 * pi * vueltas * salto, child: const Emoji('🫓', tamano: 24))));
+    if (b.arepaBrillo) {
+      final esc = vivo ? .5 + .5 * sin(t * 2.3).abs() : .8;
+      hijos.add(_abs(cx, base + const Offset(22, -12), 12, Transform.scale(scale: esc, child: const Emoji('✨', tamano: 12))));
+    }
+  }
+
   void _camion(BuildContext context, List<Widget> hijos, List<Widget> trasTaza, List<Widget> encima, double cx, double t, bool vivo) {
     final c = widget.bano.camion;
     if (!vivo) return;
@@ -1788,4 +1801,18 @@ class _PintorSuelo extends CustomPainter {
     if (tinte != null) canvas.drawRect(Offset.zero & size, Paint()..color = tinte);
     if (!e.bombillo && !e.lujo('est_lampara')) canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0x24000000));
   }
+}
+
+// El budare cuando va delante del camión (si no, lo pinta el fondo).
+class _Budare extends CustomPainter {
+  const _Budare(this.c, this.grande);
+
+  final Offset c;
+  final bool grande;
+
+  @override
+  void paint(Canvas canvas, Size size) => PintorBano.pintarBudare(canvas, c, grande);
+
+  @override
+  bool shouldRepaint(_Budare v) => v.c != c || v.grande != grande;
 }

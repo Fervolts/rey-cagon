@@ -460,6 +460,12 @@ final List<Logro> logros = [
   Logro('diez_jaladas', 'Cadena oxidada', 'Rusty chain', 'Jalar la cadena 10 veces', 'Pull the chain 10 times', (p, _) => p.jaladas >= 10),
   Logro('primer_rollo', 'Papel de oro', 'Golden paper', '1 Rollo de Oro', '1 Golden Roll', (p, _) => p.rollosGanados >= 1),
   Logro('cien_rollos', 'Rey del papel', 'Toilet paper king', '100 Rollos de Oro', '100 Golden Rolls', (p, _) => p.rollosGanados >= 100),
+  // Ocultos de la cadena, para el que juega mucho.
+  Logro('cadena_25', 'Plomero de guardia', 'On-call plumber', 'Jalar la cadena 25 veces', 'Pull the chain 25 times', (p, _) => p.jaladas >= 25,
+      oculto: true),
+  Logro('mil_rollos', 'Papel moneda', 'Paper money', '1.000 Rollos de Oro', '1,000 Golden Rolls', (p, _) => p.rollosGanados >= 1000, oculto: true),
+  Logro('candado_comprado', 'Cagada comprada', 'Bought poop', 'Abrir un candado pagando con mojonólares', 'Open a lock paying with Poopbucks',
+      (p, _) => p.cagadasPagadas >= 1, oculto: true),
   // Lo da el día 30 de la racha (Imperio.aplicarPremioRacha), no una condición. En pantalla va con segun() (nombreLogro).
   Logro('constancia', 'Rey de la constancia', 'King of consistency', '30 días seguidos de racha', '30-day streak', (p, m) => false),
   // Fase 2: Maná, objetos nuevos, Rollos, racha (cofres, semanas, congeladores) y edificios grandes.
@@ -597,6 +603,10 @@ class Ajustes {
   /// Cadena: cagadas reales que pide cada jalada (el servidor manda la cuenta buena).
   final int cadenaCagadas;
 
+  /// Candados: horas de producción (MJ/s sin efectos) que cuesta la primera cagada pagada con MJ; cada una más sube
+  /// [candadoSubida] de ese precio (la n-ésima cuesta horas x (1 + subida x n)).
+  final double candadoHoras, candadoSubida;
+
   /// Rollos de Oro totales = piso((MJ ganados en total / divisor) ^ exponente).
   final double cadenaDivisor, cadenaExponente;
 
@@ -619,10 +629,19 @@ class Ajustes {
     this.epicoTipo1 = 3,
     this.epicoMultiplicador = 10,
     this.cadenaCagadas = 5,
+    this.candadoHoras = 2,
+    this.candadoSubida = 0.1,
     this.cadenaDivisor = 1e10,
     this.cadenaExponente = 0.5,
     this.rolloPct = 0.04,
+    this.escalaEdificios = 1,
+    this.escalaMejoras = 1,
   });
+
+  /// Cuántas veces el precio del catálogo cuestan los edificios y las mejoras de MJ (Guantes, Faja y la cadena del
+  /// trono tienen su precio aparte). Aquí van en 1 (las pruebas del motor usan los precios del catálogo); el juego usa
+  /// los de [FlagsImperio], que es donde está el balance.
+  final double escalaEdificios, escalaMejoras;
 
   static const Ajustes porDefecto = Ajustes();
 }

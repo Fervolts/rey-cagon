@@ -344,6 +344,9 @@ const _emojisImperio = {
   'diez_jaladas': '🚽',
   'primer_rollo': '🧻',
   'cien_rollos': '👑',
+  'cadena_25': '⛓️',
+  'mil_rollos': '🧻',
+  'candado_comprado': '💸',
   'constancia': '🗓️',
   // Fase 2.
   'primer_mana': '🌀',

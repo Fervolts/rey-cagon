@@ -16,6 +16,7 @@ import 'comunidad.dart';
 import 'idioma.dart';
 import 'imperio/logros.dart' show cargarLogrosImperio;
 import 'logros.dart';
+import 'novedades.dart';
 import 'placer.dart';
 import 'main.dart' show conReintento, db, escucharCagadas, esDeRed, textoError;
 import 'push.dart';
@@ -492,6 +493,13 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaAjustesAvisos())),
                 ),
                 const FilaAvisosPoceta(),
+                ListTile(
+                  leading: const Emoji('💡', tamano: 32),
+                  title: Text(tr('Novedades', "What's new")),
+                  subtitle: Text(tr('Qué cambió en cada versión', 'What changed in each version')),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaNovedades())),
+                ),
                 ListTile(
                   leading: const Icon(Icons.open_in_new),
                   title: Text(tr('Hecho por ahimismito Studios C.A', 'Made by ahimismito Studios C.A')),

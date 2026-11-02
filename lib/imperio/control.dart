@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 
 import '../fresca.dart' show frescaHasta;
 import '../main.dart' show db, esDeRed;
+import '../recordatorio.dart' show cancelarAvisoImperio, programarAvisoImperio;
 import 'flags.dart';
 import 'motor.dart';
 import 'nube.dart';
@@ -79,7 +80,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   final Telemetria _tele;
   /// Para pruebas: de dónde salen los flags (por defecto, el RPC).
   final PedirFlags? pedirFlags;
-  Imperio imperio = Imperio();
+  Imperio imperio = Imperio(ajustes: FlagsImperio.porDefecto.ajustes);
 
   /// Flags remotos de esta carga (defaults hasta que lleguen).
   FlagsImperio flags = FlagsImperio.porDefecto;
@@ -101,6 +102,9 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   /// Avisos para la pantalla, en orden: bienvenida de veterano, tiempo fuera y Descarga. Los consume la pantalla.
   bool bienvenidaPendiente = false;
   ResultadoOffline? offlinePendiente;
+
+  /// El servidor dio el empujón (x2 por 30 min) y la pantalla todavía no lo avisó.
+  bool empujonPendiente = false;
   ResultadoCagadas? descargaPendiente;
 
   /// Logros nuevos para el aviso de arriba.
@@ -175,7 +179,8 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       final local1 = usarCopiaLocal(mjLocal: mjLocal, mjServidor: carga.mjTotal, servidorVacio: vacio,
           jaladasLocal: _jaladasDe(estadoLocal), jaladasServidor: _jaladasDe(carga.estado));
       imperio = Imperio.desdeJson(local1 ? estadoLocal : carga.estado,
-          cagadas: carga.cagadasTotal, fichas: carga.fichas, ciruelas: carga.ciruelas, esteticas: carga.esteticas, ajustes: flags.ajustes);
+          cagadas: carga.cagadasTotal, fichas: carga.fichas, ciruelas: carga.ciruelas, esteticas: carga.esteticas, ajustes: flags.ajustes,
+          cagadasCandado: (estadoLocal?['_cagadas_candado'] as num?)?.toInt() ?? -1, pases: (estadoLocal?['_pases'] as num?)?.toInt() ?? 0);
       _leerRacha(carga);
       _ciruelasDeCagadas(carga.ciruelasCagadas);
       if (!local1 && !vacio) aceptarRecorte(imperio.partida, carga.mjTotal);
@@ -198,6 +203,8 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
         ciruelas: (estadoLocal?['_ciruelas'] as num?)?.toInt() ?? 0,
         esteticas: {...?(estadoLocal?['_esteticas'] as List?)?.map((e) => '$e')},
         ajustes: flags.ajustes,
+        cagadasCandado: (estadoLocal?['_cagadas_candado'] as num?)?.toInt() ?? -1,
+        pases: (estadoLocal?['_pases'] as num?)?.toInt() ?? 0,
       );
       final desde = inicioOffline([ultimaLocal], ahora);
       if (desde != null) _guardarAviso(imperio.aplicarOffline(desde, ahora));
@@ -215,7 +222,29 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     _actualizarBucle();
     notifyListeners();
     if (!sinConexion) unawaited(_cargarCadena());
+    if (!sinConexion) unawaited(_cargarProgreso());
     if (!sinConexion) unawaited(cargarCofre());
+  }
+
+  /// Cagadas que cuentan para candados (tope por día), pases de la racha y el empujón si el servidor lo dio.
+  Future<void> _cargarProgreso() async {
+    try {
+      final r = await nube.progreso();
+      if (_cerrado) return;
+      imperio.cagadasCandado = r.cagadasCandado;
+      imperio.pases = r.pases;
+      if (r.empujon) {
+        imperio.darEmpujon(ahora);
+        empujonPendiente = true;
+        _anotar('empujon', {'mj_total': imperio.mjTotal});
+      }
+      _sumarLogros(imperio.revisarLogros());
+      notifyListeners();
+      unawaited(_guardarLocal());
+    } catch (_) {
+      // Sin el RPC (migración sin aplicar) o sin red: los candados cuentan las cagadas como antes.
+      _error('progreso');
+    }
   }
 
   /// Trae el estado de la cadena. Si el servidor tiene más jaladas que la partida, la jalada se marcó pero el
@@ -330,6 +359,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       _sumarLogros(imperio.revisarLogros());
       notifyListeners();
       await _cargarCadena();
+      unawaited(_cargarProgreso());
       unawaited(cargarCofre());
     } catch (e) {
       _error('recargar', e);
@@ -359,10 +389,23 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     _enPrimerPlano = state == AppLifecycleState.resumed;
     _actualizarBucle();
     if (!_enPrimerPlano && antes) unawaited(_cargado ? guardarTodo() : _vaciarTelemetria());
+    if (!_enPrimerPlano && antes && _cargado) unawaited(_programarAvisoCerrado());
+    if (_enPrimerPlano && !antes) unawaited(cancelarAvisoImperio().catchError((_) {}));
     if (_enPrimerPlano && !antes && _visible) unawaited(recargarCagadas());
     if (_enPrimerPlano && !antes && _pendienteNube) {
       _pendienteNube = false;
       unawaited(_guardarNube());
+    }
+  }
+
+  /// Al salir de la app: un aviso local para cuando ya alcance algo o se llene la poceta.
+  Future<void> _programarAvisoCerrado() async {
+    try {
+      final a = imperio.avisoAlCerrar(ahora);
+      if (a == null) return;
+      await programarAvisoImperio(Duration(seconds: a.segundos.ceil()), nombreEs: a.nombreEs, nombreEn: a.nombreEn);
+    } catch (_) {
+      // Sin permiso de notificaciones o en pruebas: no pasa nada.
     }
   }
 
@@ -573,6 +616,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       if (l != null && imperio.partida.logros.contains(l.id)) _sumarLogros([l]);
       _anotar('racha_reclamar', {'dia': r.dia, 'ciruelas': r.ciruelasGanadas, 'ficha': r.ficha, 'mj': mj});
       _hecho(true);
+      if (r.pases != null) imperio.pases = r.pases!;
       unawaited(_guardarLocal());
       unawaited(_guardarNube());
     }
@@ -678,6 +722,15 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     final precio = imperio.precioEdificioVarios(id, n, t);
     final ok = imperio.comprarEdificioVarios(id, n, t);
     if (ok) _compra('edificio', {'id': id, 'cantidad': imperio.cantidad(id), 'precio': precio, 'seg_partida': _segPartida});
+    return _hecho(ok);
+  }
+
+  /// Abre con MJ lo que le falta a un candado (hasta la mitad de lo que pide).
+  bool pagarCandado(int pide) {
+    final precio = imperio.precioCandado(pide);
+    final faltan = imperio.faltanCandado(pide);
+    final ok = imperio.pagarCandado(pide);
+    if (ok) _compra('candado', {'pide': pide, 'cagadas': faltan, 'precio': precio, 'seg_partida': _segPartida});
     return _hecho(ok);
   }
 
@@ -856,6 +909,8 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       '_fichas': imperio.fichas,
       '_ciruelas': imperio.ciruelas,
       '_esteticas': imperio.esteticas.toList(),
+      '_cagadas_candado': imperio.cagadasCandado,
+      '_pases': imperio.pases,
     };
     try {
       await nube.guardarLocal(_userId, estado, imperio.mjTotal, imperio.mpsSinEfectos());

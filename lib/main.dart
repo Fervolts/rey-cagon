@@ -22,6 +22,7 @@ import 'inodoro.dart';
 import 'invitar_play.dart';
 import 'logros.dart' show ganarLogro;
 import 'config.dart';
+import 'novedades.dart';
 import 'nuclear.dart';
 import 'onboarding.dart';
 import 'parte.dart';
@@ -563,6 +564,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
       if (mounted) await revisarActualizacion(context);
       if (mounted) await invitarAPlay(context);
       if (mounted) await ofrecerComunidad(context);
+      if (mounted) await quizasMostrarNovedades(context);
       return;
     }
     // Cuenta nueva (sin cagadas): bienvenida completa. Si ya cagaba (reinstaló), solo el aviso.

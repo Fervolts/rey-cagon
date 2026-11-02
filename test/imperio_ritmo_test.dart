@@ -2,10 +2,11 @@
 // Pujo 5 veces por segundo, 3 sesiones de 10 min al día, 0,7 cagadas reales al día.
 // Compra lo que se paga más rápido (espera + recuperación). Las aserciones son flojas a propósito.
 // Con el Dedo que puja (+1 por pujo) el arranque va mucho más rápido que cuando daba 0,1 MJ/s: con semilla 7 el Café sale
-// al minuto y la Arepa poco después; el medio del juego lo siguen frenando los candados de cagadas (Bidet día 5, Baño día 8).
+// a los 20 min activos y la Arepa poco después; el medio del juego lo siguen frenando los candados de cagadas (Bidet día 5, Baño día 8).
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rey_cagon/imperio/flags.dart';
 import 'package:rey_cagon/imperio/motor.dart';
 
 const int _seg = 1000;
@@ -33,7 +34,7 @@ class _Simulacion {
   int? mejorasEnUnaHora;
   _Simulacion(int semilla)
       : azar = Random(semilla),
-        imp = Imperio(azar: Random(semilla + 1));
+        imp = Imperio(azar: Random(semilla + 1), ajustes: FlagsImperio.porDefecto.ajustes);
 
   /// Lo que deja el offline por día con la mejora puesta, convertido a MJ/s de juego activo.
   double _offlinePorSegActivo(Duration tope, double pct, double mps) {
@@ -64,8 +65,8 @@ class _Simulacion {
       ganancia += _offlinePorSegActivo(imp.topeOffline, imp.porcentajeOffline, imp.mpsSinEfectos(contarAtasco: false)) - offlineAntes;
       p.mejoras.remove(m.id);
       // Imán y Brillo no suben el MJ/s: se compran si cuestan menos de 10 min de producción.
-      if (m.familia == FamiliaMejora.dorado) ganancia = m.precio <= 600 * base ? double.infinity : 0;
-      r.add(_Opcion(m.id, false, m.precio, ganancia));
+      if (m.familia == FamiliaMejora.dorado) ganancia = imp.precioMejora(m) <= 600 * base ? double.infinity : 0;
+      r.add(_Opcion(m.id, false, imp.precioMejora(m), ganancia));
     }
     return r;
   }
