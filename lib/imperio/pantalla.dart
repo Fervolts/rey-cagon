@@ -22,6 +22,7 @@ import 'control.dart';
 import 'fichas.dart';
 import 'fila.dart';
 import 'formato.dart';
+import 'guia_alquiler.dart';
 import 'hallaca.dart';
 import 'hoja_racha.dart';
 import 'logros.dart' show presumirLogroImperio;
@@ -131,6 +132,12 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
   Timer? _timerAviso;
   Atasco? _atascoAvisado; // el último Atasco que ya se avisó (por identidad)
   int _nAviso = 0; // clave del Dismissible: cada aviso nuevo es otro widget
+  // Empujones de la guía de los alquileres (uno a la vez, cada uno una vez) y la ficha resaltada en la tira.
+  final _guia = EmpujonesAlquiler();
+  Empujon? _empujon;
+  Timer? _timerEmpujon;
+  String? _resaltado;
+  Timer? _timerResaltado;
 
   @override
   void initState() {
@@ -154,6 +161,8 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
   @override
   void dispose() {
     _timerAviso?.cancel();
+    _timerEmpujon?.cancel();
+    _timerResaltado?.cancel();
     _c.removeListener(_alCambiar);
     _c.ciruelaCae.removeListener(_alCaerCiruela);
     _c.dispose();
@@ -201,9 +210,35 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
         _c.cadenaSincronizadaPendiente = false;
         _avisar('⛓️', tr('Tu cadena se puso al día con la nube', 'Your chain caught up with the cloud'));
       }
+      _revisarEmpujon();
       _mostrarDialogos();
     }
     setState(() {});
+  }
+
+  /// Un empujón de la guía de los alquileres si toca: nunca encima de un aviso, de otro empujón ni con una hoja abierta.
+  void _revisarEmpujon() {
+    if (_empujon != null || _aviso != null || _c.cargando || !(ModalRoute.isCurrentOf(context) ?? true)) return;
+    final e = _guia.siguiente(_c.imperio, _c.ahora);
+    if (e == null) return;
+    _timerEmpujon?.cancel();
+    _timerEmpujon = Timer(duracionEmpujonGuia, _cerrarEmpujon);
+    if (!e.tienda) {
+      _timerResaltado?.cancel();
+      _timerResaltado = Timer(duracionResaltado, () => mounted ? setState(() => _resaltado = null) : null);
+    }
+    // Primero el estado (marcarGuia avisa a los oyentes y vuelve a entrar aquí: así no salen dos).
+    setState(() {
+      _empujon = e;
+      if (!e.tienda) _resaltado = e.id;
+    });
+    _c.marcarGuia(e.clave);
+    _c.anotarGuia(e.id, 'empujon');
+  }
+
+  void _cerrarEmpujon() {
+    _timerEmpujon?.cancel();
+    if (mounted && _empujon != null) setState(() => _empujon = null);
   }
 
   // ---------- Ciruelas 🫐 ----------
@@ -391,6 +426,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
   ToquePoceta _pujar() {
     final r = _c.pujar();
     if (!r.contado) return (texto: '', epico: false, contado: false); // pasó del tope de pujos por segundo
+    _guia.pujo(_c.ahora);
     final texto = r.epico ? tr('¡ÉPICO! +${_mj(r.ganado)}', 'EPIC! +${_mj(r.ganado)}') : '+${_mj(r.ganado)}';
     return (texto: texto, epico: r.epico, contado: true);
   }
@@ -480,6 +516,22 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                 ),
               for (final v in _vuelos) _ciruelaVolando(v),
               if (_aviso != null) Positioned(top: 8, left: 16, right: 16, child: _banner(context, _aviso!)),
+              if (_aviso == null && _empujon != null)
+                Positioned(
+                  top: 8,
+                  left: 16,
+                  right: 16,
+                  child: TarjetaEmpujon(
+                    _empujon!,
+                    alCerrar: _cerrarEmpujon,
+                    alVer: _empujon!.tienda
+                        ? () {
+                            _cerrarEmpujon();
+                            _abrirObjetos(context);
+                          }
+                        : null,
+                  ),
+                ),
             ],
           ),
         ),
@@ -858,6 +910,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       plomeroBono: plomeroBono,
       alquileres: fichasAlquiler(im, ahora),
       alTocarAlquiler: (f) => _avisar(f.emoji, avisoAlquiler(f)),
+      alquilerResaltado: _resaltado,
       dedos: min(im.cantidad('dedo'), (im.partida.vista['dedos'] as int?) ?? im.cantidad('dedo')),
       activo: widget.activo,
       // Cuánto más rápido va que lo normal (fiebre, pujo loco...): acelera la escena.
@@ -1648,7 +1701,8 @@ class _HojaObjetos extends StatelessWidget {
           children: [
             Row(
               children: [
-                emoji,
+                // Alquilable: tocar el emoji abre su ficha (lo mismo que el ?).
+                if (alquilable && abierto) GestureDetector(onTap: () => alternarGuia(control, o.id), child: emoji) else emoji,
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -1670,8 +1724,20 @@ class _HojaObjetos extends StatelessWidget {
                   const SizedBox(width: 3),
                   Text(_cuenta(espera), style: numeros(context, tamano: 12, color: p.textoSuave)),
                 ],
+                if (alquilable && abierto) ...[
+                  const SizedBox(width: 8),
+                  BotonGuiaAlquiler(control: control, id: o.id),
+                ],
               ],
             ),
+            if (alquilable)
+              GuiaAlquiler(
+                control: control,
+                objeto: o,
+                ahora: ahora,
+                alIr: puedeMj ? () => _conMj(o) : null,
+                precioIr: '${_mj(precioPagar)} ${monedaActual().abreviatura}',
+              ),
             if (esFicha)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
