@@ -2,6 +2,7 @@
 //   - trigger cagadas_avisar: cagada nueva → aviso a los seguidores de quien cagó.
 //   - trigger follows_avisar: { tipo: "follow" } → aviso al seguido.
 //   - scripts/publicar.sh:   { tipo: "version" } → aviso de versión nueva.
+//   - a mano: { tipo: "actualizar_play", build } → a los de Play con un build menor.
 //   - trigger cagadas_calificar: { tipo: "placer" } → aviso del secreto, solo a seguidores
 //     que también lo desbloquearon y solo para las cagadas que valen la pena contar.
 //   - trigger mensajes_avisar_soporte: { tipo: "soporte" } → mensaje de soporte al otro lado del hilo.
@@ -220,6 +221,22 @@ async function avisarVersion(version: string, build: number) {
     `Version ${version} is ready. Tap to install it.`,
   );
   const { enviados } = await repartir("version", tokens, fijo(a, { tipo: "version", version }));
+  return Response.json({ enviados });
+}
+
+// Aviso a mano para los de Play con un build menor (la tienda no siempre insiste): al tocarlo se abre la app,
+// que ofrece la actualización de Play. null = teléfono que no reportó canal.
+async function avisarActualizarPlay(build: number) {
+  const { data: tokens } = await db.from("push_tokens").select("token, user_id, idioma").lt("app_build", build)
+    .or("canal.is.null,canal.eq.play");
+  if (!tokens?.length) return Response.json({ enviados: 0 });
+  const a = aviso(
+    "Tu Rey Cagón está viejo 💩",
+    "Hay versión nueva en Play con alquileres y temporadas en el Imperio. Toca y actualiza para no quedarte atrás.",
+    "Your King of the Throne is outdated 💩",
+    "A new version is on Play with rentals and seasons in the Empire. Tap and update so you don't fall behind.",
+  );
+  const { enviados } = await repartir("version", tokens, fijo(a, { tipo: "version", version: "play" }));
   return Response.json({ enviados });
 }
 
@@ -804,6 +821,7 @@ Deno.serve(async (req) => {
   const cuerpo = await req.json();
   if (cuerpo.tipo === "follow") return avisarFollow(cuerpo.follower, cuerpo.followed);
   if (cuerpo.tipo === "version") return avisarVersion(cuerpo.version, cuerpo.build);
+  if (cuerpo.tipo === "actualizar_play") return avisarActualizarPlay(cuerpo.build);
   if (cuerpo.tipo === "placer") return avisarPlacer(cuerpo.id);
   if (cuerpo.tipo === "soporte") return avisarSoporte(cuerpo.id);
   if (cuerpo.tipo === "mencion") return avisarMencion(cuerpo.id, cuerpo.para);

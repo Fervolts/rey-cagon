@@ -39,6 +39,7 @@ List<Desbloqueo> get exclusivos => <Desbloqueo>[
   (ranura: 'mascota', emoji: '🪙', nombre: tr('Moneda de la Temporada 1', 'Season 1 coin'), minimo: 1),
   (ranura: 'mascota', emoji: '🪠', nombre: tr('Destapador de oro', 'Golden plunger'), minimo: 1),
   (ranura: 'sombrero', emoji: '👑', nombre: tr('Corona del Imperio', 'Empire crown'), minimo: 1),
+  (ranura: 'mascota', emoji: '👆', nombre: tr('Manito clicker de oro', 'Golden clicker hand'), minimo: 1),
   // De temporada: lo da el servidor (trigger en cagadas) a quien cagó al menos una vez en diciembre. Para siempre.
   (ranura: 'sombrero', emoji: gorroSanta, nombre: tr('Gorro de Santa', 'Santa hat'), minimo: 1),
 ];
