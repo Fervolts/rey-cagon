@@ -59,6 +59,7 @@ class Poceta extends StatefulWidget {
     this.plomeroBono = false,
     this.alquileres = const [],
     this.alTocarAlquiler,
+    this.alquilerResaltado,
     @visibleForTesting this.instante,
   });
 
@@ -120,6 +121,9 @@ class Poceta extends StatefulWidget {
   /// La tira "trabajando ahora": una ficha por alquilado activo. Tocar una ficha llama a [alTocarAlquiler] y no puja.
   final List<FichaAlquiler> alquileres;
   final void Function(FichaAlquiler ficha)? alTocarAlquiler;
+
+  /// Id de la ficha de la tira que va resaltada (el recién alquilado, unos segundos).
+  final String? alquilerResaltado;
 
   /// Solo para pruebas: dibuja la escena quieta en este segundo, como con movimiento completo.
   final double? instante;
@@ -551,7 +555,7 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
       right: arriba && widget.alPersonalizar != null ? 40 : 6,
       child: Listener(
         onPointerDown: (_) => _enTira = true,
-        child: RepaintBoundary(child: TiraAlquiler(widget.alquileres, alTocar: widget.alTocarAlquiler)),
+        child: RepaintBoundary(child: TiraAlquiler(widget.alquileres, alTocar: widget.alTocarAlquiler, resaltado: widget.alquilerResaltado)),
       ),
     );
   }

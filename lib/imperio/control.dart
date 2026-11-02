@@ -1015,6 +1015,16 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   /// Para la pantalla (sala_abre). Igual que el resto: nunca lanza.
   void anotar(String evento, [Map<String, Object?> datos = const {}]) => _anotar(evento, datos);
 
+  /// `alquiler_guia` {id, accion}: la guía de los alquileres (ficha, entendido, ir, empujon).
+  void anotarGuia(String id, String accion) => _anotar('alquiler_guia', {'id': id, 'accion': accion});
+
+  /// Marca [clave] como vista en la guía de los alquileres ([Partida.guiaVista]) y guarda en el teléfono.
+  void marcarGuia(String clave) {
+    if (!imperio.partida.guiaVista.add(clave)) return;
+    if (_cargado) unawaited(_guardarLocal());
+    notifyListeners();
+  }
+
   void _anotar(String evento, [Map<String, Object?> datos = const {}]) {
     try {
       _tele.registrar(evento, datos);

@@ -74,12 +74,14 @@ String avisoAlquiler(FichaAlquiler f) {
 }
 
 /// La tira "trabajando ahora": una ficha cuadrada por alquilado activo. Quieta (no se anima nunca): se lee igual con
-/// movimiento "nada". Tocar una ficha llama a [alTocar] y no puja.
+/// movimiento "nada". Tocar una ficha llama a [alTocar] y no puja. [resaltado]: id de la ficha que va resaltada (borde
+/// grueso y fondo de acento), por ejemplo la del recién alquilado.
 class TiraAlquiler extends StatelessWidget {
-  const TiraAlquiler(this.fichas, {super.key, this.alTocar});
+  const TiraAlquiler(this.fichas, {super.key, this.alTocar, this.resaltado});
 
   final List<FichaAlquiler> fichas;
   final void Function(FichaAlquiler ficha)? alTocar;
+  final String? resaltado;
 
   @override
   Widget build(BuildContext context) {
@@ -103,7 +105,11 @@ class TiraAlquiler extends StatelessWidget {
               child: Container(
                 height: 22,
                 padding: const EdgeInsets.symmetric(horizontal: 4),
-                decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: acento), borderRadius: BorderRadius.circular(radio)),
+                decoration: BoxDecoration(
+                  color: f.id == resaltado ? acento.withValues(alpha: 0.35) : p.tarjeta,
+                  border: Border.all(color: acento, width: f.id == resaltado ? 2 : 1),
+                  borderRadius: BorderRadius.circular(radio),
+                ),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                   Emoji(f.emoji, tamano: 14),
                   const SizedBox(width: 3),
