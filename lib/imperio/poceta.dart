@@ -338,8 +338,10 @@ class _PocetaState extends State<Poceta> with SingleTickerProviderStateMixin {
                       _cx = caja.maxWidth / 2;
                       final escena = ValueListenableBuilder<double>(
                         valueListenable: _t,
-                        // El fondo no depende del tick: se arma una vez y se repinta solo si cambia el baño.
-                        child: RepaintBoundary(child: FondoBano(estado: widget.bano, techo: _arriba == 0)),
+                        // El fondo no depende del tick: se arma una vez y se repinta solo si cambia el baño. Lo alquilado
+                        // que se ve (FiguritasAlquiler) se anima solo dentro: el TickerMode lo para fuera de la pestaña.
+                        child: TickerMode(
+                            enabled: widget.activo, child: RepaintBoundary(child: FondoBano(estado: widget.bano, techo: _arriba == 0))),
                         builder: (context, t, fondo) {
                           final vivo = fijo != null || _mov == Movimiento.completo;
                           return _dibujo(context, caja.maxWidth / 2, fijo ?? (_mov == Movimiento.nada ? 0 : t), vivo, fondo!);

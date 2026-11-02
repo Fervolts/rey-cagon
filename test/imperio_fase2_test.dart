@@ -146,20 +146,23 @@ void main() {
   });
 
   group('alquileres', () {
-    test('el Robot se apila: 30 min + 30 min = 1 h; no pasa del doble', () {
+    test('el Robot se apila: 30 min + 30 min = 1 h; no pasa de 10 duraciones', () {
       final imp = _imperio();
       imp.partida.vioPrimerAtasco = true;
+      imp.partida.saldo = 1e12;
       expect(imp.comprarObjeto('robot', t0), isTrue);
       expect(imp.partida.alquilados['robot'], t0 + 30 * min_);
       expect(imp.robotActivo(t0 + 10 * min_), isTrue);
       expect(imp.comprarObjeto('robot', t0), isTrue);
       expect(imp.partida.alquilados['robot'], t0 + 60 * min_);
-      // Ya está en el doble desde ahora: no cabe más.
+      expect(imp.comprarObjeto('robot', t0, veces: 8), isTrue);
+      expect(imp.partida.alquilados['robot'], t0 + 300 * min_);
+      // Ya está en 10 duraciones desde ahora: no cabe más.
       expect(imp.puedeComprarObjeto('robot', t0), isFalse);
       expect(imp.comprarObjeto('robot', t0), isFalse);
-      // Más tarde vuelve a caber, pero nunca más de 1 h desde ese momento.
-      expect(imp.comprarObjeto('robot', t0 + 20 * min_), isTrue);
-      expect(imp.partida.alquilados['robot'], t0 + 80 * min_);
+      // Más tarde vuelve a caber, pero nunca más de 10 duraciones desde ese momento.
+      expect(imp.comprarObjeto('robot', t0 + 30 * min_), isTrue);
+      expect(imp.partida.alquilados['robot'], t0 + 330 * min_);
       expect(imp.partida.alquiladosUsados, contains('robot'));
     });
 

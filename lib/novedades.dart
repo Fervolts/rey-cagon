@@ -21,7 +21,19 @@ class VersionNovedades {
 
 /// El historial público, de la más nueva a la más vieja. Al sacar una versión nueva se agrega arriba.
 const historialNovedades = <VersionNovedades>[
-  VersionNovedades('2.13.0', '2026-11-05', [
+  VersionNovedades('2.13.1', '2026-11-02', [
+    ('💸', 'Los alquilables del Imperio tienen su propia sección, Alquiler, y salen más baratos mientras más grande es tu imperio.',
+        'Empire rentals have their own section, Rentals, and get cheaper the bigger your empire is.'),
+    ('⏳', 'Alquila por x1, x2, x5 o x10 de una vez, o en Indefinido: se renueva solo mientras te alcance y lo apagas cuando quieras.',
+        'Rent for x1, x2, x5 or x10 at once, or Indefinite: it renews by itself while you can afford it and you can turn it off anytime.'),
+    ('🔥', 'Alquilar lo mismo seguido lo encarece (lo ves en la fila: x1,6 por uso) y se enfría solo con las horas.',
+        'Renting the same thing again and again makes it pricier (the row shows it: x1.6 from use) and it cools down over the hours.'),
+    ('👦', 'Puedes tener varios Primos pujadores a la vez, y lo que alquilas se ve en tu baño.',
+        'You can have several Pushing cousins at once, and what you rent shows up in your bathroom.'),
+    ('🌀', 'El efecto de tu tipo de cagada se cansa: el mismo tipo dos veces seguidas rinde la mitad y desde la tercera no da nada. Cambia de tipo o deja pasar 24 horas.',
+        'Your poop type effect gets tired: the same type twice in a row gives half and from the third time on it gives nothing. Switch types or let 24 hours pass.'),
+  ]),
+  VersionNovedades('2.13.0', '2026-11-02', [
     ('🎨', 'Tienda de estilo en el Imperio: temas para toda la app, efectos al apretar CAGUÉ y movimientos para tu avatar. Lo que compras se queda aunque jales la cadena.',
         'Style shop in the Empire: themes for the whole app, effects when you press CAGUÉ and moves for your avatar. What you buy stays even when you pull the chain.'),
     ('🏆', 'Ranking del Imperio global y entre amigos, por mojonólares o por Rollos de Oro. Desliza hacia abajo para actualizarlo.',

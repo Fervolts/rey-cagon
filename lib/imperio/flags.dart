@@ -54,6 +54,12 @@ class FlagsImperio {
   /// Producción extra por Rollo de Oro (`rollo_pct`, 0,01 = +1%).
   final double rolloPct;
 
+  /// Alquileres (lib/imperio/motor.dart, [Ajustes.alquilerDescuento]): `alquiler_descuento` (k del descuento por
+  /// etapa), `calor_factor` (cada periodo alquilado multiplica el siguiente), `calor_tope`, `calor_vida_media_h` y
+  /// `max_primos`.
+  final double alquilerDescuento, calorFactor, calorTope, calorVidaMediaH;
+  final int maxPrimos;
+
   /// Cuántas veces el precio del catálogo cuestan los edificios (`escala_edificios`) y las mejoras (`escala_mejoras`).
   /// Calibrado con la telemetría de un jugador que spamea (test/imperio_loco_test.dart): con 1 y 1 llegaba al tope en
   /// unas 6 horas de juego (día 2), antes de juntar las cagadas para jalar la cadena; con 10 y 100 llega hacia las 25.
@@ -91,6 +97,11 @@ class FlagsImperio {
     this.cadenaDivisor = 1e8,
     this.cadenaExponente = 0.5,
     this.rolloPct = 0.04,
+    this.alquilerDescuento = 0.22,
+    this.calorFactor = 1.5,
+    this.calorTope = 10,
+    this.calorVidaMediaH = 6,
+    this.maxPrimos = 4,
     this.escalaEdificios = 10,
     this.escalaMejoras = 100,
     this.estiloPrecioMult = 1,
@@ -124,6 +135,11 @@ class FlagsImperio {
         cadenaDivisor: cadenaDivisor,
         cadenaExponente: cadenaExponente,
         rolloPct: rolloPct,
+        alquilerDescuento: alquilerDescuento,
+        calorFactor: calorFactor,
+        calorTope: calorTope,
+        calorVidaMediaH: calorVidaMediaH,
+        maxPrimos: maxPrimos,
         escalaEdificios: escalaEdificios,
         escalaMejoras: escalaMejoras,
         temporadas: temporadas,
@@ -179,6 +195,11 @@ class FlagsImperio {
       cadenaDivisor: numero('cadena_divisor', d.cadenaDivisor, 1, 1e15),
       cadenaExponente: numero('cadena_exponente', d.cadenaExponente, 0.1, 1),
       rolloPct: numero('rollo_pct', d.rolloPct, 0, 1),
+      alquilerDescuento: numero('alquiler_descuento', d.alquilerDescuento, 0, 0.5),
+      calorFactor: numero('calor_factor', d.calorFactor, 1, 5),
+      calorTope: numero('calor_tope', d.calorTope, 1, 100),
+      calorVidaMediaH: numero('calor_vida_media_h', d.calorVidaMediaH, 0.25, 168),
+      maxPrimos: numero('max_primos', d.maxPrimos.toDouble(), 1, 8).round(),
       escalaEdificios: numero('escala_edificios', d.escalaEdificios, 1, 1000),
       escalaMejoras: numero('escala_mejoras', d.escalaMejoras, 1, 10000),
       estiloPrecioMult: numero('estilo_precio_mult', d.estiloPrecioMult, 0.01, 1000),

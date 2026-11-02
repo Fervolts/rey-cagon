@@ -61,7 +61,12 @@ Future<int> _enviarPorRpc(List<Map<String, Object?>> lote) async {
 /// - `cofre_reclamar` {dias, fichas, ciruelas, semanas, mj}: abrió el Cofre del Trono de la semana (fichas/ciruelas = las que dio el servidor)
 /// - `congelador_usar` {cantidad, dia, quedan}: el servidor gastó Congeladores 🧊 al reclamar la racha y la racha siguió
 /// - `mana_usar` {id, mana, mj, fallo}: usó una habilidad de Maná (id de `habilidades`; mana = el que quedó; mj y fallo del Chorro)
-/// - `alquilar` {id, precio, hasta}: alquiló un objeto (además del `objeto_compra`; hasta = fin en ms, o cuándo se alquiló el Guardia)
+/// - `alquilar` {id, precio, hasta, veces, indefinido, calor}: alquiló un objeto (además del `objeto_compra`; hasta = fin en ms, o
+///   cuándo se alquiló el Guardia; precio = MJ pagados; veces = periodos pagados (1, 2, 5, 10; 0 si solo prendió el Indefinido de
+///   uno activo); indefinido = puso el modo Indefinido; calor = multiplicador del calor antes de pagar, x1 a x10) (2.13.1)
+/// - `alquiler_cortado` {id, precio, saldo}: un alquiler Indefinido no se pudo renovar por falta de MJ y se apagó (precio = lo que
+///   costaba el periodo, saldo = los MJ que había) (2.13.1)
+/// - `alquiler_apagar` {id, hasta}: apagó a mano el Indefinido; el alquiler sigue hasta `hasta` (2.13.1)
 /// - `consumible_usar` {id, quedan, edificio?}: usó un consumible (va con `objeto_uso`, salvo la Pintura marrón, que trae `edificio`)
 /// - `rollos_gastar` {id, costo, quedan, tiene}: compró un objeto de Rollos de Oro (id de `objetosRollos`)
 /// - `estilo_abre` {}: abrió la tienda de estilo (botón 🎨 de la cabecera)

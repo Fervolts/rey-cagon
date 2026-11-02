@@ -66,8 +66,9 @@ class ResultadoOffline {
   /// Se llenó el tanque: estuvo fuera más que el tope.
   final bool tanqueLleno;
 
-  /// Contó x1,5 por el buff del tipo 6.
+  /// Contó x1,5 por el buff del tipo 6 (x1,25 si estaba cansado: [fuerzaBonus] 0,5).
   final bool conBonus;
+  final double fuerzaBonus;
 
   /// Contó al 100% por el Guardia nocturno (y se gastó).
   final bool conGuardia;
@@ -75,7 +76,7 @@ class ResultadoOffline {
   /// Regalo de vuelta (ya sumado en [ganado]): 4 h de producción si estuvo fuera 2 días o más. 0 = no hubo.
   final double regalo;
   const ResultadoOffline(this.segundosAusente, this.segundosContados, this.ganado, this.tanqueLleno, this.conBonus,
-      {this.conGuardia = false, this.regalo = 0});
+      {this.conGuardia = false, this.regalo = 0, this.fuerzaBonus = 1});
 }
 
 /// Aviso local con la app cerrada: en [segundos] alcanza para [nombreEs] / [nombreEn], o se llena la poceta (null).
@@ -108,7 +109,10 @@ class ResultadoCagadas {
 
   /// Se abrió con la Fiebre de un mojón dorado activa.
   final bool enFiebre;
-  const ResultadoCagadas(this.cantidad, this.descargas, this.tipoBuff, this.enFiebre);
+
+  /// Fuerza del buff de [tipoBuff] por repetir tipo: 1 entero, 0,5 cansado, 0 sin efecto.
+  final double fuerza;
+  const ResultadoCagadas(this.cantidad, this.descargas, this.tipoBuff, this.enFiebre, {this.fuerza = 1});
 
   double get ganado => descargas.fold(0.0, (a, b) => a + b);
 }
@@ -189,7 +193,7 @@ const double probFalloChorro = 0.15;
 const Duration chorroGana = Duration(minutes: 15), chorroPierde = Duration(minutes: 5);
 const double alargueAguanta = 0.1;
 
-/// Pujos por segundo del Primo pujador.
+/// Pujos por segundo de cada Primo pujador (vienen [Imperio.primosActivos]).
 const double pujosPrimo = 10;
 
 /// Cada cuánto compra la Cuadrilla del barrio.
@@ -264,6 +268,9 @@ class Imperio {
   /// MJ del regalo diario del Súper Plomero que la pantalla aún no anunció.
   double _regaloPlomero = 0;
 
+  /// Alquileres Indefinidos que se cortaron por falta de MJ (id, precio que no alcanzó) y la app aún no anotó.
+  final List<(String, double)> _cortados = [];
+
   Imperio({Partida? partida, this.cagadas = 0, this.fichas = 0, this.ciruelas = 0, Set<String>? esteticas, Random? azar,
       this.ajustes = Ajustes.porDefecto, this.cagadasCandado = -1, this.pases = 0})
       : partida = partida ?? Partida(),
@@ -308,6 +315,12 @@ class Imperio {
 
   /// Tipo de mojón con buff activo (1 a 7), o null.
   int? tipoActivo(int ahora) => _p.tipoBuff != null && _p.tipoBuffHasta > ahora ? _p.tipoBuff : null;
+
+  /// Fuerza del buff de tipo activo (1 entero, 0,5 cansado). Cada bono m pasa a 1 + (m - 1) x fuerza.
+  double get fuerzaTipo => _p.tipoBuffFuerza.clamp(0, 1).toDouble();
+
+  /// Fuerza por cuántas veces seguidas se repitió el mismo tipo: 1 vez entero, 2 la mitad, 3 o más nada.
+  static double fuerzaPorRacha(int veces) => veces <= 1 ? 1 : (veces == 2 ? 0.5 : 0);
   bool robotActivo(int ahora) => _p.robotHasta > ahora;
 
   /// Alquiler activo. Con duración: hasta su fin. El Guardia (sin duración): desde que se alquila hasta el próximo offline.
@@ -368,8 +381,8 @@ class Imperio {
     if (_activo('jalon_doble', ahora)) s += 1;
     if (_activo('plomero_bono', ahora)) s += 2;
     final t = tipoActivo(ahora);
-    if (t == 4) s += 1;
-    if (t == 7) s += 2;
+    if (t == 4) s += fuerzaTipo;
+    if (t == 7) s += 2 * fuerzaTipo;
     return s.clamp(0.5, topeEfectos).toDouble();
   }
 
@@ -378,8 +391,8 @@ class Imperio {
     var s = 1.0;
     if (_activo('laxante', ahora)) s += 1;
     final t = tipoActivo(ahora);
-    if (t == 2 || t == 4) s += 1;
-    if (t == 7) s -= 0.5;
+    if (t == 2 || t == 4) s += fuerzaTipo;
+    if (t == 7) s -= 0.5 * fuerzaTipo;
     return s.clamp(0.5, topeEfectos).toDouble();
   }
 
@@ -481,21 +494,22 @@ class Imperio {
     return v == 0 ? 0 : _conEfectosPujo(v, ahora);
   }
 
-  /// Probabilidad de que un pujo sea épico: base + un poco por Dedo, con tope. El buff tipo 1 la multiplica (x3) y dobla el tope.
+  /// Probabilidad de que un pujo sea épico: base + un poco por Dedo, con tope. El buff tipo 1 la multiplica (x3) y dobla el tope
+  /// (cansado: x2 y tope x1,5).
   double probabilidadEpicoActual(int ahora) {
     final a = ajustes;
     final p = a.epicoBase + a.epicoPorDedo * max(0, cantidad('dedo'));
-    if (tipoActivo(ahora) == 1) return min(p * a.epicoTipo1, a.epicoTope * 2);
+    if (tipoActivo(ahora) == 1) return min(p * (1 + (a.epicoTipo1 - 1) * fuerzaTipo), a.epicoTope * (1 + fuerzaTipo));
     return min(p, a.epicoTope);
   }
 
   /// Ritmo que se manda al guardar (`p_mps`, lo usa el servidor para el antitrampa): lo mayor entre el MJ/s sin efectos y
   /// 15 pujos por segundo sin efectos. Así quien vive del Dedo no queda con un ritmo de 0 que le rechace el guardado.
-  /// Con [ahora] y el Primo pujador alquilado, suma sus 10 pujos por segundo.
+  /// Con [ahora] y el Primo pujador alquilado, suma los 10 pujos por segundo de cada primo ([primosActivos]).
   double ritmoEfectivo([int? ahora]) {
     final m = mpsSinEfectos();
     final pujo = (1 + aporteDedos) * _multiplicadorClic * multiplicadorRollos + _pctPujo() * m;
-    final primo = ahora != null && alquiladoActivo('primo', ahora) ? pujosPrimo : 0;
+    final primo = ahora != null && alquiladoActivo('primo', ahora) ? pujosPrimo * primosActivos() : 0;
     return max(m, pujo * (pujosPorSegundoRitmo + primo));
   }
 
@@ -577,7 +591,7 @@ class Imperio {
   }
 
   /// Descuento de precio activo: tipo 3 (-10%) y Constructor (-50%).
-  double factorPrecioEdificios(int ahora) => (tipoActivo(ahora) == 3 ? 0.9 : 1) * (_activo('constructor', ahora) ? 0.5 : 1);
+  double factorPrecioEdificios(int ahora) => (tipoActivo(ahora) == 3 ? 1 - 0.1 * fuerzaTipo : 1) * (_activo('constructor', ahora) ? 0.5 : 1);
 
   /// Precio de la siguiente unidad: base x 1,15^n con descuentos.
   double precioEdificio(String id, int ahora) => precioEdificioVarios(id, 1, ahora);
@@ -668,63 +682,186 @@ class Imperio {
     return o != null && candadoAbierto(o.candado) && (!o.pideAtasco || _p.vioPrimerAtasco);
   }
 
-  /// Precio en MJ: minutos x MJ/s sin efectos x 60, mínimo 100. La Cagada fresca da 0 (no se compra con MJ: viene con cada cagada real).
+  /// Precio en MJ: minutos x MJ/s sin efectos x 60, mínimo 100. La Cagada fresca da 0 (no se compra con MJ: viene con cada
+  /// cagada real). Alquilable: el precio del próximo periodo, con descuento por etapa y calor ([precioAlquiler]).
   double precioObjeto(String id, int ahora) {
     final o = objetoPorId(id);
     if (o == null) return double.infinity;
     if (o.tipo == TipoObjeto.ficha) return 0;
+    if (o.tipo == TipoObjeto.alquilable) return precioAlquiler(id, ahora, 1);
     return max(100.0, (o.minutosPrecio * 60 * mpsSinEfectos()).ceilToDouble());
   }
 
-  /// Lo que falta para poder usar (consumible) o alquilar (Robot) de nuevo. null = ya se puede.
+  // ---------- Alquileres (2.13.1) ----------
+
+  /// Precio base de un periodo de [o], sin calor: minutos x MJ/s sin efectos x 60 x (max(MJ/s, 10) / 10) ^ -k, mínimo 100.
+  /// Con k = `ajustes.alquilerDescuento` (0.22): a más MJ/s, el alquiler pesa menos en la producción.
+  double _baseAlquiler(Objeto o) {
+    final m = mpsSinEfectos();
+    final descuento = pow(max(m, 10.0) / 10, -ajustes.alquilerDescuento);
+    return max(100.0, (o.minutosPrecio * 60 * m * descuento).ceilToDouble());
+  }
+
+  /// Calor de [id] ahora: periodos alquilados con MJ, que bajan a la mitad cada `ajustes.calorVidaMediaH` horas reales.
+  /// Cada alquilable lleva el suyo (alquilar el Primo no encarece el Robot).
+  double calor(String id, int ahora) {
+    final c = _p.calor[id] ?? 0;
+    if (c <= 0) return 0;
+    final horas = max(0, ahora - (_p.calorEn[id] ?? ahora)) / 3600000;
+    return c * pow(0.5, horas / ajustes.calorVidaMediaH);
+  }
+
+  double _porCalor(double calor) => min(pow(ajustes.calorFactor, calor).toDouble(), ajustes.calorTope);
+
+  /// Cuánto multiplica el calor el próximo periodo de [id]: factor ^ calor, hasta el tope (x1,5 por periodo, tope x10).
+  double multiplicadorCalor(String id, int ahora) => _porCalor(calor(id, ahora));
+
+  /// Calor por encima del que el precio ya está en el tope: guardar más solo alargaría la bajada.
+  double get _calorMaximo =>
+      ajustes.calorFactor > 1 ? log(ajustes.calorTope) / log(ajustes.calorFactor) : 0;
+
+  void _calentar(String id, int ahora, int periodos) {
+    _p.calor[id] = min(calor(id, ahora) + periodos, _calorMaximo);
+    _p.calorEn[id] = ahora;
+    if (_p.calor[id]! <= 0) _p.calor.remove(id);
+  }
+
+  /// MJ de alquilar [id] [veces] periodos seguidos ahora: la suma de los precios de cada periodo, que suben con el calor
+  /// (el periodo i cuesta base x min(factor ^ (calor + i), tope)).
+  double precioAlquiler(String id, int ahora, int veces) {
+    final o = objetoPorId(id);
+    if (o == null || o.tipo != TipoObjeto.alquilable || veces < 1) return double.infinity;
+    final base = _baseAlquiler(o);
+    final c = calor(id, ahora);
+    var total = 0.0;
+    for (var i = 0; i < veces; i++) {
+      total += (base * _porCalor(c + i)).ceilToDouble();
+    }
+    return total;
+  }
+
+  /// Cuántos primos pujan con el Primo pujador: 1 + uno más por cada x1000 de MJ/s sin efectos (1e3: 2, 1e6: 3...),
+  /// hasta `ajustes.maxPrimos` (4).
+  int primosActivos() {
+    final m = max(mpsSinEfectos(), 1.0);
+    return (1 + (log(m) / ln10 / 3 + 1e-9).floor()).clamp(1, ajustes.maxPrimos);
+  }
+
+  /// [id] está en modo Indefinido (se renueva solo cada periodo mientras alcancen los MJ).
+  bool alquilerIndefinido(String id) => _p.indefinidos.contains(id);
+
+  /// Se puede poner [id] en Indefinido: alquilable con duración, abierto, no lo está ya, y sigue activo o alcanza para
+  /// el primer periodo.
+  bool puedeIndefinido(String id, int ahora) {
+    final o = objetoPorId(id);
+    if (o == null || o.tipo != TipoObjeto.alquilable || o.duracion == null || !objetoAbierto(id)) return false;
+    if (alquilerIndefinido(id)) return false;
+    return alquiladoActivo(id, ahora) || precioAlquiler(id, ahora, 1) <= _p.saldo;
+  }
+
+  /// Apaga el Indefinido de [id]: el alquiler sigue hasta su fin y no se renueva. false si no estaba.
+  bool apagarIndefinido(String id) => _p.indefinidos.remove(id);
+
+  /// Indefinidos cortados por falta de MJ que la app aún no anotó (id, precio que no alcanzó). Los entrega una vez.
+  List<(String, double)> tomarIndefinidosCortados() {
+    final r = List.of(_cortados);
+    _cortados.clear();
+    return r;
+  }
+
+  /// Renueva los Indefinidos que se vencieron: cobra el próximo periodo (con calor) y dura uno más desde ahora. Si no
+  /// alcanza, se apaga y queda para [tomarIndefinidosCortados]. Tras un offline cobra una sola vez.
+  void _renovarIndefinidos(int ahora) {
+    for (final id in _p.indefinidos.toList()) {
+      final o = objetoPorId(id);
+      if (o == null || o.tipo != TipoObjeto.alquilable || o.duracion == null) {
+        _p.indefinidos.remove(id);
+        continue;
+      }
+      if ((_p.alquilados[id] ?? 0) > ahora) continue;
+      final precio = precioAlquiler(id, ahora, 1);
+      if (!objetoAbierto(id) || precio > _p.saldo) {
+        _p.indefinidos.remove(id);
+        _cortados.add((id, precio));
+        continue;
+      }
+      _p.saldo -= precio;
+      _p.alquilados[id] = ahora + o.duracion!.inMilliseconds;
+      _calentar(id, ahora, 1);
+      _p.alquiladosUsados.add(id);
+    }
+  }
+
+  /// Lo que falta para poder usar un consumible de nuevo. null = ya se puede. Los alquilables no esperan (2.13.1):
+  /// las esperas viejas que traiga una partida no cuentan.
   Duration? esperaRestante(String id, int ahora) {
+    if (objetoPorId(id)?.tipo == TipoObjeto.alquilable) return null;
     final fin = _p.esperas[id] ?? 0;
     return fin > ahora ? Duration(milliseconds: fin - ahora) : null;
   }
 
-  /// Compra con MJ. Consumible: al inventario (hasta 5). Alquilable: se activa ya; si sigue activo suma su duración, hasta
-  /// el doble desde ahora (Robot: 30 min, hasta 1 h). Con [conCiruelas] ya se pagó en el servidor: no cobra MJ.
-  bool comprarObjeto(String id, int ahora, {bool conCiruelas = false}) {
+  /// Compra con MJ. Consumible: al inventario (hasta 5). Alquilable: se activa ya por [veces] periodos (1, 2, 5 o 10;
+  /// si sigue activo se suman a su fin, sin pasar de [vecesAlquilerMax] duraciones desde ahora) y paga la suma de esos
+  /// periodos con calor. Con [indefinido] queda en modo Indefinido: si no estaba activo paga el primer periodo. Con
+  /// [conCiruelas] ya se pagó en el servidor: no cobra MJ ni calienta (un periodo, sin Indefinido).
+  bool comprarObjeto(String id, int ahora, {bool conCiruelas = false, int veces = 1, bool indefinido = false}) {
+    final alquilable = objetoPorId(id);
+    if (alquilable != null && alquilable.tipo == TipoObjeto.alquilable) {
+      return _alquilar(alquilable, ahora, conCiruelas: conCiruelas, veces: veces, indefinido: indefinido);
+    }
     if (conCiruelas ? !_cabeObjeto(id, ahora) : !puedeComprarObjeto(id, ahora)) return false;
     final o = objetoPorId(id)!;
     final precio = conCiruelas ? 0.0 : precioObjeto(id, ahora);
-    if (o.tipo == TipoObjeto.consumible) {
-      if (enInventario(id) >= o.maxInventario) return false;
-      _p.inventario[id] = enInventario(id) + 1;
-    } else {
-      _alquilar(o, ahora);
-    }
+    if (enInventario(id) >= o.maxInventario) return false;
+    _p.inventario[id] = enInventario(id) + 1;
     _p.saldo -= precio;
     return true;
   }
 
-  /// Fin del alquiler si se vuelve a alquilar [o] ahora: suma su duración, hasta el doble desde ahora.
-  int _finAlquiler(Objeto o, int ahora) {
-    final d = o.duracion!.inMilliseconds;
-    final fin = _p.alquilados[o.id] ?? 0;
-    return fin > ahora ? min(fin + d, ahora + 2 * d) : ahora + d;
+  bool _alquilar(Objeto o, int ahora, {required bool conCiruelas, required int veces, required bool indefinido}) {
+    if (indefinido) {
+      if (conCiruelas || !puedeIndefinido(o.id, ahora)) return false;
+      _p.indefinidos.add(o.id);
+      if (alquiladoActivo(o.id, ahora)) return true;
+      veces = 1;
+    } else if (conCiruelas ? veces != 1 || !_cabeObjeto(o.id, ahora) : !puedeComprarObjeto(o.id, ahora, veces: veces)) {
+      return false;
+    }
+    if (!conCiruelas) _p.saldo -= precioAlquiler(o.id, ahora, veces);
+    final d = o.duracion?.inMilliseconds;
+    _p.alquilados[o.id] = d == null ? ahora : max(_p.alquilados[o.id] ?? 0, ahora) + d * veces;
+    if (!conCiruelas) _calentar(o.id, ahora, veces);
+    _p.alquiladosUsados.add(o.id);
+    return true;
   }
 
-  void _alquilar(Objeto o, int ahora) {
-    final nuevo = !alquiladoActivo(o.id, ahora);
-    _p.alquilados[o.id] = o.duracion == null ? ahora : _finAlquiler(o, ahora);
-    if (nuevo && o.espera != null) _p.esperas[o.id] = ahora + o.espera!.inMilliseconds;
-    _p.alquiladosUsados.add(o.id);
+  /// Cuántos periodos más caben ahora en el alquiler de [id] (fin hasta [vecesAlquilerMax] duraciones desde ahora).
+  /// El Guardia (sin duración): 1 si no está activo, 0 si ya lo está.
+  int periodosQueCaben(String id, int ahora) {
+    final o = objetoPorId(id);
+    if (o == null || o.tipo != TipoObjeto.alquilable) return 0;
+    if (o.duracion == null) return alquiladoActivo(id, ahora) ? 0 : 1;
+    final d = o.duracion!.inMilliseconds;
+    final desde = max(_p.alquilados[id] ?? 0, ahora);
+    return max(0, (ahora + vecesAlquilerMax * d - desde) ~/ d);
   }
 
   /// Se puede comprar [id] ahora: abierto, con saldo (MJ, o Ciruelas si [conCiruelas]), sin inventario lleno ni espera.
-  bool puedeComprarObjeto(String id, int ahora, {bool conCiruelas = false}) {
+  /// Alquilable: con [veces] periodos que quepan (las Ciruelas pagan uno solo).
+  bool puedeComprarObjeto(String id, int ahora, {bool conCiruelas = false, int veces = 1}) {
     final o = objetoPorId(id);
-    if (o == null || !_cabeObjeto(id, ahora)) return false;
-    return conCiruelas ? o.ciruelas > 0 && ciruelas >= o.ciruelas : precioObjeto(id, ahora) <= _p.saldo;
+    if (o == null || !_cabeObjeto(id, ahora, veces: veces)) return false;
+    if (conCiruelas) return veces == 1 && o.ciruelas > 0 && ciruelas >= o.ciruelas;
+    final precio = o.tipo == TipoObjeto.alquilable ? precioAlquiler(id, ahora, veces) : precioObjeto(id, ahora);
+    return precio <= _p.saldo;
   }
 
-  /// [id] se puede recibir ahora (sin mirar el precio).
-  bool _cabeObjeto(String id, int ahora) {
+  /// [id] se puede recibir ahora (sin mirar el precio). Los alquilables no esperan: los frena el calor.
+  bool _cabeObjeto(String id, int ahora, {int veces = 1}) {
     final o = objetoPorId(id);
     if (o == null || o.tipo == TipoObjeto.ficha || !objetoAbierto(id)) return false;
     if (o.tipo == TipoObjeto.consumible) return enInventario(id) < o.maxInventario;
-    if (alquiladoActivo(id, ahora)) return o.duracion != null && _finAlquiler(o, ahora) > _p.alquilados[id]!;
+    if (o.tipo == TipoObjeto.alquilable) return veces >= 1 && periodosQueCaben(id, ahora) >= veces;
     return esperaRestante(id, ahora) == null;
   }
 
@@ -838,14 +975,16 @@ class Imperio {
 
   /// Esperas que siguen corriendo (id → ms que faltan), de la más larga a la más corta. Para la Ficha Sin espera.
   Map<String, int> esperasActivas(int ahora) {
-    final r = [for (final MapEntry(key: id, value: fin) in _p.esperas.entries) if (fin > ahora) MapEntry(id, fin - ahora)]
-      ..sort((a, b) => b.value.compareTo(a.value));
+    final r = [
+      for (final MapEntry(key: id, value: fin) in _p.esperas.entries)
+        if (fin > ahora && objetoPorId(id)?.tipo != TipoObjeto.alquilable) MapEntry(id, fin - ahora)
+    ]..sort((a, b) => b.value.compareTo(a.value));
     return Map.fromEntries(r);
   }
 
   /// Ficha Sin espera: borra la espera de [id]. false si no tenía.
   bool quitarEspera(String id, int ahora) {
-    if ((_p.esperas[id] ?? 0) <= ahora) return false;
+    if ((_p.esperas[id] ?? 0) <= ahora || objetoPorId(id)?.tipo == TipoObjeto.alquilable) return false;
     _p.esperas.remove(id);
     return true;
   }
@@ -1008,7 +1147,9 @@ class Imperio {
     final t = tipoActivo(ahora);
     if (t != null && t != 6) {
       final b = buffsTipo[t]!;
-      r.add(EfectoActivo('tipo_$t', b.emoji, b.nombreEs, b.nombreEn, b.efectoEs, b.efectoEn, resta(_p.tipoBuffHasta)));
+      final cansado = fuerzaTipo < 1;
+      r.add(EfectoActivo('tipo_$t', b.emoji, b.nombreEs, b.nombreEn, cansado ? '${b.efectoEs} (cansado: mitad)' : b.efectoEs,
+          cansado ? '${b.efectoEn} (tired: half)' : b.efectoEn, resta(_p.tipoBuffHasta)));
     }
     r.sort((a, b) => a.restante!.compareTo(b.restante!));
     if (_p.papelDoble) {
@@ -1017,7 +1158,12 @@ class Imperio {
     }
     if (_p.offlineBonus) {
       final x = _textosEfecto['offline_bonus']!;
-      r.add(EfectoActivo('offline_bonus', x.$1, x.$2, x.$3, x.$4, x.$5, null));
+      if (_p.offlineBonusFuerza < 1) {
+        r.add(EfectoActivo('offline_bonus', x.$1, 'Offline x1,25', 'Offline x1.25', 'El próximo offline cuenta x1,25 (cansado: mitad)',
+            'Next offline counts x1.25 (tired: half)', null));
+      } else {
+        r.add(EfectoActivo('offline_bonus', x.$1, x.$2, x.$3, x.$4, x.$5, null));
+      }
     }
     r.addAll(sinFin);
     return r;
@@ -1036,8 +1182,10 @@ class Imperio {
         _p.temporadas.add(t.id);
       }
     }
-    // Primo pujador: 10 pujos por segundo (sin épicos ni contadores de pujos).
-    if (s > 0 && alquiladoActivo('primo', ahora)) _ganar(valorPujo(ahora) * pujosPrimo * s);
+    // Alquileres Indefinidos vencidos: se renuevan (o se cortan si no alcanza).
+    _renovarIndefinidos(ahora);
+    // Primo pujador: 10 pujos por segundo por primo (sin épicos ni contadores de pujos).
+    if (s > 0 && alquiladoActivo('primo', ahora)) _ganar(valorPujo(ahora) * pujosPrimo * primosActivos() * s);
     _p.segPartida += s;
     _p.segHistoricos += s;
     if (_p.primerDia <= 0) _p.primerDia = ahora;
@@ -1115,9 +1263,9 @@ class Imperio {
   }
 
   void _programarDorado(int ahora) {
-    final rapido = mejoraComprada('iman') || tipoActivo(ahora) == 5;
+    final rapido = max(mejoraComprada('iman') ? 2.0 : 1.0, tipoActivo(ahora) == 5 ? 1 + fuerzaTipo : 1.0);
     final a = ajustes.doradoMinMin * 60, b = ajustes.doradoMaxMin * 60;
-    _p.segHastaDorado = (a + (b - a) * _azar.nextDouble()) / (rapido ? 2 : 1);
+    _p.segHastaDorado = (a + (b - a) * _azar.nextDouble()) / rapido;
   }
 
   /// Se tocó una cosa del baño en la Poceta: la cuenta en [Partida.toques] (para los logros escondidos) y devuelve los logros nuevos.
@@ -1241,13 +1389,16 @@ class Imperio {
     final tope = guardia ? max(topeOffline.inSeconds, topeGuardia.inSeconds).toDouble() : topeOffline.inSeconds.toDouble();
     final contados = min(ausente, tope);
     final bonus = _p.offlineBonus;
+    final fuerzaBonus = _p.offlineBonusFuerza.clamp(0, 1).toDouble();
     _p.offlineBonus = false;
+    _p.offlineBonusFuerza = 1;
     // El x de temporada cuenta solo por la parte del tiempo contado que cayó dentro de ella.
     final xTemporada = multiplicadorEnRango(ajustes.temporadas, desdeMs, desdeMs + (contados * 1000).round());
-    final ganado = contados * mpsSinEfectos() * (guardia ? 1.0 : porcentajeOffline) * (bonus ? 1.5 : 1) * xTemporada;
+    final ganado = contados * mpsSinEfectos() * (guardia ? 1.0 : porcentajeOffline) * (bonus ? 1 + 0.5 * fuerzaBonus : 1) * xTemporada;
     final regalo = ausente >= ausenciaRegalo.inSeconds ? horasRegalo * 3600 * mpsSinEfectos(contarAtasco: false) : 0.0;
     _ganar(ganado + regalo);
-    return ResultadoOffline(ausente, contados, ganado + regalo, ausente >= tope, bonus, conGuardia: guardia, regalo: regalo);
+    return ResultadoOffline(ausente, contados, ganado + regalo, ausente >= tope, bonus,
+        conGuardia: guardia, regalo: regalo, fuerzaBonus: fuerzaBonus);
   }
 
   /// Qué avisar con la app cerrada y en cuánto: lo más barato que todavía no alcanza (mejora o edificio) si lo offline
@@ -1279,6 +1430,8 @@ class Imperio {
 
   /// Cobra cagadas reales nuevas: una Descarga por cada una (15 min x (1 + 0,1 x peso)), una sola Fiebre de Trono
   /// y el buff del tipo más reciente por 1 h. Llenan el Maná de Tripa. Las Fichas no cambian aquí (las da el servidor).
+  /// Repetir el mismo tipo seguido cansa el buff ([fuerzaPorRacha]): la 2.a vez a la mitad, desde la 3.a no da buff (la
+  /// Descarga y la Fiebre sí). Una cagada sin tipo no cuenta; más de 24 h desde la última con tipo reinicia la racha.
   ResultadoCagadas aplicarCagadas(List<CagadaReal> nuevas, int ahora) {
     if (nuevas.isEmpty) return const ResultadoCagadas(0, [], null, false);
     llenarMana(ahora);
@@ -1296,18 +1449,27 @@ class Imperio {
     if (enFiebreDorada) _p.enFiebre++;
     _extender('fiebre_trono', ahora, duracionFiebre);
     int? tipo;
-    for (final c in orden.reversed) {
-      if (c.tipo != null && buffsTipo.containsKey(c.tipo)) {
-        tipo = c.tipo;
-        break;
-      }
+    for (final c in orden) {
+      if (c.tipo == null || !buffsTipo.containsKey(c.tipo)) continue;
+      final en = c.creada.millisecondsSinceEpoch;
+      final seguido = c.tipo == _p.rachaTipo && en - _p.rachaTipoEn <= ventanaRachaTipo.inMilliseconds;
+      _p.rachaTipoVeces = seguido ? _p.rachaTipoVeces + 1 : 1;
+      _p.rachaTipo = c.tipo;
+      _p.rachaTipoEn = en;
+      tipo = c.tipo;
     }
-    if (tipo != null) {
+    final fuerza = tipo == null ? 1.0 : fuerzaPorRacha(_p.rachaTipoVeces);
+    // Con fuerza 0 no hay buff nuevo: el que estaba sigue hasta su fin, sin alargarse.
+    if (tipo != null && fuerza > 0) {
       _p.tipoBuff = tipo;
       _p.tipoBuffHasta = ahora + duracionBuffTipo.inMilliseconds;
-      if (tipo == 6) _p.offlineBonus = true;
+      _p.tipoBuffFuerza = fuerza;
+      if (tipo == 6) {
+        _p.offlineBonus = true;
+        _p.offlineBonusFuerza = fuerza;
+      }
     }
-    return ResultadoCagadas(orden.length, descargas, tipo, enFiebreDorada);
+    return ResultadoCagadas(orden.length, descargas, tipo, enFiebreDorada, fuerza: fuerza);
   }
 
   // ---------- Jalar la cadena ----------
@@ -1336,7 +1498,7 @@ class Imperio {
   /// dorado y los contadores de la corrida (pujos recientes, segPartida). Se queda: mjTotal, logros, rollos, jaladas,
   /// estadísticas históricas, el buff del tipo, el bono offline y los efectos que vienen de cagadas reales o
   /// Ciruelas (Cagada fresca, Fiebre de Trono). No mira las cagadas: eso lo valida el servidor en `imperio_jalar`.
-  /// Fase 2: se van los alquilados y la Pintura; se quedan las esperas de habilidades (`hab_*`), el Maná y los objetos
+  /// Fase 2: se van los alquilados (y sus Indefinidos; el calor se queda) y la Pintura; se quedan las esperas de habilidades (`hab_*`), el Maná y los objetos
   /// de Rollos. La Cadena de reserva pendiente se gasta: devuelve 1 edificio de cada tipo que tenías.
   int jalar() {
     final ganados = rollosPorGanar;
@@ -1352,6 +1514,7 @@ class Imperio {
       ..inventario = {}
       ..esperas = habilidadesEnEspera
       ..alquilados = {}
+      ..indefinidos = {}
       ..pintura = {}
       ..atasco = null
       ..dorado = null

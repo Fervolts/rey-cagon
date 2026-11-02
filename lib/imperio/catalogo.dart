@@ -272,7 +272,8 @@ class Objeto {
   /// Precio en minutos de producción (mínimo 100 MJ). 0 = no se compra con MJ (Cagada fresca: viene con cada cagada real).
   final double minutosPrecio;
 
-  /// Espera entre usos (consumible) o entre alquileres (alquilable). null = sin espera.
+  /// Espera entre usos (solo consumibles). null = sin espera. Los alquilables no esperan: los frena el calor
+  /// ([Ajustes.calorFactor]).
   final Duration? espera;
   final int candado;
 
@@ -289,8 +290,10 @@ class Objeto {
       {this.duracion, this.minutosPrecio = 0, this.espera, this.candado = 0, this.maxInventario = 0, this.pideAtasco = false, this.ciruelas = 0});
 }
 
-/// Tiempo máximo acumulado al volver a alquilar el Robot (2 x 30 min). Cada alquilable topa en el doble de su duración.
-const Duration topeAlquiler = Duration(hours: 1);
+/// Largos que se pueden pagar de una vez (veces la duración del alquilable). Pagado por adelantado, el alquiler
+/// nunca pasa de [vecesAlquilerMax] veces su duración desde ahora. Aparte está el modo Indefinido (se renueva solo).
+const List<int> opcionesAlquiler = [1, 2, 5, 10];
+const int vecesAlquilerMax = 10;
 
 const List<Objeto> objetos = [
   Objeto('cagada_fresca', '💩', 'Cagada fresca', 'Fresh dump', 'Producción x2', 'Production x2', TipoObjeto.ficha,
@@ -302,24 +305,24 @@ const List<Objeto> objetos = [
   Objeto('papel', '🧻', 'Papel doble hoja', 'Two-ply paper', 'El próximo mojón dorado da el doble', 'Your next golden poop gives double',
       TipoObjeto.consumible, minutosPrecio: 5, espera: Duration(hours: 1), candado: 5, maxInventario: 5, ciruelas: 2),
   Objeto('robot', '🤖', 'Robot destapador', 'Plunger bot', 'Destapa solo cada Atasco', 'Unclogs every Clog by itself', TipoObjeto.alquilable,
-      duracion: Duration(minutes: 30), minutosPrecio: 20, espera: Duration(hours: 4), candado: 10, pideAtasco: true, ciruelas: 3),
+      duracion: Duration(minutes: 30), minutosPrecio: 20, candado: 10, pideAtasco: true, ciruelas: 3),
   // Fase 2: alquilables (candado 15 y 30).
   Objeto('robot_turbo', '🦾', 'Robot destapador Turbo', 'Turbo plunger bot', 'Destapa solo y el Atasco no frena la producción',
       'Unclogs by itself and Clogs don\'t slow production', TipoObjeto.alquilable,
-      duracion: Duration(hours: 2), minutosPrecio: 90, espera: Duration(hours: 12), candado: 30, pideAtasco: true, ciruelas: 6),
+      duracion: Duration(hours: 2), minutosPrecio: 90, candado: 30, pideAtasco: true, ciruelas: 6),
   Objeto('plomero_horas', '🧰', 'Plomero por horas', 'Hourly plumber', 'Cada Atasco que destapes: producción x3 por 1 min',
       'Every Clog you clear: production x3 for 1 min', TipoObjeto.alquilable,
-      duracion: Duration(hours: 1), minutosPrecio: 30, espera: Duration(hours: 6), candado: 15),
-  Objeto('primo', '👦', 'Primo pujador', 'Pushing cousin', 'Puja por ti 10 veces por segundo con la app abierta',
-      'Pushes for you 10 times a second while the app is open', TipoObjeto.alquilable,
-      duracion: Duration(minutes: 15), minutosPrecio: 10, espera: Duration(hours: 2), candado: 15, ciruelas: 3),
+      duracion: Duration(hours: 1), minutosPrecio: 30, candado: 15),
+  Objeto('primo', '👦', 'Primo pujador', 'Pushing cousin', 'Cada primo puja 10 veces por segundo con la app abierta. Con más MJ/s vienen más primos',
+      'Each cousin pushes 10 times a second while the app is open. More MJ/s brings more cousins', TipoObjeto.alquilable,
+      duracion: Duration(minutes: 15), minutosPrecio: 10, candado: 15, ciruelas: 3),
   Objeto('cuadrilla', '👷', 'Cuadrilla del barrio', 'Neighborhood crew', 'Cada minuto compra el edificio más barato si te alcanza',
       'Every minute buys the cheapest building if you can afford it', TipoObjeto.alquilable,
-      duracion: Duration(minutes: 10), minutosPrecio: 35, espera: Duration(hours: 6), candado: 15),
+      duracion: Duration(minutes: 10), minutosPrecio: 7, candado: 15),
   // Sin duración: dura hasta que vuelves a abrir la app (se gasta en el offline).
   Objeto('guardia', '🔦', 'Guardia nocturno', 'Night watchman', 'Tu próximo offline cuenta al 100% y hasta 8 h',
       'Your next offline counts 100% and up to 8 h', TipoObjeto.alquilable,
-      minutosPrecio: 60, espera: Duration(hours: 24), candado: 30, ciruelas: 4),
+      minutosPrecio: 60, candado: 30, ciruelas: 4),
   // Fase 2: consumibles (candado 15).
   Objeto('pino', '🌲', 'Ambientador de pino', 'Pine air freshener', 'Producción +50%, mojones dorados la mitad de seguido',
       'Production +50%, golden poops half as often', TipoObjeto.consumible,
@@ -539,6 +542,9 @@ class BuffTipo {
 
 const Duration duracionBuffTipo = Duration(hours: 1);
 
+/// Repetir el mismo tipo dentro de esta ventana (desde la última cagada con tipo) cansa su buff.
+const Duration ventanaRachaTipo = Duration(hours: 24);
+
 const Map<int, BuffTipo> buffsTipo = {
   1: BuffTipo(1, '🪨', 'Piedritas de conejo', 'Rabbit pellets', 'Pujos épicos x3 de seguido', 'Epic pushes x3 as often'),
   2: BuffTipo(2, '🧱', 'Ladrillo', 'Brick', 'Pujos x2', 'Pushes x2'),
@@ -619,6 +625,14 @@ class Ajustes {
   /// Producción extra por cada Rollo de Oro (0,01 = +1%), para siempre: MJ/s y pujo.
   final double rolloPct;
 
+  /// Alquileres. Con todo en indefinido al tope (Turbo, Plomero, Primo, Cuadrilla) cuesta 10 x 2,6 minutos de producción
+  /// por minuto alquilado x el descuento: de 5,5 a 2,4 veces la producción en la semana 1, ~16% desde el día 30 de la simulación
+  /// larga (test/imperio_cadena_ritmo_test.dart imprime la tabla). Descuento por etapa: el precio base se multiplica por (max(MJ/s, 10) / 10) ^ -[alquilerDescuento].
+  /// Calor: cada periodo alquilado multiplica el precio del siguiente por [calorFactor], hasta [calorTope]; el calor
+  /// acumulado (en periodos) baja a la mitad cada [calorVidaMediaH] horas reales. Primos: hasta [maxPrimos].
+  final double alquilerDescuento, calorFactor, calorTope, calorVidaMediaH;
+  final int maxPrimos;
+
   const Ajustes({
     this.doradoMinMin = 5,
     this.doradoMaxMin = 15,
@@ -640,6 +654,11 @@ class Ajustes {
     this.cadenaDivisor = 1e10,
     this.cadenaExponente = 0.5,
     this.rolloPct = 0.04,
+    this.alquilerDescuento = 0.22,
+    this.calorFactor = 1.5,
+    this.calorTope = 10,
+    this.calorVidaMediaH = 6,
+    this.maxPrimos = 4,
     this.escalaEdificios = 1,
     this.escalaMejoras = 1,
     this.temporadas = const [],

@@ -288,7 +288,10 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
           '+${_mj(off.ganado)} ${monedaActual().abreviatura}',
           tr('Fuera ${_duracionLarga(off.segundosAusente)}. Contó ${_duracionLarga(off.segundosContados)}.',
               'Away ${_duracionLarga(off.segundosAusente)}. Counted ${_duracionLarga(off.segundosContados)}.'),
-          if (off.conBonus) tr('x1,5 por tu cagada tipo 6.', 'x1.5 from your type 6 poop.'),
+          if (off.conBonus)
+            off.fuerzaBonus < 1
+                ? tr('x1,25 por tu cagada tipo 6 (cansado: mitad).', 'x1.25 from your type 6 poop (tired: half).')
+                : tr('x1,5 por tu cagada tipo 6.', 'x1.5 from your type 6 poop.'),
           if (off.tanqueLleno) tr('Se llenó el tanque, compra uno más grande.', 'The tank filled up, buy a bigger one.'),
           if (off.regalo > 0) tr('Incluye +${_mj(off.regalo)} de regalo por volver.', 'Includes a +${_mj(off.regalo)} welcome back gift.'),
         ]);
@@ -300,7 +303,10 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
         await _dialogo('💥', tr('¡DESCARGA!', 'DISCHARGE!'), [
           tr('+${_mj(d.ganado)} y Fiebre de Trono ${duracionFiebre.inSeconds} s', '+${_mj(d.ganado)} and Throne Fever ${duracionFiebre.inSeconds} s'),
           if (d.cantidad > 1) tr('${d.cantidad} cagadas nuevas.', '${d.cantidad} new poops.'),
-          if (b != null) '${tr(b.nombreEs, b.nombreEn)}: ${tr(b.efectoEs, b.efectoEn)}',
+          if (b != null)
+            d.fuerza <= 0
+                ? tr('${b.nombreEs}: cansado, sin efecto. Cambia de tipo.', '${b.nombreEn}: tired, no effect. Switch types.')
+                : '${tr(b.nombreEs, b.nombreEn)}: ${tr(b.efectoEs, b.efectoEn)}${d.fuerza < 1 ? tr(' (cansado: mitad)', ' (tired: half)') : ''}',
         ]);
       }
       if (_c.rachaPendiente && mounted) {
@@ -791,7 +797,14 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       efectos: otros,
       // Lo que se ve en el baño sale de lo comprado: adornos, mejoras de la poceta y de cada edificio.
       // Personalizar (Templo) oculta cosas, elige ambiente y cuántos dedos se ven: solo visual.
-      bano: EstadoBano.desde(comprada: im.mejoraComprada, cantidad: im.cantidad, esteticas: im.esteticas, vista: im.partida.vista),
+      bano: EstadoBano.desde(comprada: im.mejoraComprada, cantidad: im.cantidad, esteticas: im.esteticas, vista: im.partida.vista, alquiler: (
+        // Lo alquilado activo también se ve: los primos pujando, la cuadrilla, el plomero, el robot y el guardia.
+        primos: im.alquiladoActivo('primo', ahora) ? im.primosActivos() : 0,
+        cuadrilla: im.alquiladoActivo('cuadrilla', ahora),
+        plomero: im.alquiladoActivo('plomero_horas', ahora),
+        robot: im.alquiladoActivo('robot_turbo', ahora) ? 2 : (im.alquiladoActivo('robot', ahora) ? 1 : 0),
+        guardia: im.alquiladoActivo('guardia', ahora),
+      )),
       dedos: min(im.cantidad('dedo'), (im.partida.vista['dedos'] as int?) ?? im.cantidad('dedo')),
       activo: widget.activo,
       // Cuánto más rápido va que lo normal (fiebre, pujo loco...): acelera la escena.
@@ -1219,7 +1232,17 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
 /// Objetos que se están pagando con Ciruelas (evita el doble toque mientras responde el servidor).
 final Set<String> _pagandoCiruelas = {};
 
-/// Sección OBJETOS de la tienda: cada uno se paga con MJ o con Ciruelas.
+/// Cuántos periodos va a alquilar cada alquilable (1, 2, 5 o 10; 0 = Indefinido). Vive mientras la app esté abierta.
+final Map<String, int> _vecesElegidas = {};
+
+/// Multiplicador corto para la UI: x1,6 en español, x1.6 en inglés (sin ",0" de sobra).
+String _xCorto(double v) {
+  var s = v >= 10 ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
+  if (s.endsWith('.0')) s = s.substring(0, s.length - 2);
+  return 'x${tr(s.replaceAll('.', ','), s)}';
+}
+
+/// Secciones OBJETOS y ALQUILER de la tienda: cada uno se paga con MJ o con Ciruelas.
 class _HojaObjetos extends StatelessWidget {
   const _HojaObjetos({required this.control, required this.avisar});
   final ControlImperio control;
@@ -1230,12 +1253,27 @@ class _HojaObjetos extends StatelessWidget {
     final p = paleta(context);
     final im = control.imperio;
     final ahora = control.ahora;
+    final alquiler = [for (final o in objetos) if (o.tipo == TipoObjeto.alquilable) o];
+    final a = im.ajustes;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Rotulo(tr('Objetos', 'Items')),
         const SizedBox(height: 8),
-        for (final o in objetos) _fila(context, p, im, o, ahora),
+        for (final o in objetos) if (o.tipo != TipoObjeto.alquilable) _fila(context, p, im, o, ahora),
+        if (alquiler.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Rotulo(tr('Alquiler', 'Rentals')),
+          const SizedBox(height: 4),
+          Text(
+              tr('Cada periodo que alquilas sube el próximo ${_xCorto(a.calorFactor)} (tope ${_xCorto(a.calorTope)}). '
+                      'Se enfría a la mitad cada ${a.calorVidaMediaH.round()} h.',
+                  'Each period you rent makes the next one ${_xCorto(a.calorFactor)} (max ${_xCorto(a.calorTope)}). '
+                      'It cools down by half every ${a.calorVidaMediaH.round()} h.'),
+              style: TextStyle(fontSize: 12, color: p.textoSuave)),
+          const SizedBox(height: 8),
+          for (final o in alquiler) _fila(context, p, im, o, ahora),
+        ],
         if (im.objetosRollosAbiertos) ...[
           const SizedBox(height: 8),
           Rotulo(tr('Rollos de Oro', 'Golden Rolls')),
@@ -1349,7 +1387,8 @@ class _HojaObjetos extends StatelessWidget {
   }
 
   /// Por qué no se puede comprar o alquilar [o] ahora, con su emoji. null = sí se puede.
-  (String, String)? _porQueNo(Imperio im, Objeto o, int ahora, {bool conCiruelas = false}) {
+  /// Alquilable: [veces] periodos (0 = Indefinido).
+  (String, String)? _porQueNo(Imperio im, Objeto o, int ahora, {bool conCiruelas = false, int veces = 1}) {
     if (!im.objetoAbierto(o.id)) {
       return ('🔒', im.faltanCandado(o.candado) > 0 ? _faltanCagadas(im.faltanCandado(o.candado)) : tr('Sale con tu primer Atasco', 'Unlocks with your first Clog'));
     }
@@ -1357,45 +1396,69 @@ class _HojaObjetos extends StatelessWidget {
     if (o.tipo == TipoObjeto.consumible && im.enInventario(o.id) >= n) {
       return (o.emoji, tr('Ya tienes $n/$n: usa uno primero', 'You have $n/$n: use one first'));
     }
-    if (o.tipo == TipoObjeto.alquilable) {
-      final fin = im.partida.alquilados[o.id] ?? 0;
-      if (im.alquiladoActivo(o.id, ahora)) {
-        if (o.duracion == null) return (o.emoji, tr('Ya está activo hasta tu próximo offline', 'Already active until your next offline'));
-        if (fin >= ahora + 2 * o.duracion!.inMilliseconds) {
-          return (o.emoji, tr('Ya está al máximo: ${_cuenta(Duration(milliseconds: fin - ahora))}', 'Already maxed: ${_cuenta(Duration(milliseconds: fin - ahora))}'));
+    final alquilable = o.tipo == TipoObjeto.alquilable;
+    if (alquilable) {
+      final queda = _cuenta(Duration(milliseconds: max(0, (im.partida.alquilados[o.id] ?? 0) - ahora)));
+      if (o.duracion == null) {
+        if (im.alquiladoActivo(o.id, ahora)) return (o.emoji, tr('Ya está activo hasta tu próximo offline', 'Already active until your next offline'));
+      } else if (veces == 0) {
+        if (conCiruelas) return ('🫐', tr('Con Ciruelas se alquila solo x1', 'Plums rent x1 only'));
+        if (im.alquilerIndefinido(o.id)) {
+          return (o.emoji, tr('Ya se renueva solo. Para cortarlo toca APAGAR', 'It already renews itself. Tap TURN OFF to stop it'));
         }
-      } else if (im.esperaRestante(o.id, ahora) case final espera?) {
-        return ('⏳', tr('Se puede alquilar otra vez en ${_cuenta(espera)}', 'You can rent it again in ${_cuenta(espera)}'));
+        if (im.alquiladoActivo(o.id, ahora)) return null;
+      } else {
+        if (conCiruelas && veces != 1) return ('🫐', tr('Con Ciruelas se alquila solo x1', 'Plums rent x1 only'));
+        final caben = im.periodosQueCaben(o.id, ahora);
+        if (caben == 0) return (o.emoji, tr('Ya está al máximo: $queda', 'Already maxed: $queda'));
+        if (caben < veces) {
+          return (o.emoji, tr('Solo caben x$caben más (va por $queda, tope x$vecesAlquilerMax)', 'Only x$caben more fits ($queda left, max x$vecesAlquilerMax)'));
+        }
       }
     }
     if (conCiruelas) {
       final faltan = o.ciruelas - im.ciruelas;
       if (faltan > 0) return ('🫐', tr('Te faltan $faltan Ciruelas', 'You need $faltan more Plums'));
     } else {
-      final faltan = im.precioObjeto(o.id, ahora) - im.saldo;
+      final precio = alquilable ? im.precioAlquiler(o.id, ahora, max(veces, 1)) : im.precioObjeto(o.id, ahora);
+      final faltan = precio - im.saldo;
       if (faltan > 0) return ('💸', tr('Te faltan ${_mj(faltan)} ${monedaActual().abreviatura}', 'You need ${_mj(faltan)} more ${monedaActual().abreviatura}'));
     }
     return null;
   }
 
   /// Lo que dice el aviso después de comprar o alquilar [o].
-  String _hechoTexto(Objeto o) {
+  String _hechoTexto(Objeto o, {bool indefinido = false}) {
     final im = control.imperio;
     final nombre = tr(o.nombreEs, o.nombreEn);
     if (o.tipo == TipoObjeto.consumible) {
       return tr('$nombre: tienes ${im.enInventario(o.id)}/${o.maxInventario}. Toca USAR', '$nombre: you have ${im.enInventario(o.id)}/${o.maxInventario}. Tap USE');
     }
     if (o.duracion == null) return tr('¡$nombre alquilado! Activo hasta tu próximo offline', '$nombre rented! Active until your next offline');
+    if (indefinido) {
+      return tr('$nombre en Indefinido: se renueva solo mientras puedas pagarlo', '$nombre on Indefinite: it renews itself while you can pay');
+    }
     final queda = _cuenta(Duration(milliseconds: (im.partida.alquilados[o.id] ?? 0) - control.ahora));
     return tr('¡$nombre alquilado! Activo: $queda', '$nombre rented! Active: $queda');
   }
 
+  /// Periodos elegidos para [o] (0 = Indefinido). El Guardia y los que no son alquilables van de a uno.
+  int _veces(Objeto o) => o.tipo == TipoObjeto.alquilable && o.duracion != null ? (_vecesElegidas[o.id] ?? 1) : 1;
+
   void _conMj(Objeto o) {
-    if (_porQueNo(control.imperio, o, control.ahora) case (final emoji, final texto)) return avisar(emoji, texto);
-    if (control.comprarObjeto(o.id)) {
+    final veces = _veces(o);
+    if (_porQueNo(control.imperio, o, control.ahora, veces: veces) case (final emoji, final texto)) return avisar(emoji, texto);
+    if (control.comprarObjeto(o.id, veces: max(veces, 1), indefinido: veces == 0)) {
       HapticFeedback.mediumImpact();
-      avisar(o.emoji, _hechoTexto(o));
+      avisar(o.emoji, _hechoTexto(o, indefinido: veces == 0));
     }
+  }
+
+  void _apagar(Objeto o) {
+    if (!control.apagarIndefinido(o.id)) return;
+    HapticFeedback.selectionClick();
+    final queda = _cuenta(Duration(milliseconds: max(0, (control.imperio.partida.alquilados[o.id] ?? 0) - control.ahora)));
+    avisar(o.emoji, tr('Indefinido apagado: le queda $queda y no se renueva', 'Indefinite off: $queda left, it will not renew'));
   }
 
   void _usar(BuildContext context, Objeto o, bool puedeUsar) {
@@ -1424,7 +1487,7 @@ class _HojaObjetos extends StatelessWidget {
   }
 
   Future<void> _conCiruelas(Objeto o) async {
-    if (_porQueNo(control.imperio, o, control.ahora, conCiruelas: true) case (final emoji, final texto)) return avisar(emoji, texto);
+    if (_porQueNo(control.imperio, o, control.ahora, conCiruelas: true, veces: _veces(o)) case (final emoji, final texto)) return avisar(emoji, texto);
     if (!_pagandoCiruelas.add(o.id)) return;
     try {
       final ok = await control.gastarCiruelas('obj_${o.id}');
@@ -1437,7 +1500,11 @@ class _HojaObjetos extends StatelessWidget {
     }
   }
 
-  Widget _fila(BuildContext context, Paleta p, Imperio im, Objeto o, int ahora) {
+  /// Fila de un objeto. El selector x1/x2/x5/x10/∞ redibuja solo esta fila al tocarlo.
+  Widget _fila(BuildContext context, Paleta p, Imperio im, Objeto o, int ahora) =>
+      StatefulBuilder(builder: (context, refrescar) => _filaDentro(context, p, im, o, ahora, refrescar));
+
+  Widget _filaDentro(BuildContext context, Paleta p, Imperio im, Objeto o, int ahora, StateSetter refrescar) {
     final abierto = im.objetoAbierto(o.id);
     final espera = im.esperaRestante(o.id, ahora);
     final precio = im.precioObjeto(o.id, ahora);
@@ -1455,6 +1522,44 @@ class _HojaObjetos extends StatelessWidget {
     final alquilado = o.tipo == TipoObjeto.alquilable && im.alquiladoActivo(o.id, ahora);
     final finAlquiler = im.partida.alquilados[o.id] ?? 0;
     final estiloPrecio = numeros(context, tamano: 13, weight: FontWeight.w900);
+    final alquilable = o.tipo == TipoObjeto.alquilable;
+    // Alquilable con duración: se eligen los periodos (0 = Indefinido). El Guardia va de a uno.
+    final elige = alquilable && o.duracion != null;
+    final veces = _veces(o);
+    final indef = alquilable && im.alquilerIndefinido(o.id);
+    final precioPagar = alquilable ? im.precioAlquiler(o.id, ahora, max(veces, 1)) : precio;
+    final puedeMj = abierto && (veces == 0 ? im.puedeIndefinido(o.id, ahora) : im.puedeComprarObjeto(o.id, ahora, veces: veces));
+    final calorX = alquilable ? im.multiplicadorCalor(o.id, ahora) : 1.0;
+    final estiloInfo = numeros(context, tamano: 11, color: p.textoSuave);
+    final infoAlquiler = [
+      if (calorX >= 1.05) Text('${_xCorto(calorX)} ${tr('por uso', 'from use')}', key: Key('calor_${o.id}'), style: estiloInfo),
+      if (o.id == 'primo')
+        Text(im.primosActivos() == 1 ? tr('1 primo', '1 cousin') : tr('${im.primosActivos()} primos', '${im.primosActivos()} cousins'),
+            key: const Key('primos_cuenta'), style: estiloInfo),
+    ];
+    Widget opcion(int n) {
+      final sel = veces == n;
+      return Expanded(
+        child: Padding(
+          padding: EdgeInsets.only(right: n == 0 ? 0 : 4),
+          child: OutlinedButton(
+            key: Key('veces_${o.id}_${n == 0 ? 'inf' : n}'),
+            style: OutlinedButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(0, 36),
+              backgroundColor: sel ? acento : null,
+              foregroundColor: sel ? acentoTexto : p.texto,
+              side: BorderSide(color: sel ? acento : p.borde),
+            ),
+            onPressed: () {
+              HapticFeedback.selectionClick();
+              refrescar(() => _vecesElegidas[o.id] = n);
+            },
+            child: Text(n == 0 ? '∞' : 'x$n', style: numeros(context, tamano: 13, weight: FontWeight.w900, color: sel ? acentoTexto : p.texto)),
+          ),
+        ),
+      );
+    }
     // Sin poder pagar igual se toca: el aviso dice por qué (falta plata, espera, ya está al máximo).
     Widget pagar({required Widget precio, required bool puede, required VoidCallback alTocar, Key? key}) => Expanded(
           child: OutlinedButton(
@@ -1498,6 +1603,10 @@ class _HojaObjetos extends StatelessWidget {
                     children: [
                       Text(tr(o.nombreEs, o.nombreEn), style: TextStyle(fontWeight: FontWeight.w800, color: p.texto)),
                       Text(abierto ? tr(o.descEs, o.descEn) : candado, style: TextStyle(fontSize: 12, color: p.textoSuave)),
+                      if (abierto && infoAlquiler.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Wrap(spacing: 10, children: infoAlquiler),
+                      ],
                     ],
                   ),
                 ),
@@ -1530,6 +1639,30 @@ class _HojaObjetos extends StatelessWidget {
                     style: numeros(context, tamano: 12, color: acento)),
                 const SizedBox(height: 6),
               ],
+              if (indef) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                          tr('∞ Se renueva solo. Próximo: ~${_mj(im.precioAlquiler(o.id, ahora, 1))} ${monedaActual().abreviatura}',
+                              '∞ Renews itself. Next: ~${_mj(im.precioAlquiler(o.id, ahora, 1))} ${monedaActual().abreviatura}'),
+                          style: numeros(context, tamano: 12, color: p.texto)),
+                    ),
+                    const SizedBox(width: 6),
+                    OutlinedButton(
+                      key: Key('apagar_indef_${o.id}'),
+                      style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10), minimumSize: const Size(0, 36)),
+                      onPressed: () => _apagar(o),
+                      child: Text(tr('APAGAR', 'TURN OFF')),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+              ],
+              if (elige && abierto) ...[
+                Row(children: [for (final n in opcionesAlquiler) opcion(n), opcion(0)]),
+                const SizedBox(height: 6),
+              ],
               Text(consumible ? tr('COMPRAR CON', 'BUY WITH') : tr('ALQUILAR CON', 'RENT WITH'),
                   style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1, color: p.textoSuave)),
               const SizedBox(height: 4),
@@ -1537,8 +1670,10 @@ class _HojaObjetos extends StatelessWidget {
                 children: [
                   pagar(
                     key: Key('pagar_mj_${o.id}'),
-                    precio: montoMj(_mj(precio), estiloPrecio, alineacion: Alignment.center),
-                    puede: abierto && im.puedeComprarObjeto(o.id, ahora),
+                    precio: veces == 0 && alquilado
+                        ? Text(tr('ACTIVAR ∞', 'TURN ON ∞'), style: estiloPrecio)
+                        : montoMj(_mj(precioPagar), estiloPrecio, alineacion: Alignment.center),
+                    puede: puedeMj,
                     alTocar: () => _conMj(o),
                   ),
                   if (o.ciruelas > 0) ...[
@@ -1549,7 +1684,7 @@ class _HojaObjetos extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [Text('${o.ciruelas} ', style: estiloPrecio), const Emoji('🫐', tamano: 18)],
                       ),
-                      puede: abierto && !_pagandoCiruelas.contains(o.id) && im.puedeComprarObjeto(o.id, ahora, conCiruelas: true),
+                      puede: abierto && veces == 1 && !_pagandoCiruelas.contains(o.id) && im.puedeComprarObjeto(o.id, ahora, conCiruelas: true),
                       alTocar: () => _conCiruelas(o),
                     ),
                   ],

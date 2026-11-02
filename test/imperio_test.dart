@@ -459,21 +459,21 @@ void main() {
       expect(imp.usarObjeto('laxante', t0 + 30 * min_), isTrue);
     });
 
-    test('Robot: 30 min, sube a 1 h máximo, espera 4 h y destapa solo', () {
+    test('Robot: 30 min, se apila sin espera, cada periodo más caro por el calor y destapa solo', () {
       final imp = Imperio(cagadas: 10, partida: Partida(saldo: 1000, mjTotal: 1000, vioPrimerAtasco: true), azar: _AzarFijo(d: 0.99));
       expect(imp.comprarObjeto('robot', t0), isTrue);
       expect(imp.partida.robotHasta, t0 + 30 * min_);
+      expect(imp.partida.saldo, 900); // piso de 100 MJ
       expect(imp.comprarObjeto('robot', t0 + min_), isTrue);
-      expect(imp.partida.robotHasta, t0 + hora); // +30 min
-      expect(imp.comprarObjeto('robot', t0 + min_), isTrue);
-      expect(imp.partida.robotHasta, t0 + hora + min_); // tope: 1 h desde ahora
-      expect(imp.comprarObjeto('robot', t0 + min_), isFalse);
+      expect(imp.partida.robotHasta, t0 + hora);
+      expect(imp.partida.saldo, closeTo(750, 1), reason: '100 x 1,5');
+      expect(imp.esperaRestante('robot', t0 + min_), isNull);
       imp.partida.atasco = Atasco('dedo', t0 + 2 * min_);
       imp.tick(t0 + 2 * min_, 1);
       expect(imp.atasco, isNull);
       expect(imp.partida.destapes, 1);
-      expect(imp.comprarObjeto('robot', t0 + 3 * hora), isFalse);
-      expect(imp.comprarObjeto('robot', t0 + 4 * hora), isTrue);
+      // Sin espera: se puede volver a alquilar ya, pero no pasar de 10 duraciones desde ahora.
+      expect(imp.periodosQueCaben('robot', t0 + 2 * min_), 8);
     });
 
     test('efectos activos para la barra', () {

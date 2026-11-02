@@ -17,6 +17,11 @@ Map<String, int> _mapaEnt(Object? v) {
   return {for (final e in v.entries) '${e.key}': _ent(e.value)};
 }
 
+Map<String, double> _mapaDbl(Object? v) {
+  if (v is! Map) return {};
+  return {for (final e in v.entries) '${e.key}': _dbl(e.value)};
+}
+
 Set<String> _conjunto(Object? v) => v is List ? {for (final x in v) '$x'} : <String>{};
 
 /// Preferencias de vista del baño: solo las claves conocidas y con su tipo.
@@ -113,6 +118,14 @@ class Partida {
   /// Ids de alquilables alquilados alguna vez.
   Set<String> alquiladosUsados;
 
+  /// Alquileres en modo Indefinido: se renuevan solos cada periodo mientras alcance la plata (2.13.1).
+  Set<String> indefinidos;
+
+  /// Calor de cada alquilable (periodos alquilados, ya bajados por el tiempo) y cuándo se anotó (ms). Lo baja
+  /// `Imperio.calor` con su vida media (2.13.1).
+  Map<String, double> calor;
+  Map<String, int> calorEn;
+
   /// Edificios con Pintura marrón (+10% c/u). Se borra al jalar la cadena.
   Set<String> pintura;
 
@@ -153,8 +166,19 @@ class Partida {
   int? tipoBuff;
   int tipoBuffHasta;
 
+  /// Fuerza del buff de tipo (1, 0,5): se cansa si repites el mismo tipo seguido.
+  double tipoBuffFuerza;
+
   /// Tipo 6: el próximo offline cuenta x1,5.
   bool offlineBonus;
+
+  /// Fuerza del bonus offline del tipo 6 (1 = x1,5; 0,5 = x1,25).
+  double offlineBonusFuerza;
+
+  /// Racha de repetir tipo: último tipo cagado, cuántas veces seguidas y cuándo (ms de la cagada).
+  int? rachaTipo;
+  int rachaTipoVeces;
+  int rachaTipoEn;
 
   /// Última vez que se vio la partida (ms, reloj del servidor).
   int ultimaVez;
@@ -214,6 +238,9 @@ class Partida {
     this.chorrosFallidos = 0,
     this.consumiblesUsados = 0,
     Set<String>? alquiladosUsados,
+    Set<String>? indefinidos,
+    Map<String, double>? calor,
+    Map<String, int>? calorEn,
     Set<String>? pintura,
     Map<String, int>? objetosRollos,
     Map<String, int>? toques,
@@ -231,7 +258,12 @@ class Partida {
     this.papelDoble = false,
     this.tipoBuff,
     this.tipoBuffHasta = 0,
+    this.tipoBuffFuerza = 1,
     this.offlineBonus = false,
+    this.offlineBonusFuerza = 1,
+    this.rachaTipo,
+    this.rachaTipoVeces = 0,
+    this.rachaTipoEn = 0,
     this.ultimaVez = 0,
     List<int>? pujosRecientes,
     this.segPartida = 0,
@@ -252,6 +284,9 @@ class Partida {
         pujosRecientes = pujosRecientes ?? [],
         alquilados = alquilados ?? {},
         alquiladosUsados = alquiladosUsados ?? {},
+        indefinidos = indefinidos ?? {},
+        calor = calor ?? {},
+        calorEn = calorEn ?? {},
         pintura = pintura ?? {},
         objetosRollos = objetosRollos ?? {},
         toques = toques ?? {},
@@ -286,6 +321,9 @@ class Partida {
         'chorros_fallidos': chorrosFallidos,
         'consumibles_usados': consumiblesUsados,
         'alquilados_usados': alquiladosUsados.toList(),
+        if (indefinidos.isNotEmpty) 'alquilados_indef': indefinidos.toList(),
+        if (calor.isNotEmpty) 'calor': calor,
+        if (calorEn.isNotEmpty) 'calor_en': calorEn,
         'pintura': pintura.toList(),
         'objetos_rollos': objetosRollos,
         'toques': toques,
@@ -303,7 +341,12 @@ class Partida {
         'papel_doble': papelDoble,
         'tipo_buff': tipoBuff,
         'tipo_buff_hasta': tipoBuffHasta,
+        'tipo_buff_f': tipoBuffFuerza,
         'offline_bonus': offlineBonus,
+        'offline_bonus_f': offlineBonusFuerza,
+        'racha_tipo': rachaTipo,
+        'racha_tipo_n': rachaTipoVeces,
+        'racha_tipo_en': rachaTipoEn,
         'ultima_vez': ultimaVez,
         'pujos_recientes': pujosRecientes,
         'seg_partida': segPartida,
@@ -323,6 +366,7 @@ class Partida {
     final total = _dbl(j['mj_total']);
     final recientes = j['pujos_recientes'] is List ? [for (final x in j['pujos_recientes'] as List) _ent(x)] : <int>[];
     final tipo = _entN(j['tipo_buff']);
+    final racha = _entN(j['racha_tipo']);
     final segPartida = _dbl(j['seg_partida']);
     return Partida(
       saldo: saldo < 0 ? 0 : saldo,
@@ -349,6 +393,9 @@ class Partida {
       chorrosFallidos: max(0, _ent(j['chorros_fallidos'])),
       consumiblesUsados: max(0, _ent(j['consumibles_usados'])),
       alquiladosUsados: _conjunto(j['alquilados_usados']),
+      indefinidos: _conjunto(j['alquilados_indef']),
+      calor: _mapaDbl(j['calor'])..removeWhere((_, n) => n <= 0),
+      calorEn: _mapaEnt(j['calor_en']),
       pintura: _conjunto(j['pintura']),
       objetosRollos: _mapaEnt(j['objetos_rollos'])..removeWhere((_, n) => n <= 0),
       toques: _mapaEnt(j['toques'])..removeWhere((_, n) => n <= 0),
@@ -366,7 +413,12 @@ class Partida {
       papelDoble: _bool(j['papel_doble']),
       tipoBuff: tipo != null && tipo >= 1 && tipo <= 7 ? tipo : null,
       tipoBuffHasta: _ent(j['tipo_buff_hasta']),
+      tipoBuffFuerza: _dbl(j['tipo_buff_f'], 1).clamp(0, 1).toDouble(),
       offlineBonus: _bool(j['offline_bonus']),
+      offlineBonusFuerza: _dbl(j['offline_bonus_f'], 1).clamp(0, 1).toDouble(),
+      rachaTipo: racha != null && racha >= 1 && racha <= 7 ? racha : null,
+      rachaTipoVeces: max(0, _ent(j['racha_tipo_n'])),
+      rachaTipoEn: _ent(j['racha_tipo_en']),
       ultimaVez: _ent(j['ultima_vez']),
       pujosRecientes: recientes.length > maxPujosRecientes ? recientes.sublist(recientes.length - maxPujosRecientes) : recientes,
       segPartida: segPartida < 0 ? 0 : segPartida,

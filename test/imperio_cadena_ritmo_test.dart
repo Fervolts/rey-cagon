@@ -66,6 +66,9 @@ class _Simulacion {
   int cagadasCandado = 0;
   int pagadas = 0; // cagadas pagadas con MJ
   final Map<int, int> cagadasPorDia = {};
+  // Al cerrar cada día: (corrida, MJ/s sin efectos, % de ese MJ/s que cuesta tener todo alquilado al tope de calor,
+  // el peor % al cerrar cada sesión del día).
+  final List<(int, double, double, double)> diario = [];
   _Simulacion(int semilla, Ajustes ajustes)
       : azar = Random(semilla),
         imp = Imperio(azar: Random(semilla + 1), ajustes: ajustes);
@@ -187,6 +190,7 @@ class _Simulacion {
     }
     var finAnterior = -1;
     for (var d = 0; d < _dias; d++) {
+      var peor = 0.0;
       imp.pases++; // reclama la racha al abrir el día
       for (final h in _sesiones) {
         final inicio = d * _dia + h * _hora;
@@ -231,10 +235,31 @@ class _Simulacion {
           if (s % 5 == 0) _comprar(ahora + _seg);
         }
         finAnterior = inicio + _largoSesion * _seg;
+        peor = max(peor, 100 * _costoTodoAlTope(imp, finAnterior));
       }
+      diario.add((corridas.length, imp.mpsSinEfectos(), 100 * _costoTodoAlTope(imp, finAnterior), peor));
     }
     _cerrarCorrida(_dias);
   }
+}
+
+/// Alquilables que cuentan para "todo encendido": el Robot no (el Turbo lo reemplaza) y el Guardia tampoco (no tiene periodo).
+const List<String> _todoAlquilado = ['robot_turbo', 'plomero_horas', 'primo', 'cuadrilla'];
+
+/// MJ por segundo que cuesta tener [_todoAlquilado] en indefinido con el calor en el tope, como fracción del MJ/s sin efectos.
+double _costoTodoAlTope(Imperio imp, int ahora) {
+  final p = imp.partida;
+  final calor = Map.of(p.calor), calorEn = Map.of(p.calorEn);
+  var porSeg = 0.0;
+  for (final id in _todoAlquilado) {
+    p.calor[id] = 1000;
+    p.calorEn[id] = ahora;
+    porSeg += imp.precioAlquiler(id, ahora, 1) / objetoPorId(id)!.duracion!.inSeconds;
+  }
+  p
+    ..calor = calor
+    ..calorEn = calorEn;
+  return porSeg / max(imp.mpsSinEfectos(), 1e-9);
 }
 
 void main() {
@@ -263,6 +288,13 @@ void main() {
     lineas.add('Candados: ${sim.cagadasCandado} cagadas que cuentan, ${imp.pases} pases, ${sim.pagadas} pagadas con MJ');
     lineas.add('Al final: ${imp.cagadas} cagadas, ${imp.partida.jaladas} jaladas, ${imp.partida.rollos} rollos '
         '(x${imp.multiplicadorRollos.toStringAsExponential(2)}), ${imp.mjTotal.toStringAsExponential(2)} MJ en total');
+    lineas.add('Todo alquilado en indefinido al tope de calor (${_todoAlquilado.join(', ')}), al cerrar el día:');
+    for (final d in [1, 3, 7, 10, 14, 21, 25, 29, 30, 31, 35, 40, 45, 60, 90, 120, 150, 180, 230]) {
+      if (d > sim.diario.length) break;
+      final (corrida, mps, pct, peor) = sim.diario[d - 1];
+      lineas.add('  día $d (#$corrida): ${mps.toStringAsExponential(2)} MJ/s, ${pct.toStringAsFixed(1)}% de la producción '
+          '(peor sesión del día: ${peor.toStringAsFixed(1)}%)');
+    }
     // ignore: avoid_print
     print(lineas.join('\n'));
     if (_perfilPropio) return;

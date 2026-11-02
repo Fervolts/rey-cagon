@@ -373,7 +373,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     descargaPendiente = previa == null
         ? r
         : ResultadoCagadas(previa.cantidad + r.cantidad, [...previa.descargas, ...r.descargas], r.tipoBuff ?? previa.tipoBuff,
-            previa.enFiebre || r.enFiebre);
+            previa.enFiebre || r.enFiebre, fuerza: r.tipoBuff != null ? r.fuerza : previa.fuerza);
   }
 
   /// Al volver a la pestaña o a la app: trae cagadas nuevas, Fichas y el total. No pisa la partida local.
@@ -525,6 +525,9 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       ..reset()
       ..start();
     _sumarLogros(imperio.tick(ahora, dt));
+    for (final (id, precio) in imperio.tomarIndefinidosCortados()) {
+      _anotar('alquiler_cortado', {'id': id, 'precio': precio, 'saldo': imperio.saldo});
+    }
     _mirarCambios();
     if (_sesion != null) _mirarTemporadas(ahora);
     _sesion?.sumarTiempo(dt);
@@ -827,15 +830,35 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     return _hecho(ok);
   }
 
-  bool comprarObjeto(String id) {
+  /// Compra o alquila [id] con MJ. Alquilable: [veces] periodos seguidos (x1, x2, x5, x10) o [indefinido].
+  bool comprarObjeto(String id, {int veces = 1, bool indefinido = false}) {
     final t = ahora;
     final o = objetoPorId(id);
-    final precio = imperio.precioObjeto(id, t);
-    final ok = imperio.comprarObjeto(id, t);
+    final alquilable = o?.tipo == TipoObjeto.alquilable;
+    final yaActivo = alquilable && imperio.alquiladoActivo(id, t);
+    final calor = alquilable ? imperio.multiplicadorCalor(id, t) : 1.0;
+    final saldo = imperio.saldo;
+    final ok = imperio.comprarObjeto(id, t, veces: veces, indefinido: indefinido);
     if (ok) {
       _compra('objeto_compra', {'id': id});
-      if (o?.tipo == TipoObjeto.alquilable) _anotar('alquilar', {'id': id, 'precio': precio, 'hasta': imperio.partida.alquilados[id]});
+      if (alquilable) {
+        _anotar('alquilar', {
+          'id': id,
+          'precio': saldo - imperio.saldo,
+          'hasta': imperio.partida.alquilados[id],
+          'veces': indefinido && yaActivo ? 0 : (indefinido ? 1 : veces),
+          'indefinido': indefinido,
+          'calor': (calor * 100).round() / 100,
+        });
+      }
     }
+    return _hecho(ok);
+  }
+
+  /// Apaga el Indefinido de [id]: sigue hasta su fin y no se renueva.
+  bool apagarIndefinido(String id) {
+    final ok = imperio.apagarIndefinido(id);
+    if (ok) _anotar('alquiler_apagar', {'id': id, 'hasta': imperio.partida.alquilados[id]});
     return _hecho(ok);
   }
 
