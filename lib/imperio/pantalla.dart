@@ -666,18 +666,26 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: montoMj(_mj(im.saldo), numeros(context, tamano: 32, weight: FontWeight.w900)),
+                      // Alto fijo: el saldo se encoge al no caber y, si el alto siguiera a la escala, la pantalla entera
+                      // saltaría cada vez que cambian los dígitos.
+                      SizedBox(
+                        height: 40,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: montoMj(_mj(im.saldo), numeros(context, tamano: 32, weight: FontWeight.w900)),
+                        ),
                       ),
                       // MJ/s y MJ por toque en una sola línea: si no caben, se encogen (nunca se parten).
-                      FittedBox(
+                      SizedBox(
+                        height: 18,
+                        child: FittedBox(
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerLeft,
                         child: Text(tr('${_mj(im.mps(ahora))} por seg  ·  ${_mj(im.valorPujo(ahora))} por toque',
                                 '${_mj(im.mps(ahora))} per sec  ·  ${_mj(im.valorPujo(ahora))} per tap'),
                             maxLines: 1, softWrap: false, style: numeros(context, tamano: 13, color: p.textoSuave)),
+                        ),
                       ),
                     ],
                   ),
