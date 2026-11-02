@@ -67,6 +67,8 @@ Future<int> _enviarPorRpc(List<Map<String, Object?>> lote) async {
 /// - `estilo_abre` {}: abrió la tienda de estilo (botón 🎨 de la cabecera)
 /// - `estilo_compra` {id, mj, rollos}: compró un estilo (id de `estilos`; mj = precio con `estilo_precio_mult`, rollos gastados)
 /// - `estilo_usa` {id}: se puso un tema, un efecto de CAGUÉ o un movimiento del avatar
+/// - `temporada_ve` {id}: jugó con una temporada activa (id de lib/imperio/temporadas.dart: `dia_retrete`, `navidad`);
+///   una vez por temporada en cada sesión de juego (entre `sesion_inicio` y `sesion_fin`)
 /// - `error` {donde, tipo, red}: tipo = clase de la excepción; red = si fue de red. Los guardados fallidos con la app en el fondo no cuentan (se repiten al volver)
 ///
 /// Nombres: `[a-z0-9_]`, hasta 40. Datos: JSON plano, hasta ~3,5 KB (si no, se manda `{recortado: true}`).

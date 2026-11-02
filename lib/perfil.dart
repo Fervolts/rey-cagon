@@ -1024,11 +1024,11 @@ class _EditarPerfilState extends State<_EditarPerfil> {
                       ? const SizedBox.square(dimension: 28, child: Icon(Icons.block, size: 22))
                       : o.minimo > _total
                           ? Row(mainAxisSize: MainAxisSize.min, children: [
-                              Opacity(opacity: .3, child: Emoji(o.emoji!, tamano: 28)),
+                              Opacity(opacity: .3, child: IconoAccesorio(o.emoji!, tamano: 28)),
                               const SizedBox(width: 4),
                               Text('${o.minimo}', style: numeros(context, tamano: 12, color: paleta(context).textoSuave)),
                             ])
-                          : Emoji(o.emoji!, tamano: 28),
+                          : IconoAccesorio(o.emoji!, tamano: 28),
                   selected: _puesto[ranura] == o.emoji,
                   showCheckmark: false,
                   onSelected: o.minimo > _total

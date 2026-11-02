@@ -2,6 +2,9 @@
 // Dart puro (sin Flutter) para poder probarlo. Los textos vienen en pares es/en; la pantalla escoge con tr().
 
 import 'estado.dart';
+import 'temporadas.dart';
+
+export 'temporadas.dart';
 
 /// Edificio que produce MJ por segundo (o, como el Dedo, MJ por pujo).
 class Edificio {
@@ -431,7 +434,7 @@ class Logro {
 /// Veces que se tocó una cosa del baño ([Partida.toques]).
 int _toques(Partida p, String id) => p.toques[id] ?? 0;
 
-/// Los 48 logros: 20 de la fase 1, 4 de la cadena, el de la racha, 15 de la fase 2 y 8 escondidos del baño.
+/// Los 49 logros: 20 de la fase 1, 4 de la cadena, el de la racha, 15 de la fase 2, 8 escondidos del baño y 1 de temporada.
 final List<Logro> logros = [
   Logro('primer_pujo', 'Primer pujo', 'First push', '1 pujo', '1 push', (p, _) => p.pujos >= 1),
   Logro('calentando', 'Calentando', 'Warming up', '100 pujos', '100 pushes', (p, _) => p.pujos >= 100),
@@ -507,6 +510,9 @@ final List<Logro> logros = [
       (p, _) => _toques(p, 'cuadro') >= 8, oculto: true),
   Logro('metiche', 'Metiche', 'Nosy', 'Tocar 6 cosas distintas del baño', 'Touch 6 different things in the bathroom',
       (p, _) => p.toques.length >= 6, oculto: true),
+  // Exclusivo de temporada: solo se gana jugando mientras el servidor tenga encendido el Día Mundial del Retrete.
+  Logro('dia_retrete', 'Día Mundial del Retrete', 'World Toilet Day', 'Jugar el Imperio el Día Mundial del Retrete (19 nov)',
+      'Play the Imperio on World Toilet Day (Nov 19)', (p, _) => p.temporadas.contains(temporadaDiaRetrete)),
 ];
 
 /// Las cosas del baño que cuentan para [Partida.toques] (lo demás que llegue se ignora).
@@ -636,12 +642,16 @@ class Ajustes {
     this.rolloPct = 0.04,
     this.escalaEdificios = 1,
     this.escalaMejoras = 1,
+    this.temporadas = const [],
   });
 
   /// Cuántas veces el precio del catálogo cuestan los edificios y las mejoras de MJ (Guantes, Faja y la cadena del
   /// trono tienen su precio aparte). Aquí van en 1 (las pruebas del motor usan los precios del catálogo); el juego usa
   /// los de [FlagsImperio], que es donde está el balance.
   final double escalaEdificios, escalaMejoras;
+
+  /// Temporadas que mandó el servidor (flag `temporadas`). Cada una vale solo dentro de su rango ([Temporada.activa]).
+  final List<Temporada> temporadas;
 
   static const Ajustes porDefecto = Ajustes();
 }

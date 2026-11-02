@@ -468,6 +468,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
 
   void _abrirSesion() {
     _sesion = ContadorSesion(imperio.mjTotal);
+    _temporadasVistas.clear();
     _anotar('sesion_inicio', {
       'cagadas': imperio.cagadas,
       'mj_total': imperio.mjTotal,
@@ -509,6 +510,15 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  /// Temporadas ya anotadas (`temporada_ve`) en esta sesión de juego.
+  final Set<String> _temporadasVistas = {};
+
+  void _mirarTemporadas(int t) {
+    for (final x in temporadasActivas(imperio.ajustes.temporadas, t)) {
+      if (_temporadasVistas.add(x.id)) _anotar('temporada_ve', {'id': x.id});
+    }
+  }
+
   void _tick() {
     final dt = _reloj.elapsedMicroseconds / 1e6;
     _reloj
@@ -516,6 +526,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       ..start();
     _sumarLogros(imperio.tick(ahora, dt));
     _mirarCambios();
+    if (_sesion != null) _mirarTemporadas(ahora);
     _sesion?.sumarTiempo(dt);
     _desdeLocal += dt;
     _desdeNube += dt;

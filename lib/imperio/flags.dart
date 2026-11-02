@@ -67,6 +67,9 @@ class FlagsImperio {
   /// clave → variante asignada (solo las flags con variantes). Va en `sesion_inicio`.
   final Map<String, String> variantes;
 
+  /// Flag `temporadas`: lista de {id, desde, hasta, x} (lib/imperio/temporadas.dart). Cada una vale solo en su rango.
+  final List<Temporada> temporadas;
+
   const FlagsImperio({
     this.activo = true,
     this.doradoIntervaloMin = const [5, 15],
@@ -92,6 +95,7 @@ class FlagsImperio {
     this.escalaMejoras = 100,
     this.estiloPrecioMult = 1,
     this.variantes = const {},
+    this.temporadas = const [],
   });
 
   static const FlagsImperio porDefecto = FlagsImperio();
@@ -122,6 +126,7 @@ class FlagsImperio {
         rolloPct: rolloPct,
         escalaEdificios: escalaEdificios,
         escalaMejoras: escalaMejoras,
+        temporadas: temporadas,
       );
 
   static String claveCache(String? usuario) => 'imperio_flags_${usuario ?? 'anon'}';
@@ -177,6 +182,7 @@ class FlagsImperio {
       escalaEdificios: numero('escala_edificios', d.escalaEdificios, 1, 1000),
       escalaMejoras: numero('escala_mejoras', d.escalaMejoras, 1, 10000),
       estiloPrecioMult: numero('estilo_precio_mult', d.estiloPrecioMult, 0.01, 1000),
+      temporadas: leerTemporadas(valor('temporadas')),
       variantes: {
         for (final e in m.entries)
           if (e.key is String && e.value is Map && (e.value as Map)['variante'] is String) e.key as String: (e.value as Map)['variante'] as String,

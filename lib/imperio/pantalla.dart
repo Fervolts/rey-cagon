@@ -21,6 +21,7 @@ import 'control.dart';
 import 'fichas.dart';
 import 'fila.dart';
 import 'formato.dart';
+import 'hallaca.dart';
 import 'hoja_racha.dart';
 import 'logros.dart' show presumirLogroImperio;
 import 'mana.dart';
@@ -368,7 +369,8 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       EfectoDorado.pujoLoco => tr('Pujo loco por ${r.duracion.inSeconds} s', 'Crazy push for ${r.duracion.inSeconds} s'),
       EfectoDorado.constructor => tr('Constructor: edificios -50% por ${r.duracion.inSeconds} s', 'Builder: buildings -50% for ${r.duracion.inSeconds} s'),
     };
-    _avisar('🟡', '$texto$doble');
+    final hallaca = _c.imperio.enTemporada(temporadaNavidad, _c.ahora);
+    _avisar('🟡', hallaca ? tr('Hallaca dorada: $texto$doble', 'Golden hallaca: $texto$doble') : '$texto$doble');
   }
 
   void _tocarAtasco() {
@@ -413,6 +415,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                 children: [
                   _cabecera(context, ahora),
                   if (_c.sinConexion) _sinConexion(context),
+                  if (_c.imperio.enTemporada(temporadaDiaRetrete, ahora)) _avisoTemporada(context, ahora),
                   Expanded(child: _zona(context, ahora)),
                   _botonesAbajo(context, ahora),
                 ],
@@ -425,7 +428,16 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                     onTap: _tocarDorado,
                     child: ScaleTransition(
                       scale: Tween(begin: 0.9, end: 1.1).animate(CurvedAnimation(parent: _pulso, curve: Curves.easeInOut)),
-                      child: const SizedBox(width: 72, height: 72, child: Center(child: Emoji('🟡', tamano: 60))),
+                      child: SizedBox(
+                        width: 72,
+                        height: 72,
+                        child: Center(
+                          // En Navidad el mojón dorado sale como hallaca dorada (mismo efecto, otro aspecto).
+                          child: _c.imperio.enTemporada(temporadaNavidad, ahora)
+                              ? const HallacaDorada(tamano: 60)
+                              : const Emoji('🟡', tamano: 60),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -567,6 +579,30 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       decoration: _caja(context, fondo: p.suave),
       child: Text(tr('Sin conexión: se guarda en el teléfono', 'Offline: saving on this phone'),
           style: TextStyle(fontSize: 12, color: p.textoSuave)),
+    );
+  }
+
+  /// Franja mientras dura el Día Mundial del Retrete (temporada del servidor): toda la producción va por su x.
+  Widget _avisoTemporada(BuildContext context, int ahora) {
+    final p = paleta(context);
+    final x = _c.imperio.multiplicadorTemporadaAhora(ahora);
+    final n = x == x.roundToDouble() ? x.toInt().toString() : x.toStringAsFixed(1);
+    return Container(
+      key: const Key('aviso_temporada'),
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: _caja(context, borde: acento, fondo: p.suave),
+      child: Row(
+        children: [
+          const Emoji('🚽', tamano: 16),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(tr('Día Mundial del Retrete: todo x$n', 'World Toilet Day: everything x$n'),
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: p.texto)),
+          ),
+        ],
+      ),
     );
   }
 

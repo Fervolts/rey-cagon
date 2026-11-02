@@ -397,11 +397,18 @@ class Imperio {
     return n * e.mpsBase * x;
   }
 
-  /// MJ/s de un edificio con todos los efectos. 0 si está atascado.
+  /// MJ/s de un edificio con todos los efectos (y el x de la temporada). 0 si está atascado.
   double mpsEdificio(String id, int ahora) {
     if (_p.atasco?.edificio == id) return 0;
-    return _produccionCruda(id) * multiplicadorPermanente * multiplicadorProduccionTemporal(ahora) * (enFiebre(ahora) ? multiplicadorFiebre : 1);
+    return _produccionCruda(id) * multiplicadorPermanente * multiplicadorProduccionTemporal(ahora) * (enFiebre(ahora) ? multiplicadorFiebre : 1) *
+        multiplicadorTemporadaAhora(ahora);
   }
+
+  /// x de producción de las temporadas activas en [ahora] (Día Mundial del Retrete x3); 1 sin ninguna.
+  double multiplicadorTemporadaAhora(int ahora) => multiplicadorTemporada(ajustes.temporadas, ahora);
+
+  /// Si la temporada [id] (`temporadaDiaRetrete`, `temporadaNavidad`) está encendida por el servidor y en rango.
+  bool enTemporada(String id, int ahora) => temporadaActiva(ajustes.temporadas, id, ahora);
 
   /// MJ/s total con todos los efectos (lo que se suma en cada tick). No incluye al Dedo: él suma por pujo.
   double mps(int ahora) {
@@ -1023,6 +1030,12 @@ class Imperio {
   List<Logro> tick(int ahora, double segundos) {
     final s = segundos.isNaN ? 0.0 : segundos.clamp(0.0, 1.0).toDouble();
     if (s > 0) _ganar(mps(ahora) * s);
+    // Temporadas jugadas con la app abierta (abren logros exclusivos como `dia_retrete`).
+    if (s > 0) {
+      for (final t in temporadasActivas(ajustes.temporadas, ahora)) {
+        _p.temporadas.add(t.id);
+      }
+    }
     // Primo pujador: 10 pujos por segundo (sin épicos ni contadores de pujos).
     if (s > 0 && alquiladoActivo('primo', ahora)) _ganar(valorPujo(ahora) * pujosPrimo * s);
     _p.segPartida += s;
@@ -1229,7 +1242,9 @@ class Imperio {
     final contados = min(ausente, tope);
     final bonus = _p.offlineBonus;
     _p.offlineBonus = false;
-    final ganado = contados * mpsSinEfectos() * (guardia ? 1.0 : porcentajeOffline) * (bonus ? 1.5 : 1);
+    // El x de temporada cuenta solo por la parte del tiempo contado que cayó dentro de ella.
+    final xTemporada = multiplicadorEnRango(ajustes.temporadas, desdeMs, desdeMs + (contados * 1000).round());
+    final ganado = contados * mpsSinEfectos() * (guardia ? 1.0 : porcentajeOffline) * (bonus ? 1.5 : 1) * xTemporada;
     final regalo = ausente >= ausenciaRegalo.inSeconds ? horasRegalo * 3600 * mpsSinEfectos(contarAtasco: false) : 0.0;
     _ganar(ganado + regalo);
     return ResultadoOffline(ausente, contados, ganado + regalo, ausente >= tope, bonus, conGuardia: guardia, regalo: regalo);

@@ -39,7 +39,56 @@ List<Desbloqueo> get exclusivos => <Desbloqueo>[
   (ranura: 'mascota', emoji: '🪙', nombre: tr('Moneda de la Temporada 1', 'Season 1 coin'), minimo: 1),
   (ranura: 'mascota', emoji: '🪠', nombre: tr('Destapador de oro', 'Golden plunger'), minimo: 1),
   (ranura: 'sombrero', emoji: '👑', nombre: tr('Corona del Imperio', 'Empire crown'), minimo: 1),
+  // De temporada: lo da el servidor (trigger en cagadas) a quien cagó al menos una vez en diciembre. Para siempre.
+  (ranura: 'sombrero', emoji: gorroSanta, nombre: tr('Gorro de Santa', 'Santa hat'), minimo: 1),
 ];
+
+/// Valor en profiles.sombrero del gorro de Santa. Se dibuja a mano ([IconoAccesorio]); las apps viejas, que no lo
+/// conocen, muestran el emoji de Santa como texto, que tampoco se ve mal.
+const gorroSanta = '🎅';
+
+/// Un accesorio en pantalla: los pintados a mano (gorro de Santa) o el emoji de siempre.
+class IconoAccesorio extends StatelessWidget {
+  final String emoji;
+  final double tamano;
+  const IconoAccesorio(this.emoji, {super.key, this.tamano = 24});
+
+  @override
+  Widget build(BuildContext context) => emoji == gorroSanta
+      ? SizedBox.square(dimension: tamano, child: const CustomPaint(painter: _PintorGorroSanta()))
+      : Emoji(emoji, tamano: tamano);
+}
+
+/// Gorro de Santa cuadradito: cuerpo rojo que cae a la derecha, franja blanca abajo y pompón blanco en la punta.
+class _PintorGorroSanta extends CustomPainter {
+  const _PintorGorroSanta();
+
+  static const _rojo = Color(0xFFD32F2F), _rojoOscuro = Color(0xFF9A1B1B), _blanco = Color(0xFFF5F5F5);
+  static const _gris = Color(0xFFBDBDBD);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final t = size.shortestSide;
+    Rect r(double x, double y, double w, double h) => Rect.fromLTWH(x * t, y * t, w * t, h * t);
+    final rojo = Paint()..color = _rojo, oscuro = Paint()..color = _rojoOscuro;
+    final blanco = Paint()..color = _blanco, gris = Paint()..color = _gris;
+    // Cuerpo en escalones (pixel art): ancho abajo, se angosta y cae hacia la derecha.
+    canvas.drawRect(r(.14, .52, .72, .18), rojo);
+    canvas.drawRect(r(.22, .36, .56, .17), rojo);
+    canvas.drawRect(r(.34, .22, .44, .15), rojo);
+    canvas.drawRect(r(.56, .14, .24, .09), rojo);
+    canvas.drawRect(r(.72, .16, .1, .2), oscuro);
+    // Franja blanca de abajo con su borde gris de 1px.
+    canvas.drawRect(r(.08, .68, .84, .18).inflate(1), gris);
+    canvas.drawRect(r(.08, .68, .84, .18), blanco);
+    // Pompón cuadrado colgando de la punta.
+    canvas.drawRect(r(.74, .3, .18, .18).inflate(1), gris);
+    canvas.drawRect(r(.74, .3, .18, .18), blanco);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
 
 /// Desde estas cagadas la mascota pasea alrededor del avatar.
 const mascotaSeMueve = 50;
@@ -116,7 +165,7 @@ const _relleno = .875;
 // Altura (fracción del PNG) de la línea de los ojos en cada lente.
 const _centroLentes = {'👓': .49, '🕶️': .49, '🕶': .49, '🥽': .62};
 // Altura (fracción del PNG) por donde cada sombrero se apoya en la cabeza.
-const _asiento = {'🧢': .70, '👒': .80, '🎓': .62, '🎩': .90, '🪖': .58};
+const _asiento = {'🧢': .70, '👒': .80, '🎓': .62, '🎩': .90, '🪖': .58, gorroSanta: .84};
 
 /// Avatar con sus accesorios encima. Lee avatar, sombrero, lentes, mascota y cagadas de
 /// [perfil] (una fila de profiles, leaderboard o perfil). Ocupa [tamano]; los accesorios y
@@ -228,7 +277,7 @@ Widget _ponerSombrero(String sombrero, _Punto p, ({double x, double y}) en, doub
   return Positioned(
     left: en.x * t - tam / 2,
     top: en.y * t - (_asiento[sombrero] ?? .85) * tam,
-    child: Emoji(sombrero, tamano: tam),
+    child: IconoAccesorio(sombrero, tamano: tam),
   );
 }
 
