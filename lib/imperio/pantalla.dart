@@ -417,7 +417,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                   for (final (i, l) in lineas.indexed)
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
-                      child: Text(l, textAlign: TextAlign.center, style: i == 0 ? numeros(context, tamano: 22, weight: FontWeight.w900) : TextStyle(fontSize: 15, height: 1.4, color: p.texto)),
+                      child: TextoConEmojis(l, textAlign: TextAlign.center, style: i == 0 ? numeros(context, tamano: 22, weight: FontWeight.w900) : TextStyle(fontSize: 15, height: 1.4, color: p.texto)),
                     ),
                   const SizedBox(height: 24),
                   SizedBox(
