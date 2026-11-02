@@ -521,7 +521,7 @@ class _Nuevo extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
         decoration: BoxDecoration(color: acento, borderRadius: BorderRadius.circular(radio)),
         child: Text(tr('NUEVO', 'NEW'),
-            style: const TextStyle(fontSize: 9, height: 1.2, fontWeight: FontWeight.w900, color: acentoTexto, letterSpacing: .6)),
+            style: TextStyle(fontSize: 9, height: 1.2, fontWeight: FontWeight.w900, color: acentoTexto, letterSpacing: .6)),
       );
 }
 
@@ -1081,7 +1081,9 @@ class MapaDelMes extends StatelessWidget {
   final List<({DateTime cuando, int? tipo, int? peso})> cagadas;
   final VoidCallback onTap;
 
-  static const _niveles = [Color(0xFFFFF1A8), Color(0xFFFFE04D), acento, Color(0xFFC9A600)];
+  // Escala del acento del tema en uso (en el Clásico, de amarillo pálido a mostaza).
+  static List<Color> get _niveles =>
+      [Color.lerp(acento, Colors.white, .65)!, Color.lerp(acento, Colors.white, .3)!, acento, Color.lerp(acento, Colors.black, .22)!];
 
   @override
   Widget build(BuildContext context) {

@@ -443,7 +443,7 @@ class HistoriaCartera extends StatelessWidget {
                             Expanded(
                               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                                 textoEnUnaLinea(tr('BANCO DEL TRONO', 'BANK OF THE THRONE'),
-                                    const TextStyle(color: acento, fontWeight: FontWeight.w900, letterSpacing: 2.5, fontSize: 15)),
+                                    TextStyle(color: acento, fontWeight: FontWeight.w900, letterSpacing: 2.5, fontSize: 15)),
                                 Text(tr('Sucursal Rey Cagón · Desde siempre', 'King of the Throne branch · Since forever'),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -492,7 +492,7 @@ class HistoriaCartera extends StatelessWidget {
                               padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
                               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                                 Text(tr('SALDO DISPONIBLE', 'AVAILABLE BALANCE'),
-                                    style: const TextStyle(color: acentoTexto, fontSize: 10, letterSpacing: 1.5, fontWeight: FontWeight.w900)),
+                                    style: TextStyle(color: acentoTexto, fontSize: 10, letterSpacing: 1.5, fontWeight: FontWeight.w900)),
                                 montoMj(mj(d.saldo), numeros(context, tamano: 34, weight: FontWeight.w900, color: acentoTexto)),
                               ]),
                             ),

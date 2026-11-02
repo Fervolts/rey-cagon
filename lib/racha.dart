@@ -261,7 +261,7 @@ class _AnuncioState extends State<_Anuncio> with TickerProviderStateMixin {
                               ),
                               onPressed: _compartiendo ? null : _compartir,
                               icon: _compartiendo
-                                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: acentoTexto))
+                                  ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: acentoTexto))
                                   : const Icon(Icons.ios_share),
                               label: Text(tr('COMPARTIR', 'SHARE')),
                             ),

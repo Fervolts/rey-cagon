@@ -299,7 +299,7 @@ class TarjetaVitrina extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                 color: acento,
                 child: Text(tr('NUEVO', 'NEW'),
-                    style: const TextStyle(color: acentoTexto, fontWeight: FontWeight.w900, fontSize: 10, letterSpacing: 2)),
+                    style: TextStyle(color: acentoTexto, fontWeight: FontWeight.w900, fontSize: 10, letterSpacing: 2)),
               ),
             ),
             Positioned(right: 10, top: 26, child: Transform.rotate(angle: .2, child: _Precio(minimo))),
@@ -310,7 +310,7 @@ class TarjetaVitrina extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(tr('RECIÉN LLEGADO A LA VITRINA', 'NOW IN THE WINDOW'),
-                style: const TextStyle(fontFamily: _mono, color: acento, fontSize: 10, letterSpacing: 1.5, fontWeight: FontWeight.w700)),
+                style: TextStyle(fontFamily: _mono, color: acento, fontSize: 10, letterSpacing: 1.5, fontWeight: FontWeight.w700)),
             const SizedBox(height: 2),
             Text(nombre.toUpperCase(),
                 style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: 1, height: 1.1)),
@@ -381,9 +381,9 @@ class _Precio extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(22, 6, 10, 6),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            Text(tr('PRECIO', 'PRICE'), style: const TextStyle(fontFamily: _mono, fontSize: 8, color: acentoTexto, letterSpacing: 1)),
+            Text(tr('PRECIO', 'PRICE'), style: TextStyle(fontFamily: _mono, fontSize: 8, color: acentoTexto, letterSpacing: 1)),
             Row(mainAxisSize: MainAxisSize.min, children: [
-              Text('$minimo', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: acentoTexto, height: 1)),
+              Text('$minimo', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: acentoTexto, height: 1)),
               const SizedBox(width: 3),
               const Emoji('💩', tamano: 16),
             ]),
@@ -441,9 +441,9 @@ class _Etiqueta extends StatelessWidget {
             Emoji(d.emoji, tamano: 22),
             const SizedBox(width: 6),
             Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-              Text(d.nombre, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: acentoTexto)),
+              Text(d.nombre, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: acentoTexto)),
               Text(tr('${d.minimo} cagadas', '${d.minimo} poops'),
-                  style: const TextStyle(fontFamily: _mono, fontSize: 10, color: acentoTexto)),
+                  style: TextStyle(fontFamily: _mono, fontSize: 10, color: acentoTexto)),
             ]),
           ]),
         ),
@@ -477,7 +477,7 @@ class TarjetaMuestra extends StatelessWidget {
                 style: const TextStyle(fontFamily: _mono, color: Colors.white, fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 1.5)),
             const Spacer(),
             Text(tr('MUESTRA #$n', 'SAMPLE #$n'),
-                style: const TextStyle(fontFamily: _mono, color: acento, fontWeight: FontWeight.w700, fontSize: 11)),
+                style: TextStyle(fontFamily: _mono, color: acento, fontWeight: FontWeight.w700, fontSize: 11)),
           ]),
         ),
         Padding(
@@ -905,7 +905,7 @@ class HistoriaRacha extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           color: acento,
           child: Text(tr('REY CAGÓN', 'KING OF THE THRONE'),
-              style: const TextStyle(color: acentoTexto, fontWeight: FontWeight.w900, letterSpacing: 4, fontSize: 14)),
+              style: TextStyle(color: acentoTexto, fontWeight: FontWeight.w900, letterSpacing: 4, fontSize: 14)),
         ),
         const Spacer(),
         Text(tr('RACHA DE HOY', "TODAY'S STREAK"),
@@ -1078,7 +1078,7 @@ class TarjetaContador extends StatelessWidget {
           const Emoji('🧻', tamano: 22),
           const SizedBox(width: 8),
           Text('+${formatoMj(rollos, ingles: enIngles)}',
-              style: const TextStyle(color: acento, fontWeight: FontWeight.w900, fontSize: 22)),
+              style: TextStyle(color: acento, fontWeight: FontWeight.w900, fontSize: 22)),
           const SizedBox(width: 6),
           Text(tr('Rollos de Oro', 'Golden Rolls'), style: const TextStyle(color: Colors.white, fontSize: 13)),
         ]),

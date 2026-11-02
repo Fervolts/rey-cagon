@@ -50,7 +50,7 @@ class _ParteState extends State<_Parte> {
       color: elegida ? acento : p.tarjeta,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(radio),
-        side: elegida ? const BorderSide(color: acentoTexto, width: 2) : BorderSide(color: p.borde),
+        side: elegida ? BorderSide(color: acentoTexto, width: 2) : BorderSide(color: p.borde),
       ),
       child: InkWell(onTap: onTap, child: child),
     );
@@ -223,7 +223,7 @@ class _Secreto extends StatelessWidget {
                     Rotulo(tr('Secreto', 'Secret')),
                     const Spacer(),
                     Text(tr('¿Lo disfrutaste?', 'Did you enjoy it?'),
-                        style: const TextStyle(color: acento, fontWeight: FontWeight.w800)),
+                        style: TextStyle(color: acento, fontWeight: FontWeight.w800)),
                   ],
                 ),
                 const SizedBox(height: 10),

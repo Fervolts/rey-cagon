@@ -176,7 +176,7 @@ class _IconoImperioState extends State<IconoImperio> with SingleTickerProviderSt
                       border: Border.all(color: acentoTexto),
                       borderRadius: BorderRadius.circular(radio),
                     ),
-                    child: const Text('x2',
+                    child: Text('x2',
                         style: TextStyle(color: acentoTexto, fontWeight: FontWeight.w900, fontSize: 10, height: 1.1, fontStyle: FontStyle.italic)),
                   ),
                 ),

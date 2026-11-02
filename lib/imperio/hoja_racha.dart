@@ -52,7 +52,7 @@ Future<void> mostrarHojaRacha(BuildContext context, ControlImperio control, void
     builder: (contexto) => Dialog(
       backgroundColor: paleta(contexto).fondo,
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radio), side: const BorderSide(color: acento, width: 2)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radio), side: BorderSide(color: acento, width: 2)),
       child: ListenableBuilder(
         listenable: control,
         builder: (context, _) => HojaRacha(control: control, avisar: avisar),

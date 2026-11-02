@@ -14,6 +14,7 @@ import 'calendario.dart';
 import 'chat.dart' show abrirReporteDeError;
 import 'comunidad.dart';
 import 'idioma.dart';
+import 'imperio/formato.dart' show formatoCantidad, formatoMj;
 import 'imperio/logros.dart' show cargarLogrosImperio;
 import 'logros.dart';
 import 'novedades.dart';
@@ -60,6 +61,8 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
   late final VoidCallback _soltar;
   // Ids de logros del Imperio conseguidos (solo en el propio), para la vitrina; null mientras carga o si falló.
   Set<String>? _imperio;
+  // Números de la partida del Imperio (RPC imperio_perfil), para la tarjeta; null si nunca jugó, falló o falta la RPC.
+  ({double mj, int rollos, int jaladas, double mps})? _partida;
 
   bool get _esMio => widget.usuarioId == db.auth.currentUser!.id;
 
@@ -69,6 +72,15 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
     _cargar();
     _soltar = escucharCagadas('perfil', _cargar);
     if (_esMio) _cargarImperio();
+    _cargarPartida();
+  }
+
+  /// La tarjeta del Imperio es un extra: si la RPC falla o no existe todavía, el perfil sale igual sin ella.
+  Future<void> _cargarPartida() async {
+    try {
+      final r = await conReintento(() => db.rpc('imperio_perfil', params: {'p_usuario': widget.usuarioId}));
+      if (mounted) setState(() => _partida = leerImperioPerfil(r));
+    } catch (_) {}
   }
 
   Future<void> _cargarImperio() async {
@@ -620,6 +632,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                     ],
                   ),
                   const SizedBox(height: 20),
+                  if (_partida != null) ...[_TarjetaImperio(partida: _partida!), const SizedBox(height: 20)],
                   if (_cagadas == null)
                     const Padding(padding: EdgeInsets.all(24), child: Cargando())
                   else ...[
@@ -645,6 +658,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                           if (!mounted) return;
                           setState(() => _nuevos = {});
                           _cargarImperio();
+                          _cargarPartida();
                         },
                       );
                     }),
@@ -793,6 +807,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                   title: Text(tr('Especialidad de la casa', 'House specialty')),
                   subtitle: Text(tipos[p['tipo_favorito']]?.$2 ?? tr('Todavía no se sabe', 'Nobody knows yet')),
                 ),
+                if (_partida != null && !_bloqueado) ...[const SizedBox(height: 8), _TarjetaImperio(partida: _partida!), const SizedBox(height: 8)],
                 // Su vitrina, sin los "secretos por encontrar" (eso es cosa suya). De sus secretos
                 // solo salen los que quien mira también encontró.
                 if (_cagadas != null && !_bloqueado) ...[
@@ -826,6 +841,62 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                 ),
               ],
             ),
+    );
+  }
+}
+
+/// Lee la respuesta de imperio_perfil. Null si no vino nada (nunca jugó, bloqueo) o no es un objeto.
+({double mj, int rollos, int jaladas, double mps})? leerImperioPerfil(Object? r) {
+  if (r is! Map) return null;
+  final mj = (r['mj_total'] as num?)?.toDouble() ?? 0;
+  final jaladas = (r['jaladas'] as num?)?.toInt() ?? 0;
+  if (mj <= 0 && jaladas <= 0) return null;
+  return (mj: mj, rollos: (r['rollos'] as num?)?.toInt() ?? 0, jaladas: jaladas, mps: (r['mps'] as num?)?.toDouble() ?? 0);
+}
+
+/// Tarjeta IMPERIO del perfil: MJ ganados en la partida, Rollos de Oro, jaladas y MJ/s.
+class _TarjetaImperio extends StatelessWidget {
+  const _TarjetaImperio({required this.partida});
+
+  final ({double mj, int rollos, int jaladas, double mps}) partida;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paleta(context);
+    Widget dato(String? emoji, String valor, String texto) => Expanded(
+          child: Column(
+            children: [
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  if (emoji != null) ...[Emoji(emoji, tamano: 16), const SizedBox(width: 4)],
+                  Text(valor, maxLines: 1, style: numeros(context, tamano: 16, weight: FontWeight.w900)),
+                ]),
+              ),
+              const SizedBox(height: 2),
+              Text(texto, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: p.textoSuave, fontSize: 11)),
+            ],
+          ),
+        );
+    return Container(
+      key: const Key('perfil_tarjeta_imperio'),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      decoration: BoxDecoration(color: p.tarjeta, borderRadius: BorderRadius.circular(radio), border: Border.all(color: p.borde)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Rotulo(tr('IMPERIO', 'EMPIRE')),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              dato('💰', formatoMj(partida.mj, ingles: enIngles), tr('ganados en la partida', 'earned this game')),
+              dato('🧻', formatoCantidad(partida.rollos, ingles: enIngles), tr('Rollos ganados', 'Rolls earned')),
+              dato('🚽', formatoCantidad(partida.jaladas, ingles: enIngles), tr('jaladas', 'flushes')),
+              if (partida.mps > 0) dato(null, formatoMj(partida.mps, ingles: enIngles), tr('por segundo', 'per second')),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

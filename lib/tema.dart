@@ -1,11 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'imperio/estilos.dart';
+
 // Estilo: esquinas de 2px, bordes de 1px, sin sombras ni degradados, letra del sistema
-// con cifras tabulares y un solo color de acento.
+// con cifras tabulares y un solo color de acento. El acento y la paleta cambian con el tema de la tienda de estilo
+// del Imperio (lib/imperio/tienda_estilo.dart); el Clásico es el amarillo de siempre.
 const radio = 2.0;
-const acento = Color(0xFFFFD60A);
-const acentoTexto = Color(0xFF111111);
+const _amarillo = Color(0xFFFFD60A);
+const _amarilloTexto = Color(0xFF111111);
+
+/// El acento del tema en uso (amarillo en el Clásico). No es constante: cambia al elegir otro tema.
+Color get acento => _paletaEstilo().acento;
+
+/// Texto encima del acento, con contraste para cada tema.
+Color get acentoTexto => _paletaEstilo().acentoTexto;
 
 class Paleta {
   const Paleta({
@@ -18,9 +27,14 @@ class Paleta {
     required this.bordeFuerte,
     required this.primario,
     required this.sobrePrimario,
+    this.acento = _amarillo,
+    this.acentoTexto = _amarilloTexto,
   });
 
   final Color fondo, tarjeta, suave, texto, textoSuave, borde, bordeFuerte, primario, sobrePrimario;
+
+  /// El único color de acento del tema y el texto que va encima.
+  final Color acento, acentoTexto;
 
   static const claro = Paleta(
     fondo: Color(0xFFF7F6F3),
@@ -43,17 +57,161 @@ class Paleta {
     textoSuave: Color(0xFFA8A39B),
     borde: Color(0xFF2E2C29),
     bordeFuerte: Color(0xFF5E5953),
-    primario: acento,
-    sobrePrimario: acentoTexto,
-  );}
+    primario: _amarillo,
+    sobrePrimario: _amarilloTexto,
+  );
+
+  // Temas de la tienda de estilo. Cada uno tiene su brillo fijo (ver _brilloEstilo) y un solo acento, que también
+  // es el color principal (botones y selección).
+  static const porcelana = Paleta(
+    fondo: Color(0xFFF3F7FA),
+    tarjeta: Color(0xFFFFFFFF),
+    suave: Color(0xFFE3ECF3),
+    texto: Color(0xFF10202E),
+    textoSuave: Color(0xFF4C6070),
+    borde: Color(0xFFD0DCE6),
+    bordeFuerte: Color(0xFF7A90A3),
+    primario: Color(0xFF1F6FB2),
+    sobrePrimario: Color(0xFFFFFFFF),
+    acento: Color(0xFF1F6FB2),
+    acentoTexto: Color(0xFFFFFFFF),
+  );
+
+  static const cloaca = Paleta(
+    fondo: Color(0xFF0C130D),
+    tarjeta: Color(0xFF131D14),
+    suave: Color(0xFF1B281C),
+    texto: Color(0xFFE4F2DF),
+    textoSuave: Color(0xFF93A88D),
+    borde: Color(0xFF243425),
+    bordeFuerte: Color(0xFF4E6A4C),
+    primario: Color(0xFF9BE22A),
+    sobrePrimario: Color(0xFF0C130D),
+    acento: Color(0xFF9BE22A),
+    acentoTexto: Color(0xFF0C130D),
+  );
+
+  static const papel = Paleta(
+    fondo: Color(0xFFF6F1E7),
+    tarjeta: Color(0xFFFFFCF5),
+    suave: Color(0xFFECE5D6),
+    texto: Color(0xFF2B2723),
+    textoSuave: Color(0xFF6B645B),
+    borde: Color(0xFFDED6C6),
+    bordeFuerte: Color(0xFF978E80),
+    primario: Color(0xFF726C64),
+    sobrePrimario: Color(0xFFFFFFFF),
+    acento: Color(0xFF726C64),
+    acentoTexto: Color(0xFFFFFFFF),
+  );
+
+  // Los 4 verdes de la pantalla del GameBoy (la tarjeta es un paso entre los dos más oscuros).
+  static const gameboy = Paleta(
+    fondo: Color(0xFF0F380F),
+    tarjeta: Color(0xFF184518),
+    suave: Color(0xFF306230),
+    texto: Color(0xFF9BBC0F),
+    textoSuave: Color(0xFF8BAC0F),
+    borde: Color(0xFF306230),
+    bordeFuerte: Color(0xFF8BAC0F),
+    primario: Color(0xFF9BBC0F),
+    sobrePrimario: Color(0xFF0F380F),
+    acento: Color(0xFF9BBC0F),
+    acentoTexto: Color(0xFF0F380F),
+  );
+
+  static const neon = Paleta(
+    fondo: Color(0xFF07060A),
+    tarjeta: Color(0xFF110F16),
+    suave: Color(0xFF1C1923),
+    texto: Color(0xFFF5EEFA),
+    textoSuave: Color(0xFFA99AB6),
+    borde: Color(0xFF2A2433),
+    bordeFuerte: Color(0xFF5D4F6B),
+    primario: Color(0xFFFF2BD6),
+    sobrePrimario: Color(0xFF07060A),
+    acento: Color(0xFFFF2BD6),
+    acentoTexto: Color(0xFF07060A),
+  );
+
+  static const marmol = Paleta(
+    fondo: Color(0xFFF8F7F4),
+    tarjeta: Color(0xFFFFFFFF),
+    suave: Color(0xFFEEECE7),
+    texto: Color(0xFF1E1C19),
+    textoSuave: Color(0xFF5F5A52),
+    borde: Color(0xFFE0DCD3),
+    bordeFuerte: Color(0xFF9A9283),
+    primario: Color(0xFFC9A227),
+    sobrePrimario: Color(0xFF1A1712),
+    acento: Color(0xFFC9A227),
+    acentoTexto: Color(0xFF1A1712),
+  );
+
+  static const oro = Paleta(
+    fondo: Color(0xFF0B0A07),
+    tarjeta: Color(0xFF15130D),
+    suave: Color(0xFF201C12),
+    texto: Color(0xFFF6EED8),
+    textoSuave: Color(0xFFB0A483),
+    borde: Color(0xFF2E2818),
+    bordeFuerte: Color(0xFF6B5D35),
+    primario: Color(0xFFD4AF37),
+    sobrePrimario: Color(0xFF0B0A07),
+    acento: Color(0xFFD4AF37),
+    acentoTexto: Color(0xFF0B0A07),
+  );
+}
+
+/// Paleta de cada tema de la tienda (el Clásico no está: usa claro u oscuro según el teléfono o Perfil).
+const Map<String, Paleta> _paletasEstilo = {
+  'tema_porcelana': Paleta.porcelana,
+  'tema_cloaca': Paleta.cloaca,
+  'tema_papel': Paleta.papel,
+  'tema_gameboy': Paleta.gameboy,
+  'tema_neon': Paleta.neon,
+  'tema_marmol': Paleta.marmol,
+  'tema_oro': Paleta.oro,
+};
+
+const Set<String> _temasClaros = {'tema_porcelana', 'tema_papel', 'tema_marmol'};
+
+/// Ids de los temas que tienen colores aquí (para el test y la tienda).
+Iterable<String> get temasConColores => _paletasEstilo.keys;
+
+/// Brillo fijo del tema, o null si sigue al teléfono o a Perfil (el Clásico).
+Brightness? brilloDeEstilo(String id) =>
+    _paletasEstilo.containsKey(id) ? (_temasClaros.contains(id) ? Brightness.light : Brightness.dark) : null;
+
+/// Tema de la tienda de estilo en uso (id de lib/imperio/estilos.dart).
+final estiloTema = ValueNotifier<String>(temaClasico);
+
+// El Clásico tiene el mismo acento en claro y en oscuro.
+Paleta _paletaEstilo() => _paletasEstilo[estiloTema.value] ?? Paleta.claro;
+
+/// Paleta de un tema para la muestra de la tienda (el Clásico, en claro).
+Paleta muestraDeTema(String id) => _paletasEstilo[id] ?? Paleta.claro;
+
+/// Paleta para un brillo: la del tema en uso si su brillo coincide; si no (el lado secreto fuerza oscuro), la clásica.
+Paleta paletaPara(Brightness brillo) {
+  final p = _paletasEstilo[estiloTema.value];
+  if (p != null && brilloDeEstilo(estiloTema.value) == brillo) return p;
+  return brillo == Brightness.dark ? Paleta.oscuro : Paleta.claro;
+}
+
+/// Modo para MaterialApp: el brillo fijo del tema o, en el Clásico, lo elegido en Perfil.
+ThemeMode modoDeTema() => switch (brilloDeEstilo(estiloTema.value)) {
+      Brightness.light => ThemeMode.light,
+      Brightness.dark => ThemeMode.dark,
+      null => temaElegido.value,
+    };
 
 /// Relleno con el borde de abajo del sistema sumado (barra de gestos o botones). Con la app de
 /// extremo a extremo, todo lo que no está sobre la barra de pestañas lo necesita.
 EdgeInsets conBordeAbajo(BuildContext context, EdgeInsets e) =>
     e.copyWith(bottom: e.bottom + MediaQuery.paddingOf(context).bottom);
 
-Paleta paleta(BuildContext context) =>
-    Theme.of(context).brightness == Brightness.dark ? Paleta.oscuro : Paleta.claro;
+Paleta paleta(BuildContext context) => paletaPara(Theme.of(context).brightness);
 
 const _tabular = [FontFeature.tabularFigures()];
 
@@ -83,14 +241,50 @@ class Rotulo extends StatelessWidget {
 /// Claro, oscuro o el del teléfono. Se elige en Perfil.
 final temaElegido = ValueNotifier<ThemeMode>(ThemeMode.system);
 
+/// Claves en SharedPreferences: el tema de la tienda en uso y la copia local de los estilos comprados
+/// (la llena lib/imperio/estilos_mios.dart).
+const prefTemaEstilo = 'tema_estilo';
+const prefEstilosComprados = 'estilos_comprados';
+
 Future<void> iniciarTema() async {
   try {
-    temaElegido.value = ThemeMode.values.byName((await SharedPreferences.getInstance()).getString('tema') ?? 'system');
+    final prefs = await SharedPreferences.getInstance();
+    temaElegido.value = ThemeMode.values.byName(prefs.getString('tema') ?? 'system');
+    // Un tema que no está en la copia local de lo comprado (o que ya no existe) vuelve al Clásico.
+    final id = prefs.getString(prefTemaEstilo) ?? temaClasico;
+    final comprados = (prefs.getStringList(prefEstilosComprados) ?? const <String>[]).toSet();
+    estiloTema.value = _paletasEstilo.containsKey(id) && tieneEstilo(comprados, id) ? id : temaClasico;
   } catch (_) {}
+}
+
+/// Pone un tema de la tienda (o el Clásico) y lo guarda. Quien llama ya revisó que lo tengas.
+Future<void> elegirEstiloTema(String id) async {
+  final nuevo = _paletasEstilo.containsKey(id) ? id : temaClasico;
+  if (estiloTema.value != nuevo) {
+    estiloTema.value = nuevo;
+    _repintarTodo();
+  }
+  try {
+    await (await SharedPreferences.getInstance()).setString(prefTemaEstilo, nuevo);
+  } catch (_) {}
+}
+
+// El acento se lee como getter (no de Theme), así que hay widgets que no se enteran del cambio: se reconstruye
+// todo el árbol después del cuadro en que MaterialApp toma el tema nuevo.
+void _repintarTodo() {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    void marcar(Element e) {
+      e.markNeedsBuild();
+      e.visitChildren(marcar);
+    }
+
+    WidgetsBinding.instance.rootElement?.visitChildren(marcar);
+  });
 }
 
 Future<void> elegirTema(ThemeMode modo) async {
   temaElegido.value = modo;
+  _repintarTodo();
   try {
     await (await SharedPreferences.getInstance()).setString('tema', modo.name);
   } catch (_) {}
@@ -99,7 +293,8 @@ Future<void> elegirTema(ThemeMode modo) async {
 const _emojisNuevos = ['EmojiNuevos'];
 
 ThemeData tema(Brightness brillo) {
-  final p = brillo == Brightness.dark ? Paleta.oscuro : Paleta.claro;
+  final p = paletaPara(brillo);
+  final acento = p.acento, acentoTexto = p.acentoTexto;
   final scheme = ColorScheme(
     brightness: brillo,
     primary: p.primario,

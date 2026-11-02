@@ -6,6 +6,8 @@ import 'package:flutter/widgets.dart';
 import '../fresca.dart' show frescaHasta;
 import '../main.dart' show db, esDeRed;
 import '../recordatorio.dart' show cancelarAvisoImperio, programarAvisoImperio;
+import 'estilos.dart';
+import 'estilos_mios.dart';
 import 'flags.dart';
 import 'motor.dart';
 import 'nube.dart';
@@ -238,6 +240,17 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     if (!sinConexion) unawaited(_cargarCadena(estadoServidor: estadoNube));
     if (!sinConexion) unawaited(_cargarProgreso());
     if (!sinConexion) unawaited(cargarCofre());
+    if (!sinConexion) unawaited(_cargarEstilos());
+  }
+
+  /// Lo comprado en la tienda de estilo (queda en una copia local para arrancar sin red).
+  Future<void> _cargarEstilos() async {
+    try {
+      await cargarEstilosMios();
+      if (!_cerrado) notifyListeners();
+    } catch (e) {
+      if (!esDeRed(e)) _error('estilos_cargar', e);
+    }
   }
 
   /// Cagadas que cuentan para candados (tope por día), pases de la racha y el empujón si el servidor lo dio.
@@ -607,6 +620,43 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
     unawaited(_guardarLocal());
     return true;
+  }
+
+  /// Precio en MJ de un estilo con el flag `estilo_precio_mult`.
+  double precioEstilo(Estilo e) => e.mj * flags.estiloPrecioMult;
+
+  /// Qué falta para comprar un estilo con lo que hay en el teléfono, o null si alcanza.
+  String? faltaParaEstilo(Estilo e, int cagadas) {
+    if (imperio.saldo < precioEstilo(e)) return 'mj';
+    if (imperio.partida.rollos < e.rollos) return 'rollos';
+    if (cagadas < e.cagadas) return 'cagadas';
+    return null;
+  }
+
+  /// Compra un estilo: la base lo anota (y revisa por encima) y aquí se descuentan los MJ y los Rollos, que viven en
+  /// el teléfono. Los Rollos gastados suben rollosGastados como los objetos de Rollos. Lanza el error de red o del
+  /// servidor sin tocar la partida.
+  Future<void> comprarEstilo(Estilo e) async {
+    if (tengoEstilo(e.id)) return;
+    final precio = precioEstilo(e);
+    if (imperio.saldo < precio || imperio.partida.rollos < e.rollos) throw StateError('falta');
+    // El servidor mira lo último guardado: primero se sube la partida.
+    await _guardarNube();
+    try {
+      await comprarEstiloEnBase(e.id);
+    } catch (err) {
+      if (!esDeRed(err)) _error('estilo_compra', err);
+      rethrow;
+    }
+    if (_cerrado) return;
+    imperio.partida
+      ..saldo = max(0, imperio.partida.saldo - precio)
+      ..rollos = max(0, imperio.partida.rollos - e.rollos)
+      ..rollosGastados += e.rollos;
+    _anotar('estilo_compra', {'id': e.id, 'mj': precio, 'rollos': e.rollos});
+    notifyListeners();
+    unawaited(_guardarLocal());
+    unawaited(_guardarNube());
   }
 
   /// Reclama el día de hoy de la racha. El servidor da Ciruelas y Fichas; aquí, producción, objetos y logro.

@@ -33,6 +33,11 @@ Future<void> elegirIdioma(String valor) async {
 /// Los errores que manda la base de datos vienen en español: aquí su versión en inglés.
 const _errores = {
   'Accesorio desconocido': 'Unknown accessory',
+  'Todavía no has comprado ese movimiento': "You haven't bought that move yet",
+  'Ese estilo no existe': "That style doesn't exist",
+  'Ese estilo es gratis': 'That style is free',
+  'Te faltan MJ': 'Not enough Poopbucks',
+  'Te faltan Rollos': 'Not enough Golden Rolls',
   'Todavía no tienes ese logro del Imperio': "You don't have that Empire achievement yet",
   'Esa cagada no es racha': "That poop isn't a streak",
   'Esa racha ya salió en el chat': 'That streak is already in the chat',
@@ -73,6 +78,8 @@ String trServidor(String mensaje) {
   if (tapada != null) return 'The toilet is clogged, your majesty: all that pooping and undoing jammed it. Come back in ${tapada[1]} min.';
   final genero = RegExp(r'^Solo puedes cambiar el género una vez al año\. Próximo cambio: (.+)$').firstMatch(mensaje);
   if (genero != null) return 'You can only change your gender once a year. Next change: ${genero[1]}';
+  final faltan = RegExp(r'^Te faltan cagadas: necesitas (\d+)$').firstMatch(mensaje);
+  if (faltan != null) return 'Not enough poops: you need ${faltan[1]}';
   final link = RegExp(r'^Link bloqueado: no se permiten (.+)$').firstMatch(mensaje);
   if (link != null) return 'Link blocked: ${_bloqueados[link[1]] ?? link[1]} not allowed';
   return mensaje;

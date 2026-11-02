@@ -33,6 +33,7 @@ import 'racha_imperio.dart' show diasRacha;
 import 'ranking_amigos.dart';
 import 'sala.dart';
 import 'tienda_ciruelas.dart';
+import 'tienda_estilo.dart';
 
 String _mj(double v) => formatoMj(v, ingles: enIngles);
 
@@ -637,6 +638,21 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                             maxLines: 1, softWrap: false, style: numeros(context, tamano: 13, color: p.textoSuave)),
                       ),
                     ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Tienda de estilo: temas, efectos de CAGUÉ y movimientos del avatar.
+              Tooltip(
+                message: tr('Tienda de estilo', 'Style shop'),
+                child: InkWell(
+                  key: const Key('boton_estilo'),
+                  onTap: () => abrirTiendaEstilo(context, _c),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: _caja(context),
+                    child: Icon(Icons.palette_outlined, size: 18, color: p.texto),
                   ),
                 ),
               ),

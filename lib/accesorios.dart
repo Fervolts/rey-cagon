@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'emoji.dart';
 import 'idioma.dart';
+import 'movimientos_avatar.dart' show ConMovimiento;
 
 /// Algo que se desbloquea al llegar a [minimo] cagadas en total.
 typedef Desbloqueo = ({String ranura, String emoji, String nombre, int minimo});
@@ -120,11 +121,14 @@ const _asiento = {'🧢': .70, '👒': .80, '🎓': .62, '🎩': .90, '🪖': .5
 /// Avatar con sus accesorios encima. Lee avatar, sombrero, lentes, mascota y cagadas de
 /// [perfil] (una fila de profiles, leaderboard o perfil). Ocupa [tamano]; los accesorios y
 /// la mascota se salen del cuadro.
+/// Avatar de [perfil] con sus accesorios. Si el mapa trae `movimiento` (id mov_* de la tienda de estilo), se anima
+/// con [ConMovimiento], salvo que [animarMovimiento] sea false o el avatar sea diminuto (menos de 24: reacciones del chat).
 class Avatar extends StatefulWidget {
-  const Avatar(this.perfil, {super.key, this.tamano = 28});
+  const Avatar(this.perfil, {super.key, this.tamano = 28, this.animarMovimiento = true});
 
   final Map<String, dynamic> perfil;
   final double tamano;
+  final bool animarMovimiento;
 
   @override
   State<Avatar> createState() => _AvatarState();
@@ -178,27 +182,33 @@ class _AvatarState extends State<Avatar> with SingleTickerProviderStateMixin {
     final avatar = widget.perfil['avatar'] as String? ?? '💩';
     final encaje = _encaje(avatar);
     final base = Emoji(avatar, tamano: t);
-    return SizedBox(
-      width: t,
-      height: t,
-      child: AnimatedBuilder(
-        animation: _reloj,
-        builder: (context, _) {
-          final segundos = _reloj.value * 60;
-          return Stack(
-            clipBehavior: Clip.none,
-            children: [
-              efectoAvatar(base, _nivel, segundos),
-              if (lentes != null) _ponerLentes(lentes, encaje.lentes, posicion(widget.perfil, 'lentes'), escala(widget.perfil, 'lentes'), t),
-              if (sombrero != null) _ponerSombrero(sombrero, encaje.sombrero, posicion(widget.perfil, 'sombrero'), escala(widget.perfil, 'sombrero'), t),
-              if (mascota != null)
-                if (_pasea)
-                  _paseo(mascota, t, segundos)
-                else
-                  Positioned(right: -t * .22, bottom: -t * .06, child: Emoji(mascota, tamano: t * .42)),
-            ],
-          );
-        },
+    final mov = widget.animarMovimiento && t >= 24 ? widget.perfil['movimiento'] as String? : null;
+    return ConMovimiento(
+      movimiento: mov,
+      tamano: t,
+      semilla: (widget.perfil['username'] ?? '').hashCode,
+      child: SizedBox(
+        width: t,
+        height: t,
+        child: AnimatedBuilder(
+          animation: _reloj,
+          builder: (context, _) {
+            final segundos = _reloj.value * 60;
+            return Stack(
+              clipBehavior: Clip.none,
+              children: [
+                efectoAvatar(base, _nivel, segundos),
+                if (lentes != null) _ponerLentes(lentes, encaje.lentes, posicion(widget.perfil, 'lentes'), escala(widget.perfil, 'lentes'), t),
+                if (sombrero != null) _ponerSombrero(sombrero, encaje.sombrero, posicion(widget.perfil, 'sombrero'), escala(widget.perfil, 'sombrero'), t),
+                if (mascota != null)
+                  if (_pasea)
+                    _paseo(mascota, t, segundos)
+                  else
+                    Positioned(right: -t * .22, bottom: -t * .06, child: Emoji(mascota, tamano: t * .42)),
+              ],
+            );
+          },
+        ),
       ),
     );
   }

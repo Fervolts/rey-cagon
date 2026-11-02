@@ -64,6 +64,9 @@ Future<int> _enviarPorRpc(List<Map<String, Object?>> lote) async {
 /// - `alquilar` {id, precio, hasta}: alquiló un objeto (además del `objeto_compra`; hasta = fin en ms, o cuándo se alquiló el Guardia)
 /// - `consumible_usar` {id, quedan, edificio?}: usó un consumible (va con `objeto_uso`, salvo la Pintura marrón, que trae `edificio`)
 /// - `rollos_gastar` {id, costo, quedan, tiene}: compró un objeto de Rollos de Oro (id de `objetosRollos`)
+/// - `estilo_abre` {}: abrió la tienda de estilo (botón 🎨 de la cabecera)
+/// - `estilo_compra` {id, mj, rollos}: compró un estilo (id de `estilos`; mj = precio con `estilo_precio_mult`, rollos gastados)
+/// - `estilo_usa` {id}: se puso un tema, un efecto de CAGUÉ o un movimiento del avatar
 /// - `error` {donde, tipo, red}: tipo = clase de la excepción; red = si fue de red. Los guardados fallidos con la app en el fondo no cuentan (se repiten al volver)
 ///
 /// Nombres: `[a-z0-9_]`, hasta 40. Datos: JSON plano, hasta ~3,5 KB (si no, se manda `{recortado: true}`).

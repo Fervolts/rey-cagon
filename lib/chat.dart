@@ -1421,7 +1421,7 @@ class _BarraFijada extends StatelessWidget {
         onTap: onTap,
         child: Container(
           decoration: BoxDecoration(
-            border: Border(left: const BorderSide(color: acento, width: 4), bottom: BorderSide(color: p.borde)),
+            border: Border(left: BorderSide(color: acento, width: 4), bottom: BorderSide(color: p.borde)),
           ),
           padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
           child: Row(children: [
@@ -1489,7 +1489,7 @@ class _Burbuja extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
             color: acento,
-            child: const Text('ADMIN', style: TextStyle(color: acentoTexto, fontSize: 9, fontWeight: FontWeight.w900)),
+            child: Text('ADMIN', style: TextStyle(color: acentoTexto, fontSize: 9, fontWeight: FontWeight.w900)),
           ),
         ],
       ]);

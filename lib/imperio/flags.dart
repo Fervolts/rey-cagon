@@ -60,6 +60,10 @@ class FlagsImperio {
   /// Como los MJ salen más lentos, `cadena_divisor` bajó de 1e10 a 1e8 para que la cadena dé los mismos rollos.
   final double escalaEdificios, escalaMejoras;
 
+  /// Multiplica el precio en MJ de la tienda de estilo (lib/imperio/tienda_estilo.dart). El servidor usa el mismo
+  /// flag en imperio_estilo_comprar. Los Rollos y las cagadas no cambian.
+  final double estiloPrecioMult;
+
   /// clave → variante asignada (solo las flags con variantes). Va en `sesion_inicio`.
   final Map<String, String> variantes;
 
@@ -86,6 +90,7 @@ class FlagsImperio {
     this.rolloPct = 0.04,
     this.escalaEdificios = 10,
     this.escalaMejoras = 100,
+    this.estiloPrecioMult = 1,
     this.variantes = const {},
   });
 
@@ -171,6 +176,7 @@ class FlagsImperio {
       rolloPct: numero('rollo_pct', d.rolloPct, 0, 1),
       escalaEdificios: numero('escala_edificios', d.escalaEdificios, 1, 1000),
       escalaMejoras: numero('escala_mejoras', d.escalaMejoras, 1, 10000),
+      estiloPrecioMult: numero('estilo_precio_mult', d.estiloPrecioMult, 0.01, 1000),
       variantes: {
         for (final e in m.entries)
           if (e.key is String && e.value is Map && (e.value as Map)['variante'] is String) e.key as String: (e.value as Map)['variante'] as String,

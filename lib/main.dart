@@ -14,6 +14,7 @@ import 'amigos.dart';
 import 'animaciones.dart';
 import 'avisos.dart';
 import 'cagadon.dart';
+import 'efecto_cague.dart';
 import 'chat.dart';
 import 'comunidad.dart';
 import 'fresca.dart';
@@ -34,6 +35,7 @@ import 'push.dart';
 import 'recuperar.dart';
 import 'recordatorio.dart';
 import 'teclado_emojis.dart' show panelEmojisAbierto;
+import 'imperio/estilos_mios.dart' show iniciarEstilos;
 import 'imperio/pantalla.dart';
 import 'tema.dart';
 import 'secreto.dart';
@@ -57,6 +59,7 @@ Future<void> main() async {
   }
   await iniciarIdioma();
   await iniciarTema();
+  await iniciarEstilos();
   await iniciarMovimiento();
   await cargarGenero();
   await elegirNombreSala();
@@ -172,7 +175,7 @@ class ReyCagonApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([idioma, temaElegido]),
+      listenable: Listenable.merge([idioma, temaElegido, estiloTema]),
       builder: (context, _) => MaterialApp(
         // Cambiar de idioma rearma toda la app con los textos nuevos.
         key: ValueKey(idioma.value),
@@ -180,7 +183,7 @@ class ReyCagonApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: tema(Brightness.light),
         darkTheme: tema(Brightness.dark),
-        themeMode: temaElegido.value,
+        themeMode: modoDeTema(),
         home: StreamBuilder<AuthState>(
           stream: db.auth.onAuthStateChange,
           builder: (context, _) =>
@@ -1223,6 +1226,8 @@ class _BotonCagueState extends State<_BotonCague> with SingleTickerProviderState
     }
     final caja = context.findRenderObject() as RenderBox?;
     final nivel = movimiento(context);
+    // El efecto de la tienda de estilo va primero: queda debajo del inodoro y no lo espera nadie.
+    if (caja != null && caja.hasSize) lanzarEfectoCague(context, boton: caja.localToGlobal(Offset.zero) & caja.size);
     final Future<void> animacion;
     if (nivel == Movimiento.nada) {
       animacion = Future.value();
@@ -1643,7 +1648,7 @@ class _BarraTu extends StatelessWidget {
     final falta = (arriba['total'] as int) - (fila['total'] as int);
     final quien = arriba['username'];
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: acento,
         border: Border(top: BorderSide(color: acentoTexto, width: 2)),
       ),
@@ -1664,12 +1669,12 @@ class _BarraTu extends StatelessWidget {
                 Text('${tr('TÚ', 'YOU')} · ${fila['username']}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: acentoTexto, fontWeight: FontWeight.w900, fontSize: 15)),
+                    style: TextStyle(color: acentoTexto, fontWeight: FontWeight.w900, fontSize: 15)),
                 Text(
                   falta == 0 ? tr('Empatado con $quien', 'Tied with $quien') : tr('A $falta de $quien', '$falta behind $quien'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: acentoTexto, fontWeight: FontWeight.w700, fontSize: 12),
+                  style: TextStyle(color: acentoTexto, fontWeight: FontWeight.w700, fontSize: 12),
                 ),
               ],
             ),
