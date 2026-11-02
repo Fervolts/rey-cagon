@@ -48,6 +48,8 @@ export 'config.dart' show supabaseKey, supabaseUrl;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Solo vertical: nada de la app está pensado para acostado.
+  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   registrarLicencias();
   await Supabase.initialize(url: supabaseUrl, publishableKey: supabaseKey);
   try {
