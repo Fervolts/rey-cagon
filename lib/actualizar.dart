@@ -17,12 +17,17 @@ const _manifiesto = '$supabaseUrl/storage/v1/object/public/releases/version.json
 var _abierto = false;
 int? _pospuesta;
 
+/// Llegó el push de versión nueva con la app abierta: el trono lo escucha y revisa en el momento,
+/// sin esperar a que la cierren y la vuelvan a abrir.
+final versionAnunciada = ValueNotifier<int>(0);
+
 /// La versión de Play (flavor `play`): ahí las actualizaciones llegan por la tienda. Sale del flavor
 /// para no depender de acordarse del --dart-define=CANAL=play, que ya se olvidó una vez.
 const esDePlay = appFlavor == 'play' || String.fromEnvironment('CANAL') == 'play';
 
-/// Al abrir la app y al volver a ella: si hay una versión con build mayor que la instalada,
-/// ofrece bajarla e instalarla. "Después" la calla hasta el próximo arranque.
+/// Al abrir la app, al volver a ella, cada 30 min con la app abierta y al llegar el push de versión:
+/// si hay una versión con build mayor que la instalada, ofrece bajarla e instalarla.
+/// "Después" calla ese build hasta el próximo arranque.
 Future<void> revisarActualizacion(BuildContext context) async {
   if (esDePlay) return _revisarPlay(context);
   if (_abierto) return;
@@ -115,29 +120,33 @@ Future<void> _revisar(BuildContext context) async {
 /// se instala y la app se reinicia sola. Solo funciona instalada desde Play.
 ///
 /// Para no deshacerle nada a nadie:
-/// - Solo se revisa al abrir la app, antes de que toque nada; al volver de otra app no, para no
-///   cortar a nadie a mitad de registrar una cagada o de escribir.
+/// - La inmediata solo en la primera revisión de la sesión, al abrir, antes de que toque nada.
+/// - Las siguientes (volver de otra app, cada 30 min, push de versión) usan la flexible: se baja de
+///   fondo y ofrece REINICIAR, sin cortar a nadie a mitad de registrar una cagada o de escribir.
 /// - Los datos viven en el servidor y las preferencias del teléfono sobreviven a la actualización;
 ///   el borrador del chat se guarda aparte (ver chat.dart).
-/// - Si la inmediata falla o la cancelan, cae a la flexible (se baja de fondo y ofrece REINICIAR).
-/// - Una sola vez por sesión.
-var _playRevisada = false;
+/// - Si la inmediata falla o la cancelan, cae a la flexible.
+/// - Como mucho una revisión cada 10 min.
+DateTime? _playRevisadaEn;
 
 Future<void> _revisarPlay(BuildContext context) async {
-  if (_playRevisada || _abierto) return;
-  _playRevisada = true;
+  final ahora = DateTime.now();
+  final primera = _playRevisadaEn == null;
+  if (_abierto || (!primera && ahora.difference(_playRevisadaEn!) < const Duration(minutes: 10))) return;
+  _playRevisadaEn = ahora;
   _abierto = true;
   try {
     final info = await InAppUpdate.checkForUpdate();
     if (!context.mounted) return;
     if (info.installStatus == InstallStatus.downloaded) return _ofrecerReinicio(context);
+    if (info.installStatus == InstallStatus.downloading || info.installStatus == InstallStatus.pending) return;
     if (info.updateAvailability == UpdateAvailability.developerTriggeredUpdateInProgress) {
       // Una inmediata que quedó a medias: se retoma.
       await InAppUpdate.performImmediateUpdate();
       return;
     }
     if (info.updateAvailability != UpdateAvailability.updateAvailable) return;
-    if (info.immediateUpdateAllowed) {
+    if (primera && info.immediateUpdateAllowed) {
       final r = await InAppUpdate.performImmediateUpdate();
       if (r == AppUpdateResult.success) return;
     }
@@ -145,7 +154,7 @@ Future<void> _revisarPlay(BuildContext context) async {
     if (await InAppUpdate.startFlexibleUpdate() != AppUpdateResult.success) return;
     if (context.mounted) _ofrecerReinicio(context);
   } catch (_) {
-    // Sin Play Store, sin internet o instalada por fuera: se revisa la próxima vez que abra.
+    // Sin Play Store, sin internet o instalada por fuera: se revisa la próxima vez.
   } finally {
     _abierto = false;
   }

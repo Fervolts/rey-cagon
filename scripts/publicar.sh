@@ -14,13 +14,26 @@ LINEA=$(grep -E '^version:' pubspec.yaml | awk '{print $2}')
 VERSION=${LINEA%+*}
 BUILD=${LINEA#*+}
 
+# Candado: la OTA sale junto con Play, nunca antes. Orden: subir el AAB a Play, esperar que la consola lo
+# muestre disponible, subir el flag build_play a ese build y recién ahí publicar aquí (migraciones y reinicios
+# que dependan de la versión nueva también van después). ANTES_DE_PLAY=1 lo salta, solo con permiso explícito.
+T="${SUPABASE_ACCESS_TOKEN:?Define SUPABASE_ACCESS_TOKEN con un token de https://supabase.com/dashboard/account/tokens}"
+if [ "${ANTES_DE_PLAY:-}" != 1 ]; then
+  EN_PLAY=$(curl -s -X POST -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+    -d '{"query":"select public.imperio_build_play() b"}' "https://api.supabase.com/v1/projects/$REF/database/query" |
+    python3 -c "import json,sys;print(json.load(sys.stdin)[0]['b'])")
+  if [ "$EN_PLAY" -lt "$BUILD" ]; then
+    echo "Play sirve el build $EN_PLAY y esta es la $BUILD. Espera la aprobación de Play y sube build_play antes de publicar." >&2
+    exit 1
+  fi
+fi
+
 flutter build apk --release --flavor directo --target-platform android-arm,android-arm64
 APK=build/app/outputs/flutter-apk/app-directo-release.apk
 SHA=$(shasum -a 256 "$APK" | awk '{print $1}')
 NOMBRE="rey-cagon-$VERSION+$BUILD.apk"
 
-# Service key del proyecto vía Management API. Requiere SUPABASE_ACCESS_TOKEN (token de acceso sbp_…).
-T="${SUPABASE_ACCESS_TOKEN:?Define SUPABASE_ACCESS_TOKEN con un token de https://supabase.com/dashboard/account/tokens}"
+# Service key del proyecto vía Management API.
 K=$(curl -s -H "Authorization: Bearer $T" "https://api.supabase.com/v1/projects/$REF/api-keys?reveal=true" |
   python3 -c "import json,sys;print([k['api_key'] for k in json.load(sys.stdin) if k.get('name')=='service_role'][0])")
 

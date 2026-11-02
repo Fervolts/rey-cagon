@@ -508,6 +508,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
   int _vueltasVistas = 0;
   late final VoidCallback _soltar;
   late final AppLifecycleListener _ciclo;
+  Timer? _relojActualizacion;
   // Se decide una vez por apertura de la app: aparece o no, y en qué esquina.
   final _secreto = Secreto();
 
@@ -533,6 +534,13 @@ class _PantallaRankingState extends State<PantallaRanking> {
     });
     // Bienvenida, permisos y actualización: una sola vez, desde el trono.
     if (widget.trono) _avisoPrimeraVez();
+    // Con la app abierta todo el rato no hay "volver": se revisa al llegar el push de versión y cada 30 min.
+    if (widget.trono) {
+      versionAnunciada.addListener(_revisarYa);
+      _relojActualizacion = Timer.periodic(const Duration(minutes: 30), (_) {
+        if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) _revisarYa();
+      });
+    }
     if (!widget.trono) irA.addListener(_irAPeriodo);
   }
 
@@ -556,8 +564,16 @@ class _PantallaRankingState extends State<PantallaRanking> {
     irA.removeListener(_irAPeriodo);
     secretoAbierto.removeListener(_alAbrirSecreto);
     _ciclo.dispose();
+    _relojActualizacion?.cancel();
+    versionAnunciada.removeListener(_revisarYa);
     _soltar();
     super.dispose();
+  }
+
+  void _revisarYa() {
+    esperarExplosion().then((_) {
+      if (mounted) revisarActualizacion(context);
+    });
   }
 
   Future<void> _avisoPrimeraVez() async {

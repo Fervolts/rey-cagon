@@ -9,7 +9,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
-import 'actualizar.dart' show esDePlay;
+import 'actualizar.dart' show esDePlay, versionAnunciada;
 import 'avisos.dart' show ir;
 import 'idioma.dart' show idioma, tr;
 import 'main.dart' show db;
@@ -86,6 +86,8 @@ Future<void> iniciarPush() async {
       ?.createNotificationChannel(_canal);
   // Con la app abierta Android no pinta el push solo: lo mostramos nosotros.
   FirebaseMessaging.onMessage.listen((m) {
+    // Versión nueva con la app abierta: además del aviso, se ofrece ya (el toque al aviso local no abre nada).
+    if (m.data['tipo'] == 'version') versionAnunciada.value++;
     final n = m.notification;
     if (n == null) return;
     notificaciones.show(
