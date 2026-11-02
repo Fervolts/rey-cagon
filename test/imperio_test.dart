@@ -416,13 +416,13 @@ void main() {
       expect(imp.edificioAbierto('bano'), isFalse);
     });
 
-    test('el Robot se esconde hasta el primer Atasco aunque tengas 10 cagadas', () {
-      final imp = Imperio(cagadas: 10);
+    test('el Robot se esconde hasta el primer Atasco aunque tengas 5 cagadas', () {
+      final imp = Imperio(cagadas: 5);
       expect(imp.objetoAbierto('robot'), isFalse);
       expect(imp.objetoAbierto('ambientador'), isTrue);
       imp.partida.vioPrimerAtasco = true;
       expect(imp.objetoAbierto('robot'), isTrue);
-      expect(Imperio(cagadas: 9, partida: Partida(vioPrimerAtasco: true)).objetoAbierto('robot'), isFalse);
+      expect(Imperio(cagadas: 3, partida: Partida(vioPrimerAtasco: true)).objetoAbierto('robot'), isFalse);
     });
 
     test('bienvenida', () {
@@ -430,8 +430,8 @@ void main() {
       expect(b.veterano, isTrue);
       expect(b.multiplicador, closeTo(1.62, 1e-9));
       expect(b.fichas, 4);
-      expect(b.candadosAbiertos, 6);
-      expect(Imperio(cagadas: 4).bienvenida().candadosAbiertos, 2);
+      expect(b.candadosAbiertos, 7);
+      expect(Imperio(cagadas: 4).bienvenida().candadosAbiertos, 3);
     });
   });
 
@@ -720,15 +720,15 @@ void main() {
     expect(imp.valorPujo(t0), (1 + 240) * 2);
     expect(imp.mpsSinEfectos(), closeTo(2 * 2 * imp.multiplicadorPermanente, 1e-9)); // solo las ciruelas
     expect(imp.mejorasDeEdificio('dedo').map((m) => m.id), containsAll(['dedo_10', 'faja']));
-    expect(imp.ritmoEfectivo(), closeTo(imp.valorPujo(t0) * 15, 1e-9));
+    expect(imp.ritmoEfectivo(), closeTo(imp.valorPujo(t0) * 20, 1e-9));
     imp.pujar(t0);
     imp.tick(t0, 1);
     expect(jsonDecode(jsonEncode(imp.toJson())), isA<Map>());
   });
 
-  test('ritmo al guardar: lo mayor entre MJ/s y 15 pujos', () {
+  test('ritmo al guardar: lo mayor entre MJ/s y 20 pujos (el tope de la mano)', () {
     final imp = Imperio();
-    expect(imp.ritmoEfectivo(), 15); // pujo de 1
+    expect(imp.ritmoEfectivo(), 20); // pujo de 1
     imp.partida.edificios['planta'] = 1;
     expect(imp.ritmoEfectivo(), imp.mpsSinEfectos());
   });

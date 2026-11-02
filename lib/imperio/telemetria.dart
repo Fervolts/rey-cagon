@@ -101,6 +101,7 @@ class Telemetria {
   String version;
 
   final List<Map<String, Object?>> _cola = [];
+  final Random _azar;
   Future<void>? _carga;
   bool _guardadoPendiente = false;
   bool _vaciando = false;
@@ -108,6 +109,7 @@ class Telemetria {
   Telemetria({EnviarEventos? enviar, int Function()? reloj, Random? azar, this.version = ''})
       : _enviar = enviar ?? _enviarPorRpc,
         _reloj = reloj ?? (() => DateTime.now().millisecondsSinceEpoch),
+        _azar = azar ?? Random.secure(),
         sesion = idSesion(azar ?? Random.secure());
 
   /// 128 bits al azar con forma de uuid v4 (la columna `sesion` es uuid).
@@ -141,7 +143,9 @@ class Telemetria {
     } catch (_) {
       d = {'recortado': true};
     }
-    _cola.add({'evento': evento, 'datos': d, 'sesion': sesion, 'version': version, 'ms': _reloj()});
+    // id: uuid propio de cada evento, para que un lote reenviado (falló la respuesta, no el insert) no se cuente dos
+    // veces (imperio_registrar lo ignora con on conflict). Viaja en la cola de disco con el evento.
+    _cola.add({'id': idSesion(_azar), 'evento': evento, 'datos': d, 'sesion': sesion, 'version': version, 'ms': _reloj()});
     _recortar();
     _cargar();
     _programarGuardado();

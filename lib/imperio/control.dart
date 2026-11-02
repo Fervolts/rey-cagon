@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/widgets.dart';
 
+import '../actualizar.dart' show buildInstalado;
 import '../fresca.dart' show frescaHasta;
 import '../main.dart' show db, esDeRed;
 import '../recordatorio.dart' show cancelarAvisoImperio, programarAvisoAtasco, programarAvisoImperio;
@@ -86,7 +87,7 @@ class ContadorSesion {
 
 /// Dueño de la partida del Imperio: carga y mezcla, reloj del servidor, bucle a 10 Hz y guardados.
 class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
-  ControlImperio({NubeImperio? nube, Telemetria? telemetria, this.pedirFlags})
+  ControlImperio({NubeImperio? nube, Telemetria? telemetria, this.pedirFlags, this.leerBuild})
       : nube = nube ?? NubeImperio(),
         _tele = telemetria ?? Telemetria.instancia;
 
@@ -94,6 +95,15 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   final Telemetria _tele;
   /// Para pruebas: de dónde salen los flags (por defecto, el RPC).
   final PedirFlags? pedirFlags;
+
+  /// Para pruebas: de dónde sale el build instalado (por defecto, [buildInstalado]).
+  final Future<int?> Function()? leerBuild;
+
+  /// Build instalado (null hasta que se lee o si no se puede leer). Se manda en cada guardado (p_version).
+  int? build;
+
+  /// El servidor respondió `version_vieja` a un guardado: el flag `version_minima` subió con la app abierta.
+  bool _servidorVersionVieja = false;
   Imperio imperio = Imperio(ajustes: FlagsImperio.porDefecto.ajustes);
 
   /// Flags remotos de esta carga (defaults hasta que lleguen).
@@ -101,6 +111,10 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Flag `imperio_activo` apagado: la pantalla muestra el aviso de mantenimiento y no se juega ni se guarda.
   bool get apagado => !flags.activo;
+
+  /// Build menor que `version_minima`: la pantalla pide actualizar y no se carga ni se juega (los guardados de
+  /// esta versión el servidor ya los ignora, así que lo que se jugara se perdería).
+  bool get versionVieja => _servidorVersionVieja || flags.bloqueaVersion(build);
 
   bool cargando = true;
   bool sinConexion = false;
@@ -119,6 +133,9 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
 
   /// El servidor dio el empujón (x2 por 30 min) y la pantalla todavía no lo avisó.
   bool empujonPendiente = false;
+
+  /// La cadena del servidor iba adelantada y se jaló aquí para alcanzarla (guardado perdido): la pantalla lo avisa.
+  bool cadenaSincronizadaPendiente = false;
   ResultadoCagadas? descargaPendiente;
 
   /// Logros nuevos para el aviso de arriba.
@@ -178,13 +195,15 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     if (_tele.version.isEmpty) unawaited(_tele.leerVersion());
     // Nunca lanza: si no hay red usa la caché y si no, los defaults.
     final flagsF = FlagsImperio.cargar(usuario: db.auth.currentUser?.id, pedir: pedirFlags);
+    final buildF = (leerBuild ?? buildInstalado)();
     final local = await nube.cargarLocal(_userId);
     final estadoLocal = local?['estado'] is Map ? Map<String, dynamic>.from(local!['estado'] as Map) : null;
     final mjLocal = estadoLocal == null ? null : (local!['mjTotal'] as num?)?.toDouble();
     final ultimaLocal = (estadoLocal?['ultima_vez'] as num?)?.toInt();
     // Flags antes que la nube: imperio_cargar consume las cagadas nuevas en el servidor y, apagado, se perderían.
     flags = await flagsF;
-    if (apagado) return _apagar();
+    build = await buildF;
+    if (apagado || versionVieja) return _apagar();
     // Volvió (también tras matar la app): los avisos de la app cerrada ya no hacen falta.
     unawaited(cancelarAvisoImperio().catchError((_) {}));
     Map<String, dynamic>? estadoNube;
@@ -295,8 +314,10 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
         _mirarCambios(anotar: false);
         unawaited(_guardarLocal());
       } else if (arreglo == ArregloCadena.jalar) {
+        _anotar('cadena_sincroniza', {'jaladas_servidor': c.jaladas, 'jaladas_partida': p.jaladas, 'mj_total': imperio.mjTotal});
         imperio.jalar();
         p.jaladas = c.jaladas;
+        cadenaSincronizadaPendiente = true;
         _mirarCambios(anotar: false);
         unawaited(guardarTodo());
       }
@@ -587,6 +608,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
 
   ResultadoPujo pujar() {
     final r = imperio.pujar(ahora);
+    if (!r.contado) return r; // pasó del tope de pujos por segundo: no cuenta para nada
     _sesion?.pujos++;
     if (!sinConexion && imperio.tirarCiruela()) unawaited(_pedirCiruela());
     _avisar();
@@ -1014,6 +1036,8 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     if (jalando) throw StateError('Ya se está jalando');
     jalando = true;
     try {
+      // El servidor revisa contra su mj_total si ya toca un Rollo: primero se le sube lo jugado.
+      await _guardarNube();
       final int n;
       try {
         n = await nube.jalar();
@@ -1079,7 +1103,12 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       // Ritmo efectivo (MJ/s o pujos del Dedo, lo mayor): el antitrampa del servidor lo usa como techo.
       // _mps_edificios y _pujo: los lee la tarjeta de cartera del chat (el servidor no confía en los números del cliente).
       final estado = {...imperio.toJson(), '_mps_edificios': imperio.mpsSinEfectos(), '_pujo': imperio.valorPujo(ahora)};
-      final r = await nube.guardar(estado, imperio.mjTotal, imperio.ritmoEfectivo(ahora));
+      final r = await nube.guardar(estado, imperio.mjTotal, imperio.ritmoEfectivo(ahora), version: build);
+      if (r.versionVieja && !_servidorVersionVieja) {
+        _servidorVersionVieja = true;
+        _anotar('version_vieja', {'build': build});
+        if (!_cerrado) notifyListeners();
+      }
       if (r.recortado) {
         // Para cazar trampas (supabase/consultas/exploits.sql): cuánto dijo la app y cuánto aceptó el servidor.
         _anotar('guardado_recortado', {'mj_app': imperio.mjTotal, 'mj_servidor': r.mjTotal});

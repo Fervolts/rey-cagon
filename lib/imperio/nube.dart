@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import '../main.dart';
 
@@ -99,7 +100,14 @@ class ResultadoGuardar {
   final double mjTotal;
   final bool recortado;
   final DateTime guardado;
-  const ResultadoGuardar({required this.mjTotal, required this.recortado, required this.guardado});
+
+  /// El servidor no guardó: copia de antes de una jalada o versión de la app por debajo de `version_minima`.
+  final bool ignorado;
+
+  /// No guardó porque la versión de la app es menor que `version_minima` (la pestaña pide actualizar).
+  final bool versionVieja;
+  const ResultadoGuardar({required this.mjTotal, required this.recortado, required this.guardado, this.ignorado = false,
+      this.versionVieja = false});
 }
 
 /// Respuesta de `imperio_progreso`.
@@ -200,19 +208,25 @@ class NubeImperio {
     return CargaImperio.desdeJson(Map<String, dynamic>.from(r as Map));
   }
 
-  Future<ResultadoGuardar> guardar(Map<String, dynamic> estado, double mjTotal, double mps) async {
-    final r = await conReintento(
-      () => db.rpc('imperio_guardar', params: {'p_estado': estado, 'p_mj_total': mjTotal, 'p_mps': mps}),
-    );
+  /// [version]: build de la app (`p_version`), para el corte de `version_minima` del servidor.
+  Future<ResultadoGuardar> guardar(Map<String, dynamic> estado, double mjTotal, double mps, {int? version}) async {
+    final params = {'p_estado': estado, 'p_mj_total': mjTotal, 'p_mps': mps};
+    Object? r;
+    try {
+      r = await conReintento(() => db.rpc('imperio_guardar', params: {...params, 'p_version': ?version}));
+    } on PostgrestException catch (e) {
+      // Servidor sin la migración del p_version (PGRST202: no hay función con esos parámetros): se manda sin él.
+      if (version == null || e.code != 'PGRST202') rethrow;
+      r = await conReintento(() => db.rpc('imperio_guardar', params: params));
+    }
     final j = Map<String, dynamic>.from(r as Map);
-    return ResultadoGuardar(mjTotal: _dbl(j['mj_total']), recortado: j['recortado'] == true, guardado: _fecha(j['guardado']));
+    return ResultadoGuardar(mjTotal: _dbl(j['mj_total']), recortado: j['recortado'] == true, guardado: _fecha(j['guardado']),
+        ignorado: j['ignorado'] == true, versionVieja: j['version_vieja'] == true);
   }
 
   /// Gasta 1 Ficha (Cagada fresca de la hoja de Fichas). Devuelve las que quedan, o -1 si no había.
-  Future<int> usarFicha() async {
-    final r = await conReintento(() => db.rpc('imperio_usar_ficha'));
-    return _ent(r);
-  }
+  /// Sin reintento: si la respuesta se pierde después de descontar, reintentar cobraría 2 Fichas por 1 Cagada fresca.
+  Future<int> usarFicha() async => _ent(await db.rpc('imperio_usar_ficha'));
 
   /// Gasta Fichas en un uso de la hoja de Fichas: 'sin_espera' (1), 'tanque_extra' (2) o 'congelador' (3).
   /// Devuelve las que quedan, -1 si no alcanzan o -2 si ya no se puede. Sin reintento para no cobrar dos veces.

@@ -2,6 +2,7 @@
 // Todo lo que depende del tiempo recibe `ahora` (ms epoch del reloj corregido con el servidor) y el azar viene inyectado.
 // La pantalla llama `tick()` ~1 vez por segundo, `pujar()` en cada toque y guarda `toJson()` en la nube.
 
+import 'dart:collection';
 import 'dart:math';
 
 import 'catalogo.dart';
@@ -23,7 +24,10 @@ class CagadaReal {
 class ResultadoPujo {
   final double ganado;
   final bool epico;
-  const ResultadoPujo(this.ganado, this.epico);
+
+  /// false si el toque pasó del tope de pujos por segundo ([Ajustes.topePujosSeg]): no dio nada ni contó.
+  final bool contado;
+  const ResultadoPujo(this.ganado, this.epico, {this.contado = true});
 }
 
 /// Lo que puede dar un mojón dorado.
@@ -184,9 +188,6 @@ const double segundosPrimerAtasco = 60;
 // La probabilidad y el valor del pujo épico salen de los ajustes (`epicoBase`, `epicoPorDedo`, `epicoTope`, `epicoTipo1`, `epicoMultiplicador`).
 const double multiplicadorFiebre = 7, multiplicadorPujoLoco = 777;
 
-/// Pujos por segundo que se suponen al calcular el ritmo que se manda al guardar. Generoso a propósito: el antitrampa
-/// del servidor no debe rechazar a nadie que puje rápido.
-const double pujosPorSegundoRitmo = 15;
 
 /// Tope de la suma de efectos de objetos y del tipo de mojón.
 const double topeEfectos = 4;
@@ -292,6 +293,9 @@ class Imperio {
   String? _ultimaCuadrilla;
   int get comprasCuadrilla => _comprasCuadrilla;
   String? get ultimaCuadrilla => _ultimaCuadrilla;
+
+  /// Momentos (ms) de los pujos de la mano que contaron en el último segundo, para el tope (no se guarda).
+  final _toques = ListQueue<int>();
 
   /// MJ del regalo diario del Súper Plomero que la pantalla aún no anunció.
   double _regaloPlomero = 0;
@@ -532,17 +536,28 @@ class Imperio {
   }
 
   /// Ritmo que se manda al guardar (`p_mps`, lo usa el servidor para el antitrampa): lo mayor entre el MJ/s sin efectos y
-  /// 15 pujos por segundo sin efectos. Así quien vive del Dedo no queda con un ritmo de 0 que le rechace el guardado.
+  /// [Ajustes.topePujosSeg] pujos por segundo (20) sin efectos. Así quien vive del Dedo no queda con un ritmo de 0 que le rechace el guardado.
   /// Con [ahora] y el Primo pujador alquilado, suma los 10 pujos por segundo de cada primo ([primosActivos]).
   double ritmoEfectivo([int? ahora]) {
     final m = mpsSinEfectos();
     final pujo = (1 + aporteDedos) * _multiplicadorClic * multiplicadorRollos + _pctPujo() * m;
     final primo = ahora != null && alquiladoActivo('primo', ahora) ? pujosPrimo * primosActivos() : 0;
-    return max(m, pujo * (pujosPorSegundoRitmo + primo));
+    // Con el tope de pujos por segundo, nadie puede pujar más rápido que esto a mano: es el ritmo máximo legítimo.
+    return max(m, pujo * (ajustes.topePujosSeg + primo));
   }
 
   /// Un toque al Mojón. Puede salir épico (`probabilidadEpicoActual`), que vale `ajustes.epicoMultiplicador` (x10).
   ResultadoPujo pujar(int ahora) {
+    // Tope de pujos por segundo, en ventana deslizante. Un reloj que retrocede vacía la ventana.
+    final tope = ajustes.topePujosSeg;
+    if (tope > 0) {
+      if (_toques.isNotEmpty && ahora < _toques.last) _toques.clear();
+      while (_toques.isNotEmpty && ahora - _toques.first >= 1000) {
+        _toques.removeFirst();
+      }
+      if (_toques.length >= tope) return const ResultadoPujo(0, false, contado: false);
+      _toques.add(ahora);
+    }
     final epico = _azar.nextDouble() < probabilidadEpicoActual(ahora);
     final ganado = valorPujo(ahora) * (epico ? ajustes.epicoMultiplicador : 1);
     _ganar(ganado);

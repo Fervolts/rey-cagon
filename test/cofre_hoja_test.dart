@@ -26,7 +26,7 @@ class _NubeCofre extends NubeImperio {
   Future<void> guardarLocal(String userId, Map<String, dynamic> estado, double mjTotal, double mps) async {}
 
   @override
-  Future<ResultadoGuardar> guardar(Map<String, dynamic> estado, double mjTotal, double mps) async => throw StateError('sin red');
+  Future<ResultadoGuardar> guardar(Map<String, dynamic> estado, double mjTotal, double mps, {int? version}) async => throw StateError('sin red');
 
   @override
   Future<CargaImperio> cargar() async => throw StateError('sin red');
