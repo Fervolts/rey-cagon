@@ -442,8 +442,10 @@ class _PantallaInicioState extends State<PantallaInicio> {
         builder: (context, abierto, barra) => abierto ? const SizedBox.shrink() : barra!,
         child: DecoratedBox(
           decoration: BoxDecoration(border: Border(top: BorderSide(color: paleta(context).borde))),
-          child: MediaQuery(
-            data: mq.copyWith(textScaler: mq.textScaler.clamp(maxScaleFactor: 1.0)),
+          // Solo limita la letra: copiar `mq` de afuera le devolvía a la barra el margen de arriba (barra de estado)
+          // que el Scaffold le quita, y quedaba un hueco encima de los iconos.
+          child: MediaQuery.withClampedTextScaling(
+            maxScaleFactor: 1.0,
             child: NavigationBarTheme(
               data: NavigationBarTheme.of(context).copyWith(
                 labelTextStyle: WidgetStatePropertyAll(
