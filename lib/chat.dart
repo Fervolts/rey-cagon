@@ -14,6 +14,7 @@ import 'amigos.dart';
 import 'animaciones.dart';
 import 'avisos.dart';
 import 'cagadon.dart' show TarjetaReto;
+import 'chat_vivo.dart';
 import 'popups.dart' show PantallaPopups;
 import 'presumir.dart';
 import 'emoji.dart';
@@ -410,6 +411,18 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
   bool _hayReacciones = true;
   RealtimeChannel? _canalReacciones;
   Timer? _reintentoReacciones;
+  // Quién escribe: broadcast de realtime, sin tabla. El nombre del canal es el mismo para todos
+  // en la sala (sin el contador de _canales) para que se oigan entre sí.
+  RealtimeChannel? _canalEscribiendo;
+  final _escribiendo = Escribiendo();
+  Timer? _venceEscribiendo;
+  final _latido = Latido();
+  var _escritoAntes = '';
+  // Bloqueos en ambos sentidos, por usuario (null mientras se pregunta).
+  final _bloqueo = <String, bool?>{};
+  // Perfiles mencionados con @ que no están en _perfiles ni en _amigos. Llave: username en minúsculas.
+  final _mencionados = <String, Map<String, dynamic>>{};
+  final _mencionPedida = <String>{};
   // Cuándo llegó cada mensaje nuevo (para animarlo una sola vez) y cuándo puse cada reacción
   // ("id emoji", para el brinco del chip).
   final _llegada = <int, DateTime>{};
@@ -467,10 +480,15 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
       _cargarAmigos();
       _texto.addListener(_buscarMencion);
     }
+    _texto.addListener(_alEscribir);
     // El borrador sobrevive a cerrar la app o a que se actualice.
     SharedPreferences.getInstance().then((prefs) {
       final b = prefs.getString(_claveBorrador);
-      if (b != null && _texto.text.isEmpty) _texto.text = b;
+      if (b != null && _texto.text.isEmpty) {
+        // El borrador no cuenta como estar escribiendo.
+        _escritoAntes = b;
+        _texto.text = b;
+      }
       _texto.addListener(() => prefs.setString(_claveBorrador, _texto.text));
     });
   }
@@ -505,6 +523,10 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
     final reacciones = _canalReacciones;
     _canalReacciones = null;
     if (reacciones != null) db.removeChannel(reacciones);
+    _venceEscribiendo?.cancel();
+    final escribiendo = _canalEscribiendo;
+    _canalEscribiendo = null;
+    if (escribiendo != null) db.removeChannel(escribiendo);
     // _version no se cierra: un hilo abierto todavía puede quitarse de oyente después.
     _texto.dispose();
     super.dispose();
@@ -718,7 +740,121 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
         });
     _canal = canal;
     _conectarReacciones();
+    if (!_unido(_canalEscribiendo)) _conectarEscribiendo();
   }
+
+  String get _temaEscribiendo => _esSoporte ? 'escribiendo-soporte-${widget.hilo}' : 'escribiendo-${widget.sala}';
+
+  void _conectarEscribiendo() {
+    final viejo = _canalEscribiendo;
+    _canalEscribiendo = null;
+    if (viejo != null) db.removeChannel(viejo);
+    _canalEscribiendo = db.channel(_temaEscribiendo).onBroadcast(event: 'escribiendo', callback: _recibirEscribiendo).subscribe();
+  }
+
+  // [hilo]: id del mensaje padre si se escribe en un hilo. Mientras se escribe sale uno cada
+  // pausaEscribiendo; al vaciar la caja, uno de "ya no".
+  void _avisarEscribiendo(bool escribe, {int? hilo, Latido? latido}) {
+    final l = latido ?? _latido;
+    if (escribe && !l.toca()) return;
+    if (!escribe) l.reiniciar();
+    final canal = _canalEscribiendo;
+    if (canal == null) return;
+    canal.sendBroadcastMessage(event: 'escribiendo', payload: {
+      'user_id': _yo,
+      'hilo': hilo,
+      'escribe': escribe,
+      'perfil': ?_perfiles[_yo],
+    }).catchError((_) => ChannelResponse.error);
+  }
+
+  void _alEscribir() {
+    final t = _texto.text;
+    if (t == _escritoAntes) return;
+    final antes = _escritoAntes;
+    _escritoAntes = t;
+    if (t.trim().isNotEmpty) {
+      _avisarEscribiendo(true);
+    } else if (antes.trim().isNotEmpty) {
+      _avisarEscribiendo(false);
+    }
+  }
+
+  void _recibirEscribiendo(Map<String, dynamic> mensaje) {
+    final datos = mensaje['payload'] is Map ? mensaje['payload'] as Map : mensaje;
+    final id = datos['user_id'];
+    if (!mounted || id is! String || id == _yo) return;
+    if (datos['escribe'] != true) {
+      if (_escribiendo.quitar(id)) setState(() {});
+      return;
+    }
+    final perfil = datos['perfil'] is Map ? Map<String, dynamic>.from(datos['perfil'] as Map) : <String, dynamic>{'id': id};
+    final hilo = datos['hilo'] == null ? null : '${datos['hilo']}';
+    if (!_bloqueo.containsKey(id)) {
+      _bloqueo[id] = null;
+      db.rpc('hay_bloqueo', params: {'otro': id}).then((r) {
+        if (mounted) setState(() => _bloqueo[id] = r == true);
+      }).catchError((_) {
+        // Si no se puede saber, se muestra: los mensajes igual los filtra la base.
+        if (mounted) setState(() => _bloqueo[id] = false);
+      });
+    }
+    _pedirPerfiles([id]);
+    setState(() => _escribiendo.senal(id, perfil, hilo: hilo));
+    _programarVencimiento();
+  }
+
+  void _programarVencimiento() {
+    _venceEscribiendo?.cancel();
+    final proximo = _escribiendo.proximoVencimiento;
+    if (proximo == null) return;
+    _venceEscribiendo = Timer(proximo.difference(DateTime.now()) + const Duration(milliseconds: 50), () {
+      if (!mounted) return;
+      if (_escribiendo.limpiar()) setState(() {});
+      _programarVencimiento();
+    });
+  }
+
+  // Para pintar: el perfil de la base si ya está, si no el que vino en la señal.
+  List<Map<String, dynamic>> _quienesEscriben({String? hilo}) => [
+        for (final id in _escribiendo.vigentes(hilo: hilo))
+          if (_bloqueo[id] == false) _perfiles[id] ?? _escribiendo.perfil(id)!,
+      ];
+
+  // Llave: username en minúsculas. Lo de _perfiles gana porque viene fresco de la base.
+  Map<String, Map<String, dynamic>> get _porUsername => {
+        for (final p in [..._mencionados.values, ..._amigos, ..._perfiles.values])
+          if (p['username'] is String) (p['username'] as String).toLowerCase(): p,
+      };
+
+  // Las @palabras que no son de nadie conocido se buscan de a tandas (también las que no existen,
+  // para no volver a pedirlas).
+  void _pedirMenciones(String? texto) {
+    if (texto == null || !texto.contains('@')) return;
+    final conocidos = _porUsername;
+    final faltan = [
+      for (final c in candidatosMencion(texto))
+        if (!conocidos.containsKey(c.toLowerCase()) && _mencionPedida.add(c.toLowerCase())) c,
+    ];
+    if (faltan.isEmpty) return;
+    db.from('profiles').select(_columnasPerfil).inFilter('username', faltan).then((r) {
+      for (final p in r) {
+        _mencionados[(p['username'] as String).toLowerCase()] = p;
+      }
+      if (mounted && r.isNotEmpty) setState(() {});
+    }).catchError((_) {
+      _mencionPedida.removeAll(faltan.map((c) => c.toLowerCase()));
+    });
+  }
+
+  void _tocarMencion(BuildContext context, Offset donde, Map<String, dynamic> perfil) {
+    final id = perfil['id'];
+    if (id is! String) return;
+    mostrarMencion(context, donde, perfil,
+        abrirPerfil: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PantallaPerfil(usuarioId: id))));
+  }
+
+  Widget _conMenciones(Widget child) => MencionesChat(perfiles: _porUsername, alTocar: _tocarMencion, child: child);
 
   // Reacciones de todos los mensajes (la tabla no tiene sala): las de mensajes que no están en
   // pantalla se ignoran. Los borrados llegan con la llave completa (mensaje, usuario, emoji).
@@ -885,6 +1021,8 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
     if (!mounted || m['id'] == null || !_esDeAqui(m)) return;
     final id = m['id'] as int;
     final padre = m['responde_a'] as int?;
+    // Llegó su mensaje: ya no está escribiendo.
+    if (!_esConocido(id) && m['user_id'] is String) _escribiendo.quitar(m['user_id'] as String);
     setState(() {
       if (_cargado && !_esConocido(id)) _llegada[id] = DateTime.now();
       if (padre == null) {
@@ -1117,6 +1255,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
           if (mounted) _aviso(context, tr('Reportado. Gracias 🙏', 'Reported. Thanks 🙏'));
         case 'bloquear':
           await db.from('bloqueos').insert({'bloqueado': m['user_id']});
+          _bloqueo[m['user_id'] as String] = true;
           if (mounted) _aviso(context, tr('Bloqueado. Ya no verás sus mensajes', "Blocked. You won't see their messages anymore"));
         case 'ocultar':
           final r = await db.from('mensajes').update({'oculto': m['oculto'] != true}).eq('id', m['id']).select().single();
@@ -1166,6 +1305,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
         hora != null &&
         horaAnterior != null &&
         hora.difference(horaAnterior).abs() < const Duration(minutes: 5);
+    _pedirMenciones(m['texto'] as String?);
     return GestureDetector(
       key: ValueKey<int>(id),
       onLongPress: () => _opciones(m, enHilo: enHilo),
@@ -1276,7 +1416,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
     super.build(context);
     final p = paleta(context);
     final fijados = _fijadosVigentes;
-    return Column(
+    return _conMenciones(Column(
       children: [
         if (fijados.isNotEmpty)
           _BarraFijada(
@@ -1352,6 +1492,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
             },
           ),
         ),
+        IndicadorEscribiendo(perfiles: _quienesEscriben()),
         if (_sugerencias.isNotEmpty)
           Container(
             height: 52,
@@ -1399,7 +1540,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
           )),
         ),
       ],
-    );
+    ));
   }
 }
 
@@ -1552,7 +1693,7 @@ class _Burbuja extends StatelessWidget {
             ),
           // La hora va pegada al final del texto, y baja de renglón si no cabe (como en WhatsApp).
           Wrap(alignment: WrapAlignment.end, crossAxisAlignment: WrapCrossAlignment.end, spacing: 8, children: [
-            if (cuerpo.isNotEmpty) _TextoConLinks(cuerpo, colorLink: mio ? acentoTexto : null),
+            if (cuerpo.isNotEmpty) _TextoConLinks(cuerpo, colorLink: mio ? acentoTexto : null, sobreAcento: mio),
             Padding(
               padding: const EdgeInsets.only(bottom: 1),
               child: Text(_hora(mensaje['created_at']), style: numeros(context, tamano: 10, color: mio ? acentoTexto.withValues(alpha: .65) : p.textoSuave)),
@@ -1752,6 +1893,8 @@ class _PantallaHilo extends StatefulWidget {
 class _PantallaHiloState extends State<_PantallaHilo> with ConTecladoEmojis {
   final _texto = TextEditingController();
   final _scroll = ScrollController();
+  final _latido = Latido();
+  var _escritoAntes = '';
   var _cargando = true;
   var _cerrado = false;
   var _cuantas = 0;
@@ -1763,6 +1906,7 @@ class _PantallaHiloState extends State<_PantallaHilo> with ConTecladoEmojis {
   void initState() {
     super.initState();
     _sala._version.addListener(_cambio);
+    _texto.addListener(_alEscribir);
     _cuantas = _sala._respuestas[_id]?.length ?? 0;
     _sala._cargarRespuestas([_id]).whenComplete(() {
       if (!mounted) return;
@@ -1795,6 +1939,19 @@ class _PantallaHiloState extends State<_PantallaHilo> with ConTecladoEmojis {
     if (bajar) _alFinal();
   }
 
+  // Lo mismo que en la sala, pero la señal lleva el id del hilo.
+  void _alEscribir() {
+    final t = _texto.text;
+    if (t == _escritoAntes) return;
+    final antes = _escritoAntes;
+    _escritoAntes = t;
+    if (t.trim().isNotEmpty) {
+      _sala._avisarEscribiendo(true, hilo: _id, latido: _latido);
+    } else if (antes.trim().isNotEmpty) {
+      _sala._avisarEscribiendo(false, hilo: _id, latido: _latido);
+    }
+  }
+
   void _alFinal() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _scroll.hasClients) _scroll.jumpTo(_scroll.position.maxScrollExtent);
@@ -1821,7 +1978,7 @@ class _PantallaHiloState extends State<_PantallaHilo> with ConTecladoEmojis {
     _sala._pedirPerfiles([padre['user_id'] as String, ...respuestas.map((m) => m['user_id'] as String)]);
     return Scaffold(
       appBar: AppBar(title: Text(tr('HILO', 'THREAD'))),
-      body: Column(children: [
+      body: _sala._conMenciones(Column(children: [
         Expanded(
           child: ListView(
             controller: _scroll,
@@ -1852,6 +2009,7 @@ class _PantallaHiloState extends State<_PantallaHilo> with ConTecladoEmojis {
             ],
           ),
         ),
+        IndicadorEscribiendo(perfiles: _sala._quienesEscriben(hilo: '$_id')),
         SafeArea(
           top: false,
           child: conPanelEmojis(context, _texto, Container(
@@ -1876,7 +2034,7 @@ class _PantallaHiloState extends State<_PantallaHilo> with ConTecladoEmojis {
             ]),
           )),
         ),
-      ]),
+      ])),
     );
   }
 }
@@ -1905,11 +2063,13 @@ final _link = RegExp(r'((https?://|www\.)[^\s<>"]+)', caseSensitive: false);
 
 /// Texto con los links tocables. Antes de abrir, muestra a qué dominio vas.
 class _TextoConLinks extends StatelessWidget {
-  const _TextoConLinks(this.texto, {this.colorLink});
+  const _TextoConLinks(this.texto, {this.colorLink, this.sobreAcento = false});
 
   final String texto;
   // Sobre la burbuja amarilla el azul no se lee: ahí los links van del color del texto.
   final Color? colorLink;
+  // La burbuja propia: el chip de mención va con la tinta del acento.
+  final bool sobreAcento;
 
   Future<void> _abrir(BuildContext context, String url) async {
     final uri = Uri.tryParse(url.startsWith('http') ? url : 'https://$url');
@@ -1933,9 +2093,21 @@ class _TextoConLinks extends StatelessWidget {
     final base = DefaultTextStyle.of(context).style;
     final tam = (base.fontSize ?? 14) * 1.2;
     final partes = <InlineSpan>[];
+    final menciones = MencionesChat.maybeOf(context)?.perfiles ?? const {};
+    // Lo que no es link: texto con emojis y, si hay @alguien real, su chip.
+    void normal(String s) {
+      var i = 0;
+      for (final m in partirMenciones(s, menciones.keys)) {
+        if (m.inicio > i) partes.addAll(spansConEmojis(s.substring(i, m.inicio), tamano: tam));
+        partes.add(chipMencion(context, s.substring(m.inicio, m.fin), menciones[m.username]!, base: base, sobreAcento: sobreAcento));
+        i = m.fin;
+      }
+      if (i < s.length) partes.addAll(spansConEmojis(s.substring(i), tamano: tam));
+    }
+
     var desde = 0;
     for (final m in _link.allMatches(texto)) {
-      if (m.start > desde) partes.addAll(spansConEmojis(texto.substring(desde, m.start), tamano: tam));
+      if (m.start > desde) normal(texto.substring(desde, m.start));
       final url = m.group(0)!;
       partes.add(TextSpan(
         text: url,
@@ -1944,7 +2116,7 @@ class _TextoConLinks extends StatelessWidget {
       ));
       desde = m.end;
     }
-    if (desde < texto.length) partes.addAll(spansConEmojis(texto.substring(desde), tamano: tam));
+    if (desde < texto.length) normal(texto.substring(desde));
     return Text.rich(TextSpan(style: base, children: partes));
   }
 }
