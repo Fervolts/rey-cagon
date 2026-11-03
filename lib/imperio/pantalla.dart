@@ -820,6 +820,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: PedidoRegalos(
@@ -844,7 +845,15 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                                 child: FittedBox(
                                   fit: BoxFit.scaleDown,
                                   alignment: Alignment.centerLeft,
-                                  child: montoMj(_mj(im.saldo), numeros(context, tamano: 32, weight: FontWeight.w900)),
+                                  // La flecha va pegada al monto: se encoge con él y se lee como parte del saldo.
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      montoMj(_mj(im.saldo), numeros(context, tamano: 32, weight: FontWeight.w900)),
+                                      const SizedBox(width: 8),
+                                      _flechaSaldo(context, punto),
+                                    ],
+                                  ),
                                 ),
                               ),
                               // MJ/s y MJ por toque en una sola línea: si no caben, se encogen (nunca se parten).
@@ -864,31 +873,18 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                             ],
                           ),
                         ),
-                        const SizedBox(width: 6),
-                        // Flecha de la hoja del saldo; con punto amarillo si hay algo por abrir.
-                        Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            Icon(Icons.expand_more, size: 20, color: p.textoSuave),
-                            if (punto)
-                              Positioned(
-                                right: -2,
-                                top: -2,
-                                child: Container(
-                                  key: const Key('punto_saldo'),
-                                  width: 8,
-                                  height: 8,
-                                  decoration: BoxDecoration(color: acento, borderRadius: BorderRadius.circular(radio)),
-                                ),
-                              ),
-                          ],
-                        ),
                       ],
                     ),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
+              // Alineados con la línea del saldo (40 de alto, botones de 34).
+              Padding(
+                padding: const EdgeInsets.only(top: 3),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
               if (racha != null) ...[
                 GestureDetector(
                   key: const Key('chip_racha'),
@@ -910,6 +906,9 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                     decoration: _caja(context),
                     child: Icon(Icons.more_horiz, size: 18, color: p.texto),
                   ),
+                ),
+              ),
+                  ],
                 ),
               ),
             ],
@@ -1049,6 +1048,32 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       });
 
   String _pctRollos(Imperio im) => porcentajeRollos(im.partida.rollos, im.ajustes.rolloPct);
+
+  /// Flecha de la hoja del saldo en su cajita; el punto amarillo (algo por abrir) va dentro de la esquina, sin salirse.
+  Widget _flechaSaldo(BuildContext context, bool punto) {
+    final p = paleta(context);
+    return Container(
+      width: 26,
+      height: 26,
+      decoration: _caja(context),
+      child: Stack(
+        children: [
+          Center(child: Icon(Icons.expand_more, size: 20, color: p.textoSuave)),
+          if (punto)
+            Positioned(
+              right: 2,
+              top: 2,
+              child: Container(
+                key: const Key('punto_saldo'),
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(color: acento, borderRadius: BorderRadius.circular(radio)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 
   Widget _chip(BuildContext context, String emoji, String texto, {Color? borde}) => Container(
         height: 34,
