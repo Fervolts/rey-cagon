@@ -7,6 +7,7 @@ import '../emoji.dart';
 import '../idioma.dart';
 import '../main.dart' show textoError;
 import '../tema.dart';
+import 'abdicar.dart';
 import 'casas.dart';
 import 'catalogo.dart';
 import 'control.dart';
@@ -40,10 +41,11 @@ const claveMudanzaVista = 'mudanza_vista';
 /// Clave en [Partida.guiaVista] cuando ya abriste la hoja de la Mudanza: el botón deja de brillar.
 const claveMudanzaAbierta = 'mudanza_abierta';
 
-/// El botón MUDANZA 🏠 de la barra: sale si ya te mudaste, si ya lo descubriste o si ya no cabes en la casa (ver [noCabes]).
+/// El botón MUDANZA 🏠 de la barra: sale si ya te mudaste o abdicaste, si ya lo descubriste o si ya no cabes en la casa
+/// (ver [noCabes]).
 bool mudanzaDescubierta(ControlImperio c) {
   final pa = c.imperio.partida;
-  return pa.mudanzas > 0 || pa.guiaVista.contains(claveMudanzaVista) || noCabes(c);
+  return pa.mudanzas > 0 || pa.abdicaciones > 0 || pa.guiaVista.contains(claveMudanzaVista) || noCabes(c);
 }
 
 /// Ya no cabes en esta casa: la mudanza está disponible, jalaste `mudanza_descubre_jaladas` veces en ella y la próxima
@@ -58,15 +60,15 @@ bool noCabes(ControlImperio c) {
       im.rollosPorGanar < a.mudanzaDescubrePct * im.rollosCasa;
 }
 
-/// El botón brilla hasta que abres la hoja por primera vez (solo antes de la primera mudanza).
+/// El botón brilla hasta que abres la hoja por primera vez (solo antes de la primera mudanza y sin abdicar).
 bool mudanzaResaltada(ControlImperio c) {
   final pa = c.imperio.partida;
-  return pa.mudanzas == 0 && !pa.guiaVista.contains(claveMudanzaAbierta);
+  return pa.mudanzas == 0 && pa.abdicaciones == 0 && !pa.guiaVista.contains(claveMudanzaAbierta);
 }
 
 /// Barra fina y cuadrada: [f] de 0 a 1.
-class _Barra extends StatelessWidget {
-  const _Barra(this.f, {this.alto = 6});
+class BarraRequisito extends StatelessWidget {
+  const BarraRequisito(this.f, {super.key, this.alto = 6});
 
   final double f;
   final double alto;
@@ -104,7 +106,7 @@ List<(String, double, double, String, String)> _requisitos(ControlImperio c) {
 double _fraccion(double valor, double meta) => meta <= 0 ? 1 : valor / meta;
 
 /// Hoja de la Mudanza (capa 2): la tarjeta DEJAS / RECIBES con los 3 requisitos y el botón MUDARSE, el Mayordomo, el
-/// Llavero y, después de la primera mudanza, el candado de lo que viene.
+/// Llavero y, después de la primera mudanza, el candado de lo que viene (o, ya descubierto, el paso a ABDICAR).
 Future<void> abrirMudanza(BuildContext context, ControlImperio control, AvisarMudanza avisar) {
   control.anotar('mudanza_abre');
   control.marcarGuia(claveMudanzaAbierta);
@@ -157,7 +159,7 @@ class _HojaMudanza extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(tr('Vives en: ${nombreCasa(m)}', 'You live in: ${nombreCasa(m)}'),
+                        Text(tr('Vives en: ', 'You live in: ') + conDinastia(nombreCasa(m), im.partida.abdicaciones),
                             style: TextStyle(fontWeight: FontWeight.w900, color: p.texto)),
                         Text(tr(casa.fraseEs, casa.fraseEn), style: suave),
                         const SizedBox(height: 2),
@@ -190,7 +192,7 @@ class _HojaMudanza extends StatelessWidget {
                                 ],
                               ),
                               const SizedBox(height: 4),
-                              _Barra(_fraccion(r.$2, r.$3), alto: 8),
+                              BarraRequisito(_fraccion(r.$2, r.$3), alto: 8),
                             ],
                           ),
                         ),
@@ -221,7 +223,10 @@ class _HojaMudanza extends StatelessWidget {
             ],
             const SizedBox(height: 16),
             SeccionLlavero(control: control, avisar: avisar),
-            if (m > 0) ...[
+            if (abdicarDescubierta(control)) ...[
+              const SizedBox(height: 8),
+              _IrAAbdicar(control: control, avisar: avisar),
+            ] else if (m > 0) ...[
               const SizedBox(height: 8),
               Container(
                 key: const Key('capa_3_candado'),
@@ -246,6 +251,50 @@ class _HojaMudanza extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// El candado de la capa 3 ya abierto: lleva a la hoja de ABDICAR 👑.
+class _IrAAbdicar extends StatelessWidget {
+  const _IrAAbdicar({required this.control, required this.avisar});
+
+  final ControlImperio control;
+  final AvisarMudanza avisar;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paleta(context);
+    return InkWell(
+      key: const Key('ir_a_abdicar'),
+      borderRadius: BorderRadius.circular(radio),
+      onTap: () {
+        final raiz = Navigator.of(context);
+        raiz.pop();
+        abrirAbdicar(raiz.context, control, avisar);
+      },
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 48),
+        padding: const EdgeInsets.all(12),
+        decoration: _caja(context, borde: abdicarResaltada(control) ? acento : null),
+        child: Row(
+          children: [
+            const Emoji('👑', tamano: 26),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(tr('ABDICAR', 'ABDICATE'), style: numeros(context, tamano: 14, weight: FontWeight.w900, color: p.texto)),
+                  Text(tr('Ni el Palacio te alcanza: deja el trono y cobra Coronas.', 'Not even the Palace is enough: leave the throne for Crowns.'),
+                      style: TextStyle(fontSize: 12, color: p.textoSuave)),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: p.textoSuave),
           ],
         ),
       ),

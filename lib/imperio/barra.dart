@@ -5,7 +5,8 @@ import '../idioma.dart';
 import '../tema.dart';
 import 'cadena.dart';
 
-/// Barra de abajo del Imperio: CAGADORES, TIENDA, JALAR (solo si [jalar] es visible), MUDANZA (solo si [mudanza]) y SALA.
+/// Barra de abajo del Imperio: CAGADORES, TIENDA, JALAR (solo si [jalar] es visible), MUDANZA (solo si [mudanza]),
+/// ABDICAR (solo si [abdicar]) y SALA.
 /// Baja, para no tapar el baño. Hasta 5 botones en 360dp: los rótulos se achican si no caben.
 /// JALAR no sale hasta comprar La cadena del trono; después de la primera jalada sale para siempre. Sin hueco.
 /// JALAR abre la hoja de la Cadena y MUDANZA la de la Mudanza (las capas de la escalera).
@@ -24,6 +25,9 @@ class BarraImperio extends StatelessWidget {
     this.mudanza = false,
     this.mudanzaResaltada = false,
     this.alMudanza,
+    this.abdicar = false,
+    this.abdicarResaltada = false,
+    this.alAbdicar,
   });
 
   final BotonJalar jalar;
@@ -40,6 +44,10 @@ class BarraImperio extends StatelessWidget {
   /// El botón MUDANZA ya se descubrió (ver mudanza.dart) y [mudanzaResaltada] lo hace brillar hasta abrir su hoja.
   final bool mudanza, mudanzaResaltada;
   final VoidCallback? alMudanza;
+
+  /// El botón ABDICAR ya se descubrió (ver abdicar.dart) y [abdicarResaltada] lo hace brillar hasta abrir su hoja.
+  final bool abdicar, abdicarResaltada;
+  final VoidCallback? alAbdicar;
 
   @override
   Widget build(BuildContext context) {
@@ -128,6 +136,7 @@ class BarraImperio extends StatelessWidget {
                 rollo: jalar.encendido),
           if (mudanza)
             boton('🏠', tr('MUDANZA', 'MOVING'), alMudanza, key: const Key('boton_mudanza'), resaltado: mudanzaResaltada),
+          if (abdicar) boton('👑', tr('ABDICAR', 'ABDICATE'), alAbdicar, key: const Key('boton_abdicar'), resaltado: abdicarResaltada),
           boton('🕹️', tr('SALA', 'ARCADE'), alSala),
         ],
       ),

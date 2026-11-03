@@ -31,6 +31,7 @@ import 'logros.dart' show presumirLogroImperio;
 import 'mana.dart';
 import 'moneda_app.dart';
 import 'motor.dart';
+import 'abdicar.dart';
 import 'mudanza.dart';
 import 'personalizar.dart';
 import 'tarjeta_bano.dart' show presumirBano;
@@ -234,6 +235,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
         _avisar('⛓️', tr('Tu cadena se puso al día con la nube', 'Your chain caught up with the cloud'));
       }
       _revisarMudanza();
+      _revisarAbdicar();
       _revisarDedo();
       _revisarEmpujon();
       _mostrarDialogos();
@@ -247,6 +249,14 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     // Antes del aviso: marcarGuia avisa a los oyentes y vuelve a entrar aquí.
     _c.marcarGuia(claveMudanzaVista);
     _avisar('🏠', tr('Ya no cabes en esta casa: 🏠 MUDANZA', 'You no longer fit in this house: 🏠 MOVING'));
+  }
+
+  /// La primera vez que el botón ABDICAR aparece: queda marcado y avisa (el botón brilla hasta abrir la hoja).
+  void _revisarAbdicar() {
+    if (_c.cargando || !abdicarDescubierta(_c) || _c.imperio.partida.guiaVista.contains(claveAbdicarVista)) return;
+    // Antes del aviso: marcarGuia avisa a los oyentes y vuelve a entrar aquí.
+    _c.marcarGuia(claveAbdicarVista);
+    _avisar('👑', tr('Ni el Palacio te alcanza: 👑 ABDICAR', 'Not even the Palace is enough: 👑 ABDICATE'));
   }
 
   /// ¿Se puede poner (o dejar) un dedo? Nunca encima de un diálogo, una hoja, un aviso, un empujón ni el cajón moviéndose.
@@ -276,6 +286,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
         abiertos: _abiertos,
         jalarVisible: botonJalar(_c.imperio, _c.cadena).visible,
         mudanza: mudanzaDescubierta(_c) && mudanzaResaltada(_c),
+        abdicar: abdicarDescubierta(_c) && abdicarResaltada(_c),
         cantidad: _cantidad);
     if (d == null || (_dedoEspera > 0 && --_dedoEspera > 0)) return;
     final raiz = _llaveEscena.currentContext;
@@ -304,6 +315,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
             DestinoQueHago.tienda => _abrirObjetos(context),
             DestinoQueHago.jalar => _abrirCadena(context),
             DestinoQueHago.mudanza => abrirMudanza(context, _c, _avisar),
+            DestinoQueHago.abdicar => abrirAbdicar(context, _c, _avisar),
             DestinoQueHago.cerrar => null,
           });
 
@@ -1553,6 +1565,9 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       mudanza: mudanzaDescubierta(_c),
       mudanzaResaltada: mudanzaResaltada(_c),
       alMudanza: () => abrirMudanza(context, _c, _avisar),
+      abdicar: abdicarDescubierta(_c),
+      abdicarResaltada: abdicarResaltada(_c),
+      alAbdicar: () => abrirAbdicar(context, _c, _avisar),
       alSala: () {
         _c.anotar('sala_abre');
         Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaSala()));

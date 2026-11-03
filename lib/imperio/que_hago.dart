@@ -21,9 +21,9 @@ const double saltoPlomeriaConviene = 1.2;
 const List<String> plomeriaQueProduce = ['tuberia_ancha', 'llave_paso'];
 
 /// A dónde lleva el botón IR de la hoja.
-enum DestinoQueHago { cerrar, edificios, tienda, jalar, mudanza }
+enum DestinoQueHago { cerrar, edificios, tienda, jalar, mudanza, abdicar }
 
-/// Una jugada sugerida. [id] va a la telemetría (`imperio_que_hago`): destapar, robot, dorado, mudanza, jalar, plomeria,
+/// Una jugada sugerida. [id] va a la telemetría (`imperio_que_hago`): destapar, robot, dorado, abdicar, mudanza, corte, jalar, plomeria,
 /// edificio, mejora, esperar o pujar. [objetivo] es el edificio o la mejora (si aplica) y [segundos], lo que falta esperando (si aplica).
 class Sugerencia {
   const Sugerencia(this.id, this.emoji, this.titulo, this.texto, this.ir, {this.objetivo, this.segundos});
@@ -168,6 +168,17 @@ String duracionCorta(int s) {
   return '${(s / 86400).round()} d';
 }
 
+/// Orden en que conviene La Corte: Heraldo y Tesorero primero, después Bufón; el resto al final.
+const ordenCorte = ['heraldo', 'tesorero', 'bufon', 'maestro_obras', 'catador', 'mayordomo_real'];
+
+/// El primer nodo de La Corte (en [ordenCorte]) que alcanza con las Coronas sin gastar, o null.
+MejoraCorte? corteConviene(Imperio im) {
+  for (final id in ordenCorte) {
+    if (im.puedeComprarCorte(id)) return mejorasCorte.firstWhere((m) => m.id == id);
+  }
+  return null;
+}
+
 /// Porcentaje de producción de [rollos] Rollos de Oro: "+40%".
 String pctRollos(int rollos, double pct) {
   final v = rollos * pct * 100;
@@ -175,12 +186,14 @@ String pctRollos(int rollos, double pct) {
 }
 
 /// La próxima jugada, en este orden: 1) un Atasco abierto (con dos o más y el Robot abierto, alquilarlo); 2) el mojón
-/// dorado en pantalla; 3) mudarse si se puede; 4) jalar si conviene (si no, siempre habría algo barato que comprar y
-/// nunca saldría); 5) un nivel de la Plomería que rinde; 6) la compra que alcanza con menor retorno; 7) pujar o esperar
-/// lo que falta para la mejor compra. [cadenaLista]: el botón JALAR está encendido (lo decide cadena.dart, que pide red;
-/// por eso llega de afuera). [mudanzaLista]: el servidor conoce la mudanza y se cumplen los requisitos (las cagadas las
-/// cuenta el servidor). [moneda]: la abreviatura de los MJ.
-Sugerencia queHagoAhora(Imperio im, int ahora, {bool cadenaLista = false, bool mudanzaLista = false, String moneda = 'MJ'}) {
+/// dorado en pantalla; 3) abdicar si se puede; 4) mudarse si se puede; 5) un nodo de La Corte si alcanzan las Coronas
+/// (Heraldo y Tesorero primero); 6) jalar si conviene (si no, siempre habría algo barato que comprar y nunca saldría);
+/// 7) un nivel de la Plomería que rinde; 8) la compra que alcanza con menor retorno; 9) pujar o esperar lo que falta para
+/// la mejor compra. [cadenaLista]: el botón JALAR está encendido (lo decide cadena.dart, que pide red; por eso llega de
+/// afuera). [mudanzaLista]: el servidor conoce la mudanza y se cumplen los requisitos (las cagadas las cuenta el
+/// servidor); [abdicarLista], lo mismo para abdicar. [moneda]: la abreviatura de los MJ.
+Sugerencia queHagoAhora(Imperio im, int ahora,
+    {bool cadenaLista = false, bool mudanzaLista = false, bool abdicarLista = false, String moneda = 'MJ'}) {
   final atascos = im.atascos;
   if (atascos.isNotEmpty && !im.robotActivo(ahora)) {
     if (atascos.length >= 2 && im.objetoAbierto('robot')) {
@@ -202,6 +215,14 @@ Sugerencia queHagoAhora(Imperio im, int ahora, {bool cadenaLista = false, bool m
         tr('Anda flotando por la pantalla y se va rápido. Trae premio.', "It's floating around the screen and leaves fast. It brings a prize."),
         DestinoQueHago.cerrar);
   }
+  if (abdicarLista) {
+    final c = im.coronasPorGanar;
+    final pct = (im.ajustes.coronaPct * 100).round();
+    return Sugerencia('abdicar', '👑', tr('Abdica', 'Abdicate'),
+        tr('Ni el Palacio te alcanza. Te llevas $c Coronas (+$pct% cada una) y empiezas otra dinastía desde el Rancho.',
+            'Not even the Palace is enough. You take $c Crowns (+$pct% each) and start a new dynasty from the Ranch.'),
+        DestinoQueHago.abdicar);
+  }
   if (mudanzaLista) {
     final m = im.partida.mudanzas + 1;
     final llaves = im.llavesPorGanar;
@@ -212,6 +233,15 @@ Sugerencia queHagoAhora(Imperio im, int ahora, {bool cadenaLista = false, bool m
             'It makes x${_mj(multiplicadorCasa(m) / multiplicadorCasa(m - 1))} and you take ${_mj(llaves.toDouble())} Keys (+$pct% each). '
                 'You start over in a bigger house.'),
         DestinoQueHago.mudanza);
+  }
+  final corte = corteConviene(im);
+  if (corte != null) {
+    final m = corte;
+    return Sugerencia('corte', m.emoji, tr('Compra ${m.nombreEs} en La Corte', 'Buy ${m.nombreEn} in the Court'),
+        tr('${m.descEs}. Cuesta ${m.precio(im.nivelCorte(m.id))} Coronas y se queda entre abdicaciones.',
+            '${m.descEn}. It costs ${m.precio(im.nivelCorte(m.id))} Crowns and stays across abdications.'),
+        DestinoQueHago.abdicar,
+        objetivo: m.id);
   }
   if (jalarConviene(im, cadenaLista: cadenaLista)) {
     final j = cuentaJalar(im);

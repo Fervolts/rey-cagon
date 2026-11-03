@@ -43,6 +43,7 @@ String _textoIr(DestinoQueHago ir) => switch (ir) {
       DestinoQueHago.tienda => tr('IR A LA TIENDA', 'GO TO THE SHOP'),
       DestinoQueHago.jalar => tr('IR A LA CADENA', 'GO TO THE CHAIN'),
       DestinoQueHago.mudanza => tr('IR A LA MUDANZA', 'GO TO MOVING'),
+      DestinoQueHago.abdicar => tr('IR A ABDICAR', 'GO TO ABDICATE'),
       DestinoQueHago.cerrar => tr('VAMOS', "LET'S GO"),
     };
 
@@ -52,7 +53,10 @@ Future<void> abrirQueHago(BuildContext context, ControlImperio control,
     {required bool Function() cadenaLista, required void Function(Sugerencia) alIr}) {
   final moneda = monedaActual().abreviatura;
   Sugerencia calcular() => queHagoAhora(control.imperio, control.ahora,
-      cadenaLista: cadenaLista(), mudanzaLista: control.mudanzaDisponible && control.imperio.puedeMudarse(control.cagadasCasa), moneda: moneda);
+      cadenaLista: cadenaLista(),
+      mudanzaLista: control.mudanzaDisponible && control.imperio.puedeMudarse(control.cagadasCasa),
+      abdicarLista: control.abdicarDisponible && control.imperio.puedeAbdicar(control.cagadasReinado),
+      moneda: moneda);
   control.anotar('imperio_que_hago', {'sugerencia': calcular().id, 'accion': 'abrir'});
   return showModalBottomSheet<void>(
     context: context,

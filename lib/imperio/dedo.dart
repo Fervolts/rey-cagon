@@ -60,16 +60,18 @@ Mejora? primeraMejoraComprable(Imperio im) {
 /// no sale ninguno de la corrida (poceta, cagadores, mejora, cadena).
 /// [cajonAbierto]: el cajón de edificios está abierto del todo. [abiertos]: desplegables de mejoras abiertos ('poceta' o
 /// el id del edificio). [jalarVisible]: el botón JALAR se ve. [mudanza]: el botón MUDANZA se ve y todavía brilla.
+/// [abdicar]: el botón ABDICAR 👑 se ve y todavía brilla.
 /// [cantidad]: cuántos compra cada toque en el cajón.
 Dedo? siguienteDedo(Imperio im, int ahora,
     {required bool cajonAbierto,
     Set<String> abiertos = const {},
     bool jalarVisible = false,
     bool mudanza = false,
+    bool abdicar = false,
     int cantidad = 1}) {
   final pa = im.partida;
   bool libre(String paso) => !pa.guiaVista.contains(claveDedo(paso));
-  final empezando = pa.jaladas == 0 && pa.mudanzas == 0;
+  final empezando = pa.jaladas == 0 && pa.mudanzas == 0 && pa.abdicaciones == 0;
   final sinCagadores = pa.edificios.values.every((n) => n <= 0);
 
   if (empezando && sinCagadores && pa.mejoras.isEmpty && !cajonAbierto && libre('poceta') &&
@@ -104,6 +106,9 @@ Dedo? siguienteDedo(Imperio im, int ahora,
   }
   if (mudanza && pa.mudanzas == 0 && libre('mudanza')) {
     return const Dedo('mudanza', Key('boton_mudanza'), 'Ya no cabes: múdate', "You don't fit anymore: move");
+  }
+  if (abdicar && pa.abdicaciones == 0 && libre('abdicar')) {
+    return const Dedo('abdicar', Key('boton_abdicar'), 'Ni el Palacio te alcanza: abdica', 'Not even the Palace is enough: abdicate');
   }
   return null;
 }

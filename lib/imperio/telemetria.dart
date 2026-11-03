@@ -90,6 +90,11 @@ Future<int> _enviarPorRpc(List<Map<String, Object?>> lote) async {
 /// - `imperio_mudanza` {mudanzas, llaves, dia}: se mudó de casa (mudanzas = las que lleva, llaves = las que ganó, dia = día de juego)
 /// - `mudanza_rechazada` {motivo}: el servidor no dejó mudarse (motivo de `imperio_mudar`)
 /// - `mudanza_sincroniza` {mudanzas_servidor, mudanzas_partida}: al cargar, el servidor tenía una mudanza que la partida no; se aplicó
+/// - `imperio_abdicar` {abdicaciones, coronas, dia}: abdicó 👑 (abdicaciones = las que lleva, coronas = las que ganó, dia = día de juego)
+/// - `imperio_corte` {id, nivel}: compró un nivel de La Corte con Coronas (id de `mejorasCorte`; nivel = el que quedó)
+/// - `abdicar_abre` {}: abrió la hoja de ABDICAR 👑
+/// - `abdicar_rechazada` {motivo}: el servidor no dejó abdicar (motivo de `imperio_abdicar`)
+/// - `abdicar_sincroniza` {abdicaciones_servidor, abdicaciones_partida}: al cargar, el servidor tenía una abdicación que la partida no; se aplicó
 /// - `estilo_abre` {}: abrió la tienda de estilo (botón 🎨 de la cabecera)
 /// - `estilo_compra` {id, mj, rollos}: compró un estilo (id de `estilos`; mj = precio con `estilo_precio_mult`, rollos gastados)
 /// - `estilo_usa` {id}: se puso un tema, un efecto de CAGUÉ o un movimiento del avatar
