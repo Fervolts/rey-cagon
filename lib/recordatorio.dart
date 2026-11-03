@@ -190,15 +190,13 @@ Future<void> programarAvisoImperio(Duration en, {String? nombreEs, String? nombr
 // destapa solo. Mismo canal e interruptor que el del Imperio; se borra al volver junto con él.
 const _idAtasco = 201;
 
-/// Programa el aviso del Atasco offline para dentro de [en] ([edificioEs] / [edificioEn] = el que se atasca). De noche
-/// sale a las 7:30, como el del Imperio. false = no se programó (avisos apagados).
+/// Programa el aviso del Atasco offline para dentro de [en] ([edificioEs] / [edificioEn] = el que se atasca). Sale a
+/// cualquier hora, también de noche, como los de las cagadas. false = no se programó (avisos apagados).
 Future<bool> programarAvisoAtasco(Duration en, {required String edificioEs, required String edificioEn}) async {
   await notificaciones.cancel(id: _idAtasco);
   final prefs = await SharedPreferences.getInstance();
   if (!(prefs.getBool(clavePocetaLocal) ?? true)) return false;
-  var cuando = tz.TZDateTime.now(tz.local).add(en < const Duration(minutes: 1) ? const Duration(minutes: 1) : en);
-  final manana = salidaDeNoche(cuando);
-  if (manana != null) cuando = tz.TZDateTime(tz.local, manana.year, manana.month, manana.day, manana.hour, manana.minute);
+  final cuando = tz.TZDateTime.now(tz.local).add(en < const Duration(minutes: 1) ? const Duration(minutes: 1) : en);
   await notificaciones.zonedSchedule(
     id: _idAtasco,
     title: tr('🪠 ¡Se te atascó la poceta!', '🪠 Your toilet got clogged!'),

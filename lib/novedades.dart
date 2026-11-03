@@ -22,6 +22,19 @@ class VersionNovedades {
 /// El historial público, de la más nueva a la más vieja. Al sacar una versión nueva se agrega arriba.
 const historialNovedades = <VersionNovedades>[
   VersionNovedades('2.15.0', '2026-11-02', [
+    ('🏠', 'MUDANZA: cuando ya jalaste bastante la cadena, múdate a una casa más grande. Se reinicia todo, pero ganas Llaves y cada casa produce mucho más que la anterior. Rancho, Casa, Quinta, Mansión y Palacio, y en cada casa tus cagadores cambian de nombre.',
+        'MOVING: once you have flushed enough, move to a bigger house. Everything resets, but you earn Keys and every house produces way more than the last one. Shack, House, Villa, Mansion and Palace, and your poopers get new names in every house.'),
+    ('🔧', 'PLOMERÍA: lo que compras con Rollos de Oro ahora sube de nivel y se queda entre jaladas hasta que te mudas.',
+        'PLUMBING: what you buy with Golden Rolls now levels up and stays between flushes until you move.'),
+    ('🔑', 'LLAVERO: gasta tus Llaves en mejoras para todas las casas, como el Mayordomo que compra solo.',
+        'KEYRING: spend your Keys on upgrades for every house, like the Butler who buys for you.'),
+    ('💩', 'Los edificios ahora se llaman cagadores.', 'Buildings are now called poopers.'),
+    ('🎁', 'Regálale un Rollo a tus amigos desde su perfil, uno por día a cada uno: al abrirlo le da 30 minutos de su producción.',
+        'Gift your friends a Roll from their profile, one per day each: opening it gives them 30 minutes of their production.'),
+    ('⚔️', 'Cagadón con apuesta: al retar puedes apostar 15, 30 o 60 minutos de producción. El que gana cobra el doble; si empatan, cada uno recupera lo suyo.',
+        'Poop-Off with a bet: when you challenge someone you can bet 15, 30 or 60 minutes of production. The winner takes double; on a tie, each one gets theirs back.'),
+    ('📱', 'Menos avisos: las cagadas de tus amigos llegan juntas, como mucho una cada 90 minutos, y en ajustes ves cuántos avisos te llegaron de cada tipo. El aviso de atasco ahora sale a cualquier hora.',
+        'Fewer notifications: your friends\' poops come bundled, at most one every 90 minutes, and settings show how many of each kind you got. The clog alert now comes at any hour.'),
     ('🎓', 'Recorrido por el Imperio: te enseña la poceta, los cagadores, las mejoras, los atascos y la cadena con tus propios números. Sale una vez, también si ya vas avanzado.',
         'Empire tour: it walks you through the toilet, poopers, upgrades, clogs and the chain with your own numbers. It shows up once, even if you are far along.'),
     ('❓', 'Botón "?" arriba: "¿Qué hago ahora?" te dice la mejor jugada del momento y te lleva directo.',
