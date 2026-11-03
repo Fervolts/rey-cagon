@@ -20,6 +20,7 @@ import 'presumir.dart';
 import 'emoji.dart';
 import 'idioma.dart';
 import 'imperio/tarjeta_bano.dart';
+import 'imperio/regalos.dart' show TarjetaImperio, TarjetaRegalo;
 import 'imperio/tarjeta_cartera.dart';
 import 'main.dart' show db, esDeRed;
 import 'panel.dart';
@@ -2049,6 +2050,8 @@ class _Tarjeta extends StatelessWidget {
     if (t['tipo'] == 'reto' || t['tipo'] == 'reto_fin') return TarjetaReto(id: t['id'] as int, compacta: true);
     if (t['tipo'] == 'cartera') return TarjetaCartera(t);
     if (t['tipo'] == 'bano') return TarjetaBano(t);
+    if (t['tipo'] == 'regalo') return TarjetaRegalo(t);
+    if (t['tipo'] == 'imperio') return TarjetaImperio(t);
     final propia = tarjetaPresumir(t);
     if (propia != null) return propia;
     return Container(

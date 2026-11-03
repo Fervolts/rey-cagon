@@ -12,6 +12,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'actualizar.dart' show esDePlay, versionAnunciada;
 import 'avisos.dart' show ir;
 import 'idioma.dart' show idioma, tr;
+import 'imperio/regalos.dart' show irARegalos;
 import 'main.dart' show db;
 import 'recordatorio.dart' show cancelarAvisoImperio, clavePocetaLocal, notificaciones;
 import 'widget.dart' show clienteDeFondo, refrescarRanking;
@@ -50,6 +51,10 @@ void _alTocar(RemoteMessage m) {
   // RAMPAGE / HEXAKILL: queda en el centro de avisos y de ahí se abre el perfil del amigo.
   if (m.data['tipo'] == 'cagada' && m.data['subtipo'] != null) {
     ir('avisos', usuario: m.data['user_id']);
+    return;
+  }
+  if (m.data['tipo'] == 'regalo') {
+    irARegalos();
     return;
   }
   final destino = switch (m.data['tipo']) {

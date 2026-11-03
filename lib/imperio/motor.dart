@@ -1751,4 +1751,30 @@ class Imperio {
   /// Lo que trae un veterano: cagadas, multiplicador, Fichas y candados abiertos.
   ResumenBienvenida bienvenida() =>
       ResumenBienvenida(cagadas, multiplicadorCagadas, fichas, candadosFase1.where((c) => candadoAbierto(c.cagadas)).length);
+
+  // ---------- Regalos (el servidor valida y cuenta; aquí solo se cobra) ----------
+
+  /// MJ de un Rollo de regalo: [minutos] (1 a 60) de producción propia al MJ/s de ahora sin efectos, más 13 como la Lluvia.
+  static double mjDeRegalo(int minutos, double mps) {
+    final m = minutos.clamp(0, 60);
+    if (m == 0) return 0;
+    return m * 60 * (mps.isFinite && mps > 0 ? mps : 0) + 13;
+  }
+
+  /// Abre un Rollo de regalo que el servidor ya dio por bueno: suma la producción y devuelve los MJ. El atasco no resta.
+  double abrirRegalo(int minutos) {
+    final mj = mjDeRegalo(minutos, mpsSinEfectos(contarAtasco: false));
+    _ganar(mj);
+    return mj;
+  }
+
+  /// Logros de regalos con lo que contó el servidor: [dados] en total y [mutuo] (abriste uno de alguien a quien también le diste).
+  List<Logro> logrosDeRegalos({int dados = 0, bool mutuo = false}) {
+    final ids = {if (dados >= 1) 'regalo_primero', if (dados >= 10) 'regalo_diez', if (mutuo) 'regalo_mutuo'};
+    final nuevos = <Logro>[];
+    for (final l in logros) {
+      if (ids.contains(l.id) && _p.logros.add(l.id)) nuevos.add(l);
+    }
+    return nuevos;
+  }
 }

@@ -35,6 +35,7 @@ import 'poceta.dart';
 import 'que_hago.dart';
 import 'racha_imperio.dart' show diasRacha;
 import 'recorrido.dart';
+import 'regalos.dart' show ChipRegalos, hayRegalos;
 import 'ranking_amigos.dart';
 import 'sala.dart';
 import 'tienda_ciruelas.dart';
@@ -795,6 +796,8 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
           child: _chip(context, '🔥', '${racha.dia}/$diasRacha', borde: racha.reclamado ? null : acento),
         ),
       if (_c.cofre != null) ChipCofre(control: _c, avisar: _avisar),
+      // Rollos de regalo por abrir (regalos.dart): solo sale si hay alguno.
+      if (hayRegalos(_c)) ChipRegalos(control: _c, avisar: _avisar),
       if (rollos > 0)
         GestureDetector(
           key: const Key('chip_rollos'),
