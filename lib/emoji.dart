@@ -174,6 +174,8 @@ const _archivos = {
   '🔑': 'key',
   '🚚': 'delivery_truck',
   '🤵': 'person_in_tuxedo',
+  '📯': 'postal_horn',
+  '🍷': 'wine_glass',
 };
 
 // Las mismas claves sin FE0F, para encontrar '🌶' igual que '🌶️'.
