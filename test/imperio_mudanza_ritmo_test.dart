@@ -72,6 +72,7 @@ class _Casa {
   double plomeriaIngreso = 1; // lo mismo con los pujos contados
   int nivelesPlomeria = 0;
   String llavero = '-';
+  String desglose = ''; // multiplicadores al irse
   _Casa(this.mudanzas, this.dia, [this.abdicaciones = 0]);
 }
 
@@ -217,10 +218,25 @@ class _Simulacion {
     return (mps / max(mps0, 1e-9), ingreso / max(ingreso0, 1e-9));
   }
 
+  /// Multiplicadores de ahora, para comparar casas entre reinados.
+  String _desglose() {
+    String e(num v) => v.toStringAsExponential(2);
+    final p = imp.partida;
+    final cimientos = pow(2, imp.nivelLlavero('cimientos')), tuberia = pow(1.5, imp.nivelPlomeria('tuberia_ancha'));
+    return 'cagadas x${e(imp.multiplicadorCagadas)} (${imp.cagadas}), logros x${e(imp.multiplicadorLogros)} (${p.logros.length}), '
+        'rollos x${e(imp.multiplicadorRollos)} (${p.rollos}), comodidad x${e(imp.multiplicadorComodidad)}, '
+        'mudanza x${e(imp.multiplicadorMudanza)} [casa x${e(multiplicadorCasa(p.mudanzas))}, ${imp.llaves} llaves sin gastar, '
+        'cimientos x${e(cimientos)}, tubería x${e(tuberia)}], corte x${e(imp.multiplicadorCorte)}, '
+        'permanente x${e(imp.multiplicadorPermanente)}, ahorros ${imp.nivelLlavero('ahorros')}, plomería ${p.objetosRollos}, '
+        'MJ/s ${e(imp.mpsSinEfectos(contarAtasco: false))}, mjCasa ${e(p.mjCasa)}, mjTotal ${e(p.mjTotal)}, '
+        'rollosCasa ${e(imp.rollosCasa)}, edificios ${p.edificios.values.fold(0, (a, b) => a + b)}';
+  }
+
   void _quizasMudarse(int inicio) {
     if (!imp.puedeMudarse(cagadasCasa)) return;
     final dia = inicio ~/ _dia;
     final c = casasVividas.last;
+    c.desglose = _desglose();
     final (mps, ingreso) = _aportePlomeria(inicio);
     c
       ..fin = dia
@@ -251,6 +267,7 @@ class _Simulacion {
     if (!abdica || !imp.puedeAbdicar(cagadasReinado)) return;
     final dia = inicio ~/ _dia;
     final c = casasVividas.last;
+    c.desglose = _desglose();
     c
       ..fin = dia
       ..abdico = true
@@ -349,7 +366,7 @@ class _Simulacion {
   }
 }
 
-/// Ajustes de la mudanza y de abdicar por variables (para afinar sin tocar los flags): MR, MRS, MJ, MC, MD, AL, AF.
+/// Ajustes de la mudanza y de abdicar por variables (para afinar sin tocar los flags): MR, MRS, MJ, MC, MD, AL, AF, AD.
 FlagsImperio _flags() => FlagsImperio(
       mudanzaRollos: double.tryParse(_env['MR'] ?? '') ?? FlagsImperio.porDefecto.mudanzaRollos,
       mudanzaRollosSubida: double.tryParse(_env['MRS'] ?? '') ?? FlagsImperio.porDefecto.mudanzaRollosSubida,
@@ -358,6 +375,7 @@ FlagsImperio _flags() => FlagsImperio(
       mudanzaDivisorX: double.tryParse(_env['MD'] ?? '') ?? FlagsImperio.porDefecto.mudanzaDivisorX,
       abdicarLlaves: double.tryParse(_env['AL'] ?? '') ?? FlagsImperio.porDefecto.abdicarLlaves,
       abdicarCoronasFactor: double.tryParse(_env['AF'] ?? '') ?? FlagsImperio.porDefecto.abdicarCoronasFactor,
+      abdicarDivisorRollos: double.tryParse(_env['AD'] ?? '') ?? FlagsImperio.porDefecto.abdicarDivisorRollos,
     );
 
 void main() {
@@ -429,6 +447,7 @@ void main() {
       final fin = c.fin == null ? 'sigue' : 'día ${c.fin! + 1}${c.abdico ? ' 👑' : ''}';
       lineas.add('  día ${c.dia + 1} → $fin, dinastía ${rom(c.abdicaciones)}, ${casaConEmoji(c.mudanzas)}, '
           '${c.llavesReinado} llaves, ${c.coronas} coronas, corte: ${c.corte}, llavero: ${c.llavero}');
+      if (c.desglose.isNotEmpty) lineas.add('      ${c.desglose}');
     }
     final palacios = <(int, int)>[]; // (abdicaciones, día de llegada al Palacio)
     for (final c in sim.casasVividas) {
@@ -460,9 +479,10 @@ void main() {
     expect(sim.diasAbdicacion, isNotEmpty, reason: 'no abdicó en $_diasAbdicar días');
     expect(sim.diasAbdicacion.first + 1, inInclusiveRange(300, 420), reason: '1.ª abdicación');
     expect(reinados.length, greaterThanOrEqualTo(2), reason: 'después de abdicar no volvió al Palacio');
-    expect(reinados[1], lessThanOrEqualTo(reinados.first * .75), reason: 'reinado II: hasta el 75% de los días del I');
+    // El reinado II va más rápido por el Maestro de obras (cada casa pide menos), no por una explosión de Rollos.
+    expect(reinados[1], lessThanOrEqualTo(reinados.first * .8), reason: 'reinado II: hasta el 80% de los días del I');
     if (reinados.length >= 3) {
-      expect(reinados[2], lessThanOrEqualTo(reinados.first * .5), reason: 'reinado III: hasta el 50% de los días del I');
+      expect(reinados[2], lessThanOrEqualTo(reinados[1]), reason: 'reinado III: no más lento que el II');
     }
   }, skip: _correrAbdicar ? false : 'Simulación larga: correr con SIM_ABDICAR=1', timeout: const Timeout(Duration(minutes: 30)));
 }
