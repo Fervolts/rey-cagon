@@ -490,7 +490,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       EfectoDorado.fiebre => tr('Fiebre dorada x${multiplicadorFiebre.toInt()} por ${r.duracion.inSeconds} s', 'Golden fever x${multiplicadorFiebre.toInt()} for ${r.duracion.inSeconds} s'),
       EfectoDorado.lluvia => tr('Lluvia de mojones +${_mj(r.cantidad)}', 'Poop rain +${_mj(r.cantidad)}'),
       EfectoDorado.pujoLoco => tr('Pujo loco por ${r.duracion.inSeconds} s', 'Crazy push for ${r.duracion.inSeconds} s'),
-      EfectoDorado.constructor => tr('Constructor: edificios -50% por ${r.duracion.inSeconds} s', 'Builder: buildings -50% for ${r.duracion.inSeconds} s'),
+      EfectoDorado.constructor => tr('Constructor: cagadores -50% por ${r.duracion.inSeconds} s', 'Builder: poopers -50% for ${r.duracion.inSeconds} s'),
     };
     final hallaca = _c.imperio.enTemporada(temporadaNavidad, _c.ahora);
     _avisar('🟡', hallaca ? tr('Hallaca dorada: $texto$doble', 'Golden hallaca: $texto$doble') : '$texto$doble');
@@ -1055,7 +1055,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       padding: const EdgeInsets.fromLTRB(16, 8, 8, 6),
       child: Row(
         children: [
-          Rotulo(tr('EDIFICIOS', 'BUILDINGS')),
+          Rotulo(tr('CAGADORES', 'POOPERS')),
           const Spacer(),
           for (final n in cantidadesCompra)
             if (visibles.contains(n)) ...[
@@ -1066,7 +1066,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
             const SizedBox(width: 8),
             Semantics(
               button: true,
-              label: tr('Cerrar edificios', 'Close buildings'),
+              label: tr('Cerrar cagadores', 'Close poopers'),
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: alCerrar,
@@ -1566,7 +1566,7 @@ class _HojaObjetos extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Rotulo(tr('¿Qué edificio pintas?', 'Which building do you paint?')),
+                Rotulo(tr('¿Qué cagador pintas?', 'Which pooper do you paint?')),
                 const SizedBox(height: 8),
                 for (final id in im.edificiosParaPintura())
                   if (edificioPorId(id) case final e?)
@@ -1685,7 +1685,7 @@ class _HojaObjetos extends StatelessWidget {
     if (!puedeUsar) {
       return avisar(o.emoji, o.id == 'destapacanos'
           ? tr('No hay ningún Atasco ahora', 'There is no Clog right now')
-          : tr('No te queda ningún edificio sin pintar', 'No unpainted building left'));
+          : tr('No te queda ningún cagador sin pintar', 'No unpainted pooper left'));
     }
     if (o.id == 'pintura') return unawaited(_elegirPintura(context));
     if (!control.usarObjeto(o.id)) return;

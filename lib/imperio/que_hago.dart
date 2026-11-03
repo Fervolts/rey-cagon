@@ -185,8 +185,8 @@ Sugerencia queHagoAhora(Imperio im, int ahora, {bool cadenaLista = false, bool m
   if (atascos.isNotEmpty && !im.robotActivo(ahora)) {
     if (atascos.length >= 2 && im.objetoAbierto('robot')) {
       return Sugerencia('robot', '🤖', tr('Alquila el Robot destapador', 'Rent the Plunger bot'),
-          tr('Tienes ${atascos.length} edificios tapados y no producen nada. El Robot los destapa solo mientras juegas.',
-              '${atascos.length} buildings are clogged and make nothing. The Plunger bot unclogs them by itself while you play.'),
+          tr('Tienes ${atascos.length} cagadores tapados y no producen nada. El Robot los destapa solo mientras juegas.',
+              '${atascos.length} poopers are clogged and make nothing. The Plunger bot unclogs them by itself while you play.'),
           DestinoQueHago.tienda);
     }
     final e = edificioPorId(atascos.first.edificio);

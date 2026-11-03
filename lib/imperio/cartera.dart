@@ -477,12 +477,12 @@ class HistoriaCartera extends StatelessWidget {
                           Text('MJ/S', style: rotulo),
                         ]),
                         const SizedBox(height: 2),
-                        if (d.movimientos.isEmpty) renglon(tr('Sin edificios todavía', 'No buildings yet'), '0', emoji: '🚽'),
+                        if (d.movimientos.isEmpty) renglon(tr('Sin cagadores todavía', 'No poopers yet'), '0', emoji: '🚽'),
                         for (final m in d.movimientos)
                           renglon('${nombreEdificio(m.edificio.id, d.mudanzas)} x${formatoCantidad(m.cantidad, ingles: enIngles)}', '+${mj(m.mps)}',
                               emoji: m.edificio.emoji),
                         if (d.otros > 0)
-                          renglon(tr('Y ${d.otros} ${d.otros == 1 ? 'edificio' : 'edificios'} más', 'And ${d.otros} more'), '+${mj(d.otrosMps)}'),
+                          renglon(tr('Y ${d.otros} ${d.otros == 1 ? 'cagador' : 'cagadores'} más', 'And ${d.otros} more'), '+${mj(d.otrosMps)}'),
                         renglon(tr('TOTAL MJ/S', 'TOTAL MJ/S'), '+${mj(d.mps)}', fuerte: true),
                         perforado(),
                         renglon(tr('MJ POR PUJO', 'MJ PER TAP'), mj(d.pujo), emoji: '💩'),

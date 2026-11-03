@@ -22,12 +22,12 @@ class VersionNovedades {
 /// El historial público, de la más nueva a la más vieja. Al sacar una versión nueva se agrega arriba.
 const historialNovedades = <VersionNovedades>[
   VersionNovedades('2.15.0', '2026-11-02', [
-    ('🎓', 'Recorrido por el Imperio: te enseña la poceta, los edificios, las mejoras, los atascos y la cadena con tus propios números. Sale una vez, también si ya vas avanzado.',
-        'Empire tour: it walks you through the toilet, buildings, upgrades, clogs and the chain with your own numbers. It shows up once, even if you are far along.'),
+    ('🎓', 'Recorrido por el Imperio: te enseña la poceta, los cagadores, las mejoras, los atascos y la cadena con tus propios números. Sale una vez, también si ya vas avanzado.',
+        'Empire tour: it walks you through the toilet, poopers, upgrades, clogs and the chain with your own numbers. It shows up once, even if you are far along.'),
     ('❓', 'Botón "?" arriba: "¿Qué hago ahora?" te dice la mejor jugada del momento y te lleva directo.',
         '"?" button at the top: "What now?" tells you the best move right now and takes you there.'),
-    ('🪠', 'Se pueden tapar hasta 3 edificios a la vez, y mientras más rápido produces, más seguido se tapan. El Robot y el Destapacaños los destapan todos.',
-        'Up to 3 buildings can clog at once, and the faster you produce, the more often they clog. The Plunger bot and Drain cleaner unclog all of them.'),
+    ('🪠', 'Se pueden tapar hasta 3 cagadores a la vez, y mientras más rápido produces, más seguido se tapan. El Robot y el Destapacaños los destapan todos.',
+        'Up to 3 poopers can clog at once, and the faster you produce, the more often they clog. The Plunger bot and Drain cleaner unclog all of them.'),
     ('💡', 'Cada alquilable tiene su "?" con lo que hace y cuánto te rinde, y el juego te avisa cuando uno te vendría bien.',
         'Every rental has a "?" showing what it does and how much it gives you, and the game tells you when one would help.'),
     ('📱', 'Arreglado el texto con espacios gigantes en "Mientras no estabas" en algunos Samsung.',
@@ -94,10 +94,10 @@ const historialNovedades = <VersionNovedades>[
     ('💡', 'Esta pantalla de Novedades.', 'This What\'s new screen.'),
   ]),
   VersionNovedades('2.12.2', '2026-11-01', [
-    ('🚽', 'Los atascos ahora se ven en todos los edificios del Imperio.', 'Clogs now show up in every Imperio building.'),
+    ('🚽', 'Los atascos ahora se ven en todos los cagadores del Imperio.', 'Clogs now show up in every Imperio pooper.'),
     ('💰', 'El saldo en las tiendas se queda fijo y ya no salta mientras compras.', 'Your balance in the shops stays put instead of jumping while you buy.'),
     ('🏆', 'Premios exclusivos para quienes juegan el Imperio.', 'Exclusive prizes for people playing the Imperio.'),
-    ('🏭', 'Edificios animados en el baño y dos logros bien escondidos.', 'Animated buildings in the bathroom and two well-hidden achievements.'),
+    ('🏭', 'Cagadores animados en el baño y dos logros bien escondidos.', 'Animated poopers in the bathroom and two well-hidden achievements.'),
   ]),
   VersionNovedades('2.12.1', '2026-11-01', [
     ('🚽', 'Poceta tapada: si abusas de cagar y deshacer, la poceta se tapa un rato.', 'Clogged toilet: if you abuse poop and undo, the toilet clogs for a while.'),
@@ -112,7 +112,7 @@ const historialNovedades = <VersionNovedades>[
   ]),
   VersionNovedades('2.1.3', '2026-11-01', [
     ('🛁', 'El baño del Imperio ahora ocupa toda la pantalla.', 'The Imperio bathroom now fills the whole screen.'),
-    ('🏗️', 'Cajón de edificios para ver y comprar todo desde un solo lugar.', 'A buildings drawer to see and buy everything in one place.'),
+    ('🏗️', 'Cajón de cagadores para ver y comprar todo desde un solo lugar.', 'A poopers drawer to see and buy everything in one place.'),
     ('💩', 'Puedes mandar la foto de tu baño al chat para presumir.', 'You can send a photo of your bathroom to the chat to show off.'),
     ('🪙', 'Maná, Rollos, Fichas, Cofre y Congelador de racha: objetos y monedas nuevas.', 'Mana, Rolls, Chips, Chest and Streak Freezer: new items and coins.'),
   ]),
@@ -131,8 +131,8 @@ const historialNovedades = <VersionNovedades>[
   ]),
   VersionNovedades('2.0.0', '2026-10-31', [
     ('🕹️', 'Llega el Imperio Cagón: un juego de clics para construir tu imperio de mojones.', 'The Imperio Cagón arrives: a clicker game to build your poop empire.'),
-    ('💰', 'Gana mojonólares (MJ) y compra edificios y mejoras.', 'Earn mojonólares (MJ) and buy buildings and upgrades.'),
-    ('🚽', 'Poceta mascota y mejoras por edificio.', 'A pet toilet and upgrades per building.'),
+    ('💰', 'Gana mojonólares (MJ) y compra cagadores y mejoras.', 'Earn mojonólares (MJ) and buy poopers and upgrades.'),
+    ('🚽', 'Poceta mascota y mejoras por cagador.', 'A pet toilet and upgrades per pooper.'),
     ('💩', 'Nueva pestaña IMPERIO en la barra de abajo.', 'New IMPERIO tab in the bottom bar.'),
     ('🔥', 'Reconexión del chat al volver a la app y ver quién reaccionó.', 'The chat reconnects when you return to the app, and you can see who reacted.'),
   ]),

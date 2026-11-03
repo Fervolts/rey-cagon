@@ -281,7 +281,7 @@ void main() {
       expect(ids, isNot(contains('objetos')));
       expect(ids, isNot(contains('cadena')));
       expect(pasos.length, inInclusiveRange(5, 6));
-      expect(pasos[1].texto, contains('compra un edificio'));
+      expect(pasos[1].texto, contains('compra un cagador'));
     });
 
     test('duraciones y porcentajes cortos', () {

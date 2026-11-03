@@ -216,7 +216,7 @@ const Map<String, (String, String, String, String, String)> _textosEfecto = {
   'fiebre_trono': ('💥', 'Fiebre de Trono', 'Throne fever', 'Producción x7', 'Production x7'),
   'empujon': ('🎁', 'Empujón', 'Boost', 'Producción x2', 'Production x2'),
   'pujo_loco': ('🍑', 'Pujo loco', 'Crazy push', 'Pujos x777', 'Pushes x777'),
-  'constructor': ('🧱', 'Constructor', 'Builder', 'Edificios a mitad de precio', 'Buildings at half price'),
+  'constructor': ('🧱', 'Constructor', 'Builder', 'Cagadores a mitad de precio', 'Poopers at half price'),
   'offline_bonus': ('🌋', 'Offline x1,5', 'Offline x1.5', 'El próximo offline cuenta x1,5', 'Next offline counts x1.5'),
   'jalon_doble': ('🚽', 'Jalón doble', 'Double flush', 'Producción x2', 'Production x2'),
   'pujo_sagrado': ('🙌', 'Pujo sagrado', 'Holy push', 'Pujos x10', 'Pushes x10'),

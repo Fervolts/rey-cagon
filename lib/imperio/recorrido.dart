@@ -51,32 +51,32 @@ List<PasoRecorrido> pasosRecorrido(Imperio im, int ahora,
       mps > 0
           ? tr('Aquí ves lo que tienes. Ahora produces ${_mj(mps)} $moneda/s, aunque no toques nada.',
               "This is what you've got. You make ${_mj(mps)} $moneda/s right now, even without tapping.")
-          : tr('Aquí ves lo que tienes. Por ahora todo sale de tus pujos: compra un edificio para que entre solo.',
-              "This is what you've got. For now it all comes from your pushes: buy a building so it flows by itself."),
+          : tr('Aquí ves lo que tienes. Por ahora todo sale de tus pujos: compra un cagador para que entre solo.',
+              "This is what you've got. For now it all comes from your pushes: buy a pooper so it flows by itself."),
       objetivo: const Key('recorrido_saldo')));
 
   final edificio = mejorCompra(im, ahora, soloEdificios: true);
-  pasos.add(PasoRecorrido('edificios', '🏗️', tr('Edificios', 'Buildings'),
+  pasos.add(PasoRecorrido('edificios', '🏗️', tr('Cagadores', 'Poopers'),
       edificio == null
-          ? tr('Aquí compras edificios: producen $moneda solos, hasta con el teléfono guardado.',
-              'Buy buildings here: they make $moneda by themselves, even with your phone in your pocket.')
-          : tr('Producen $moneda solos, hasta con el teléfono guardado. Tu próximo edificio que más rinde: ${edificio.emoji} ${edificio.nombre} '
+          ? tr('Aquí compras cagadores: producen $moneda solos, hasta con el teléfono guardado.',
+              'Buy poopers here: they make $moneda by themselves, even with your phone in your pocket.')
+          : tr('Producen $moneda solos, hasta con el teléfono guardado. Tu próximo cagador que más rinde: ${edificio.emoji} ${edificio.nombre} '
                   '(+${_mj(edificio.suma)} $moneda/s por ${_mj(edificio.precio)}).',
-              'They make $moneda by themselves, even with your phone in your pocket. Your best next building: ${edificio.emoji} '
+              'They make $moneda by themselves, even with your phone in your pocket. Your best next pooper: ${edificio.emoji} '
                   '${edificio.nombre} (+${_mj(edificio.suma)} $moneda/s for ${_mj(edificio.precio)}).'),
       objetivo: const Key('boton_edificios')));
 
   if (im.mejorasDisponibles().isNotEmpty || im.partida.mejoras.isNotEmpty) {
     pasos.add(PasoRecorrido('mejoras', '⬆️', tr('Mejoras', 'Upgrades'),
-        tr('Dentro de Edificios, cada uno tiene su ▼ con mejoras que lo multiplican. Las de la poceta engordan cada pujo.',
-            'Inside Buildings, each one has a ▼ with upgrades that multiply it. The toilet ones make every push fatter.'),
+        tr('Dentro de Cagadores, cada uno tiene su ▼ con mejoras que lo multiplican. Las de la poceta engordan cada pujo.',
+            'Inside Poopers, each one has a ▼ with upgrades that multiply it. The toilet ones make every push fatter.'),
         objetivo: const Key('boton_edificios')));
   }
 
   if (im.partida.vioPrimerAtasco || im.atascos.isNotEmpty) {
     pasos.add(PasoRecorrido('atascos', '🪠', tr('Atascos', 'Clogs'),
-        tr('A veces un edificio se tapa y no produce nada. Destápalo a toques, o alquila el Robot para que lo haga él.',
-            'Sometimes a building clogs and makes nothing. Unclog it by tapping, or rent the Plunger bot to do it for you.'),
+        tr('A veces un cagador se tapa y no produce nada. Destápalo a toques, o alquila el Robot para que lo haga él.',
+            'Sometimes a pooper clogs and makes nothing. Unclog it by tapping, or rent the Plunger bot to do it for you.'),
         objetivo: im.atascos.isNotEmpty ? const Key('tarjeta_atasco') : const Key('boton_edificios')));
   }
 
@@ -148,8 +148,8 @@ PasoRecorrido _pasoCadena(Imperio im, String moneda, {required bool jalarVisible
     final cagadas = cadenaLista ? '' : tr(' Ojo: la cadena también pide cagadas reales.', ' Heads up: the chain also needs real poops.');
     plan = '$gana$consejo$cagadas';
   }
-  final que = tr('Jalar borra tus $moneda y edificios, pero te da Rollos de Oro que duran hasta la mudanza.',
-      'Flushing wipes your $moneda and buildings, but gives you Golden Rolls that last until you move.');
+  final que = tr('Jalar borra tus $moneda y cagadores, pero te da Rollos de Oro que duran hasta la mudanza.',
+      'Flushing wipes your $moneda and poopers, but gives you Golden Rolls that last until you move.');
   return PasoRecorrido('cadena', '🧻', tr('Jalar la cadena', 'Flush the chain'), '$que $tienes $plan',
       objetivo: jalarVisible ? const Key('boton_jalar') : null);
 }
@@ -395,7 +395,7 @@ class BotonQueHago extends StatelessWidget {
 }
 
 String _textoIr(DestinoQueHago ir) => switch (ir) {
-      DestinoQueHago.edificios => tr('IR A EDIFICIOS', 'GO TO BUILDINGS'),
+      DestinoQueHago.edificios => tr('IR A CAGADORES', 'GO TO POOPERS'),
       DestinoQueHago.tienda => tr('IR A LA TIENDA', 'GO TO THE SHOP'),
       DestinoQueHago.jalar => tr('JALAR', 'FLUSH'),
       DestinoQueHago.mudanza => tr('MUDARSE', 'MOVE'),
