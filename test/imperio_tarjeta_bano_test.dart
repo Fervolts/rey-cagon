@@ -68,7 +68,7 @@ void main() {
     test('no lleva saldo ni nada fuera de lo que dibuja', () {
       final p = Partida(edificios: {'dedo': 3, 'templo': 1}, mejoras: {'dedo_5', 'iman'});
       final t = tarjetaBano({...p.toJson(), 'saldo': 999, 'nombre': 'x'}, {'est_tobo', 'trampa'});
-      expect(t.keys.toSet(), {'tipo', 'mudanzas', 'edificios', 'mejoras', 'esteticas', 'vista'});
+      expect(t.keys.toSet(), {'tipo', 'mudanzas', 'abdicaciones', 'edificios', 'mejoras', 'esteticas', 'vista'});
       expect(t['tipo'], 'bano');
       expect(t['mudanzas'], 0);
       expect(t['edificios'], {'dedo': 3, 'templo': 1});
@@ -88,7 +88,7 @@ void main() {
         'ocultos': ['3', 'camion'],
         'dedos': 24,
       });
-      expect(tarjetaBano('basura', const []), {'tipo': 'bano', 'mudanzas': 0, 'edificios': {}, 'mejoras': [], 'esteticas': [], 'vista': {}});
+      expect(tarjetaBano('basura', const []), {'tipo': 'bano', 'mudanzas': 0, 'abdicaciones': 0, 'edificios': {}, 'mejoras': [], 'esteticas': [], 'vista': {}});
     });
   });
 
@@ -111,10 +111,11 @@ void main() {
       for (final (p, est) in casos) {
         final esperado = _dePartida(p, est);
         final t = _porJson(tarjetaBano(jsonDecode(jsonEncode(p.toJson())), est));
-        final (:bano, :dedos, :mudanzas) = banoDeTarjeta(t);
+        final (:bano, :dedos, :mudanzas, :abdicaciones) = banoDeTarjeta(t);
         expect(bano, esperado.bano, reason: '${p.vista}');
         expect(dedos, esperado.dedos, reason: '${p.vista}');
         expect(mudanzas, p.mudanzas);
+        expect(abdicaciones, p.abdicaciones);
       }
     });
 
@@ -138,6 +139,9 @@ void main() {
       expect(tarjetaBano({'mudanzas': 'x'}, const [])['mudanzas'], 0);
       expect(banoDeTarjeta({'tipo': 'bano', 'mudanzas': 2}).mudanzas, 2);
       expect(banoDeTarjeta({'tipo': 'bano', 'mudanzas': 'x'}).mudanzas, 0);
+      expect(tarjetaBano({'abdicaciones': 2}, const [])['abdicaciones'], 2);
+      expect(tarjetaBano({'abdicaciones': -1}, const [])['abdicaciones'], 0);
+      expect(banoDeTarjeta({'tipo': 'bano', 'abdicaciones': 1}).abdicaciones, 1);
     });
   });
 

@@ -56,6 +56,12 @@ String nombreCasa(int mudanzas) {
 /// Emoji y nombre: "🏡 Quinta".
 String casaConEmoji(int mudanzas) => '${casaDe(mudanzas).emoji} ${nombreCasa(mudanzas)}';
 
+/// La dinastía tras [abdicaciones] ("Dinastía II" después de la 1.ª abdicación). Sin abdicar no hay: ''.
+String dinastia(int abdicaciones) => abdicaciones <= 0 ? '' : '${tr('Dinastía', 'Dynasty')} ${_romano(abdicaciones + 1)}';
+
+/// [texto] de la casa con la dinastía detrás: "Rancho · Dinastía II". Sin abdicar, [texto] tal cual.
+String conDinastia(String texto, int abdicaciones) => abdicaciones <= 0 ? texto : '$texto · ${dinastia(abdicaciones)}';
+
 /// Nombres de los edificios en Casa, Quinta, Mansión y Palacio (es, en). En el Rancho son los del catálogo.
 const Map<String, List<(String, String)>> _nombresPorCasa = {
   'dedo': [
