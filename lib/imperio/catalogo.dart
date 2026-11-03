@@ -437,7 +437,8 @@ class Logro {
 /// Veces que se tocó una cosa del baño ([Partida.toques]).
 int _toques(Partida p, String id) => p.toques[id] ?? 0;
 
-/// Los 49 logros: 20 de la fase 1, 4 de la cadena, el de la racha, 15 de la fase 2, 8 escondidos del baño y 1 de temporada.
+/// Los 52 logros: 20 de la fase 1, 4 de la cadena, el de la racha, 15 de la fase 2, 8 escondidos del baño, 1 de temporada
+/// y 3 del Cagadón con apuesta.
 final List<Logro> logros = [
   Logro('primer_pujo', 'Primer pujo', 'First push', '1 pujo', '1 push', (p, _) => p.pujos >= 1),
   Logro('calentando', 'Calentando', 'Warming up', '100 pujos', '100 pushes', (p, _) => p.pujos >= 100),
@@ -516,6 +517,10 @@ final List<Logro> logros = [
   // Exclusivo de temporada: solo se gana jugando mientras el servidor tenga encendido el Día Mundial del Retrete.
   Logro('dia_retrete', 'Día Mundial del Retrete', 'World Toilet Day', 'Jugar el Imperio el Día Mundial del Retrete (19 nov)',
       'Play the Imperio on World Toilet Day (Nov 19)', (p, _) => p.temporadas.contains(temporadaDiaRetrete)),
+  // Cagadón con apuesta (lib/imperio/apuesta.dart): los da el controlador al cobrar un premio que validó el servidor.
+  Logro('apuesta_ganada', 'Apostador', 'Gambler', 'Cobrar una apuesta del Cagadón', 'Collect a Poop-Off bet', (p, _) => false),
+  Logro('apuestas_5', 'Tahúr del trono', 'Throne shark', 'Ganar 5 apuestas del Cagadón', 'Win 5 Poop-Off bets', (p, _) => false),
+  Logro('apuesta_60', 'Todo o nada', 'All or nothing', 'Ganar una apuesta de 60 minutos', 'Win a 60-minute bet', (p, _) => false),
 ];
 
 /// Las cosas del baño que cuentan para [Partida.toques] (lo demás que llegue se ignora).

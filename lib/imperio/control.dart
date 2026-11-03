@@ -7,6 +7,8 @@ import '../actualizar.dart' show buildInstalado;
 import '../fresca.dart' show frescaHasta;
 import '../main.dart' show db, esDeRed;
 import '../recordatorio.dart' show cancelarAvisoImperio, programarAvisoAtasco, programarAvisoImperio;
+import 'apuesta.dart';
+import 'apuesta_local.dart';
 import 'estilos.dart';
 import 'estilos_mios.dart';
 import 'flags.dart';
@@ -254,6 +256,8 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     _sumarLogros(imperio.revisarLogros());
     _mirarCambios(anotar: false);
     _cargado = true;
+    vivo = this;
+    unawaited(aplicarApuestas());
     cargando = false;
     frescaHasta.addListener(_ponerFresca);
     _ponerFresca();
@@ -1161,6 +1165,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   @override
   void dispose() {
     _cerrado = true;
+    if (identical(vivo, this)) vivo = null;
     frescaHasta.removeListener(_ponerFresca);
     _bucle?.cancel();
     _bucle = null;
@@ -1168,5 +1173,49 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_cargado ? guardarTodo() : _vaciarTelemetria());
     super.dispose();
+  }
+
+  // ---------- Cagadón con apuesta (apuesta.dart, apuesta_local.dart) ----------
+
+  /// El controlador cargado, si hay uno: lo que se apuesta o cobra en el chat se aplica al momento en vez de esperar a
+  /// que se abra el Imperio.
+  static ControlImperio? vivo;
+
+  bool _aplicandoApuestas = false;
+
+  bool get apuestaCargada => _cargado && !_cerrado;
+
+  /// Para apostar con la partida abierta: null si el Imperio está apagado, la versión bloqueada, las apuestas apagadas o
+  /// todavía no hay producción.
+  ResumenApuesta? get resumenApuesta {
+    if (!apuestaCargada || apagado || versionVieja || flags.apuestaMaxMin <= 0 || imperio.mjTotal <= 0) return null;
+    final mps = imperio.mpsSinEfectos(contarAtasco: false);
+    return mps > 0 && mps.isFinite ? ResumenApuesta(saldo: imperio.saldo, mps: mps, tope: flags.apuestaMaxMin) : null;
+  }
+
+  /// Aplica la cola de la apuesta (descuentos, premios y devoluciones) con la producción de ahora. Apagado o con la
+  /// versión bloqueada, la cola espera. Los premios dan sus logros (el servidor ya validó el ganador y el cobro único).
+  Future<void> aplicarApuestas() async {
+    if (!apuestaCargada || apagado || versionVieja || _aplicandoApuestas) return;
+    _aplicandoApuestas = true;
+    try {
+      final cola = await sacarApuntes(_userId);
+      if (cola.isEmpty) return;
+      if (_cerrado) return await devolverApuntes(_userId, cola);
+      final mps = imperio.mpsSinEfectos(contarAtasco: false);
+      final p = imperio.partida;
+      final nuevos = <Logro>[];
+      for (final a in cola) {
+        aplicarApunte(p, a, mps);
+        for (final id in logrosDeApunte(a)) {
+          final l = logroPorId(id);
+          if (l != null && p.logros.add(id)) nuevos.add(l);
+        }
+      }
+      _sumarLogros(nuevos);
+      _fichasHechas();
+    } finally {
+      _aplicandoApuestas = false;
+    }
   }
 }

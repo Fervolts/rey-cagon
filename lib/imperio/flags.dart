@@ -87,6 +87,10 @@ class FlagsImperio {
   /// flag en imperio_estilo_comprar. Los Rollos y las cagadas no cambian.
   final double estiloPrecioMult;
 
+  /// Tope de la apuesta del Cagadón en minutos de producción (`apuesta_max_min`, lib/imperio/apuesta.dart). 0 apaga
+  /// las apuestas. El servidor valida el mismo flag al retar.
+  final int apuestaMaxMin;
+
   /// clave → variante asignada (solo las flags con variantes). Va en `sesion_inicio`.
   final Map<String, String> variantes;
 
@@ -128,6 +132,7 @@ class FlagsImperio {
     this.escalaEdificios = 10,
     this.escalaMejoras = 100,
     this.estiloPrecioMult = 1,
+    this.apuestaMaxMin = 60,
     this.variantes = const {},
     this.temporadas = const [],
   });
@@ -237,6 +242,7 @@ class FlagsImperio {
       escalaEdificios: numero('escala_edificios', d.escalaEdificios, 1, 1000),
       escalaMejoras: numero('escala_mejoras', d.escalaMejoras, 1, 10000),
       estiloPrecioMult: numero('estilo_precio_mult', d.estiloPrecioMult, 0.01, 1000),
+      apuestaMaxMin: numero('apuesta_max_min', d.apuestaMaxMin.toDouble(), 0, 60).round(),
       temporadas: leerTemporadas(valor('temporadas')),
       variantes: {
         for (final e in m.entries)

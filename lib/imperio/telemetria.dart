@@ -87,6 +87,11 @@ Future<int> _enviarPorRpc(List<Map<String, Object?>> lote) async {
 /// - `estilo_usa` {id}: se puso un tema, un efecto de CAGUÉ o un movimiento del avatar
 /// - `temporada_ve` {id}: jugó con una temporada activa (id de lib/imperio/temporadas.dart: `dia_retrete`, `navidad`);
 ///   una vez por temporada en cada sesión de juego (entre `sesion_inicio` y `sesion_fin`)
+/// - `imperio_apuesta` {min, rol, fraccion}: apostó en un Cagadón (lib/imperio/apuesta.dart). min = 15, 30 o 60 minutos de su
+///   producción; rol = `reta` o `acepta`; fraccion = parte pagada (0 a 1, menos de 1 si no le alcanzaba el saldo). Puede salir
+///   fuera del Imperio (chat): el descuento se aplica al abrirlo
+/// - `imperio_apuesta_cobra` {resultado, min, minutos, mj}: tocó COBRAR (`gana`, doble de lo pagado) o RECUPERAR (`devuelve`:
+///   empate, rechazo, cancelación, vencido o anulada). minutos = los que dio el servidor; mj = MJ estimados con la producción de ese momento (null si no hay Imperio)
 /// - `error` {donde, tipo, red}: tipo = clase de la excepción; red = si fue de red. Los guardados fallidos con la app en el fondo no cuentan (se repiten al volver)
 ///
 /// Nombres: `[a-z0-9_]`, hasta 40. Datos: JSON plano, hasta ~3,5 KB (si no, se manda `{recortado: true}`).
