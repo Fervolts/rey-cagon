@@ -5,6 +5,7 @@
 import 'dart:collection';
 import 'dart:math';
 
+import 'casas.dart';
 import 'catalogo.dart';
 import 'esteticas.dart';
 import 'estado.dart';
@@ -215,7 +216,7 @@ const Map<String, (String, String, String, String, String)> _textosEfecto = {
   'fiebre_trono': ('💥', 'Fiebre de Trono', 'Throne fever', 'Producción x7', 'Production x7'),
   'empujon': ('🎁', 'Empujón', 'Boost', 'Producción x2', 'Production x2'),
   'pujo_loco': ('🍑', 'Pujo loco', 'Crazy push', 'Pujos x777', 'Pushes x777'),
-  'constructor': ('🧱', 'Constructor', 'Builder', 'Edificios a mitad de precio', 'Buildings at half price'),
+  'constructor': ('🧱', 'Constructor', 'Builder', 'Cagadores a mitad de precio', 'Poopers at half price'),
   'offline_bonus': ('🌋', 'Offline x1,5', 'Offline x1.5', 'El próximo offline cuenta x1,5', 'Next offline counts x1.5'),
   'jalon_doble': ('🚽', 'Jalón doble', 'Double flush', 'Producción x2', 'Production x2'),
   'pujo_sagrado': ('🙌', 'Pujo sagrado', 'Holy push', 'Pujos x10', 'Pushes x10'),
@@ -302,6 +303,10 @@ class Imperio {
 
   /// Compras de la Cuadrilla en esta sesión y la última que hizo (no se guardan): la pantalla las anima.
   int _comprasCuadrilla = 0;
+
+  /// Segundos activos acumulados para la próxima compra del Mayordomo (no se guarda).
+  double _segMayordomo = 0;
+  int _comprasMayordomo = 0;
   String? _ultimaCuadrilla;
   int get comprasCuadrilla => _comprasCuadrilla;
   String? get ultimaCuadrilla => _ultimaCuadrilla;
@@ -364,6 +369,7 @@ class Imperio {
     if (mj.isNaN || mj <= 0) return;
     _p.saldo += mj;
     _p.mjTotal += mj;
+    if (_p.mudanzas > 0) _p.mjEnCasa += mj;
   }
 
   bool _activo(String id, int ahora) => (_p.efectos[id] ?? 0) > ahora;
@@ -432,8 +438,29 @@ class Imperio {
     return s;
   }
 
-  /// Cagadas x logros x rollos x comodidad: lo que no se acaba.
-  double get multiplicadorPermanente => multiplicadorCagadas * multiplicadorLogros * multiplicadorRollos * multiplicadorComodidad;
+  /// Llaves sin gastar: las ganadas al mudarte menos lo que costó el Llavero.
+  int get llaves => max(0, _p.llavesGanadas - costoLlavero(_p.llavero));
+
+  /// Nivel de [id] en el Llavero (cortado a su máximo).
+  int nivelLlavero(String id) => min(_p.llavero[id] ?? 0, mejoraLlaveroPorId(id)?.limite ?? 0);
+
+  /// Nivel de [id] en la Plomería (cortado a su máximo).
+  int nivelPlomeria(String id) => min(tieneObjetoRollos(id), objetoRollosPorId(id)?.limite ?? 0);
+
+  /// Lo que viene de la mudanza: la casa, +`ajustes.llavePct` por Llave sin gastar, Cimientos (x2 por nivel) y Tubería
+  /// ancha (x1,5 por nivel). En el Rancho sin nada da x1.
+  double get multiplicadorMudanza =>
+      multiplicadorCasa(_p.mudanzas) *
+      (1 + llaves * ajustes.llavePct) *
+      pow(2, nivelLlavero('cimientos')) *
+      pow(1.5, nivelPlomeria('tuberia_ancha'));
+
+  /// Llave de paso: la parte del clic del pujo x3 por nivel.
+  double get multiplicadorLlavePaso => pow(3, nivelPlomeria('llave_paso')).toDouble();
+
+  /// Cagadas x logros x rollos x comodidad x mudanza: lo que no se acaba en la corrida.
+  double get multiplicadorPermanente =>
+      multiplicadorCagadas * multiplicadorLogros * multiplicadorRollos * multiplicadorComodidad * multiplicadorMudanza;
 
   /// Suma de efectos temporales sobre la producción (objetos + tipo), tope x4. No incluye la Fiebre.
   double multiplicadorProduccionTemporal(int ahora) {
@@ -547,17 +574,18 @@ class Imperio {
     return _activo('pujo_loco', ahora) ? t * multiplicadorPujoLoco : t;
   }
 
-  /// MJ de un pujo normal (sin épico): ((1 + aporteDedos) × 2^x2 de clic × rollos + % × MJ/s) × efectos temporales, x777 en
-  /// Pujo loco. El % de MJ/s ya trae los rollos dentro, por eso solo la parte del clic se multiplica por `multiplicadorRollos`.
-  double valorPujo(int ahora) =>
-      _conEfectosPujo((1 + aporteDedos) * _multiplicadorClic * multiplicadorRollos + _pctPujo() * mps(ahora), ahora);
+  /// MJ de un pujo normal (sin épico): ((1 + aporteDedos) × 2^x2 de clic × rollos × Llave de paso + % × MJ/s) × efectos
+  /// temporales, x777 en Pujo loco. El % de MJ/s ya trae los rollos dentro, por eso solo la parte del clic se multiplica
+  /// por `multiplicadorRollos` (y por la Llave de paso de la Plomería).
+  double valorPujo(int ahora) => _conEfectosPujo(
+      (1 + aporteDedos) * _multiplicadorClic * multiplicadorRollos * multiplicadorLlavePaso + _pctPujo() * mps(ahora), ahora);
 
   /// Lo que un edificio suma a cada pujo, con los mismos efectos que `valorPujo` (para el "+N /pujo" de su fila).
   /// Dedo: sus dedos (con los x2 de clic) y Respiración/Mano de Dios. Baño, camión, planta: sus mejoras de %. La suma de
   /// todas las filas más el pujo base (1 × 2^x2) da `valorPujo`.
   double pujoEdificio(String id, int ahora) {
     var v = _pctPujo(id) * mps(ahora);
-    if (id == 'dedo') v += aporteDedos * _multiplicadorClic * multiplicadorRollos;
+    if (id == 'dedo') v += aporteDedos * _multiplicadorClic * multiplicadorRollos * multiplicadorLlavePaso;
     return v == 0 ? 0 : _conEfectosPujo(v, ahora);
   }
 
@@ -672,8 +700,11 @@ class Imperio {
     return e != null && cantidad(id) == 0 && _p.mjTotal < e.precioBase * ajustes.escalaEdificios / 2;
   }
 
-  /// Descuento de precio activo: tipo 3 (-10%) y Constructor (-50%).
-  double factorPrecioEdificios(int ahora) => (tipoActivo(ahora) == 3 ? 1 - 0.1 * fuerzaTipo : 1) * (_activo('constructor', ahora) ? 0.5 : 1);
+  /// Descuento de precio activo: tipo 3 (-10%), Constructor (-50%) y Rebaja de la Plomería (-2% por nivel).
+  double factorPrecioEdificios(int ahora) =>
+      (tipoActivo(ahora) == 3 ? 1 - 0.1 * fuerzaTipo : 1) *
+      (_activo('constructor', ahora) ? 0.5 : 1) *
+      (1 - 0.02 * nivelPlomeria('rebaja'));
 
   /// Precio de la siguiente unidad: base x 1,15^n con descuentos.
   double precioEdificio(String id, int ahora) => precioEdificioVarios(id, 1, ahora);
@@ -783,7 +814,8 @@ class Imperio {
   double _baseAlquiler(Objeto o) {
     final m = mpsSinEfectos();
     final descuento = pow(max(m, 10.0) / 10, -ajustes.alquilerDescuento);
-    return max(100.0, (o.minutosPrecio * 60 * m * descuento).ceilToDouble());
+    final barato = 1 - 0.1 * nivelLlavero('alquiler_barato');
+    return max(100.0, (o.minutosPrecio * 60 * m * descuento * barato).ceilToDouble());
   }
 
   /// Calor de [id] ahora: periodos alquilados con MJ, que bajan a la mitad cada `ajustes.calorVidaMediaH` horas reales.
@@ -825,10 +857,10 @@ class Imperio {
   }
 
   /// Cuántos primos pujan con el Primo pujador: 1 + uno más por cada x1000 de MJ/s sin efectos (1e3: 2, 1e6: 3...),
-  /// hasta `ajustes.maxPrimos` (4).
+  /// hasta `ajustes.maxPrimos` (4) más el Primo extra del Llavero.
   int primosActivos() {
     final m = max(mpsSinEfectos(), 1.0);
-    return (1 + (log(m) / ln10 / 3 + 1e-9).floor()).clamp(1, ajustes.maxPrimos);
+    return (1 + (log(m) / ln10 / 3 + 1e-9).floor()).clamp(1, ajustes.maxPrimos + nivelLlavero('primo_extra'));
   }
 
   /// [id] está en modo Indefinido (se renueva solo cada periodo mientras alcancen los MJ).
@@ -1169,20 +1201,26 @@ class Imperio {
     return fin > ahora ? Duration(milliseconds: fin - ahora) : null;
   }
 
+  /// Rollos que cuesta el nivel siguiente de [id] (sube x`crecimiento` por nivel). Infinito si no existe.
+  double precioObjetoRollos(String id) {
+    final o = objetoRollosPorId(id);
+    return o == null ? double.infinity : o.precio(tieneObjetoRollos(id)).ceilToDouble();
+  }
+
   /// Se puede comprar [id] con Rollos: abiertos, alcanzan los rollos, bajo su límite (y sin espera la Cadena).
   bool puedeComprarObjetoRollos(String id, int ahora) {
     final o = objetoRollosPorId(id);
-    if (o == null || !objetosRollosAbiertos || _p.rollos < o.costo || tieneObjetoRollos(id) >= o.limite) return false;
+    if (o == null || !objetosRollosAbiertos || _p.rollos < precioObjetoRollos(id) || tieneObjetoRollos(id) >= o.limite) return false;
     return id != 'cadena_reserva' || esperaCadena(ahora) == null;
   }
 
   /// Compra con Rollos de Oro. Los gastados bajan el +% por rollo, pero no cierran edificios ni mejoras.
   bool comprarObjetoRollos(String id, int ahora) {
     if (!puedeComprarObjetoRollos(id, ahora)) return false;
-    final o = objetoRollosPorId(id)!;
+    final precio = precioObjetoRollos(id).toInt();
     _p
-      ..rollos -= o.costo
-      ..rollosGastados += o.costo;
+      ..rollos -= precio
+      ..rollosGastados += precio;
     _p.objetosRollos[id] = tieneObjetoRollos(id) + 1;
     if (id == 'cadena_reserva') _p.cadenaReservaEn = ahora;
     return true;
@@ -1272,6 +1310,7 @@ class Imperio {
     _p.segHistoricos += s;
     if (_p.primerDia <= 0) _p.primerDia = ahora;
     _cuadrilla(ahora, s);
+    _mayordomo(ahora, s);
     _revisarSuperPlomero(ahora);
 
     // Laxante de la abuela: al terminar sale un Atasco seguro.
@@ -1289,7 +1328,8 @@ class Imperio {
       // Ambientador de pino: los dorados salen la mitad de seguido.
       _p.segHastaDorado -= _activo('pino', ahora) ? s / 2 : s;
       if (_p.segHastaDorado <= 0) {
-        final dur = duracionDoradoVisible.inMilliseconds * (mejoraComprada('brillo') ? 2 : 1);
+        // Imán dorado de la Plomería: +2 s en pantalla por nivel.
+        final dur = duracionDoradoVisible.inMilliseconds * (mejoraComprada('brillo') ? 2 : 1) + 2000 * nivelPlomeria('iman_dorado');
         _p.dorado = DoradoVisible(ahora, ahora + dur, 0.1 + 0.8 * _azar.nextDouble(), 0.1 + 0.8 * _azar.nextDouble());
         _programarDorado(ahora);
       }
@@ -1326,7 +1366,8 @@ class Imperio {
   /// siguiente. Con el tope lleno la presión espera en el umbral.
   void _presionarAtasco(int ahora, double s) {
     if (_p.umbralAtasco <= 0) _p.umbralAtasco = _sortearUmbral();
-    _p.presionAtasco += s / max(1.0, ajustes.atascoSeg) * factorPresionAtasco(ahora);
+    // Destapador fino de la Plomería: 25% menos seguido por nivel.
+    _p.presionAtasco += s / max(1.0, ajustes.atascoSeg) * factorPresionAtasco(ahora) * pow(0.75, nivelPlomeria('destapador_fino'));
     if (_p.presionAtasco < _p.umbralAtasco) return;
     if (_atascar(ahora, minimoParaAtasco)) {
       _p.presionAtasco = max(0.0, _p.presionAtasco - _p.umbralAtasco);
@@ -1439,7 +1480,67 @@ class Imperio {
   void _programarDorado(int ahora) {
     final rapido = max(mejoraComprada('iman') ? 2.0 : 1.0, tipoActivo(ahora) == 5 ? 1 + fuerzaTipo : 1.0);
     final a = ajustes.doradoMinMin * 60, b = ajustes.doradoMaxMin * 60;
-    _p.segHastaDorado = (a + (b - a) * _azar.nextDouble()) / rapido;
+    // Imán dorado de la Plomería: 10% más seguido por nivel.
+    _p.segHastaDorado = (a + (b - a) * _azar.nextDouble()) / rapido / pow(1.1, nivelPlomeria('iman_dorado'));
+  }
+
+  /// El Mayordomo está trabajando: lo tienes en el Llavero y no lo apagaste.
+  bool get mayordomoTrabajando => nivelLlavero('mayordomo') > 0 && !_p.mayordomoApagado;
+
+  /// Prende o apaga el Mayordomo (se guarda en la partida).
+  void cambiarMayordomo() => _p.mayordomoApagado = !_p.mayordomoApagado;
+
+  /// Compras que hizo el Mayordomo en esta sesión (para el aviso).
+  int get comprasMayordomo => _comprasMayordomo;
+
+  /// Lo que entra por segundo contando un toque por segundo, como "¿Qué hago ahora?".
+  double _ritmoMayordomo(int ahora) => mpsSinEfectos(contarAtasco: false) + valorPujo(ahora);
+
+  /// El edificio que se paga más rápido (precio / lo que suma), con el criterio de "¿Qué hago ahora?". null si ninguno suma.
+  String? edificioMasRentable(int ahora) {
+    final base = _ritmoMayordomo(ahora);
+    String? mejor;
+    var mejorRetorno = double.infinity;
+    for (final e in edificios) {
+      if (!edificioVisible(e.id) || !edificioAbierto(e.id)) continue;
+      final precio = precioEdificio(e.id, ahora);
+      if (!precio.isFinite) continue;
+      final antes = _p.edificios[e.id];
+      _p.edificios[e.id] = (antes ?? 0) + 1;
+      final double suma;
+      try {
+        suma = _ritmoMayordomo(ahora) - base;
+      } finally {
+        if (antes == null) {
+          _p.edificios.remove(e.id);
+        } else {
+          _p.edificios[e.id] = antes;
+        }
+      }
+      if (suma <= 0) continue;
+      final r = precio / suma;
+      if (r < mejorRetorno) {
+        mejorRetorno = r;
+        mejor = e.id;
+      }
+    }
+    return mejor;
+  }
+
+  /// Mayordomo del Llavero: cada 10 s, 3 s o 1 s activos (según el nivel) compra el edificio más rentable si alcanza.
+  /// Solo edificios y solo con la app abierta (offline no compra).
+  void _mayordomo(int ahora, double s) {
+    final n = nivelLlavero('mayordomo');
+    if (n <= 0 || _p.mayordomoApagado) {
+      _segMayordomo = 0;
+      return;
+    }
+    _segMayordomo += s;
+    final ciclo = segundosMayordomo[min(n, segundosMayordomo.length) - 1];
+    if (_segMayordomo < ciclo) return;
+    _segMayordomo -= ciclo;
+    final id = edificioMasRentable(ahora);
+    if (id != null && comprarEdificio(id, ahora)) _comprasMayordomo++;
   }
 
   /// Se tocó una cosa del baño en la Poceta: la cuenta en [Partida.toques] (para los logros escondidos) y devuelve los logros nuevos.
@@ -1546,9 +1647,12 @@ class Imperio {
     return Duration(seconds: ((max(h, ajustes.offlineTopeH) + extra) * 3600).round());
   }
 
-  /// Qué parte cuenta offline: 25% (la base de los ajustes), 50% o 75% según las válvulas. Nunca menos que la base.
-  double get porcentajeOffline =>
-      max(mejoraComprada('valvula_75') ? 0.75 : (mejoraComprada('valvula_50') ? 0.5 : 0.0), ajustes.offlinePorcentaje).toDouble();
+  /// Qué parte cuenta offline: 25% (la base de los ajustes), 50% o 75% según las válvulas. Nunca menos que la base, que
+  /// sube 10 puntos por nivel del Tanque hondo de la Plomería (hasta 75%).
+  double get porcentajeOffline {
+    final base = max(ajustes.offlinePorcentaje, min(0.75, ajustes.offlinePorcentaje + 0.10 * nivelPlomeria('tanque_hondo')));
+    return max(mejoraComprada('valvula_75') ? 0.75 : (mejoraComprada('valvula_50') ? 0.5 : 0.0), base).toDouble();
+  }
 
   /// Cobra el tiempo fuera (sin efectos temporales ni dorados). El Atasco que quedó sigue tapado fuera: ese edificio no cuenta. x1,5 si quedó el buff del tipo 6 (y se gasta).
   /// Guardia nocturno: cuenta al 100% con tope de 8 h (o el del tanque si es más) y se gasta.
@@ -1629,7 +1733,10 @@ class Imperio {
       mirar(precioMejora(m), m.nombreEs, m.nombreEn);
     }
     for (final e in edificios) {
-      if (edificioVisible(e.id) && edificioAbierto(e.id) && !edificioMisterioso(e.id)) mirar(precioEdificio(e.id, ahora), e.nombreEs, e.nombreEn);
+      if (edificioVisible(e.id) && edificioAbierto(e.id) && !edificioMisterioso(e.id)) {
+        final (es, en) = nombresEdificio(e.id, _p.mudanzas);
+        mirar(precioEdificio(e.id, ahora), es, en);
+      }
     }
     return mejor ?? AvisoCerrado(tope, null, null);
   }
@@ -1685,16 +1792,21 @@ class Imperio {
 
   // ---------- Jalar la cadena ----------
 
-  /// Rollos de Oro que da todo lo ganado en la historia: piso((mjTotal / divisor) ^ exponente).
-  int get rollosTotales => rollosPorMj(_p.mjTotal, ajustes);
+  /// Rollos de Oro que da todo lo ganado en esta casa: piso((MJ de la casa / divisor de la casa / divisor) ^ exponente)
+  /// x (1 + mudanzas). En el Rancho (sin mudanzas) son los MJ de toda la historia, como antes.
+  int get rollosTotales => rollosPorMj(_p.mjCasa / divisorRollosCasa, ajustes) * factorRollosCasa(_p.mudanzas);
 
-  /// Rollos que da jalar ahora: los totales menos los que ya ganaste (los gastados cuentan). Nunca negativo.
+  /// Cuántas veces menos Rollos rinden los MJ en esta casa: `mudanzaDivisorX` ^ mudanzas (Rancho = 1).
+  double get divisorRollosCasa => pow(max(1.0, ajustes.mudanzaDivisorX), max(0, _p.mudanzas)).toDouble();
+
+  /// Rollos que da jalar ahora: los totales menos los que ya ganaste en esta casa (los gastados cuentan). Nunca negativo.
   int get rollosPorGanar => max(0, rollosTotales - _p.rollosGanados);
 
-  /// MJ (históricos) que faltan para que jalar dé un rollo más que ahora.
+  /// MJ que faltan para que jalar dé más rollos que ahora (en casas grandes salta de a 1 + mudanzas).
   double get mjParaSiguienteRollo {
-    final meta = mjParaRollos(max(rollosTotales, _p.rollosGanados) + 1, ajustes);
-    return max(0, meta - _p.mjTotal);
+    final f = factorRollosCasa(_p.mudanzas);
+    final meta = mjParaRollos(max(rollosTotales, _p.rollosGanados) ~/ f + 1, ajustes) * divisorRollosCasa;
+    return max(0, meta - _p.mjCasa);
   }
 
   /// Ya compraste La cadena del trono o ya jalaste alguna vez: el botón JALAR se ve para siempre.
@@ -1713,12 +1825,25 @@ class Imperio {
   /// de Rollos. La Cadena de reserva pendiente se gasta: devuelve 1 edificio de cada tipo que tenías.
   int jalar() {
     final ganados = rollosPorGanar;
-    final habilidadesEnEspera = {for (final e in _p.esperas.entries) if (e.key.startsWith('hab_')) e.key: e.value};
     final reserva = tieneObjetoRollos('cadena_reserva') > 0;
     final devueltos = {for (final MapEntry(key: id, value: n) in _p.edificios.entries) if (n > 0) id: 1};
     _p
       ..rollos += ganados
-      ..jaladas += 1
+      ..jaladas += 1;
+    _reiniciarCorrida();
+    if (reserva) {
+      _p.edificios = devueltos;
+      _p.objetosRollos.remove('cadena_reserva');
+    }
+    _empezarCorrida();
+    revisarLogros();
+    return ganados;
+  }
+
+  /// Lo que se va al jalar y al mudarse: la corrida entera (ver [jalar]).
+  void _reiniciarCorrida() {
+    final habilidadesEnEspera = {for (final e in _p.esperas.entries) if (e.key.startsWith('hab_')) e.key: e.value};
+    _p
       ..saldo = 0
       ..edificios = {}
       ..mejoras = {}
@@ -1737,13 +1862,90 @@ class Imperio {
       ..pujosRecientes = []
       ..segPartida = 0;
     _p.efectos.removeWhere((id, _) => !efectosQueSobrevivenJalada.contains(id));
-    if (reserva) {
-      _p.edificios = devueltos;
-      _p.objetosRollos.remove('cadena_reserva');
-    }
     _segCuadrilla = 0;
+    _segMayordomo = 0;
+  }
+
+  /// Lo que trae cada corrida nueva: Tubería lista (+10 por nivel de cada edificio de la fase 1) y Ahorros del Llavero
+  /// (1e3 x 1000^nivel MJ de saldo; no suman a los MJ ganados, así no dan Rollos).
+  void _empezarCorrida() {
+    final lista = nivelPlomeria('tuberia_lista');
+    if (lista > 0) {
+      for (final e in edificiosFase1) {
+        _p.edificios[e.id] = cantidad(e.id) + 10 * lista;
+      }
+    }
+    final ahorros = nivelLlavero('ahorros');
+    if (ahorros > 0) _p.saldo = max(_p.saldo, 1e3 * pow(1000, ahorros));
+  }
+
+  // ---------- Mudanza 🏠 ----------
+
+  /// Rollos ganados en esta casa que pide la mudanza: `ajustes.mudanzaRollos` x `mudanzaRollosSubida` ^ mudanzas.
+  double get rollosParaMudanza => ajustes.mudanzaRollos * pow(ajustes.mudanzaRollosSubida, _p.mudanzas);
+
+  /// Rollos ganados en esta casa (los gastados en la Plomería cuentan).
+  int get rollosCasa => _p.rollosGanados;
+
+  /// Llaves que daría mudarse ahora: piso((rollos de la casa / requisito) ^ exponente x factor). 0 sin llegar al requisito.
+  int get llavesPorGanar {
+    final r = rollosParaMudanza;
+    if (rollosCasa < r || r <= 0) return 0;
+    return (pow(rollosCasa / r, ajustes.mudanzaLlavesExponente) * ajustes.mudanzaLlavesFactor + 1e-9).floor();
+  }
+
+  /// Se puede mudar: rollos de la casa, jaladas en la casa y [cagadasCasa] reales desde que llegaste (las cuenta el
+  /// servidor, máx 3 por día). El servidor revisa lo mismo en `imperio_mudar`.
+  bool puedeMudarse(int cagadasCasa) =>
+      rollosCasa >= rollosParaMudanza && _p.jaladasCasa >= ajustes.mudanzaJaladas && cagadasCasa >= ajustes.mudanzaCagadas;
+
+  /// Se muda a la casa siguiente y devuelve las Llaves ganadas ([llavesServidor] si las mandó el servidor).
+  /// Se va: la corrida (como al jalar), los Rollos (saldo y ganados), la Plomería (el Camión de mudanza se lleva un
+  /// 10% por nivel de cada nodo) y las jaladas de la casa. Se queda: logros, cosméticos, mjTotal, jaladas históricas,
+  /// Llaves y Llavero. [mjBaseServidor]: los MJ con los que el servidor marcó la llegada (si no, los de aquí).
+  int mudarse({int? llavesServidor, double? mjBaseServidor}) {
+    final ganadas = max(0, llavesServidor ?? llavesPorGanar);
+    if (_p.rollosGastados == 0) _p.mudanzasLimpias += 1;
+    final camion = nivelLlavero('camion_mudanza');
+    final quedan = <String, int>{};
+    if (camion > 0) {
+      for (final MapEntry(key: id, value: n) in _p.objetosRollos.entries) {
+        if (id == 'cadena_reserva') continue;
+        final q = (n * 0.1 * camion + 1e-9).floor();
+        if (q > 0) quedan[id] = q;
+      }
+    }
+    _reiniciarCorrida();
+    _p
+      ..rollos = 0
+      ..rollosGastados = 0
+      ..objetosRollos = quedan
+      ..cadenaReservaEn = 0
+      ..mjBase = min(_p.mjTotal, max(0.0, mjBaseServidor ?? _p.mjTotal))
+      ..mjEnCasa = 0
+      ..jaladasBase = _p.jaladas
+      ..mudanzas += 1
+      ..llavesGanadas += ganadas;
+    _empezarCorrida();
     revisarLogros();
-    return ganados;
+    return ganadas;
+  }
+
+  /// Se puede comprar el nivel siguiente de [id] en el Llavero.
+  bool puedeComprarLlavero(String id) {
+    final m = mejoraLlaveroPorId(id);
+    if (m == null) return false;
+    final n = nivelLlavero(id);
+    return n < m.limite && llaves >= m.precio(n);
+  }
+
+  /// Compra el nivel siguiente de [id] con Llaves. El Mayordomo nuevo arranca prendido.
+  bool comprarLlavero(String id) {
+    if (!puedeComprarLlavero(id)) return false;
+    _p.llavero[id] = nivelLlavero(id) + 1;
+    if (id == 'mayordomo' && _p.llavero[id] == 1) _p.mayordomoApagado = false;
+    revisarLogros();
+    return true;
   }
 
   // ---------- Veteranos ----------

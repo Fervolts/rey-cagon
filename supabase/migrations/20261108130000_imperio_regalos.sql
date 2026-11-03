@@ -355,7 +355,7 @@ begin
         raise exception 'Rollos fuera de rango' using errcode = 'P0001';
       end if;
       rollos := (new.tarjeta ->> 'rollos')::numeric;
-      if rollos > 1e12 or rollos > public.imperio_rollos_max(im.mj_total) then
+      if rollos > 1e12 or rollos > public.imperio_rollos_casa(public.imperio_mj_casa(im), im.mudanzas) then
         raise exception 'Rollos fuera de rango' using errcode = 'P0001';
       end if;
       if exists (select 1 from public.mensajes x where x.user_id = new.user_id and x.tarjeta ->> 'tipo' = 'jalada'
@@ -379,7 +379,8 @@ begin
         'pujo', public.imperio_numero(im.estado ->> '_pujo'),
         'mj_total', greatest(coalesce(im.mj_total, 0), 0),
         'jaladas', greatest(im.jaladas, 0),
-        'rollos', least(public.imperio_numero(im.estado ->> 'rollos'), public.imperio_rollos_max(im.mj_total)));
+        'rollos', least(public.imperio_numero(im.estado ->> 'rollos'),
+                        public.imperio_rollos_casa(public.imperio_mj_casa(im), im.mudanzas)));
     elsif t = 'bano' then
       select * into im from public.imperio x where x.user_id = new.user_id;
       if im.user_id is null then
@@ -392,7 +393,7 @@ begin
       -- Solo lo que dibuja el baño, sacado de la fila (nunca del cliente). Lo que venga mal se vuelve vacío.
       e := case when jsonb_typeof(im.estado) = 'object' then im.estado else '{}'::jsonb end;
       v := case when jsonb_typeof(e -> 'vista') = 'object' then e -> 'vista' else '{}'::jsonb end;
-      new.tarjeta := jsonb_build_object('tipo', 'bano',
+      new.tarjeta := jsonb_build_object('tipo', 'bano', 'mudanzas', greatest(im.mudanzas, 0),
         'edificios', coalesce((select jsonb_object_agg(x.k, least(floor(case when jsonb_typeof(x.n) = 'number' then (x.n)::numeric end), 1000000)::int)
           from jsonb_each(case when jsonb_typeof(e -> 'edificios') = 'object' then e -> 'edificios' else '{}'::jsonb end) x(k, n)
           where x.k = any (array['dedo', 'ciruela', 'cafe', 'arepa', 'inodoro', 'bano', 'camion', 'planta', 'cloaca', 'granja',

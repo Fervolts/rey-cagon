@@ -294,6 +294,10 @@ declare
   seg double precision;
   permitido double precision;
   nuevo_total double precision;
+  margen double precision;
+  premios_s double precision;
+  pedido_casa double precision;
+  nuevo_casa double precision := 0;
   pedido_mps double precision := greatest(coalesce(p_mps, 0), 0);
   tope_mps double precision;
   nuevo_mps double precision;
@@ -301,7 +305,7 @@ declare
   recortado boolean := false;
   jaladas_copia int;
   version_minima double precision;
-  premios_s double precision;
+  mudanzas_copia int;
 begin
   if uid is null then raise exception 'no autenticado'; end if;
   if p_estado is null or pg_column_size(p_estado) > 65536 then
@@ -325,10 +329,29 @@ begin
     return jsonb_build_object('mj_total', fila.mj_total, 'recortado', false, 'guardado', fila.guardado, 'ignorado', true);
   end if;
 
+  -- Mudanza: la copia tiene que estar en la misma casa que el servidor. Una copia de antes de mudarse (o con más
+  -- mudanzas de las que hizo imperio_mudar) no se guarda; la app se pone al día con imperio_cadena. Sin la clave
+  -- (apps viejas) cuenta como 0, igual que la fila de quien nunca se mudó.
+  mudanzas_copia := case when jsonb_typeof(p_estado -> 'mudanzas') = 'number' then (p_estado ->> 'mudanzas')::numeric::int else 0 end;
+  if mudanzas_copia <> fila.mudanzas then
+    return jsonb_build_object('mj_total', fila.mj_total, 'recortado', false, 'guardado', fila.guardado, 'ignorado', true,
+                              'mudanzas', fila.mudanzas);
+  end if;
+  -- Llavero: lo comprado no puede costar más Llaves de las ganadas al mudarse.
+  if public.imperio_llavero_costo(p_estado -> 'llavero') > fila.llaves_ganadas then
+    return jsonb_build_object('mj_total', fila.mj_total, 'recortado', false, 'guardado', fila.guardado, 'ignorado', true,
+                              'mudanzas', fila.mudanzas);
+  end if;
+  -- Las bases de la casa y las Llaves ganadas las pone el servidor (la app no las puede subir a mano).
+  if fila.mudanzas > 0 or fila.llaves_ganadas > 0 then
+    p_estado := p_estado || jsonb_build_object('mudanzas', fila.mudanzas, 'mj_base', fila.mj_base,
+                                               'jaladas_base', fila.jaladas_base, 'llaves_ganadas', fila.llaves_ganadas);
+  end if;
+
   seg := greatest(extract(epoch from now() - fila.guardado), 0);
 
   -- p_mps es Imperio.ritmoEfectivo: max(MJ/s sin efectos, valor del pujo x (20 pujos/s + 10 por Primo)), sin efectos
-  -- temporales. Solo sube comprando (edificios, mejoras, Rollos). Tope: x100 sobre el pico de una vez y x10 más por hora
+  -- temporales. Solo sube comprando (edificios, mejoras, Rollos, Llavero). Tope: x100 sobre el pico de una vez y x10 más por hora
   -- pasada (hasta 24 h). Piso 1000 MJ/s para el que empieza. En la simulación de 21 y 60 días al tope de la mano,
   -- el ritmo nunca pasó x21 su pico en un guardado.
   tope_mps := greatest(fila.mps_pico, fila.mps, 1000) * 100 * power(10, least(seg, 86400) / 3600);
@@ -354,19 +377,27 @@ begin
   --    Fiebre (x7, 77-154 s), Lluvia (hasta 900 s), Descargas (900-1350 s por cagada), Ciruela de 2 h (7200 s), Cofre
   --    y Súper plomero (3600 s), regalo de vuelta (4 h). En la simulación lo más que llegó de golpe fueron 152834 s.
   --  Lo que pasa de ahí ya se recortaba antes (Pujo loco con Sagrado y Fiebre encima, varias Ciruelas en un minuto).
-  --  Los premios de apuesta van aparte porque no salen de jugar: sin contarlos se comían el margen que le queda a la
-  --    ráfaga (216000 - 152834 = 63166 s), y cobrar varios retos ganados de una vez lo podía pasar.
-  permitido := fila.mj_total + (seg * 24 + 216000 + premios_s) * ritmo
-    * public.imperio_temporada_x(fila.guardado - interval '2 hours', now()) + 100000;
+  margen := (seg * 24 + 216000 + premios_s) * ritmo * public.imperio_temporada_x(fila.guardado - interval '2 hours', now()) + 100000;
+  permitido := fila.mj_total + margen;
   nuevo_total := least(greatest(coalesce(p_mj_total, 0), fila.mj_total), permitido);
   if coalesce(p_mj_total, 0) > nuevo_total then recortado := true; end if;
+  -- MJ de la casa (después de mudarse): con números grandes mj_total ya no se mueve, así que se cuentan aparte, con el
+  -- mismo tope. Nunca bajan con un guardado y la app recibe el valor bueno de vuelta.
+  if fila.mudanzas > 0 then
+    pedido_casa := case when jsonb_typeof(p_estado -> 'mj_casa') = 'number' then greatest((p_estado ->> 'mj_casa')::double precision, 0)
+                        else 0 end;
+    nuevo_casa := least(greatest(pedido_casa, fila.mj_casa), fila.mj_casa + margen);
+    if pedido_casa > nuevo_casa then recortado := true; end if;
+    p_estado := p_estado || jsonb_build_object('mj_casa', nuevo_casa);
+  end if;
 
   update public.imperio
-    set estado = p_estado, mj_total = nuevo_total, mps = nuevo_mps, mps_pico = greatest(fila.mps_pico, nuevo_mps),
+    set estado = p_estado, mj_total = nuevo_total, mj_casa = nuevo_casa, mps = nuevo_mps, mps_pico = greatest(fila.mps_pico, nuevo_mps),
         guardado = now()
     where user_id = uid;
 
-  return jsonb_build_object('mj_total', nuevo_total, 'recortado', recortado, 'guardado', now());
+  return jsonb_build_object('mj_total', nuevo_total, 'recortado', recortado, 'guardado', now())
+         || case when fila.mudanzas > 0 then jsonb_build_object('mj_casa', nuevo_casa) else '{}'::jsonb end;
 end $$;
 revoke all on function public.imperio_guardar(jsonb, double precision, double precision, int) from public, anon;
 grant execute on function public.imperio_guardar(jsonb, double precision, double precision, int) to authenticated;

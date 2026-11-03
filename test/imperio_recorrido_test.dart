@@ -224,14 +224,53 @@ void main() {
       expect(queHagoAhora(im, t0, cadenaLista: true).id, 'destapar');
 
       final pasos = pasosRecorrido(im, t0, jalarVisible: true, cadenaLista: true);
-      expect([for (final p in pasos) p.id], ['poceta', 'saldo', 'edificios', 'mejoras', 'atascos', 'dorado', 'objetos', 'que_hago', 'cadena']);
-      final cadena = pasos.last;
+      expect([for (final p in pasos) p.id], ['poceta', 'saldo', 'edificios', 'mejoras', 'atascos', 'dorado', 'objetos', 'que_hago', 'cadena', 'mudanza']);
+      final cadena = pasos[pasos.length - 2];
       expect(cadena.objetivo, const Key('boton_jalar'));
       expect(cadena.texto, contains('Tienes 10 Rollos de Oro'));
       expect(cadena.texto, contains('Si jalas ahora ganas'));
       expect(cadena.texto, isNot(contains('cagadas reales')));
       expect(pasos[4].objetivo, const Key('tarjeta_atasco'));
       expect(pasos[5].objetivo, const Key('mojon_dorado'));
+      // Plomería y Mudanza: después de la primera jalada, al final; apunta a la tira si se ve, si no a la tienda.
+      expect(pasos.last.texto, contains('Plomería'));
+      expect(pasos.last.texto, contains('Casa'));
+      expect(pasos.last.objetivo, const Key('boton_tienda'));
+      expect(pasosRecorrido(im, t0, tiraMudanza: true).last.objetivo, const Key('tira_mudanza'));
+      im.partida.jaladas = 0;
+      expect([for (final p in pasosRecorrido(im, t0)) p.id], isNot(contains('mudanza')));
+    });
+
+    test('mudanza lista: mudarse va antes que jalar; sin requisitos, nunca', () {
+      final im = _veterano();
+      final s = queHagoAhora(im, t0, cadenaLista: true, mudanzaLista: true);
+      expect(s.id, 'mudanza');
+      expect(s.ir, DestinoQueHago.mudanza);
+      expect(s.titulo, contains('Casa'));
+      expect(s.texto, contains('x3'));
+      expect(queHagoAhora(im, t0, cadenaLista: true).id, 'jalar');
+    });
+
+    test('Plomería: sugiere el nivel que rinde aun gastando Rollos; sin Rollos, no', () {
+      final im = _veterano();
+      im.partida.rollos = 100;
+      final pl = plomeriaConviene(im, t0);
+      expect(pl, isNotNull);
+      expect(pl!.salto, greaterThanOrEqualTo(saltoPlomeriaConviene));
+      final s = queHagoAhora(im, t0);
+      expect(s.id, 'plomeria');
+      expect(s.ir, DestinoQueHago.tienda);
+      expect(s.objetivo, pl.objeto.id);
+      // La prueba deshace la compra.
+      expect(im.partida.rollos, 100);
+      expect(im.partida.objetosRollos, isEmpty);
+      im.partida.rollos = 1;
+      expect(plomeriaConviene(im, t0), isNull);
+      // Antes de la primera jalada la Plomería está cerrada.
+      im.partida
+        ..rollos = 100
+        ..jaladas = 0;
+      expect(plomeriaConviene(im, t0), isNull);
     });
 
     test('jugador nuevo: solo lo abierto (poceta, saldo, edificios, dorado y el ?)', () {
@@ -242,7 +281,7 @@ void main() {
       expect(ids, isNot(contains('objetos')));
       expect(ids, isNot(contains('cadena')));
       expect(pasos.length, inInclusiveRange(5, 6));
-      expect(pasos[1].texto, contains('compra un edificio'));
+      expect(pasos[1].texto, contains('compra un cagador'));
     });
 
     test('duraciones y porcentajes cortos', () {
@@ -293,7 +332,7 @@ void main() {
       await _desmontar(t);
     });
 
-    testWidgets('se salta los pasos cerrados (nuevo) y el veterano termina en la cadena', (t) async {
+    testWidgets('se salta los pasos cerrados (nuevo) y el veterano termina en la cadena y la mudanza', (t) async {
       var (c, tele, enviados) = await _montar(t, _estado(_nuevo()));
       final vistos = <Object?>[];
       while (_tarjeta.evaluate().isNotEmpty) {
@@ -319,8 +358,8 @@ void main() {
       for (final e in _eventos(enviados, tele, 'imperio_recorrido', 'paso')) {
         if (e.$2 == 'ver') vistos.add(e.$1);
       }
-      expect(vistos, containsAllInOrder(['poceta', 'saldo', 'edificios', 'mejoras', 'atascos', 'dorado', 'objetos', 'que_hago', 'cadena']));
-      expect(vistos.last, 'cadena');
+      expect(vistos, containsAllInOrder(['poceta', 'saldo', 'edificios', 'mejoras', 'atascos', 'dorado', 'objetos', 'que_hago', 'cadena', 'mudanza']));
+      expect(vistos.last, 'mudanza');
       // Cada paso se ve una sola vez: que salga un atasco o el dorado a mitad no lo devuelve al principio.
       expect(vistos.toSet().length, vistos.length);
       await _desmontar(t);

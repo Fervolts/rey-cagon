@@ -182,7 +182,7 @@ void main() {
       expect(find.text('SALA'), findsOneWidget);
       // Tres botones (EDIFICIOS, TIENDA, SALA): cada uno ocupa un tercio.
       expect(tester.getSize(find.ancestor(of: find.text('TIENDA'), matching: find.byType(Expanded))).width, closeTo(100, 1));
-      expect(find.text('EDIFICIOS'), findsOneWidget);
+      expect(find.text('CAGADORES'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

@@ -10,6 +10,7 @@ import '../genero.dart';
 import '../idioma.dart';
 import '../main.dart' show db, textoError;
 import '../tema.dart';
+import 'casas.dart';
 import 'control.dart';
 import 'fila.dart' show textoEnUnaLinea;
 import 'formato.dart';
@@ -43,6 +44,7 @@ class DatosCartera {
     this.otrosMps = 0,
     this.cuenta = '0000',
     this.fecha,
+    this.mudanzas = 0,
   });
 
   /// Renglones de edificios que caben en la imagen; el resto va junto en "y N más".
@@ -66,6 +68,7 @@ class DatosCartera {
       otrosMps: resto.fold(0, (s, m) => s + m.mps),
       cuenta: cuenta ?? '0000',
       fecha: DateTime.fromMillisecondsSinceEpoch(ahora),
+      mudanzas: im.partida.mudanzas,
     );
   }
 
@@ -82,6 +85,9 @@ class DatosCartera {
   /// Las 4 cifras de la cuenta de mentira (`cuentaDe`).
   final String cuenta;
   final DateTime? fecha;
+
+  /// Mudanzas hechas: los edificios salen con el nombre de la casa.
+  final int mudanzas;
 }
 
 /// Fecha del estado de cuenta: 31/10/2026 en español, 10/31/2026 en inglés.
@@ -471,12 +477,12 @@ class HistoriaCartera extends StatelessWidget {
                           Text('MJ/S', style: rotulo),
                         ]),
                         const SizedBox(height: 2),
-                        if (d.movimientos.isEmpty) renglon(tr('Sin edificios todavía', 'No buildings yet'), '0', emoji: '🚽'),
+                        if (d.movimientos.isEmpty) renglon(tr('Sin cagadores todavía', 'No poopers yet'), '0', emoji: '🚽'),
                         for (final m in d.movimientos)
-                          renglon('${tr(m.edificio.nombreEs, m.edificio.nombreEn)} x${formatoCantidad(m.cantidad, ingles: enIngles)}', '+${mj(m.mps)}',
+                          renglon('${nombreEdificio(m.edificio.id, d.mudanzas)} x${formatoCantidad(m.cantidad, ingles: enIngles)}', '+${mj(m.mps)}',
                               emoji: m.edificio.emoji),
                         if (d.otros > 0)
-                          renglon(tr('Y ${d.otros} ${d.otros == 1 ? 'edificio' : 'edificios'} más', 'And ${d.otros} more'), '+${mj(d.otrosMps)}'),
+                          renglon(tr('Y ${d.otros} ${d.otros == 1 ? 'cagador' : 'cagadores'} más', 'And ${d.otros} more'), '+${mj(d.otrosMps)}'),
                         renglon(tr('TOTAL MJ/S', 'TOTAL MJ/S'), '+${mj(d.mps)}', fuerte: true),
                         perforado(),
                         renglon(tr('MJ POR PUJO', 'MJ PER TAP'), mj(d.pujo), emoji: '💩'),

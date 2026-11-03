@@ -9,6 +9,7 @@ import '../main.dart' show db, esDeRed;
 import '../recordatorio.dart' show cancelarAvisoImperio, programarAvisoAtasco, programarAvisoImperio;
 import 'apuesta.dart';
 import 'apuesta_local.dart';
+import 'casas.dart';
 import 'estilos.dart';
 import 'estilos_mios.dart';
 import 'flags.dart';
@@ -62,7 +63,9 @@ int? inicioOffline(Iterable<int?> marcas, int ahora) {
 }
 
 /// Si el servidor recortó los MJ totales (antitrampa), la partida los acepta y el saldo no puede pasarlos.
-void aceptarRecorte(Partida p, double mjServidor) {
+/// [mjCasaServidor]: los MJ de la casa que dejó el servidor (después de mudarse se recortan aparte).
+void aceptarRecorte(Partida p, double mjServidor, {double? mjCasaServidor}) {
+  if (mjCasaServidor != null && p.mudanzas > 0 && mjCasaServidor < p.mjEnCasa) p.mjEnCasa = max(0.0, mjCasaServidor);
   if (mjServidor >= p.mjTotal) return;
   p.mjTotal = mjServidor;
   if (p.saldo > mjServidor) p.saldo = mjServidor;
@@ -327,6 +330,17 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
         _anotar('partida_adoptada', {'jaladas': c.jaladas});
         _mirarCambios(anotar: false);
         unawaited(_guardarLocal());
+      } else if (c.mudanzas != null && c.mudanzas! > p.mudanzas) {
+        // La mudanza quedó marcada en el servidor pero el guardado se perdió: se muda aquí con los datos del servidor.
+        _anotar('mudanza_sincroniza', {'mudanzas_servidor': c.mudanzas, 'mudanzas_partida': p.mudanzas});
+        imperio.mudarse(llavesServidor: max(0, (c.llavesGanadas ?? p.llavesGanadas) - p.llavesGanadas), mjBaseServidor: c.mjBase);
+        p
+          ..mudanzas = c.mudanzas!
+          ..jaladas = max(p.jaladas, c.jaladas)
+          ..jaladasBase = p.jaladas;
+        if (c.llavesGanadas != null) p.llavesGanadas = c.llavesGanadas!;
+        _mirarCambios(anotar: false);
+        unawaited(guardarTodo());
       } else if (arreglo == ArregloCadena.jalar) {
         _anotar('cadena_sincroniza', {'jaladas_servidor': c.jaladas, 'jaladas_partida': p.jaladas, 'mj_total': imperio.mjTotal});
         imperio.jalar();
@@ -559,9 +573,10 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     final e = edificioPorId(a.edificio);
     if (e == null) return;
     final minutos = (a.en - ahora) / 60000;
+    final (nEs, nEn) = nombresEdificio(e.id, imperio.partida.mudanzas);
     unawaited(() async {
       try {
-        final ok = await programarAvisoAtasco(Duration(milliseconds: max(0, a!.en - ahora)), edificioEs: e.nombreEs, edificioEn: e.nombreEn);
+        final ok = await programarAvisoAtasco(Duration(milliseconds: max(0, a!.en - ahora)), edificioEs: nEs, edificioEn: nEn);
         if (ok) _anotar('atasco_offline_aviso', {'edificio': e.id, 'minutos': minutos.round()});
       } catch (_) {
         // Sin permiso de notificaciones o en pruebas: no pasa nada.
@@ -1019,12 +1034,30 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     return r;
   }
 
-  /// Compra un objeto de Rollos de Oro (gasta Rollos: baja el +% por rollo).
+  /// Compra un nivel de la Plomería con Rollos de Oro (gasta Rollos: baja el +% por rollo).
   bool comprarObjetoRollos(String id) {
-    final costo = objetoRollosPorId(id)?.costo ?? 0;
+    final p = imperio.precioObjetoRollos(id);
+    final costo = p.isFinite ? p.toInt() : 0;
     final ok = imperio.comprarObjetoRollos(id, ahora);
-    if (ok) _anotar('rollos_gastar', {'id': id, 'costo': costo, 'quedan': imperio.partida.rollos, 'tiene': imperio.tieneObjetoRollos(id)});
+    if (ok) {
+      final nivel = imperio.tieneObjetoRollos(id);
+      _anotar('rollos_gastar', {'id': id, 'costo': costo, 'quedan': imperio.partida.rollos, 'tiene': nivel});
+      _anotar('imperio_plomeria', {'id': id, 'nivel': nivel});
+    }
     return _hecho(ok);
+  }
+
+  /// Compra un nivel del Llavero con Llaves.
+  bool comprarLlavero(String id) {
+    final ok = imperio.comprarLlavero(id);
+    if (ok) _anotar('imperio_llavero', {'id': id, 'nivel': imperio.nivelLlavero(id)});
+    return _hecho(ok);
+  }
+
+  /// Prende o apaga el Mayordomo del Llavero.
+  void cambiarMayordomo() {
+    imperio.cambiarMayordomo();
+    _hecho(true);
   }
 
   ResultadoDorado? tocarDorado() {
@@ -1143,6 +1176,58 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  // ---------- Mudanza ----------
+
+  /// Se está pidiendo la mudanza al servidor (el botón espera).
+  bool mudando = false;
+
+  /// Cagadas reales que cuentan para la mudanza (desde la llegada a la casa, máx 3 por día). 0 sin el dato del servidor.
+  int get cagadasCasa => cadena?.cagadasCasa ?? 0;
+
+  /// El servidor ya conoce la mudanza (migración aplicada).
+  bool get mudanzaDisponible => cadena?.mudanzas != null;
+
+  /// Se muda: sube lo jugado, el servidor revisa los requisitos y cuenta las Llaves, aquí se reinicia y se guarda.
+  /// Devuelve el resultado del servidor (con [ResultadoMudanza.motivo] si dijo que no). Lanza el error de red sin tocar
+  /// la partida.
+  Future<ResultadoMudanza> mudarse() async {
+    if (mudando || jalando) throw StateError('Ya se está mudando');
+    mudando = true;
+    try {
+      await _guardarNube();
+      final ResultadoMudanza r;
+      try {
+        r = await nube.mudar();
+      } catch (e) {
+        _error('mudar', e);
+        rethrow;
+      }
+      if (!r.ok) {
+        _anotar('mudanza_rechazada', {'motivo': r.motivo});
+        return r;
+      }
+      final p = imperio.partida;
+      final llavesAntes = p.llavesGanadas;
+      imperio.mudarse(llavesServidor: r.llaves, mjBaseServidor: r.mjBase);
+      p.mudanzas = max(p.mudanzas, r.mudanzas);
+      p.llavesGanadas = max(p.llavesGanadas, llavesAntes + r.llaves);
+      final c = cadena;
+      if (c != null) {
+        cadena = EstadoCadena(cagadas: c.cagadas, necesarias: c.necesarias, jaladas: c.jaladas, mudanzas: p.mudanzas, cagadasCasa: 0,
+            llavesGanadas: p.llavesGanadas, mjBase: p.mjBase);
+      }
+      final dia = p.primerDia > 0 ? ((ahora - p.primerDia) / Duration.millisecondsPerDay).floor() + 1 : 1;
+      _anotar('imperio_mudanza', {'mudanzas': p.mudanzas, 'llaves': r.llaves, 'dia': dia});
+      _mirarCambios(anotar: false);
+      notifyListeners();
+      await _guardarLocal();
+      await _guardarNube();
+      return r;
+    } finally {
+      mudando = false;
+    }
+  }
+
   // ---------- Cartera ----------
 
   /// Antes de presumir la cartera en el chat: el servidor arma la tarjeta con lo guardado, así que se guarda primero.
@@ -1196,7 +1281,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       if (r.recortado) {
         // Para cazar trampas (supabase/consultas/exploits.sql): cuánto dijo la app y cuánto aceptó el servidor.
         _anotar('guardado_recortado', {'mj_app': imperio.mjTotal, 'mj_servidor': r.mjTotal});
-        aceptarRecorte(imperio.partida, r.mjTotal);
+        aceptarRecorte(imperio.partida, r.mjTotal, mjCasaServidor: r.mjCasa);
       }
     } catch (e) {
       // Android corta la red unos segundos después de mandar la app al fondo: ese guardado se repite al volver

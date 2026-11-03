@@ -106,8 +106,11 @@ class ResultadoGuardar {
 
   /// No guardó porque la versión de la app es menor que `version_minima` (la pestaña pide actualizar).
   final bool versionVieja;
+
+  /// MJ de la casa que quedaron en el servidor (solo después de mudarse).
+  final double? mjCasa;
   const ResultadoGuardar({required this.mjTotal, required this.recortado, required this.guardado, this.ignorado = false,
-      this.versionVieja = false});
+      this.versionVieja = false, this.mjCasa});
 }
 
 /// Respuesta de `imperio_progreso`.
@@ -124,10 +127,44 @@ class EstadoCadena {
   final int cagadas;
   final int necesarias;
   final int jaladas;
-  const EstadoCadena({required this.cagadas, required this.necesarias, required this.jaladas});
 
-  factory EstadoCadena.desdeJson(Map<String, dynamic> j) =>
-      EstadoCadena(cagadas: _ent(j['cagadas']), necesarias: _ent(j['necesarias']), jaladas: _ent(j['jaladas']));
+  /// Mudanza (null = servidor sin la migración de la mudanza): mudanzas hechas, cagadas reales que cuentan desde la
+  /// llegada a la casa (máx 3 por día), Llaves ganadas en total y MJ con los que se llegó a la casa.
+  final int? mudanzas;
+  final int? cagadasCasa;
+  final int? llavesGanadas;
+  final double? mjBase;
+  const EstadoCadena({required this.cagadas, required this.necesarias, required this.jaladas, this.mudanzas, this.cagadasCasa,
+      this.llavesGanadas, this.mjBase});
+
+  factory EstadoCadena.desdeJson(Map<String, dynamic> j) => EstadoCadena(
+        cagadas: _ent(j['cagadas']),
+        necesarias: _ent(j['necesarias']),
+        jaladas: _ent(j['jaladas']),
+        mudanzas: j['mudanzas'] is num ? _ent(j['mudanzas']) : null,
+        cagadasCasa: j['cagadas_casa'] is num ? _ent(j['cagadas_casa']) : null,
+        llavesGanadas: j['llaves_ganadas'] is num ? _ent(j['llaves_ganadas']) : null,
+        mjBase: j['mj_base'] is num ? _dbl(j['mj_base']) : null,
+      );
+}
+
+/// Respuesta de `imperio_mudar`: [ok] con las Llaves ganadas, las mudanzas y los MJ de llegada; si no, [motivo]
+/// (rollos, jaladas, cagadas o sin_imperio).
+class ResultadoMudanza {
+  final bool ok;
+  final int llaves;
+  final int mudanzas;
+  final double? mjBase;
+  final String? motivo;
+  const ResultadoMudanza({required this.ok, this.llaves = 0, this.mudanzas = 0, this.mjBase, this.motivo});
+
+  factory ResultadoMudanza.desdeJson(Map<String, dynamic> j) => ResultadoMudanza(
+        ok: j['ok'] == true,
+        llaves: _ent(j['llaves']),
+        mudanzas: _ent(j['mudanzas']),
+        mjBase: j['mj_base'] is num ? _dbl(j['mj_base']) : null,
+        motivo: j['motivo']?.toString(),
+      );
 }
 
 /// Respuesta de `imperio_reclamar_racha`.
@@ -221,7 +258,8 @@ class NubeImperio {
     }
     final j = Map<String, dynamic>.from(r as Map);
     return ResultadoGuardar(mjTotal: _dbl(j['mj_total']), recortado: j['recortado'] == true, guardado: _fecha(j['guardado']),
-        ignorado: j['ignorado'] == true, versionVieja: j['version_vieja'] == true);
+        ignorado: j['ignorado'] == true, versionVieja: j['version_vieja'] == true,
+        mjCasa: j['mj_casa'] is num ? _dbl(j['mj_casa']) : null);
   }
 
   /// Gasta 1 Ficha (Cagada fresca de la hoja de Fichas). Devuelve las que quedan, o -1 si no había.
@@ -273,6 +311,13 @@ class NubeImperio {
   Future<int> jalar() async {
     final r = await db.rpc('imperio_jalar');
     return _ent(Map<String, dynamic>.from(r as Map)['jaladas']);
+  }
+
+  /// Pide la mudanza al servidor, que revisa rollos de la casa, jaladas y cagadas, y cuenta las Llaves.
+  /// Sin reintento, por lo mismo que [jalar]: si la respuesta se pierde, la mudanza se recupera al recargar.
+  Future<ResultadoMudanza> mudar() async {
+    final r = await db.rpc('imperio_mudar');
+    return ResultadoMudanza.desdeJson(Map<String, dynamic>.from(r as Map));
   }
 
   String _clave(String userId) => 'imperio_local_$userId';

@@ -10,6 +10,7 @@ import '../emoji.dart';
 import '../idioma.dart';
 import '../tema.dart';
 import 'cadena.dart';
+import 'casas.dart';
 import 'control.dart';
 import 'formato.dart';
 import 'moneda_app.dart';
@@ -33,9 +34,11 @@ class PasoRecorrido {
 String _mj(double v) => formatoMj(v, ingles: enIngles);
 
 /// Los pasos para esta partida, en orden: poceta, saldo, edificios, mejoras, atascos, mojón dorado, tienda, ¿qué hago? y,
-/// si la cadena ya está abierta, jalar con los números del jugador (el último, para los veteranos). Mejoras, atascos,
-/// tienda y cadena solo salen si ya están abiertos. [jalarVisible]: el botón JALAR se ve; [cadenaLista]: está encendido.
-List<PasoRecorrido> pasosRecorrido(Imperio im, int ahora, {String moneda = 'MJ', bool jalarVisible = false, bool cadenaLista = false}) {
+/// si la cadena ya está abierta, jalar con los números del jugador y, después de la primera jalada, la Plomería y la
+/// Mudanza (los últimos, para los veteranos). Mejoras, atascos, tienda, cadena y mudanza solo salen si ya están abiertos.
+/// [jalarVisible]: el botón JALAR se ve; [cadenaLista]: está encendido; [tiraMudanza]: la tira MUDANZA se ve.
+List<PasoRecorrido> pasosRecorrido(Imperio im, int ahora,
+    {String moneda = 'MJ', bool jalarVisible = false, bool cadenaLista = false, bool tiraMudanza = false}) {
   final pasos = <PasoRecorrido>[];
   final pujo = _mj(im.valorPujo(ahora));
   pasos.add(PasoRecorrido('poceta', '💩', tr('Puja en la poceta', 'Push on the toilet'),
@@ -48,32 +51,32 @@ List<PasoRecorrido> pasosRecorrido(Imperio im, int ahora, {String moneda = 'MJ',
       mps > 0
           ? tr('Aquí ves lo que tienes. Ahora produces ${_mj(mps)} $moneda/s, aunque no toques nada.',
               "This is what you've got. You make ${_mj(mps)} $moneda/s right now, even without tapping.")
-          : tr('Aquí ves lo que tienes. Por ahora todo sale de tus pujos: compra un edificio para que entre solo.',
-              "This is what you've got. For now it all comes from your pushes: buy a building so it flows by itself."),
+          : tr('Aquí ves lo que tienes. Por ahora todo sale de tus pujos: compra un cagador para que entre solo.',
+              "This is what you've got. For now it all comes from your pushes: buy a pooper so it flows by itself."),
       objetivo: const Key('recorrido_saldo')));
 
   final edificio = mejorCompra(im, ahora, soloEdificios: true);
-  pasos.add(PasoRecorrido('edificios', '🏗️', tr('Edificios', 'Buildings'),
+  pasos.add(PasoRecorrido('edificios', '🏗️', tr('Cagadores', 'Poopers'),
       edificio == null
-          ? tr('Aquí compras edificios: producen $moneda solos, hasta con el teléfono guardado.',
-              'Buy buildings here: they make $moneda by themselves, even with your phone in your pocket.')
-          : tr('Producen $moneda solos, hasta con el teléfono guardado. Tu próximo edificio que más rinde: ${edificio.emoji} ${edificio.nombre} '
+          ? tr('Aquí compras cagadores: producen $moneda solos, hasta con el teléfono guardado.',
+              'Buy poopers here: they make $moneda by themselves, even with your phone in your pocket.')
+          : tr('Producen $moneda solos, hasta con el teléfono guardado. Tu próximo cagador que más rinde: ${edificio.emoji} ${edificio.nombre} '
                   '(+${_mj(edificio.suma)} $moneda/s por ${_mj(edificio.precio)}).',
-              'They make $moneda by themselves, even with your phone in your pocket. Your best next building: ${edificio.emoji} '
+              'They make $moneda by themselves, even with your phone in your pocket. Your best next pooper: ${edificio.emoji} '
                   '${edificio.nombre} (+${_mj(edificio.suma)} $moneda/s for ${_mj(edificio.precio)}).'),
       objetivo: const Key('boton_edificios')));
 
   if (im.mejorasDisponibles().isNotEmpty || im.partida.mejoras.isNotEmpty) {
     pasos.add(PasoRecorrido('mejoras', '⬆️', tr('Mejoras', 'Upgrades'),
-        tr('Dentro de Edificios, cada uno tiene su ▼ con mejoras que lo multiplican. Las de la poceta engordan cada pujo.',
-            'Inside Buildings, each one has a ▼ with upgrades that multiply it. The toilet ones make every push fatter.'),
+        tr('Dentro de Cagadores, cada uno tiene su ▼ con mejoras que lo multiplican. Las de la poceta engordan cada pujo.',
+            'Inside Poopers, each one has a ▼ with upgrades that multiply it. The toilet ones make every push fatter.'),
         objetivo: const Key('boton_edificios')));
   }
 
   if (im.partida.vioPrimerAtasco || im.atascos.isNotEmpty) {
     pasos.add(PasoRecorrido('atascos', '🪠', tr('Atascos', 'Clogs'),
-        tr('A veces un edificio se tapa y no produce nada. Destápalo a toques, o alquila el Robot para que lo haga él.',
-            'Sometimes a building clogs and makes nothing. Unclog it by tapping, or rent the Plunger bot to do it for you.'),
+        tr('A veces un cagador se tapa y no produce nada. Destápalo a toques, o alquila el Robot para que lo haga él.',
+            'Sometimes a pooper clogs and makes nothing. Unclog it by tapping, or rent the Plunger bot to do it for you.'),
         objetivo: im.atascos.isNotEmpty ? const Key('tarjeta_atasco') : const Key('boton_edificios')));
   }
 
@@ -95,7 +98,29 @@ List<PasoRecorrido> pasosRecorrido(Imperio im, int ahora, {String moneda = 'MJ',
       objetivo: const Key('boton_que_hago')));
 
   if (im.cadenaDesbloqueada) pasos.add(_pasoCadena(im, moneda, jalarVisible: jalarVisible, cadenaLista: cadenaLista));
+  if (im.objetosRollosAbiertos) pasos.add(_pasoMudanza(im, ahora, tiraMudanza: tiraMudanza));
   return pasos;
+}
+
+/// Plomería y Mudanza: con qué se gastan los Rollos de Oro y qué pide la casa siguiente, con los números del jugador.
+PasoRecorrido _pasoMudanza(Imperio im, int ahora, {required bool tiraMudanza}) {
+  final plomeria = plomeriaConviene(im, ahora);
+  final consejo = plomeria == null
+      ? ''
+      : tr(' Ahora mismo te conviene ${plomeria.objeto.emoji} ${plomeria.objeto.nombreEs}.',
+          ' Right now ${plomeria.objeto.emoji} ${plomeria.objeto.nombreEn} is worth it.');
+  final m = im.partida.mudanzas + 1;
+  final a = im.ajustes;
+  final rollos = _mj(im.rollosParaMudanza);
+  final que = tr('En la tienda, la Plomería 🔧 cambia Rollos de Oro por mejoras que duran hasta la mudanza.$consejo',
+      'In the shop, Plumbing 🔧 trades Golden Rolls for upgrades that last until you move.$consejo');
+  final casa = tr(
+      ' Para mudarte a ${casaConEmoji(m)} necesitas $rollos Rollos ganados en esta casa, ${a.mudanzaJaladas} jaladas y '
+          '${a.mudanzaCagadas} cagadas reales. Allá todo produce más y te llevas Llaves 🔑.',
+      ' To move to the ${casaConEmoji(m)} you need $rollos Rolls earned in this house, ${a.mudanzaJaladas} flushes and '
+          '${a.mudanzaCagadas} real poops. Everything makes more there and you take Keys 🔑.');
+  return PasoRecorrido('mudanza', '🏠', tr('Plomería y mudanza', 'Plumbing and moving'), '$que$casa',
+      objetivo: tiraMudanza ? const Key('tira_mudanza') : const Key('boton_tienda'));
 }
 
 PasoRecorrido _pasoCadena(Imperio im, String moneda, {required bool jalarVisible, required bool cadenaLista}) {
@@ -116,15 +141,15 @@ PasoRecorrido _pasoCadena(Imperio im, String moneda, {required bool jalarVisible
         'Flush now and you get ${_mj(j.nuevos.toDouble())}, ending at ${porcentajeRollos(r + j.nuevos, pct)}.');
     final consejo = ahoraSi
         ? (j.abre != null
-            ? tr(' Conviene: se abre ${j.abre!.nombreEs}.', ' Worth it: it unlocks ${j.abre!.nombreEn}.')
+            ? '${tr(' Conviene: se abre ', ' Worth it: it unlocks ')}${nombreEdificio(j.abre!.id, im.partida.mudanzas)}.'
             : tr(' Conviene: produces x${_mj(j.salto)}.', ' Worth it: you make x${_mj(j.salto)}.'))
         : tr(' Todavía no: espera a que suba x${_mj(saltoRollosConviene)} o más.',
             ' Not yet: wait until it goes up x${_mj(saltoRollosConviene)} or more.');
     final cagadas = cadenaLista ? '' : tr(' Ojo: la cadena también pide cagadas reales.', ' Heads up: the chain also needs real poops.');
     plan = '$gana$consejo$cagadas';
   }
-  final que = tr('Jalar borra tus $moneda y edificios, pero te da Rollos de Oro para siempre.',
-      'Flushing wipes your $moneda and buildings, but gives you Golden Rolls forever.');
+  final que = tr('Jalar borra tus $moneda y cagadores, pero te da Rollos de Oro que duran hasta la mudanza.',
+      'Flushing wipes your $moneda and poopers, but gives you Golden Rolls that last until you move.');
   return PasoRecorrido('cadena', '🧻', tr('Jalar la cadena', 'Flush the chain'), '$que $tienes $plan',
       objetivo: jalarVisible ? const Key('boton_jalar') : null);
 }
@@ -370,9 +395,10 @@ class BotonQueHago extends StatelessWidget {
 }
 
 String _textoIr(DestinoQueHago ir) => switch (ir) {
-      DestinoQueHago.edificios => tr('IR A EDIFICIOS', 'GO TO BUILDINGS'),
+      DestinoQueHago.edificios => tr('IR A CAGADORES', 'GO TO POOPERS'),
       DestinoQueHago.tienda => tr('IR A LA TIENDA', 'GO TO THE SHOP'),
       DestinoQueHago.jalar => tr('JALAR', 'FLUSH'),
+      DestinoQueHago.mudanza => tr('MUDARSE', 'MOVE'),
       DestinoQueHago.cerrar => tr('VAMOS', "LET'S GO"),
     };
 
@@ -381,7 +407,8 @@ String _textoIr(DestinoQueHago ir) => switch (ir) {
 Future<void> abrirQueHago(BuildContext context, ControlImperio control,
     {required bool Function() cadenaLista, required void Function(Sugerencia) alIr, required VoidCallback alRecorrido}) {
   final moneda = monedaActual().abreviatura;
-  Sugerencia calcular() => queHagoAhora(control.imperio, control.ahora, cadenaLista: cadenaLista(), moneda: moneda);
+  Sugerencia calcular() => queHagoAhora(control.imperio, control.ahora,
+      cadenaLista: cadenaLista(), mudanzaLista: control.mudanzaDisponible && control.imperio.puedeMudarse(control.cagadasCasa), moneda: moneda);
   control.anotar('imperio_que_hago', {'sugerencia': calcular().id, 'accion': 'abrir'});
   return showModalBottomSheet<void>(
     context: context,

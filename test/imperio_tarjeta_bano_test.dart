@@ -68,8 +68,9 @@ void main() {
     test('no lleva saldo ni nada fuera de lo que dibuja', () {
       final p = Partida(edificios: {'dedo': 3, 'templo': 1}, mejoras: {'dedo_5', 'iman'});
       final t = tarjetaBano({...p.toJson(), 'saldo': 999, 'nombre': 'x'}, {'est_tobo', 'trampa'});
-      expect(t.keys.toSet(), {'tipo', 'edificios', 'mejoras', 'esteticas', 'vista'});
+      expect(t.keys.toSet(), {'tipo', 'mudanzas', 'edificios', 'mejoras', 'esteticas', 'vista'});
       expect(t['tipo'], 'bano');
+      expect(t['mudanzas'], 0);
       expect(t['edificios'], {'dedo': 3, 'templo': 1});
       expect(t['esteticas'], ['est_tobo']);
     });
@@ -87,7 +88,7 @@ void main() {
         'ocultos': ['3', 'camion'],
         'dedos': 24,
       });
-      expect(tarjetaBano('basura', const []), {'tipo': 'bano', 'edificios': {}, 'mejoras': [], 'esteticas': [], 'vista': {}});
+      expect(tarjetaBano('basura', const []), {'tipo': 'bano', 'mudanzas': 0, 'edificios': {}, 'mejoras': [], 'esteticas': [], 'vista': {}});
     });
   });
 
@@ -110,9 +111,10 @@ void main() {
       for (final (p, est) in casos) {
         final esperado = _dePartida(p, est);
         final t = _porJson(tarjetaBano(jsonDecode(jsonEncode(p.toJson())), est));
-        final (:bano, :dedos) = banoDeTarjeta(t);
+        final (:bano, :dedos, :mudanzas) = banoDeTarjeta(t);
         expect(bano, esperado.bano, reason: '${p.vista}');
         expect(dedos, esperado.dedos, reason: '${p.vista}');
+        expect(mudanzas, p.mudanzas);
       }
     });
 
@@ -126,7 +128,16 @@ void main() {
         final r = banoDeTarjeta(t);
         expect(r.bano, basico);
         expect(r.dedos, 0);
+        expect(r.mudanzas, 0);
       }
+    });
+
+    test('la casa viaja en la tarjeta (y lo que venga mal es el Rancho)', () {
+      expect(tarjetaBano({'mudanzas': 3}, const [])['mudanzas'], 3);
+      expect(tarjetaBano({'mudanzas': -2}, const [])['mudanzas'], 0);
+      expect(tarjetaBano({'mudanzas': 'x'}, const [])['mudanzas'], 0);
+      expect(banoDeTarjeta({'tipo': 'bano', 'mudanzas': 2}).mudanzas, 2);
+      expect(banoDeTarjeta({'tipo': 'bano', 'mudanzas': 'x'}).mudanzas, 0);
     });
   });
 

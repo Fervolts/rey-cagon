@@ -8,6 +8,7 @@ import '../animaciones.dart';
 import '../emoji.dart';
 import '../idioma.dart';
 import '../tema.dart';
+import 'casas.dart';
 import 'control.dart';
 import 'formato.dart';
 import 'moneda_app.dart';
@@ -74,15 +75,15 @@ Edificio? edificioMasBarato(Imperio im, int ahora) {
       final e = edificioMasBarato(im, ahora);
       final String ejemplo;
       if (e == null) {
-        ejemplo = tr('Ahora no hay edificio que comprar.', 'There is no building to buy right now.');
+        ejemplo = tr('Ahora no hay cagador que comprar.', 'There is no pooper to buy right now.');
       } else {
-        final nombre = '${e.emoji} ${tr(e.nombreEs, e.nombreEn)}';
+        final nombre = '${e.emoji} ${nombreEdificio(e.id, im.partida.mudanzas)}';
         final precio = im.precioEdificio(e.id, ahora);
         ejemplo = precio <= im.saldo
             ? tr('Ahora compraría: $nombre.', 'Right now it would buy: $nombre.')
             : tr('Ahora compraría: $nombre, cuando tengas ${_mj(precio)} $mon.', 'Right now it would buy: $nombre, once you have ${_mj(precio)} $mon.');
       }
-      return (que: tr('Cada minuto compra el edificio más barato si te alcanza.', 'Every minute it buys the cheapest building if you can afford it.'), ejemplo: ejemplo);
+      return (que: tr('Cada minuto compra el cagador más barato si te alcanza.', 'Every minute it buys the cheapest pooper if you can afford it.'), ejemplo: ejemplo);
     case 'guardia':
       final tope = im.topeOffline > topeGuardia ? im.topeOffline : topeGuardia;
       final pct = (im.porcentajeOffline * 100).round();
