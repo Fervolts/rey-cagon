@@ -39,7 +39,7 @@ import 'que_hago.dart';
 import 'hoja_cadena.dart';
 import 'hoja_que_hago.dart';
 import 'racha_imperio.dart' show diasRacha;
-import 'regalos.dart' show ChipRegalos, hayRegalos;
+import 'regalos.dart' show ChipRegalos, PedidoRegalos, abrirHojaRegalos, hayRegalos;
 import 'ranking_amigos.dart';
 import 'sala.dart';
 import 'tienda_ciruelas.dart';
@@ -116,6 +116,8 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
   final _llaveEscena = GlobalKey();
   final _llavePoceta = GlobalKey();
   final _llaveCiruelas = GlobalKey();
+  // Saldo de la cabecera: adonde vuela la ciruela si la hoja del saldo (con el chip 🫐) está cerrada.
+  final _llaveSaldo = GlobalKey();
   final _vuelos = <(int, Offset, Offset)>[];
   int _nVuelo = 0;
 
@@ -339,7 +341,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final escena = _llaveEscena.currentContext?.findRenderObject() as RenderBox?;
       final poceta = _llavePoceta.currentContext?.findRenderObject() as RenderBox?;
-      final chip = _llaveCiruelas.currentContext?.findRenderObject() as RenderBox?;
+      final chip = (_llaveCiruelas.currentContext ?? _llaveSaldo.currentContext)?.findRenderObject() as RenderBox?;
       if (!mounted || escena == null || poceta == null || chip == null || !escena.hasSize) return;
       Offset centro(RenderBox b) => escena.globalToLocal(b.localToGlobal(b.size.center(Offset.zero)));
       setState(() => _vuelos.add((_nVuelo++, centro(poceta), centro(chip))));
@@ -809,45 +811,9 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
   Widget _cabecera(BuildContext context, int ahora) {
     final p = paleta(context);
     final im = _c.imperio;
-    final moneda = monedaActual();
     final racha = _c.racha;
-    final rollos = im.partida.rollos;
-    // Chips en una sola fila, todos del mismo ancho y alto.
-    final chips = <Widget>[
-      // Fichas: abre la hoja de Fichas (fichas.dart).
-      GestureDetector(
-        key: const Key('chip_fichas'),
-        onTap: () => abrirHojaFichas(context, _c, _avisar),
-        child: _chip(context, '🎟️', '${im.fichas}'),
-      ),
-      // Ciruelas: abre la tienda. La llave es el destino de la ciruela que vuela.
-      GestureDetector(
-        key: const Key('chip_ciruelas'),
-        onTap: () => _abrirObjetos(context),
-        child: KeyedSubtree(key: _llaveCiruelas, child: _chip(context, '🫐', '${im.ciruelas}', borde: acento)),
-      ),
-      GestureDetector(
-        onTap: () => _avisar('💩', tr('x${_mj(im.multiplicadorCagadas)} por tus ${im.cagadas} cagadas reales',
-            'x${_mj(im.multiplicadorCagadas)} from your ${im.cagadas} real poops')),
-        child: _chip(context, '💩', 'x${_mj(im.multiplicadorCagadas)}'),
-      ),
-      if (racha != null)
-        GestureDetector(
-          key: const Key('chip_racha'),
-          onTap: () => mostrarHojaRacha(context, _c, _avisar),
-          child: _chip(context, '🔥', '${racha.dia}/$diasRacha', borde: racha.reclamado ? null : acento),
-        ),
-      if (_c.cofre != null) ChipCofre(control: _c, avisar: _avisar),
-      // Rollos de regalo por abrir (regalos.dart): solo sale si hay alguno.
-      if (hayRegalos(_c)) ChipRegalos(control: _c, avisar: _avisar),
-      if (rollos > 0)
-        GestureDetector(
-          key: const Key('chip_rollos'),
-          onTap: () => _avisar('🧻', tr('${_mj(rollos.toDouble())} Rollos de Oro: todo produce ${_pctRollos(im)} hasta la mudanza',
-              '${_mj(rollos.toDouble())} Golden Rolls: everything makes ${_pctRollos(im)} until you move')),
-          child: _chip(context, '🧻', '${_mj(rollos.toDouble())} · ${_pctRollos(im)}'),
-        ),
-    ];
+    // Algo por abrir en la hoja del saldo: el Cofre o Rollos de regalo.
+    final punto = _c.cofre != null || hayRegalos(_c);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       child: Column(
@@ -856,109 +822,96 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
           Row(
             children: [
               Expanded(
-                child: GestureDetector(
-                  key: const Key('recorrido_saldo'),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _avisar('💩', moneda.nombre),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Alto fijo: el saldo se encoge al no caber y, si el alto siguiera a la escala, la pantalla entera
-                      // saltaría cada vez que cambian los dígitos.
-                      SizedBox(
-                        height: 40,
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: montoMj(_mj(im.saldo), numeros(context, tamano: 32, weight: FontWeight.w900)),
+                child: PedidoRegalos(
+                  control: _c,
+                  avisar: _avisar,
+                  child: GestureDetector(
+                    key: const Key('boton_saldo'),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _abrirHojaSaldo(context),
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Column(
+                            key: _llaveSaldo,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Alto fijo: el saldo se encoge al no caber y, si el alto siguiera a la escala, la pantalla entera
+                              // saltaría cada vez que cambian los dígitos.
+                              SizedBox(
+                                height: 40,
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: montoMj(_mj(im.saldo), numeros(context, tamano: 32, weight: FontWeight.w900)),
+                                ),
+                              ),
+                              // MJ/s y MJ por toque en una sola línea: si no caben, se encogen (nunca se parten).
+                              SizedBox(
+                                height: 18,
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                      tr('${_mj(im.mps(ahora))} por seg  ·  ${_mj(im.valorPujo(ahora))} por toque',
+                                          '${_mj(im.mps(ahora))} per sec  ·  ${_mj(im.valorPujo(ahora))} per tap'),
+                                      maxLines: 1,
+                                      softWrap: false,
+                                      style: numeros(context, tamano: 13, color: p.textoSuave)),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      // MJ/s y MJ por toque en una sola línea: si no caben, se encogen (nunca se parten).
-                      SizedBox(
-                        height: 18,
-                        child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(tr('${_mj(im.mps(ahora))} por seg  ·  ${_mj(im.valorPujo(ahora))} por toque',
-                                '${_mj(im.mps(ahora))} per sec  ·  ${_mj(im.valorPujo(ahora))} per tap'),
-                            maxLines: 1, softWrap: false, style: numeros(context, tamano: 13, color: p.textoSuave)),
+                        const SizedBox(width: 6),
+                        // Flecha de la hoja del saldo; con punto amarillo si hay algo por abrir.
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Icon(Icons.expand_more, size: 20, color: p.textoSuave),
+                            if (punto)
+                              Positioned(
+                                right: -2,
+                                top: -2,
+                                child: Container(
+                                  key: const Key('punto_saldo'),
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(color: acento, borderRadius: BorderRadius.circular(radio)),
+                                ),
+                              ),
+                          ],
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
-              // Tienda de estilo: temas, efectos de CAGUÉ y movimientos del avatar.
-              Tooltip(
-                message: tr('Tienda de estilo', 'Style shop'),
-                child: InkWell(
-                  key: const Key('boton_estilo'),
-                  onTap: () => abrirTiendaEstilo(context, _c),
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: _caja(context),
-                    child: Icon(Icons.palette_outlined, size: 18, color: p.texto),
-                  ),
+              if (racha != null) ...[
+                GestureDetector(
+                  key: const Key('chip_racha'),
+                  onTap: () => mostrarHojaRacha(context, _c, _avisar),
+                  child: SizedBox(width: 64, child: _chip(context, '🔥', '${racha.dia}/$diasRacha', borde: racha.reclamado ? null : acento)),
                 ),
-              ),
-              const SizedBox(width: 8),
-              // Ranking del Imperio: vive en la pestaña RANKING, este botón lleva ahí.
-              Tooltip(
-                message: tr('Ranking del Imperio', 'Empire leaderboard'),
-                child: InkWell(
-                  key: const Key('boton_ranking_imperio'),
-                  onTap: verRankingImperio,
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: _caja(context),
-                    child: Icon(Icons.emoji_events_outlined, size: 18, color: p.texto),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              // Mandar la foto del baño (como lo tengas personalizado) al chat.
-              Tooltip(
-                message: tr('Compartir mi baño', 'Share my bathroom'),
-                child: InkWell(
-                  key: const Key('boton_foto_bano'),
-                  onTap: () => presumirBano(context, _c),
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: _caja(context),
-                    child: Icon(Icons.photo_camera_outlined, size: 18, color: p.texto),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              // Presumir la cartera: en el chat o como imagen para historias.
-              Tooltip(
-                message: tr('Presumir cartera', 'Show off your wallet'),
-                child: InkWell(
-                  key: const Key('boton_cartera'),
-                  onTap: () => compartirCartera(context, _c),
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: _caja(context),
-                    child: Icon(Icons.ios_share, size: 18, color: p.texto),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              for (var i = 0; i < chips.length; i++) ...[
-                if (i > 0) const SizedBox(width: 6),
-                Expanded(flex: i == chips.length - 1 && rollos > 0 ? 2 : 1, child: chips[i]),
+                const SizedBox(width: 6),
               ],
-              const SizedBox(width: 6),
               BotonQueHago(alTocar: () => _queHago(context)),
+              const SizedBox(width: 6),
+              Tooltip(
+                message: tr('Más', 'More'),
+                child: InkWell(
+                  key: const Key('boton_mas'),
+                  onTap: () => _abrirHojaMas(context),
+                  child: Container(
+                    width: 34,
+                    height: 34,
+                    decoration: _caja(context),
+                    child: Icon(Icons.more_horiz, size: 18, color: p.texto),
+                  ),
+                ),
+              ),
             ],
           ),
           if (im.manaAbierto) ...[
@@ -969,6 +922,131 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       ),
     );
   }
+
+  /// Hoja cuadrada de la cabecera: título y filas. Se reconstruye con el control (las cifras siguen vivas).
+  Future<void> _hojaCabecera(BuildContext context, {required Key llave, required String titulo, required List<Widget> Function(BuildContext hoja) filas}) {
+    final p = paleta(context);
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: p.fondo,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radio)),
+      builder: (hoja) => ListenableBuilder(
+        listenable: _c,
+        builder: (hoja, _) => SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(hoja).height * 0.85),
+            child: SingleChildScrollView(
+              key: llave,
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(titulo, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: p.texto)),
+                  const SizedBox(height: 12),
+                  for (final f in filas(hoja)) ...[f, const SizedBox(height: 8)],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Una fila de la hoja del saldo: el chip a la izquierda y qué es a la derecha.
+  Widget _filaSaldo(BuildContext hoja, {Key? llave, required Widget chip, required String texto, VoidCallback? alTocar}) {
+    final fila = Row(
+      children: [
+        SizedBox(width: 104, child: chip),
+        const SizedBox(width: 10),
+        Expanded(child: Text(texto, style: TextStyle(fontSize: 13, color: paleta(hoja).textoSuave))),
+      ],
+    );
+    if (alTocar == null) return KeyedSubtree(key: llave, child: fila);
+    return GestureDetector(key: llave, behavior: HitTestBehavior.opaque, onTap: alTocar, child: fila);
+  }
+
+  /// Tocar el saldo: Fichas, Ciruelas, el multiplicador 💩, el Cofre, los regalos y los Rollos de Oro.
+  Future<void> _abrirHojaSaldo(BuildContext context) => _hojaCabecera(context,
+      llave: const Key('hoja_saldo'),
+      titulo: monedaActual().nombre,
+      filas: (hoja) {
+        final im = _c.imperio;
+        final rollos = im.partida.rollos;
+        final mult = _mj(im.multiplicadorCagadas);
+        void cerrarY(void Function() accion) {
+          Navigator.pop(hoja);
+          accion();
+        }
+
+        return [
+          _filaSaldo(hoja,
+              llave: const Key('chip_fichas'),
+              chip: _chip(hoja, '🎟️', '${im.fichas}'),
+              texto: tr('Fichas: x2 por 1 h o sin espera. Salen en la racha y en el Cofre.', 'Tokens: x2 for 1 h or no wait. They come from the streak and the Chest.'),
+              alTocar: () => cerrarY(() => abrirHojaFichas(context, _c, _avisar))),
+          // La llave es el destino de la ciruela que vuela (con la hoja cerrada vuela al saldo).
+          _filaSaldo(hoja,
+              llave: const Key('chip_ciruelas'),
+              chip: KeyedSubtree(key: _llaveCiruelas, child: _chip(hoja, '🫐', '${im.ciruelas}', borde: acento)),
+              texto: tr('Ciruelas: se gastan en la tienda.', 'Plums: spend them in the shop.'),
+              alTocar: () => cerrarY(() => _abrirObjetos(context))),
+          _filaSaldo(hoja,
+              llave: const Key('chip_cagadas'),
+              chip: _chip(hoja, '💩', 'x$mult'),
+              texto: tr('x$mult por tus ${im.cagadas} cagadas reales.', 'x$mult from your ${im.cagadas} real poops.')),
+          if (_c.cofre != null)
+            _filaSaldo(hoja,
+                chip: ChipCofre(control: _c, avisar: _avisar),
+                texto: tr('Cofre del Trono: toca para ver qué pide y qué trae.', 'Throne Chest: tap to see what it asks and what it brings.'),
+                alTocar: () => abrirHojaCofre(hoja, _c, _avisar)),
+          if (hayRegalos(_c))
+            _filaSaldo(hoja,
+                chip: ChipRegalos(control: _c, avisar: _avisar),
+                texto: tr('Rollos de regalo por abrir.', 'Gift Rolls to open.'),
+                alTocar: () => abrirHojaRegalos(hoja, _c, _avisar)),
+          if (rollos > 0)
+            _filaSaldo(hoja,
+                llave: const Key('chip_rollos'),
+                chip: _chip(hoja, '🧻', '${_mj(rollos.toDouble())} · ${_pctRollos(im)}'),
+                texto: tr('Rollos de Oro: todo produce ${_pctRollos(im)} hasta la mudanza.', 'Golden Rolls: everything makes ${_pctRollos(im)} until you move.')),
+        ];
+      });
+
+  /// ⋯: estilo, ranking, foto del baño y cartera. Cada fila cierra la hoja y sigue desde la pantalla.
+  Future<void> _abrirHojaMas(BuildContext context) => _hojaCabecera(context,
+      llave: const Key('hoja_mas'),
+      titulo: tr('Más', 'More'),
+      filas: (hoja) {
+        Widget fila(String llave, IconData icono, String texto, void Function() accion) => InkWell(
+              key: Key(llave),
+              onTap: () {
+                Navigator.pop(hoja);
+                accion();
+              },
+              child: Container(
+                height: 48,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: _caja(hoja),
+                child: Row(children: [
+                  Icon(icono, size: 18, color: paleta(hoja).texto),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(texto, style: TextStyle(fontWeight: FontWeight.w800, color: paleta(hoja).texto))),
+                ]),
+              ),
+            );
+        return [
+          // Tienda de estilo: temas, efectos de CAGUÉ y movimientos del avatar.
+          fila('boton_estilo', Icons.palette_outlined, tr('Tienda de estilo', 'Style shop'), () => abrirTiendaEstilo(context, _c)),
+          // Ranking del Imperio: vive en la pestaña RANKING, este botón lleva ahí.
+          fila('boton_ranking_imperio', Icons.emoji_events_outlined, tr('Ranking del Imperio', 'Empire leaderboard'), verRankingImperio),
+          // Mandar la foto del baño (como lo tengas personalizado) al chat.
+          fila('boton_foto_bano', Icons.photo_camera_outlined, tr('Compartir mi baño', 'Share my bathroom'), () => presumirBano(context, _c)),
+          // Presumir la cartera: en el chat o como imagen para historias.
+          fila('boton_cartera', Icons.ios_share, tr('Presumir cartera', 'Show off your wallet'), () => compartirCartera(context, _c)),
+        ];
+      });
 
   String _pctRollos(Imperio im) => porcentajeRollos(im.partida.rollos, im.ajustes.rolloPct);
 

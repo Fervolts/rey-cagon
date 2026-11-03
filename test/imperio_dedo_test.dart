@@ -398,6 +398,60 @@ void main() {
       expect(find.text('SALA'), findsOneWidget);
       expect(t.takeException(), isNull);
     });
+
+    testWidgets('cabecera: arriba solo el saldo, ¿Qué hago? y ⋯; los botones viven en la hoja de ⋯', (t) async {
+      await _montar(t, _estado(_veterano(), cagadas: 30));
+      // Los avisos de la carga salen arriba, encima de la cabecera: se espera a que pasen.
+      await _esperar(t, 80);
+      for (final k in ['boton_saldo', 'boton_que_hago', 'boton_mas']) {
+        expect(find.byKey(Key(k)), findsOneWidget, reason: k);
+      }
+      const enHojas = ['boton_estilo', 'boton_ranking_imperio', 'boton_foto_bano', 'boton_cartera', 'chip_fichas', 'chip_ciruelas', 'chip_rollos'];
+      for (final k in enHojas) {
+        expect(find.byKey(Key(k)), findsNothing, reason: k);
+      }
+      await t.tap(find.byKey(const Key('boton_mas')));
+      await _esperar(t);
+      expect(find.byKey(const Key('hoja_mas')), findsOneWidget);
+      for (final k in ['boton_estilo', 'boton_ranking_imperio', 'boton_foto_bano', 'boton_cartera']) {
+        expect(find.byKey(Key(k)), findsOneWidget, reason: k);
+      }
+      Navigator.of(t.element(find.byKey(const Key('hoja_mas')))).pop();
+      await _esperar(t);
+      expect(find.byKey(const Key('hoja_mas')), findsNothing);
+      expect(t.takeException(), isNull);
+      await _desmontar(t);
+    });
+
+    testWidgets('tocar el saldo abre la hoja con Fichas, Ciruelas, 💩 y Rollos de Oro; el punto sale con el Cofre', (t) async {
+      final (c, _, _) = await _montar(t, _estado(_veterano(), cagadas: 30));
+      await _esperar(t, 80);
+      expect(find.byKey(const Key('punto_saldo')), findsNothing);
+      await t.tap(find.byKey(const Key('boton_saldo')));
+      await _esperar(t);
+      expect(find.byKey(const Key('hoja_saldo')), findsOneWidget);
+      for (final k in ['chip_fichas', 'chip_ciruelas', 'chip_cagadas', 'chip_rollos']) {
+        expect(find.byKey(Key(k)), findsOneWidget, reason: k);
+      }
+      Navigator.of(t.element(find.byKey(const Key('hoja_saldo')))).pop();
+      await _esperar(t);
+
+      c.cofre = const EstadoCofre(dias: 3, listo: true, reclamado: false, semanasRacha: 1, fichas: 5, ciruelas: 0);
+      await _esperar(t);
+      expect(find.byKey(const Key('punto_saldo')), findsOneWidget);
+      expect(t.takeException(), isNull);
+      await _desmontar(t);
+    });
+
+    testWidgets('la cabecera cabe en 360 dp', (t) async {
+      t.view.physicalSize = const Size(360, 780);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.reset);
+      await _montar(t, _estado(_veterano(), cagadas: 30));
+      expect(find.byKey(const Key('boton_mas')), findsOneWidget);
+      expect(t.takeException(), isNull);
+      await _desmontar(t);
+    });
   });
 
   group('Dedos (pura)', () {

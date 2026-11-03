@@ -33,23 +33,31 @@ bool hayRegalos(ControlImperio c) {
   return r != null && r.activo && r.regalos.isNotEmpty;
 }
 
-/// Chip 🎁 ×N con los Rollos por abrir (el del Cofre dice x/3, ABRIR o ✓). Amarillo si hoy todavía se puede abrir alguno.
-/// Al tocarlo abre [abrirHojaRegalos].
-class ChipRegalos extends StatefulWidget {
-  const ChipRegalos({super.key, required this.control, required this.avisar});
+/// Abre la hoja de regalos cuando la pidieron ([irARegalos]) y ya hay Rollos por abrir. Va siempre montado en la cabecera
+/// del Imperio: el chip vive en la hoja del saldo, que casi siempre está cerrada.
+class PedidoRegalos extends StatefulWidget {
+  const PedidoRegalos({super.key, required this.control, required this.avisar, required this.child});
 
   final ControlImperio control;
   final void Function(String emoji, String texto) avisar;
+  final Widget child;
 
   @override
-  State<ChipRegalos> createState() => _ChipRegalosState();
+  State<PedidoRegalos> createState() => _PedidoRegalosState();
 }
 
-class _ChipRegalosState extends State<ChipRegalos> {
+class _PedidoRegalosState extends State<PedidoRegalos> {
   @override
   void initState() {
     super.initState();
     pedirHojaRegalos.addListener(_pedida);
+    _pedida();
+  }
+
+  @override
+  void didUpdateWidget(PedidoRegalos old) {
+    super.didUpdateWidget(old);
+    // La cabecera se reconstruye en cada tick: así se abre en cuanto lleguen los Rollos.
     _pedida();
   }
 
@@ -61,7 +69,7 @@ class _ChipRegalosState extends State<ChipRegalos> {
 
   void _pedida() {
     final pedida = pedirHojaRegalos.value;
-    if (pedida == null) return;
+    if (pedida == null || !hayRegalos(widget.control)) return;
     pedirHojaRegalos.value = null;
     if (DateTime.now().difference(pedida) > const Duration(minutes: 1)) return;
     // Después del cambio de pestaña (ir('imperio') cierra lo que haya encima en este mismo frame).
@@ -71,14 +79,26 @@ class _ChipRegalosState extends State<ChipRegalos> {
   }
 
   @override
+  Widget build(BuildContext context) => widget.child;
+}
+
+/// Chip 🎁 ×N con los Rollos por abrir (el del Cofre dice x/3, ABRIR o ✓). Amarillo si hoy todavía se puede abrir alguno.
+/// Al tocarlo abre [abrirHojaRegalos].
+class ChipRegalos extends StatelessWidget {
+  const ChipRegalos({super.key, required this.control, required this.avisar});
+
+  final ControlImperio control;
+  final void Function(String emoji, String texto) avisar;
+
+  @override
   Widget build(BuildContext context) {
     final p = paleta(context);
-    final r = widget.control.regalos;
+    final r = control.regalos;
     if (r == null || r.regalos.isEmpty) return const SizedBox.shrink();
     final listo = r.puedeAbrir;
     return GestureDetector(
       key: const Key('chip_regalos'),
-      onTap: () => abrirHojaRegalos(context, widget.control, widget.avisar),
+      onTap: () => abrirHojaRegalos(context, control, avisar),
       child: Container(
         height: 34,
         padding: const EdgeInsets.symmetric(horizontal: 6),

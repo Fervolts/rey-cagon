@@ -9,7 +9,8 @@ import 'fichas.dart' show faltaCorto;
 import 'formato.dart';
 import 'motor.dart';
 
-/// Barra fina del Maná. Solo con el candado de 15 cagadas abierto; al tocarla abre la hoja.
+/// Barra fina del Maná: el 🌀 y cuánto lleva (borde amarillo si ya alcanza una habilidad). La cifra y las habilidades van
+/// en la hoja. Solo con el candado de 15 cagadas abierto; al tocarla abre la hoja.
 class BarraMana extends StatelessWidget {
   const BarraMana({super.key, required this.control, required this.avisar, required this.ahora});
 
@@ -29,7 +30,7 @@ class BarraMana extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: () => abrirHojaMana(context, control, avisar),
       child: SizedBox(
-        height: 18,
+        height: 16,
         child: Row(
           children: [
             const Emoji('🌀', tamano: 14),
@@ -45,8 +46,6 @@ class BarraMana extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 6),
-            Text('${mana.floor()}/${manaMax.round()}', style: numeros(context, tamano: 11, color: p.textoSuave)),
           ],
         ),
       ),
