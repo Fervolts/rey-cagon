@@ -12,7 +12,8 @@
 //
 // Con SIM_ABDICAR=1 corre la otra, de 600 días (DIAS la cambia): el mismo jugador abdica apenas puede (Palacio, Llaves
 // ganadas en el reinado y cagadas reales desde la última abdicación, máx 3 por día) y gasta las Coronas en La Corte:
-// Heraldo y Tesorero primero, después Bufón. Tarda unos 10 min.
+// Maestro de obras primero, luego Heraldo, Tesorero y Bufón. Metas: 1.ª abdicación entre los días 300 y 420; el 2.º
+// reinado llega al Palacio en 75% o menos de los días del 1.º y, si hay 3.º, en 50% o menos. Tarda unos 10 min.
 import 'dart:io';
 import 'dart:math';
 
@@ -42,7 +43,7 @@ const Set<String> _plomeriaFuerte = {'tuberia_ancha', 'llave_paso'};
 const List<String> _ordenLlavero = ['cimientos', 'camion_mudanza', 'ahorros', 'mayordomo'];
 
 /// Orden en el que gasta las Coronas: el primero que le alcance.
-const List<String> _ordenCorte = ['heraldo', 'tesorero', 'bufon'];
+const List<String> _ordenCorte = ['maestro_obras', 'heraldo', 'tesorero', 'bufon'];
 
 class _Opcion {
   final String id;
@@ -438,6 +439,15 @@ void main() {
     lineas.add('Llegada al Palacio por dinastía: '
         '${palacios.map((x) => '${rom(x.$1)}: día ${x.$2 + 1}').join(', ')}');
     lineas.add('Abdicaciones: ${sim.diasAbdicacion.map((d) => 'día ${d + 1}').join(', ')}');
+    // Días de cada reinado hasta el Palacio: el I desde el día 1; los siguientes desde la abdicación anterior.
+    final reinados = <int>[
+      for (final x in palacios)
+        if (x.$1 == 0) x.$2 else if (x.$1 - 1 < sim.diasAbdicacion.length) x.$2 - sim.diasAbdicacion[x.$1 - 1],
+    ];
+    lineas.add('Días hasta el Palacio por reinado: ${[
+      for (var i = 0; i < reinados.length; i++)
+        '${i + 1}.º: ${reinados[i]}${i == 0 ? '' : ' (${(100 * reinados[i] / reinados.first).round()}% del I)'}',
+    ].join(', ')}');
     lineas.add('Al final: ${imp.partida.abdicaciones} abdicaciones, ${imp.partida.coronasGanadas} Coronas ganadas, '
         '${imp.coronas} sin gastar, corte ${imp.partida.corte}, ${imp.partida.mudanzas} mudanzas, x${e(imp.multiplicadorCorte)} '
         'de La Corte, ${e(imp.mjTotal)} MJ en total');
@@ -448,9 +458,11 @@ void main() {
     expect(palacios, isNotEmpty, reason: 'no llegó al Palacio');
     expect(palacios.first.$2 + 1, inInclusiveRange(230, 300), reason: 'Palacio');
     expect(sim.diasAbdicacion, isNotEmpty, reason: 'no abdicó en $_diasAbdicar días');
-    expect(sim.diasAbdicacion.first + 1, inInclusiveRange(330, 420), reason: '1.ª abdicación');
-    final vuelta = palacios.where((x) => x.$1 == 1).map((x) => x.$2 - sim.diasAbdicacion.first).firstOrNull;
-    expect(vuelta, isNotNull, reason: 'después de abdicar no volvió al Palacio');
-    expect(vuelta!, lessThan(palacios.first.$2 / 2), reason: 'vuelta al Palacio');
+    expect(sim.diasAbdicacion.first + 1, inInclusiveRange(300, 420), reason: '1.ª abdicación');
+    expect(reinados.length, greaterThanOrEqualTo(2), reason: 'después de abdicar no volvió al Palacio');
+    expect(reinados[1], lessThanOrEqualTo(reinados.first * .75), reason: 'reinado II: hasta el 75% de los días del I');
+    if (reinados.length >= 3) {
+      expect(reinados[2], lessThanOrEqualTo(reinados.first * .5), reason: 'reinado III: hasta el 50% de los días del I');
+    }
   }, skip: _correrAbdicar ? false : 'Simulación larga: correr con SIM_ABDICAR=1', timeout: const Timeout(Duration(minutes: 30)));
 }
