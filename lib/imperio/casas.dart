@@ -62,6 +62,9 @@ String dinastia(int abdicaciones) => abdicaciones <= 0 ? '' : '${tr('Dinastía',
 /// [texto] de la casa con la dinastía detrás: "Rancho · Dinastía II". Sin abdicar, [texto] tal cual.
 String conDinastia(String texto, int abdicaciones) => abdicaciones <= 0 ? texto : '$texto · ${dinastia(abdicaciones)}';
 
+/// Como [conDinastia] pero corto, para sitios estrechos: "🛖 Rancho 👑II".
+String conDinastiaCorta(String texto, int abdicaciones) => abdicaciones <= 0 ? texto : '$texto 👑${_romano(abdicaciones + 1)}';
+
 /// Nombres de los edificios en Casa, Quinta, Mansión y Palacio (es, en). En el Rancho son los del catálogo.
 const Map<String, List<(String, String)>> _nombresPorCasa = {
   'dedo': [

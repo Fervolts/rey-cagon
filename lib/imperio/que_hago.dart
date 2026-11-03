@@ -220,7 +220,7 @@ Sugerencia queHagoAhora(Imperio im, int ahora,
     final pct = (im.ajustes.coronaPct * 100).round();
     return Sugerencia('abdicar', '👑', tr('Abdica', 'Abdicate'),
         tr('Ni el Palacio te alcanza. Te llevas $c Coronas (+$pct% cada una) y empiezas otra dinastía desde el Rancho.',
-            'Not even the Palace is enough. You take $c Crowns (+$pct% each) and start a new dynasty from the Ranch.'),
+            'Not even the Palace is enough. You take $c Crowns (+$pct% each) and start a new dynasty from the Shack.'),
         DestinoQueHago.abdicar);
   }
   if (mudanzaLista) {

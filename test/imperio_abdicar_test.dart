@@ -208,6 +208,8 @@ void main() {
       expect(dinastia(3), endsWith(' IV'));
       expect(conDinastia('Rancho', 0), 'Rancho');
       expect(conDinastia('Rancho', 1), 'Rancho · ${dinastia(1)}');
+      expect(conDinastiaCorta('Rancho', 0), 'Rancho');
+      expect(conDinastiaCorta('Rancho', 1), 'Rancho 👑II');
     });
 
     test('después de abdicar los MJ rinden abdicarDivisorRollos veces menos Rollos, una vez y no por reinado', () {

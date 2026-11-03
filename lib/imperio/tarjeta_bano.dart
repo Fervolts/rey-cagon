@@ -168,9 +168,9 @@ class _Pie extends StatelessWidget {
   Widget build(BuildContext context) {
     final (emoji, nombre) = nombreAmbiente(ambiente, mudanzas);
     // Desde la primera mudanza el pie dice en qué casa está el baño: "🏡 Quinta"; tras abdicar, con la dinastía:
-    // "🛖 Rancho · Dinastía II".
+    // "🛖 Rancho 👑II".
     final casa = mudanzas > 0 || abdicaciones > 0
-        ? conDinastia(casaConEmoji(mudanzas), abdicaciones)
+        ? conDinastiaCorta(casaConEmoji(mudanzas), abdicaciones)
         : '🚽 ${tr('Mi baño', 'My bathroom')}';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),

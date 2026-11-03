@@ -125,7 +125,7 @@ class _HojaAbdicar extends StatelessWidget {
                             style: TextStyle(fontWeight: FontWeight.w900, color: p.texto)),
                         Text(
                             tr('Abdica y vuelve a empezar desde el Rancho, pero con Coronas que multiplican todo.',
-                                'Abdicate and start over from the Ranch, but with Crowns that multiply everything.'),
+                                'Abdicate and start over from the Shack, but with Crowns that multiply everything.'),
                             style: suave),
                       ],
                     ),
