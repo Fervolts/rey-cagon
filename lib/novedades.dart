@@ -21,6 +21,14 @@ class VersionNovedades {
 
 /// El historial público, de la más nueva a la más vieja. Al sacar una versión nueva se agrega arriba.
 const historialNovedades = <VersionNovedades>[
+  VersionNovedades('2.16.0', '2026-11-03', [
+    ('✨', 'Pantalla más limpia: arriba quedan tu saldo, el ? y el ⋯. Toca el saldo para ver tus Fichas, Ciruelas, el Cofre y los Rollos; en ⋯ están el estilo, el ranking, la foto del baño y la cartera.',
+        'A cleaner screen: up top you only see your balance, the ? and the ⋯. Tap the balance to see your Tokens, Plums, the Chest and your Rolls; ⋯ holds style, the leaderboard, the bathroom photo and your wallet.'),
+    ('⛓️', 'JALAR abre la Cadena con su Plomería, y la MUDANZA sale cuando ya no cabes en tu casa, con el Llavero adentro.',
+        'FLUSH opens the Chain with its Plumbing, and MOVING shows up when you no longer fit in your house, with the Keyring inside.'),
+    ('👆', 'Un dedo te enseña dónde tocar la primera vez: la poceta, los cagadores, la primera mejora, JALAR y la MUDANZA.',
+        'A finger shows you where to tap the first time: the toilet, the poopers, the first upgrade, FLUSH and MOVING.'),
+  ]),
   VersionNovedades('2.15.0', '2026-11-02', [
     ('🏠', 'MUDANZA: cuando ya jalaste bastante la cadena, múdate a una casa más grande. Se reinicia todo, pero ganas Llaves y cada casa produce mucho más que la anterior. Rancho, Casa, Quinta, Mansión y Palacio, y en cada casa tus cagadores cambian de nombre.',
         'MOVING: once you have flushed enough, move to a bigger house. Everything resets, but you earn Keys and every house produces way more than the last one. Shack, House, Villa, Mansion and Palace, and your poopers get new names in every house.'),
