@@ -132,6 +132,24 @@ Future<void> cancelarCierres() async {
 }
 
 // Aviso local del Imperio (id 200): uno solo programado a la vez. Se programa al salir de la app y se borra al volver.
+// Noche de los avisos del Imperio y del Atasco: de 23:30 a 7:30 (hora del teléfono). Lo que caiga ahí sale a las 7:30.
+const nocheEmpiezaHora = 23;
+const nocheEmpiezaMinuto = 30;
+const nocheTerminaHora = 7;
+const nocheTerminaMinuto = 30;
+
+/// Si [cuando] cae de noche, la hora a la que debe salir el aviso (7:30 de ese día o del siguiente); null = no es de noche.
+DateTime? salidaDeNoche(DateTime cuando) {
+  final minuto = cuando.hour * 60 + cuando.minute;
+  if (minuto >= nocheEmpiezaHora * 60 + nocheEmpiezaMinuto) {
+    return DateTime(cuando.year, cuando.month, cuando.day + 1, nocheTerminaHora, nocheTerminaMinuto);
+  }
+  if (minuto < nocheTerminaHora * 60 + nocheTerminaMinuto) {
+    return DateTime(cuando.year, cuando.month, cuando.day, nocheTerminaHora, nocheTerminaMinuto);
+  }
+  return null;
+}
+
 // Respeta el interruptor "Avisos de la poceta" (copia local en [clavePocetaLocal]).
 const _idImperio = 200;
 const clavePocetaLocal = 'avisos_poceta';
@@ -144,15 +162,15 @@ NotificationDetails get _detallesImperio => NotificationDetails(
   ),
 );
 
-/// Programa el aviso del Imperio para dentro de [en]. Si cae de noche (antes de las 9 o desde las 22), pasa a las 9.
+/// Programa el aviso del Imperio para dentro de [en]. Si cae de noche (ver [salidaDeNoche]), sale a las 7:30.
 /// [nombreEs] / [nombreEn] = lo que ya alcanza; null = se llenó la poceta.
 Future<void> programarAvisoImperio(Duration en, {String? nombreEs, String? nombreEn}) async {
   await notificaciones.cancel(id: _idImperio);
   final prefs = await SharedPreferences.getInstance();
   if (!(prefs.getBool(clavePocetaLocal) ?? true)) return;
   var cuando = tz.TZDateTime.now(tz.local).add(en < const Duration(minutes: 15) ? const Duration(minutes: 15) : en);
-  if (cuando.hour < 9) cuando = tz.TZDateTime(tz.local, cuando.year, cuando.month, cuando.day, 9);
-  if (cuando.hour >= 22) cuando = tz.TZDateTime(tz.local, cuando.year, cuando.month, cuando.day + 1, 9);
+  final manana = salidaDeNoche(cuando);
+  if (manana != null) cuando = tz.TZDateTime(tz.local, manana.year, manana.month, manana.day, manana.hour, manana.minute);
   final (titulo, cuerpo) = nombreEs == null
       ? (tr('🚽 Se llenó tu poceta', '🚽 Your toilet is full'),
           tr('Ya no cabe un mojonólar más. Ven a cobrar y ponla a producir otra vez 💩', "Not one more Poopbuck fits. Come collect and get it producing again 💩"))
@@ -173,14 +191,14 @@ Future<void> programarAvisoImperio(Duration en, {String? nombreEs, String? nombr
 const _idAtasco = 201;
 
 /// Programa el aviso del Atasco offline para dentro de [en] ([edificioEs] / [edificioEn] = el que se atasca). De noche
-/// pasa a las 9, como el del Imperio. false = no se programó (avisos apagados).
+/// sale a las 7:30, como el del Imperio. false = no se programó (avisos apagados).
 Future<bool> programarAvisoAtasco(Duration en, {required String edificioEs, required String edificioEn}) async {
   await notificaciones.cancel(id: _idAtasco);
   final prefs = await SharedPreferences.getInstance();
   if (!(prefs.getBool(clavePocetaLocal) ?? true)) return false;
   var cuando = tz.TZDateTime.now(tz.local).add(en < const Duration(minutes: 1) ? const Duration(minutes: 1) : en);
-  if (cuando.hour < 9) cuando = tz.TZDateTime(tz.local, cuando.year, cuando.month, cuando.day, 9);
-  if (cuando.hour >= 22) cuando = tz.TZDateTime(tz.local, cuando.year, cuando.month, cuando.day + 1, 9);
+  final manana = salidaDeNoche(cuando);
+  if (manana != null) cuando = tz.TZDateTime(tz.local, manana.year, manana.month, manana.day, manana.hour, manana.minute);
   await notificaciones.zonedSchedule(
     id: _idAtasco,
     title: tr('🪠 ¡Se te atascó la poceta!', '🪠 Your toilet got clogged!'),

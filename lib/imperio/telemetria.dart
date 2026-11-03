@@ -96,6 +96,10 @@ Future<int> _enviarPorRpc(List<Map<String, Object?>> lote) async {
 ///   regalado según el servidor; en_chat = si salió la tarjeta en el chat (la primera del día)
 /// - `imperio_regalo_abre` {minutos, mj, mutuo, quedan}: abrió un Rollo de regalo. minutos = los que pagó el servidor; mj =
 ///   lo que sumó (minutos de la producción propia); mutuo = si ese mismo día yo también le regalé a quien me lo dio; quedan = Rollos por abrir
+/// - `avisos_tarjeta_ve` {total, categoria}: vio la tarjeta "Ordena tus avisos" del inicio (una vez por pantalla;
+///   avisos_resumen.dart). total = push que le llegaron en 7 días; categoria = la que más mandó
+/// - `avisos_tarjeta_abre` {total}: tocó ELEGIR AVISOS y abrió Ajustes de notificaciones
+/// - `avisos_tarjeta_descarta` {total}: la cerró; no vuelve en 14 días
 /// - `error` {donde, tipo, red}: tipo = clase de la excepción; red = si fue de red. Los guardados fallidos con la app en el fondo no cuentan (se repiten al volver)
 ///
 /// Nombres: `[a-z0-9_]`, hasta 40. Datos: JSON plano, hasta ~3,5 KB (si no, se manda `{recortado: true}`).

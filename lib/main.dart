@@ -13,6 +13,7 @@ import 'actualizar.dart';
 import 'amigos.dart';
 import 'animaciones.dart';
 import 'avisos.dart';
+import 'avisos_resumen.dart';
 import 'cagadon.dart';
 import 'efecto_cague.dart';
 import 'chat.dart';
@@ -930,6 +931,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
       const SizedBox(height: 8),
       const RetosDeHoy(),
       const SizedBox(height: 12),
+      const TarjetaOrdenaAvisos(),
       if (puesto >= 0)
         Aparece(
           orden: 3,
