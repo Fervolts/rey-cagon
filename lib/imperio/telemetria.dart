@@ -92,6 +92,10 @@ Future<int> _enviarPorRpc(List<Map<String, Object?>> lote) async {
 ///   fuera del Imperio (chat): el descuento se aplica al abrirlo
 /// - `imperio_apuesta_cobra` {resultado, min, minutos, mj}: tocó COBRAR (`gana`, doble de lo pagado) o RECUPERAR (`devuelve`:
 ///   empate, rechazo, cancelación, vencido o anulada). minutos = los que dio el servidor; mj = MJ estimados con la producción de ese momento (null si no hay Imperio)
+/// - `imperio_regalo_envia` {dados, en_chat}: regaló un Rollo 🧻 a un amigo (perfil o chat; regalos.dart). dados = total
+///   regalado según el servidor; en_chat = si salió la tarjeta en el chat (la primera del día)
+/// - `imperio_regalo_abre` {minutos, mj, mutuo, quedan}: abrió un Rollo de regalo. minutos = los que pagó el servidor; mj =
+///   lo que sumó (minutos de la producción propia); mutuo = si ese mismo día yo también le regalé a quien me lo dio; quedan = Rollos por abrir
 /// - `error` {donde, tipo, red}: tipo = clase de la excepción; red = si fue de red. Los guardados fallidos con la app en el fondo no cuentan (se repiten al volver)
 ///
 /// Nombres: `[a-z0-9_]`, hasta 40. Datos: JSON plano, hasta ~3,5 KB (si no, se manda `{recortado: true}`).

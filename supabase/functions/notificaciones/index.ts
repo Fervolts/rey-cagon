@@ -15,6 +15,7 @@
 //   - cron push_racha: { tipo: "racha", lista: [{ user_id, llevas, dia }] } → racha del Imperio a punto de perderse.
 //   - cron push_ganadores: { tipo: "ganadores", periodo, lista } → quién ganó la semana/mes/año entre tus amigos.
 //   - cron push_cierres: { tipo: "cierre", periodo, lista } → la semana/mes/año se acaba: tu puesto y a quién pasar.
+//   - imperio_regalar: { tipo: "regalo", id } → un amigo te mandó un Rollo de papel de regalo (categoría imperio).
 // Cada quien apaga categorías en push_ajustes (cagadas, rachas, ganadores, cierres, chat, retos,
 // seguidores, imperio). Apagar solo quita el push: lo que se guardaba en el centro de avisos se sigue guardando.
 // Anuncio, versión y soporte no se apagan.
@@ -435,6 +436,18 @@ async function avisarReto(id: number, evento: string) {
   ), data, "retos");
 }
 
+// Regalo del Imperio: aviso al que lo recibe. El toque abre el Imperio, donde se abre el regalo.
+async function avisarRegalo(id: string) {
+  const { data: g } = await db.from("imperio_regalos").select("de, para, abierto").eq("id", id).maybeSingle();
+  if (!g || g.abierto) return Response.json({ enviados: 0 });
+  const { data: perfil } = await db.from("profiles").select("username").eq("id", g.de).maybeSingle();
+  const quien = perfil?.username ?? "Alguien";
+  return avisarA([g.para], aviso(
+    `🎁 ${quien} te mandó un rollo de regalo`, "Ábrelo en tu Imperio y cobra producción gratis 🧻",
+    `🎁 ${quien} sent you a gift roll`, "Open it in your Empire for free production 🧻",
+  ), { tipo: "regalo", id: String(id) }, "imperio");
+}
+
 // Anuncio de un admin: a todos los teléfonos (o solo a los de un idioma), de Play y de la APK
 // directa. No se guarda por usuario: la app lee public.anuncios directo.
 async function avisarAnuncio(id: number) {
@@ -833,6 +846,7 @@ Deno.serve(async (req) => {
   if (cuerpo.tipo === "racha") return avisarRacha(cuerpo.lista ?? []);
   if (cuerpo.tipo === "ganadores") return avisarGanadores(cuerpo.periodo, cuerpo.lista ?? []);
   if (cuerpo.tipo === "cierre") return avisarCierre(cuerpo.periodo, cuerpo.lista ?? []);
+  if (cuerpo.tipo === "regalo") return avisarRegalo(String(cuerpo.id));
   const { user_id } = cuerpo;
 
   const { data: seguidores } = await db.from("follows").select("follower").eq("followed", user_id);

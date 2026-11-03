@@ -16,6 +16,7 @@ import 'comunidad.dart';
 import 'idioma.dart';
 import 'imperio/formato.dart' show formatoCantidad, formatoMj;
 import 'imperio/logros.dart' show cargarLogrosImperio;
+import 'imperio/regalos.dart' show regalarRollo;
 import 'logros.dart';
 import 'novedades.dart';
 import 'placer.dart';
@@ -46,6 +47,8 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
   Map<String, dynamic>? _p;
   bool _ocupado = false;
   bool _bloqueado = false;
+  // Rollo de regalo del Imperio (imperio/regalos.dart): mientras sale y si ya salió hoy desde aquí.
+  bool _regalando = false, _regalado = false;
   // Género del perfil propio: no sale en el RPC perfil porque nadie más lo ve.
   String? _genero;
   DateTime? _generoCambiado;
@@ -65,6 +68,16 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
   ({double mj, int rollos, int jaladas, double mps})? _partida;
 
   bool get _esMio => widget.usuarioId == db.auth.currentUser!.id;
+
+  Future<void> _regalar(String nombre) async {
+    setState(() => _regalando = true);
+    final r = await regalarRollo(context, widget.usuarioId, nombre);
+    if (!mounted) return;
+    setState(() {
+      _regalando = false;
+      _regalado = r != null && (r.ok || r.motivo == 'ya_hoy');
+    });
+  }
 
   @override
   void initState() {
@@ -772,6 +785,14 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                           onPressed: () => retar(context, widget.usuarioId, p['username']),
                           icon: const Text('⚔️'),
                           label: Text(tr('RETAR', 'CHALLENGE')),
+                        ),
+                      // Rollo de regalo del Imperio: el servidor decide si son amigos (se siguen los dos) y los topes.
+                      if (p['lo_sigo'] == true)
+                        FilledButton.icon(
+                          key: const Key('regalar'),
+                          onPressed: _regalando || _regalado ? null : () => _regalar(p['username'] as String? ?? ''),
+                          icon: const Emoji('🎁', tamano: 18),
+                          label: Text(_regalado ? tr('REGALADO', 'GIFTED') : tr('REGALAR', 'GIFT')),
                         ),
                     ]),
                   ),

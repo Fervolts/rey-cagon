@@ -15,6 +15,7 @@ import 'flags.dart';
 import 'motor.dart';
 import 'nube.dart';
 import 'racha_imperio.dart';
+import 'regalos_datos.dart';
 import 'telemetria.dart';
 
 // ---------- Partes puras (se prueban sin Supabase) ----------
@@ -165,6 +166,12 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   /// Producción que dio el último Cofre abierto (para mostrarla en la hoja del Cofre).
   double premioCofreMj = 0;
 
+  /// Regalos 🎁 por abrir y topes de hoy (RPC `imperio_regalos_pendientes`). null mientras no llega o sin la migración.
+  EstadoRegalos? regalos;
+
+  /// Las llamadas de los regalos (en las pruebas, una falsa).
+  NubeRegalos nubeRegalos = const NubeRegalos();
+
   /// Sube cada vez que cae una Ciruela 🫐 (pujo o cagada): la pantalla la hace volar al chip.
   final ValueNotifier<int> ciruelaCae = ValueNotifier(0);
 
@@ -267,6 +274,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     if (!sinConexion) unawaited(_cargarCadena(estadoServidor: estadoNube));
     if (!sinConexion) unawaited(_cargarProgreso());
     if (!sinConexion) unawaited(cargarCofre());
+    if (!sinConexion) unawaited(cargarRegalos());
     if (!sinConexion) unawaited(_cargarEstilos());
   }
 
@@ -356,6 +364,55 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  /// Trae los regalos por abrir. Nunca lanza: sin RPC o sin red el chip no sale. Da los logros de regalar que falten.
+  Future<void> cargarRegalos() async {
+    try {
+      final r = await nubeRegalos.pendientes();
+      if (_cerrado) return;
+      regalos = r;
+      if (_cargado) _sumarLogros(imperio.logrosDeRegalos(dados: r.dados));
+      notifyListeners();
+    } catch (e) {
+      _error('regalos', e);
+    }
+  }
+
+  /// Abre un Rollo de regalo: el servidor dice cuántos minutos; aquí se cobran de la producción propia. Devuelve lo que
+  /// dijo el servidor y los MJ (0 si no se abrió). Lanza el error de red sin tocar la partida.
+  Future<(ResultadoRegalo, double)> abrirRegalo(Regalo g) async {
+    final ResultadoRegalo r;
+    try {
+      r = await nubeRegalos.abrir(g.id);
+    } catch (e) {
+      _error('regalo_abrir', e);
+      rethrow;
+    }
+    if (_cerrado) return (r, 0.0);
+    final antes = regalos;
+    // ya_abierto, vencido y no_existe tampoco se pueden abrir de nuevo: se quitan de la lista.
+    if (antes != null && (r.ok || r.motivo == 'ya_abierto' || r.motivo == 'vencido' || r.motivo == 'no_existe')) {
+      regalos = r.ok ? antes.trasAbrir(g.id) : antes.sinRegalo(g.id);
+    }
+    if (!r.ok) {
+      notifyListeners();
+      return (r, 0.0);
+    }
+    final mj = imperio.abrirRegalo(r.minutos);
+    _sumarLogros(imperio.logrosDeRegalos(mutuo: r.mutuo));
+    _anotar('imperio_regalo_abre', {'minutos': r.minutos, 'mj': mj, 'mutuo': r.mutuo, 'quedan': regalos?.regalos.length ?? 0});
+    _fichasHechas();
+    return (r, mj);
+  }
+
+  /// Se regaló un Rollo desde el Imperio (ranking de amigos): pone los topes al día y da los logros de regalar.
+  void regaloHecho(String para, ResultadoRegalo r) {
+    if (!r.ok || _cerrado) return;
+    final antes = regalos;
+    if (antes != null) regalos = antes.trasRegalar(para, r.dados);
+    if (_cargado) _sumarLogros(imperio.logrosDeRegalos(dados: r.dados));
+    notifyListeners();
+  }
+
   /// Ciruelas que el servidor sacó con las cagadas reales nuevas (5% cada una): vuelan y se anotan.
   void _ciruelasDeCagadas(int n) {
     if (n <= 0) return;
@@ -437,6 +494,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       await _cargarCadena(estadoServidor: carga.estado);
       unawaited(_cargarProgreso());
       unawaited(cargarCofre());
+      unawaited(cargarRegalos());
     } catch (e) {
       _error('recargar', e);
       if (!sinConexion) {

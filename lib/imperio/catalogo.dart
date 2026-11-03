@@ -437,8 +437,8 @@ class Logro {
 /// Veces que se tocó una cosa del baño ([Partida.toques]).
 int _toques(Partida p, String id) => p.toques[id] ?? 0;
 
-/// Los 52 logros: 20 de la fase 1, 4 de la cadena, el de la racha, 15 de la fase 2, 8 escondidos del baño, 1 de temporada
-/// y 3 del Cagadón con apuesta.
+/// Los 55 logros: 20 de la fase 1, 4 de la cadena, el de la racha, 15 de la fase 2, 8 escondidos del baño, 1 de temporada,
+/// 3 del Cagadón con apuesta y 3 de regalos.
 final List<Logro> logros = [
   Logro('primer_pujo', 'Primer pujo', 'First push', '1 pujo', '1 push', (p, _) => p.pujos >= 1),
   Logro('calentando', 'Calentando', 'Warming up', '100 pujos', '100 pushes', (p, _) => p.pujos >= 100),
@@ -521,6 +521,11 @@ final List<Logro> logros = [
   Logro('apuesta_ganada', 'Apostador', 'Gambler', 'Cobrar una apuesta del Cagadón', 'Collect a Poop-Off bet', (p, _) => false),
   Logro('apuestas_5', 'Tahúr del trono', 'Throne shark', 'Ganar 5 apuestas del Cagadón', 'Win 5 Poop-Off bets', (p, _) => false),
   Logro('apuesta_60', 'Todo o nada', 'All or nothing', 'Ganar una apuesta de 60 minutos', 'Win a 60-minute bet', (p, _) => false),
+  // Regalos: los da Imperio.logrosDeRegalos con lo que cuenta el servidor (imperio_regalar / imperio_regalo_abrir), nunca la condición.
+  Logro('regalo_primero', 'Rollo con lazo', 'Roll with a bow', 'Regalarle un Rollo a un amigo', 'Gift a Roll to a friend', (p, _) => false),
+  Logro('regalo_diez', 'Santa del papel', 'Paper Santa', 'Regalar 10 Rollos', 'Gift 10 Rolls', (p, _) => false),
+  Logro('regalo_mutuo', 'Hoy por ti, mañana por mí', 'You scratch my back', 'Abrir el Rollo de un amigo al que también le regalaste',
+      'Open a Roll from a friend you also gifted', (p, _) => false, oculto: true),
 ];
 
 /// Las cosas del baño que cuentan para [Partida.toques] (lo demás que llegue se ignora).

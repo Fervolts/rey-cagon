@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'ajustes_avisos.dart';
 import 'emoji.dart';
 import 'idioma.dart';
+import 'imperio/regalos.dart' show irARegalos;
 import 'main.dart' show conReintento, db, textoError;
 import 'perfil.dart' show PantallaPerfil;
 import 'popups.dart';
@@ -158,7 +159,7 @@ class _PantallaAvisosState extends State<PantallaAvisos> {
   // Filtros de arriba: cada uno junta varios tipos de aviso.
   static Map<String, (String, Set<String>)> get _filtros => {
     'chat': (tr('💬 CHAT', '💬 CHAT'), {'mencion', 'respuesta'}),
-    'amigos': (tr('👀 AMIGOS', '👀 FRIENDS'), {'follow', 'placer', 'cagada', 'ganadores'}),
+    'amigos': (tr('👀 AMIGOS', '👀 FRIENDS'), {'follow', 'placer', 'cagada', 'ganadores', 'regalo'}),
     'retos': (tr('⚔️ RETOS', '⚔️ CHALLENGES'), {'reto'}),
     'admin': (tr('📢 ADMIN', '📢 ADMIN'), {'anuncio', 'soporte', 'reporte_chat'}),
   };
@@ -264,6 +265,9 @@ class _PantallaAvisosState extends State<PantallaAvisos> {
       case 'reto':
         Navigator.pop(context);
         ir('inicio');
+      case 'regalo':
+        Navigator.pop(context);
+        irARegalos();
       case 'ganadores':
         Navigator.pop(context);
         ir('ranking', periodo: datos['periodo'] as String?);
@@ -386,6 +390,7 @@ class _FilaAviso extends StatelessWidget {
     'reporte_chat': '🚩',
     'cagada': '🔥',
     'ganadores': '🏆',
+    'regalo': '🎁',
   };
 
   @override
