@@ -47,12 +47,14 @@ bool mudanzaDescubierta(ControlImperio c) {
 }
 
 /// Ya no cabes en esta casa: la mudanza está disponible, jalaste `mudanza_descubre_jaladas` veces en ella y la próxima
-/// jalada da menos que `mudanza_descubre_pct` de los Rollos que ya ganaste aquí.
+/// jalada da menos que `mudanza_descubre_pct` de los Rollos que ya ganaste aquí, con al menos `mudanza_descubre_min`
+/// minutos de corrida (recién jalado la próxima jalada siempre da casi nada: eso no es estar atascado).
 bool noCabes(ControlImperio c) {
   final im = c.imperio;
   final a = im.ajustes;
   return c.mudanzaDisponible &&
       im.partida.jaladasCasa >= a.mudanzaDescubreJaladas &&
+      im.partida.segPartida >= a.mudanzaDescubreMin * 60 &&
       im.rollosPorGanar < a.mudanzaDescubrePct * im.rollosCasa;
 }
 
