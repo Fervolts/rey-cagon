@@ -19,6 +19,10 @@
 // Cada quien apaga categorías en push_ajustes (cagadas, rachas, ganadores, cierres, chat, retos,
 // seguidores, imperio). Apagar solo quita el push: lo que se guardaba en el centro de avisos se sigue guardando.
 // Anuncio, versión y soporte no se apagan.
+// Topes (migración avisos_menos, función push_tope): 'cagada' y 'placer' comparten uno por persona cada
+// push_config.cagadas_cada_min (90); lo que cae dentro no sale y el siguiente aviso de cagada lo resume
+// ("y 3 amigos más desde tu último aviso"). 'version': uno por persona cada push_config.version_cada_horas (20).
+// RAMPAGE/HEXAKILL no se frenan pero cuentan como último aviso. Sin la migración no hay tope.
 // Lo que va a una persona también se guarda en public.notificaciones (centro de avisos de la app).
 // Cada texto va en español y en inglés: cada teléfono recibe el de su idioma (push_tokens.idioma).
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
@@ -170,6 +174,23 @@ async function conAviso(destinos: Destino[], ...claves: string[]) {
   return destinos.filter((d) => claves.every((c) => prendido(mapa, d.user_id, c)));
 }
 
+// Quién está frenado por el tope de su tipo ('cagadas' = cagada + placer, 'version') y cuántos amigos cagaron desde
+// su último aviso (sin contar a autor). Usuario sin entrada = sin tope. Si push_tope no existe todavía, sin tope.
+type Tope = { frenado: boolean; otros: number };
+async function topes(usuarios: (string | null | undefined)[], tipo: "cagadas" | "version", autor?: string) {
+  const mapa = new Map<string, Tope>();
+  const ids = [...new Set(usuarios.filter((u): u is string => !!u))];
+  if (!ids.length) return mapa;
+  const { data, error } = await db.rpc("push_tope", { p_usuarios: ids, p_tipo: tipo, p_autor: autor ?? null });
+  if (error) {
+    console.error("push_tope", error.message);
+    return mapa;
+  }
+  for (const f of data ?? []) mapa.set(f.user_id, { frenado: !!f.frenado, otros: Number(f.otros) || 0 });
+  return mapa;
+}
+const frenado = (mapa: Map<string, Tope>, u: string | null | undefined) => !!u && !!mapa.get(u)?.frenado;
+
 // Copia del aviso en el centro de avisos de cada usuario, tenga o no teléfono registrado.
 async function guardar(usuarios: string[], a: Aviso, datos: Record<string, string>) {
   if (!usuarios.length) return;
@@ -215,13 +236,17 @@ async function avisarVersion(version: string, build: number) {
   const { data: tokens } = await db.from("push_tokens").select("token, user_id, idioma").lt("app_build", build)
     .or("canal.is.null,canal.eq.directo");
   if (!tokens?.length) return Response.json({ enviados: 0 });
+  // Uno por persona cada push_config.version_cada_horas: al que ya le llegó uno hace poco no se le repite.
+  const tope = await topes(tokens.map((t) => t.user_id), "version");
+  const destinos = tokens.filter((t) => !frenado(tope, t.user_id));
+  if (!destinos.length) return Response.json({ enviados: 0 });
   const a = aviso(
     "Actualízame, mojón 💩",
     `La versión ${version} ya está lista. Toca para instalarla.`,
     "Update me, you turd 💩",
     `Version ${version} is ready. Tap to install it.`,
   );
-  const { enviados } = await repartir("version", tokens, fijo(a, { tipo: "version", version }));
+  const { enviados } = await repartir("version", destinos, fijo(a, { tipo: "version", version }));
   return Response.json({ enviados });
 }
 
@@ -295,7 +320,10 @@ async function avisarPlacer(id: string) {
   if (!abiertos?.length) return Response.json({ enviados: 0 });
   await guardar(abiertos.map((a) => a.id), texto, { tipo: "placer", user_id: c.user_id });
   const { data: tokens } = await db.from("push_tokens").select("token, user_id, idioma").in("user_id", abiertos.map((a) => a.id));
-  const destinos = await conAviso(tokens ?? [], "cagadas");
+  const conCagadas = await conAviso(tokens ?? [], "cagadas");
+  // Comparte el tope de las cagadas: si ya le llegó un aviso de cagada hace poco, este no sale (queda en el centro).
+  const tope = await topes(conCagadas.map((t) => t.user_id), "cagadas");
+  const destinos = conCagadas.filter((t) => !frenado(tope, t.user_id));
   if (!destinos.length) return Response.json({ enviados: 0 });
   const { enviados } = await repartir("placer", destinos, fijo(texto, { tipo: "placer", user_id: c.user_id }));
   return Response.json({ enviados });
@@ -869,7 +897,11 @@ Deno.serve(async (req) => {
   const especial = n === 5 ? "rampage" : n === 6 ? "hexakill" : null;
   const mapa = await ajustes(tokens.map((t) => t.user_id), ["cagadas", "rachas"]);
   const hype = especial ? tokens.filter((t) => prendido(mapa, t.user_id, "rachas")) : [];
-  const normales = tokens.filter((t) => !hype.includes(t) && prendido(mapa, t.user_id, "cagadas"));
+  const candidatos = tokens.filter((t) => !hype.includes(t) && prendido(mapa, t.user_id, "cagadas"));
+  // Tope: como mucho un aviso de cagada (o placer) por persona cada push_config.cagadas_cada_min. El que está
+  // frenado no recibe push (sí queda en el centro de avisos); el siguiente le cuenta cuántos amigos cagaron mientras.
+  const tope = await topes(candidatos.map((t) => t.user_id), "cagadas", user_id);
+  const normales = candidatos.filter((t) => !frenado(tope, t.user_id));
   const u = perfil.username;
 
   let enviados = 0;
@@ -901,12 +933,17 @@ Deno.serve(async (req) => {
     const r = await repartir("cagada", normales, (t) => {
       const mio = cuenta.get(t.user_id ?? "") ?? 0;
       const en = t.idioma === "en";
+      const otros = tope.get(t.user_id ?? "")?.otros ?? 0;
+      const resumen = otros <= 0 ? ""
+        : en
+        ? ` (and ${otros} ${otros === 1 ? "more friend" : "more friends"} since your last alert)`
+        : ` (y ${otros} ${otros === 1 ? "amigo más" : "amigos más"} desde tu último aviso)`;
       const cola = en
         ? (mio < n ? "you're losing 😬" : mio === n ? "you're tied 👀" : "you're still winning 👑")
         : (mio < n ? "vas perdiendo 😬" : mio === n ? "van empatados 👀" : "todavía le ganas 👑");
       return en
-        ? { titulo: `💩 ${u} pooped`, cuerpo: `${u} pooped ${n} ${n === 1 ? "time" : "times"} today... ${cola}`, data }
-        : { titulo: `💩 ${u} cagó`, cuerpo: `${u} cagó ${n} ${n === 1 ? "vez" : "veces"} hoy... ${cola}`, data };
+        ? { titulo: `💩 ${u} pooped${resumen}`, cuerpo: `${u} pooped ${n} ${n === 1 ? "time" : "times"} today... ${cola}`, data }
+        : { titulo: `💩 ${u} cagó${resumen}`, cuerpo: `${u} cagó ${n} ${n === 1 ? "vez" : "veces"} hoy... ${cola}`, data };
     });
     enviados += r.enviados;
     borrados += r.borrados;

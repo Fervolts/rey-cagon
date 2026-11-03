@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rey_cagon/ajustes_avisos.dart';
+import 'package:rey_cagon/avisos_resumen.dart';
 import 'package:rey_cagon/idioma.dart';
 import 'package:rey_cagon/tema.dart';
 
@@ -28,6 +29,28 @@ void main() {
     }
     expect(tester.getSemantics(find.byKey(const ValueKey('aviso_cierres'))), isSemantics(hasToggledState: true, isToggled: false));
     expect(tester.getSemantics(find.byKey(const ValueKey('aviso_cagadas'))), isSemantics(hasToggledState: true, isToggled: true));
+  });
+
+  testWidgets('con el resumen, cada fila dice cuántos llegaron en 7 días', (tester) async {
+    await _montar(
+      tester,
+      PantallaAjustesAvisos(
+        cargar: () async => {for (final c in categoriasAvisos) c.$1: true},
+        guardar: (_, _) async {},
+        resumen: () async => const ResumenAvisos(total: 33, porCategoria: {'cagadas': 30, 'chat': 3}, prendidas: 8, categorias: 8),
+      ),
+    );
+    expect(find.text('30 en 7 días'), findsOneWidget);
+    expect(find.text('3 en 7 días'), findsOneWidget);
+    expect(find.text('0 en 7 días'), findsNWidgets(categoriasAvisos.length - 2));
+  });
+
+  testWidgets('sin resumen no dice números', (tester) async {
+    await _montar(
+      tester,
+      PantallaAjustesAvisos(cargar: () async => {for (final c in categoriasAvisos) c.$1: true}, guardar: (_, _) async {}, resumen: () async => null),
+    );
+    expect(find.textContaining('en 7 días'), findsNothing);
   });
 
   testWidgets('tocar una fila guarda el cambio', (tester) async {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'animaciones.dart';
+import 'avisos_resumen.dart';
 import 'emoji.dart';
 import 'idioma.dart';
 import 'main.dart' show conReintento, db, textoError;
@@ -38,11 +39,14 @@ Future<void> _guardarEnLaBase(String clave, bool activo) =>
     conReintento(() => db.rpc('push_aviso', params: {'p_clave': clave, 'p_activo': activo}));
 
 class PantallaAjustesAvisos extends StatefulWidget {
-  const PantallaAjustesAvisos({super.key, this.cargar, this.guardar});
+  const PantallaAjustesAvisos({super.key, this.cargar, this.guardar, this.resumen});
 
   /// Para pruebas: por defecto, la base.
   final CargarAvisos? cargar;
   final GuardarAviso? guardar;
+
+  /// Cuántos llegaron en 7 días por categoría; null (o sin la RPC) = no se muestra nada.
+  final Future<ResumenAvisos?> Function()? resumen;
 
   @override
   State<PantallaAjustesAvisos> createState() => _PantallaAjustesAvisosState();
@@ -50,6 +54,7 @@ class PantallaAjustesAvisos extends StatefulWidget {
 
 class _PantallaAjustesAvisosState extends State<PantallaAjustesAvisos> {
   Map<String, bool>? _activos;
+  ResumenAvisos? _resumen;
   String? _error;
   final _guardando = <String>{};
 
@@ -57,6 +62,15 @@ class _PantallaAjustesAvisosState extends State<PantallaAjustesAvisos> {
   void initState() {
     super.initState();
     _cargar();
+    _cargarResumen();
+  }
+
+  Future<void> _cargarResumen() async {
+    ResumenAvisos? r;
+    try {
+      r = await (widget.resumen ?? cargarResumenAvisos)();
+    } catch (_) {}
+    if (mounted && r != null) setState(() => _resumen = r);
   }
 
   Future<void> _cargar() async {
@@ -131,6 +145,7 @@ class _PantallaAjustesAvisosState extends State<PantallaAjustesAvisos> {
                         emoji: emoji,
                         nombre: nombre,
                         descripcion: descripcion,
+                        enSemana: _resumen?.de(clave),
                         activo: activos[clave] ?? true,
                         onCambio: (v) => _cambiar(clave, v),
                       ),
@@ -144,9 +159,12 @@ class _PantallaAjustesAvisosState extends State<PantallaAjustesAvisos> {
 }
 
 class _FilaInterruptor extends StatelessWidget {
-  const _FilaInterruptor({super.key, required this.emoji, required this.nombre, required this.descripcion, required this.activo, required this.onCambio});
+  const _FilaInterruptor({super.key, required this.emoji, required this.nombre, required this.descripcion, this.enSemana, required this.activo, required this.onCambio});
 
   final String emoji, nombre, descripcion;
+
+  /// Cuántos push de esta categoría le llegaron en 7 días (null = no se sabe, no se muestra).
+  final int? enSemana;
   final bool activo;
   final ValueChanged<bool> onCambio;
 
@@ -168,6 +186,13 @@ class _FilaInterruptor extends StatelessWidget {
                 Text(nombre, style: const TextStyle(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 2),
                 Text(descripcion, style: TextStyle(color: p.textoSuave, fontSize: 13)),
+                if (enSemana != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    tr('$enSemana en 7 días', '$enSemana in 7 days'),
+                    style: numeros(context, tamano: 11, weight: FontWeight.w700, color: p.textoSuave),
+                  ),
+                ],
               ]),
             ),
             const SizedBox(width: 12),
