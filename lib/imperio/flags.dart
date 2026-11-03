@@ -84,11 +84,12 @@ class FlagsImperio {
   final double mudanzaDescubrePct, mudanzaDescubreMin;
 
   /// Abdicar ([Ajustes.abdicarMudanzas]): `abdicar_mudanzas`, `abdicar_llaves` (Llaves ganadas), `abdicar_cagadas`,
-  /// `abdicar_coronas_exponente`, `abdicar_coronas_factor` y `corona_pct`. El servidor lee las mismas claves en
+  /// `abdicar_coronas_exponente`, `abdicar_coronas_factor`, `corona_pct` y `abdicar_divisor_rollos`. El servidor lee las mismas claves en
   /// imperio_abdicar; los requisitos de verdad los valida él. Cuándo aparece el botón: `abdicar_descubre_pct` y
   /// `abdicar_descubre_dias`.
   final int abdicarMudanzas, abdicarCagadas;
-  final double abdicarLlaves, abdicarCoronasExponente, abdicarCoronasFactor, coronaPct, abdicarDescubrePct, abdicarDescubreDias;
+  final double abdicarLlaves, abdicarCoronasExponente, abdicarCoronasFactor, coronaPct, abdicarDivisorRollos, abdicarDescubrePct,
+      abdicarDescubreDias;
 
   /// `version_minima`: build mínimo para jugar el Imperio. Con uno menor la pestaña pide actualizar; el servidor
   /// ignora los guardados de versiones más viejas (imperio_guardar, p_version). 0 = sin mínimo.
@@ -165,6 +166,7 @@ class FlagsImperio {
     this.abdicarCoronasExponente = 0.5,
     this.abdicarCoronasFactor = 3,
     this.coronaPct = 0.5,
+    this.abdicarDivisorRollos = 3.5,
     this.abdicarDescubrePct = 0.25,
     this.abdicarDescubreDias = 3,
     this.versionMinima = 0,
@@ -229,6 +231,7 @@ class FlagsImperio {
         abdicarCoronasExponente: abdicarCoronasExponente,
         abdicarCoronasFactor: abdicarCoronasFactor,
         coronaPct: coronaPct,
+        abdicarDivisorRollos: abdicarDivisorRollos,
         abdicarDescubrePct: abdicarDescubrePct,
         abdicarDescubreDias: abdicarDescubreDias,
         escalaEdificios: escalaEdificios,
@@ -313,6 +316,7 @@ class FlagsImperio {
       abdicarCoronasExponente: numero('abdicar_coronas_exponente', d.abdicarCoronasExponente, 0.05, 1),
       abdicarCoronasFactor: numero('abdicar_coronas_factor', d.abdicarCoronasFactor, 0.1, 1000),
       coronaPct: numero('corona_pct', d.coronaPct, 0, 10),
+      abdicarDivisorRollos: numero('abdicar_divisor_rollos', d.abdicarDivisorRollos, 1, 1e12),
       abdicarDescubrePct: numero('abdicar_descubre_pct', d.abdicarDescubrePct, 0, 1),
       abdicarDescubreDias: numero('abdicar_descubre_dias', d.abdicarDescubreDias, 0, 1000),
       versionMinima: numero('version_minima', d.versionMinima.toDouble(), 0, 1e9).round(),

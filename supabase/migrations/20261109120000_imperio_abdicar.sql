@@ -13,6 +13,9 @@
 --     ganadas; el Mayordomo real regala el primer nivel del Mayordomo del Llavero.
 --  6. imperio_cadena, imperio_ranking, imperio_perfil y la tarjeta del baño mandan también las abdicaciones.
 --  7. Los reinicios pendientes también borran las dinastías.
+--  8. imperio_rollos_tope(): después de abdicar los MJ de la casa rinden abdicar_divisor_rollos veces menos Rollos (una
+--     vez, no por reinado), como divisorRollosCasa en lib/imperio/motor.dart. imperio_rollos_de, imperio_jalar y la
+--     tarjeta de jalada y de cartera usan ese tope.
 -- La simulación de 600 días está en test/imperio_mudanza_ritmo_test.dart (SIM_ABDICAR=1).
 
 begin;
@@ -126,6 +129,67 @@ AS $function$
   select case when coalesce(p_fila.mudanzas, 0) <= 0 and coalesce(p_fila.abdicaciones, 0) <= 0 then greatest(coalesce(p_fila.mj_total, 0), 0)
               else greatest(coalesce(p_fila.mj_casa, 0), 0) end;
 $function$;
+
+-- Tope de Rollos de la casa de una fila: imperio_rollos_casa con los MJ de la casa, y si ya abdicó, divididos además por
+-- abdicar_divisor_rollos (una vez, no por reinado). Igual que divisorRollosCasa en lib/imperio/motor.dart. Frena el bono
+-- de cagadas reales y logros que se traen de un reinado al otro. p_margen: la app redondea con un épsilon.
+create or replace function public.imperio_rollos_tope(p_fila public.imperio, p_margen double precision default 0)
+returns double precision
+language sql stable security definer set search_path = '' as $$
+  select public.imperio_rollos_casa(public.imperio_mj_casa(p_fila) * (1 + p_margen)
+                                    / case when coalesce(p_fila.abdicaciones, 0) > 0
+                                           then public.imperio_flag_numero('abdicar_divisor_rollos', 3.5, 1, 1e12)
+                                           else 1 end,
+                                    p_fila.mudanzas);
+$$;
+revoke all on function public.imperio_rollos_tope(public.imperio, double precision) from public, anon, authenticated;
+
+-- Rollos de la casa de una fila (saldo + gastados en la Plomería), con tope en imperio_rollos_tope.
+create or replace function public.imperio_rollos_de(p_fila public.imperio)
+returns double precision
+language sql stable security definer set search_path = '' as $$
+  select least(public.imperio_numero(p_fila.estado ->> 'rollos') + public.imperio_numero(p_fila.estado ->> 'rollos_gastados'),
+               public.imperio_rollos_tope(p_fila, 1e-6));
+$$;
+
+-- Jalar: igual que en 20261108120000_imperio_mudanza.sql, con el Rollo que falta contado con imperio_rollos_tope.
+create or replace function public.imperio_jalar()
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  uid uuid := auth.uid();
+  fila public.imperio;
+  n bigint;
+  total int;
+begin
+  if uid is null then raise exception 'Sin sesión' using errcode = 'P0001'; end if;
+  select * into fila from public.imperio where user_id = uid for update;
+  if fila.user_id is null then
+    raise exception 'Todavía no tienes Imperio' using errcode = 'P0001';
+  end if;
+  n := public.imperio_cagadas_tope(uid, coalesce(fila.jalada_en, fila.creado));
+  if n < public.imperio_cadena_necesarias() then
+    raise exception 'Todavía te faltan cagadas para jalar la cadena' using errcode = 'P0001';
+  end if;
+  -- La mejora se compra una vez y la jalada la borra del estado: después de la primera ya no se pide.
+  if fila.jaladas = 0 and not (jsonb_typeof(fila.estado -> 'mejoras') = 'array' and (fila.estado -> 'mejoras') ? 'cadena_trono') then
+    raise exception 'Todavía no tienes La cadena del trono' using errcode = 'P0001';
+  end if;
+  -- La app guarda justo antes de jalar. Margen 1e-6 porque la app redondea con un épsilon al contar Rollos.
+  if public.imperio_rollos_tope(fila, 1e-6)
+     - (public.imperio_numero(fila.estado ->> 'rollos') + public.imperio_numero(fila.estado ->> 'rollos_gastados')) < 1 then
+    raise exception 'Todavía te faltan MJ para el siguiente Rollo' using errcode = 'P0001';
+  end if;
+  update public.imperio set jalada_en = now(), jaladas = jaladas + 1 where user_id = uid
+    returning jaladas into total;
+  return jsonb_build_object('jaladas', total);
+end;
+$$;
+revoke all on function public.imperio_jalar() from public, anon;
+grant execute on function public.imperio_jalar() to authenticated;
 
 -- Mudarse: el Maestro de obras baja las jaladas y las cagadas pedidas.
 CREATE OR REPLACE FUNCTION public.imperio_mudar()
@@ -566,7 +630,7 @@ begin
         raise exception 'Rollos fuera de rango' using errcode = 'P0001';
       end if;
       rollos := (new.tarjeta ->> 'rollos')::numeric;
-      if rollos > 1e12 or rollos > public.imperio_rollos_casa(public.imperio_mj_casa(im), im.mudanzas) then
+      if rollos > 1e12 or rollos > public.imperio_rollos_tope(im) then
         raise exception 'Rollos fuera de rango' using errcode = 'P0001';
       end if;
       if exists (select 1 from public.mensajes x where x.user_id = new.user_id and x.tarjeta ->> 'tipo' = 'jalada'
@@ -591,7 +655,7 @@ begin
         'mj_total', greatest(coalesce(im.mj_total, 0), 0),
         'jaladas', greatest(im.jaladas, 0),
         'rollos', least(public.imperio_numero(im.estado ->> 'rollos'),
-                        public.imperio_rollos_casa(public.imperio_mj_casa(im), im.mudanzas)));
+                        public.imperio_rollos_tope(im)));
     elsif t = 'bano' then
       select * into im from public.imperio x where x.user_id = new.user_id;
       if im.user_id is null then

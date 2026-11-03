@@ -209,6 +209,25 @@ void main() {
       expect(conDinastia('Rancho', 0), 'Rancho');
       expect(conDinastia('Rancho', 1), 'Rancho · ${dinastia(1)}');
     });
+
+    test('después de abdicar los MJ rinden abdicarDivisorRollos veces menos Rollos, una vez y no por reinado', () {
+      final imp = Imperio(azar: Random(1));
+      final d = imp.ajustes.abdicarDivisorRollos;
+      final x = imp.ajustes.mudanzaDivisorX;
+      expect(d, greaterThan(1));
+      imp.partida
+        ..mjTotal = 1e30
+        ..mjEnCasa = 1e30;
+      expect(imp.divisorRollosCasa, 1);
+      imp.partida.abdicaciones = 1;
+      expect(imp.divisorRollosCasa, d);
+      expect(imp.rollosTotales, rollosPorMj(1e30 / d, imp.ajustes));
+      imp.partida.abdicaciones = 3;
+      expect(imp.divisorRollosCasa, d);
+      imp.partida.mudanzas = 2;
+      expect(imp.divisorRollosCasa, closeTo(x * x * d, x * x * d * 1e-12));
+      expect(imp.rollosTotales, rollosPorMj(1e30 / (x * x * d), imp.ajustes) * 3);
+    });
   });
 
   group('Guía', () {

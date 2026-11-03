@@ -832,8 +832,11 @@ class Ajustes {
   /// reales desde la última abdicación (máx 3 por día; el servidor manda la cuenta buena). Coronas =
   /// piso((Llaves ganadas / [abdicarLlaves]) ^ [abdicarCoronasExponente] x [abdicarCoronasFactor]). Cada Corona sin
   /// gastar: +[coronaPct] de producción. Los mismos defaults están en la migración (imperio_abdicar).
+  /// [abdicarDivisorRollos]: después de abdicar los MJ de la casa rinden ese tanto menos Rollos (una vez, no sube con
+  /// cada reinado). Frena el bono de cagadas reales y logros que traes del reinado anterior: sin él, el Rancho II daba
+  /// ~280 veces los Rollos del Rancho I y las Llaves se disparaban. El servidor usa la misma cuenta (imperio_rollos_de).
   final int abdicarMudanzas, abdicarCagadas;
-  final double abdicarLlaves, abdicarCoronasExponente, abdicarCoronasFactor, coronaPct;
+  final double abdicarLlaves, abdicarCoronasExponente, abdicarCoronasFactor, coronaPct, abdicarDivisorRollos;
 
   /// El botón ABDICAR aparece cuando ya no rinde mudarse: con [abdicarMudanzas] mudanzas, la mudanza siguiente da menos
   /// que [abdicarDescubrePct] de las Llaves ya ganadas y llevas [abdicarDescubreDias] días en la casa (o si ya
@@ -888,6 +891,7 @@ class Ajustes {
     this.abdicarCoronasExponente = 0.5,
     this.abdicarCoronasFactor = 3,
     this.coronaPct = 0.5,
+    this.abdicarDivisorRollos = 3.5,
     this.abdicarDescubrePct = 0.25,
     this.abdicarDescubreDias = 3,
     this.escalaEdificios = 1,

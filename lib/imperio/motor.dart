@@ -1797,8 +1797,11 @@ class Imperio {
   /// x (1 + mudanzas). En el Rancho (sin mudanzas) son los MJ de toda la historia, como antes.
   int get rollosTotales => rollosPorMj(_p.mjCasa / divisorRollosCasa, ajustes) * factorRollosCasa(_p.mudanzas);
 
-  /// Cuántas veces menos Rollos rinden los MJ en esta casa: `mudanzaDivisorX` ^ mudanzas (Rancho = 1).
-  double get divisorRollosCasa => pow(max(1.0, ajustes.mudanzaDivisorX), max(0, _p.mudanzas)).toDouble();
+  /// Cuántas veces menos Rollos rinden los MJ en esta casa: `mudanzaDivisorX` ^ mudanzas (Rancho = 1), y x
+  /// `abdicarDivisorRollos` si ya abdicaste (una vez, no por reinado). El servidor hace lo mismo en `imperio_rollos_de`.
+  double get divisorRollosCasa =>
+      pow(max(1.0, ajustes.mudanzaDivisorX), max(0, _p.mudanzas)).toDouble() *
+      (_p.abdicaciones > 0 ? max(1.0, ajustes.abdicarDivisorRollos) : 1.0);
 
   /// Rollos que da jalar ahora: los totales menos los que ya ganaste en esta casa (los gastados cuentan). Nunca negativo.
   int get rollosPorGanar => max(0, rollosTotales - _p.rollosGanados);
