@@ -76,8 +76,11 @@ Future<int> _enviarPorRpc(List<Map<String, Object?>> lote) async {
 /// - `alquiler_guia` {id, accion}: guía de los alquileres. accion = `ficha` (se vio la ficha de qué hace, la primera vez o
 ///   con el botón ?), `entendido` (la cerró), `ir` (alquiló desde la ficha) o `empujon` (salió un consejo en la pantalla:
 ///   id = el alquilable, `robot` con un Atasco de más de 20 s, `primo` pujando rápido a mano, o el recién alquilado)
-/// - `imperio_recorrido` {paso, accion}: recorrido guiado de la primera vez (recorrido.dart). paso = id del paso (poceta, saldo,
-///   edificios, mejoras, atascos, dorado, objetos, que_hago, cadena); accion = `ver` (salió el paso), `siguiente`, `saltar` o `fin`
+/// - `imperio_recorrido` {paso, accion}: recorrido guiado de la primera vez (hasta 2.15.0; lo reemplazó `imperio_dedo`). paso = id
+///   del paso (poceta, saldo, edificios, mejoras, atascos, dorado, objetos, que_hago, cadena); accion = `ver` (salió el paso),
+///   `siguiente`, `saltar` o `fin`
+/// - `imperio_dedo` {paso, accion}: dedo de la primera vez (dedo.dart, 2.16.0). paso = poceta, cagadores, cagadores_fila, mejora,
+///   mejora_flecha, mejora_comprar, jalar o mudanza; accion = `ver` (salió, una vez por paso) o `toque` (lo quitó tocando la pantalla)
 /// - `imperio_que_hago` {sugerencia, accion}: hoja "¿Qué hago ahora?" (botón ? de la cabecera). sugerencia = destapar, robot,
 ///   dorado, jalar, edificio, mejora, esperar o pujar (que_hago.dart); accion = `abrir` (abrió la hoja) o `ir` (tocó el botón IR)
 /// - `consumible_usar` {id, quedan, edificio?}: usó un consumible (va con `objeto_uso`, salvo la Pintura marrón, que trae `edificio`)

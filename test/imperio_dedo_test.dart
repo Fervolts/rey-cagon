@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rey_cagon/imperio/barra.dart';
 import 'package:rey_cagon/imperio/cadena.dart';
 import 'package:rey_cagon/imperio/control.dart';
+import 'package:rey_cagon/imperio/dedo.dart';
 import 'package:rey_cagon/imperio/motor.dart';
 import 'package:rey_cagon/imperio/mudanza.dart';
 import 'package:rey_cagon/imperio/nube.dart';
@@ -98,6 +99,13 @@ Future<(ControlImperio, Telemetria, List<Map<String, Object?>>)> _montar(WidgetT
 
 Future<void> _esperar(WidgetTester t, [int veces = 10]) async {
   for (var i = 0; i < veces; i++) {
+    await t.pump(const Duration(milliseconds: 100));
+  }
+}
+
+/// Espera (hasta 6 s de juego) a que salga un dedo: los avisos de la carga van antes.
+Future<void> _hastaDedo(WidgetTester t) async {
+  for (var i = 0; i < 60 && find.byKey(const Key('dedo')).evaluate().isEmpty; i++) {
     await t.pump(const Duration(milliseconds: 100));
   }
 }
@@ -392,6 +400,151 @@ void main() {
     });
   });
 
+  group('Dedos (pura)', () {
+    test('nuevo: la poceta; vista, nada hasta que alcance un cagador', () {
+      final im = _nuevo();
+      final d = siguienteDedo(im, t0, cajonAbierto: false);
+      expect(d?.paso, 'poceta');
+      expect(d?.objetivo, const Key('dedo_poceta'));
+      // Con el cajón abierto no se señala la poceta (queda tapada).
+      expect(siguienteDedo(im, t0, cajonAbierto: true), isNull);
+      im.partida.guiaVista.add(claveDedo('poceta'));
+      expect(siguienteDedo(im, t0, cajonAbierto: false), isNull);
+    });
+
+    test('alcanza el primer cagador: CAGADORES con el cajón cerrado, la fila con el cajón abierto', () {
+      final im = _nuevo();
+      final e = edificios.first;
+      im.partida.saldo = im.precioEdificioVarios(e.id, 1, t0) * 2;
+      im.partida.mjTotal = im.partida.saldo;
+      expect(primerEdificioComprable(im, t0)?.id, e.id);
+      final cerrado = siguienteDedo(im, t0, cajonAbierto: false);
+      expect(cerrado?.paso, 'cagadores');
+      expect(cerrado?.objetivo, const Key('boton_edificios'));
+      final abierto = siguienteDedo(im, t0, cajonAbierto: true);
+      expect(abierto?.paso, 'cagadores_fila');
+      expect(abierto?.objetivo, Key('fila_${e.id}'));
+      // Comprado uno: ya no.
+      im.partida.edificios[e.id] = 1;
+      im.partida.guiaVista.add(claveDedo('mejora'));
+      im.partida.guiaVista.add(claveDedo('mejora_flecha'));
+      im.partida.guiaVista.add(claveDedo('mejora_comprar'));
+      expect(siguienteDedo(im, t0, cajonAbierto: false), isNull);
+      expect(siguienteDedo(im, t0, cajonAbierto: true), isNull);
+    });
+
+    test('la primera mejora: CAGADORES, la flecha de su fila y su botón', () {
+      final im = _nuevo();
+      im.partida.edificios[edificios.first.id] = 1;
+      im.partida.saldo = 1e12;
+      im.partida.mjTotal = 1e12;
+      final m = primeraMejoraComprable(im)!;
+      final clave = m.edificio ?? 'poceta';
+      expect(siguienteDedo(im, t0, cajonAbierto: false)?.paso, 'mejora');
+      final flecha = siguienteDedo(im, t0, cajonAbierto: true);
+      expect(flecha?.paso, 'mejora_flecha');
+      expect(flecha?.objetivo, Key('flecha_$clave'));
+      final comprar = siguienteDedo(im, t0, cajonAbierto: true, abiertos: {clave});
+      expect(comprar?.paso, 'mejora_comprar');
+      expect(comprar?.objetivo, Key('comprar_mejora_${m.id}'));
+      im.partida.mejoras.add(m.id);
+      expect(siguienteDedo(im, t0, cajonAbierto: true, abiertos: {clave}), isNull);
+    });
+
+    test('la Cadena abierta: JALAR (si se ve); la Mudanza descubierta: MUDANZA', () {
+      final im = _nuevo();
+      im.partida.edificios[edificios.first.id] = 1;
+      im.partida.mejoras.add('cadena_trono');
+      expect(im.cadenaDesbloqueada, isTrue);
+      expect(siguienteDedo(im, t0, cajonAbierto: false), isNull);
+      final j = siguienteDedo(im, t0, cajonAbierto: false, jalarVisible: true);
+      expect(j?.paso, 'jalar');
+      expect(j?.objetivo, const Key('boton_jalar'));
+      im.partida.guiaVista.add(claveDedo('jalar'));
+      final m = siguienteDedo(im, t0, cajonAbierto: false, jalarVisible: true, mudanza: true);
+      expect(m?.paso, 'mudanza');
+      expect(m?.objetivo, const Key('boton_mudanza'));
+    });
+
+    test('veterano: ningún dedo de la corrida (ya jaló); solo la Mudanza si la descubre', () {
+      final im = _veterano();
+      im.partida.mejoras.clear();
+      im.partida.edificios.clear();
+      im.partida.mjTotal = 0;
+      for (final abierto in [false, true]) {
+        expect(siguienteDedo(im, t0, cajonAbierto: abierto, jalarVisible: true), isNull);
+      }
+      expect(siguienteDedo(im, t0, cajonAbierto: false, jalarVisible: true, mudanza: true)?.paso, 'mudanza');
+      im.partida.mudanzas = 1;
+      expect(siguienteDedo(im, t0, cajonAbierto: false, jalarVisible: true, mudanza: true), isNull);
+    });
+  });
+
+  group('Dedos en la pantalla', () {
+    testWidgets('nuevo: el dedo de la poceta sale una vez, el toque pasa de largo y lo quita, y no vuelve', (t) async {
+      final (c, tele, enviados) = await _montar(t, _estado(_nuevo()));
+      expect(find.byKey(const Key('dedo')), findsOneWidget);
+      expect(find.textContaining('Toca para pujar', findRichText: true), findsOneWidget);
+      expect(c.imperio.partida.guiaVista, contains(claveDedo('poceta')));
+      expect(_eventos(enviados, tele, 'imperio_dedo', 'paso'), [('poceta', 'ver')]);
+
+      final antes = c.imperio.mjTotal;
+      await t.tap(find.byKey(const Key('dedo_poceta')));
+      await _esperar(t);
+      expect(c.imperio.mjTotal, greaterThan(antes), reason: 'el toque llega a la poceta');
+      expect(find.byKey(const Key('dedo')), findsNothing);
+      expect(_eventos(enviados, tele, 'imperio_dedo', 'paso'), [('poceta', 'ver'), ('poceta', 'toque')]);
+      await _esperar(t, 20);
+      expect(find.byKey(const Key('dedo')), findsNothing);
+      expect(t.takeException(), isNull);
+      await _desmontar(t);
+    });
+
+    testWidgets('alcanza el primer cagador: dedo en CAGADORES y, abierto el cajón, en la fila', (t) async {
+      final im = _nuevo();
+      im.partida.guiaVista.add(claveDedo('poceta'));
+      // Los ajustes de la pantalla escalan los precios: sobra para el primero con cualquier escala.
+      im.partida.saldo = edificios.first.precioBase * 100;
+      im.partida.mjTotal = im.partida.saldo;
+      final (_, tele, enviados) = await _montar(t, _estado(im));
+      await _hastaDedo(t);
+      expect(find.byKey(const Key('dedo')), findsOneWidget);
+      await t.tap(find.byKey(const Key('boton_edificios')));
+      await _esperar(t);
+      await _hastaDedo(t);
+      expect(find.byKey(Key('fila_${edificios.first.id}')), findsOneWidget);
+      expect(find.byKey(const Key('dedo')), findsOneWidget);
+      expect(_eventos(enviados, tele, 'imperio_dedo', 'paso'), [('cagadores', 'ver'), ('cagadores', 'toque'), ('cagadores_fila', 'ver')]);
+      expect(t.takeException(), isNull);
+      await _desmontar(t);
+    });
+
+    testWidgets('con otra pantalla encima no sale; al volver, sí', (t) async {
+      final nav = GlobalKey<NavigatorState>();
+      final espera = Completer<void>();
+      final (c, tele, enviados) = await _montar(t, _estado(_nuevo()), nav: nav, espera: espera);
+      unawaited(nav.currentState!.push(MaterialPageRoute<void>(builder: (_) => const Scaffold(body: Text('encima')))));
+      await _esperar(t);
+      espera.complete();
+      await _esperar(t, 20);
+      expect(c.cargando, isFalse);
+      expect(_eventos(enviados, tele, 'imperio_dedo', 'paso'), isEmpty);
+      nav.currentState!.pop();
+      await _esperar(t);
+      expect(find.byKey(const Key('dedo')), findsOneWidget);
+      expect(_eventos(enviados, tele, 'imperio_dedo', 'paso'), [('poceta', 'ver')]);
+      await _desmontar(t);
+    });
+
+    testWidgets('veterano: ningún dedo', (t) async {
+      final (_, tele, enviados) = await _montar(t, _estado(_veterano(), cagadas: 30));
+      await _esperar(t, 20);
+      expect(find.byKey(const Key('dedo')), findsNothing);
+      expect(_eventos(enviados, tele, 'imperio_dedo', 'paso'), isEmpty);
+      await _desmontar(t);
+    });
+  });
+
   group('Capturas', () {
     final capturas = Platform.environment['CAPTURAS_DEDO'] != null;
     testWidgets('hojas de la escalera a PNG', (t) async {
@@ -431,6 +584,15 @@ void main() {
         await t.tap(find.byKey(const Key('boton_que_hago')));
         await _esperar(t);
         await foto('que_hago_$sufijo');
+        await _desmontar(t);
+
+        // El dedo del primer cagador, con el cajón cerrado.
+        final listo = _nuevo();
+        listo.partida.guiaVista.add(claveDedo('poceta'));
+        listo.partida.saldo = listo.precioEdificioVarios(edificios.first.id, 1, t0) * 2;
+        listo.partida.mjTotal = listo.partida.saldo;
+        await _montar(t, _estado(listo), tema: estilo, foto: llave);
+        await foto('dedo_cagadores_$sufijo');
         await _desmontar(t);
 
         // Veterano con la mudanza descubierta: la barra de 5, la Cadena y la Mudanza.

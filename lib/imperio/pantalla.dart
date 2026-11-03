@@ -20,6 +20,7 @@ import 'cartera.dart';
 import 'casas.dart';
 import 'cofre.dart';
 import 'control.dart';
+import 'dedo.dart';
 import 'fichas.dart';
 import 'fila.dart';
 import 'formato.dart';
@@ -145,6 +146,9 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
   Timer? _timerEmpujon;
   String? _resaltado;
   Timer? _timerResaltado;
+  // Dedo de la primera vez (dedo.dart): uno a la vez. Si su objetivo no se encontró, se espera unas vueltas para reintentar.
+  Dedo? _dedo;
+  int _dedoEspera = 0;
 
   @override
   void initState() {
@@ -228,6 +232,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
         _avisar('⛓️', tr('Tu cadena se puso al día con la nube', 'Your chain caught up with the cloud'));
       }
       _revisarMudanza();
+      _revisarDedo();
       _revisarEmpujon();
       _mostrarDialogos();
     }
@@ -242,6 +247,54 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     _avisar('🏠', tr('Ya no cabes en esta casa: 🏠 MUDANZA', 'You no longer fit in this house: 🏠 MOVING'));
   }
 
+  /// ¿Se puede poner (o dejar) un dedo? Nunca encima de un diálogo, una hoja, un aviso, un empujón ni el cajón moviéndose.
+  bool get _dedoPuede =>
+      widget.activo &&
+      !_c.cargando &&
+      !_dialogoAbierto &&
+      !_c.bienvenidaPendiente &&
+      _c.offlinePendiente == null &&
+      _c.descargaPendiente == null &&
+      !_c.rachaPendiente &&
+      (ModalRoute.isCurrentOf(context) ?? true) &&
+      _aviso == null &&
+      _empujon == null &&
+      !_cajon.isAnimating;
+
+  /// El dedo que toque ahora (dedo.dart), si su objetivo está en la pantalla.
+  void _revisarDedo() {
+    if (_dedo != null) {
+      // Se abrió algo encima: se quita sin marcarse más (ya salió y quedó marcado al verse).
+      if (!_dedoPuede) _dedo = null;
+      return;
+    }
+    if (!_dedoPuede || (_cajon.value != 0 && _cajon.value != 1)) return;
+    final d = siguienteDedo(_c.imperio, _c.ahora,
+        cajonAbierto: _cajon.value == 1,
+        abiertos: _abiertos,
+        jalarVisible: botonJalar(_c.imperio, _c.cadena).visible,
+        mudanza: mudanzaDescubierta(_c) && mudanzaResaltada(_c),
+        cantidad: _cantidad);
+    if (d == null || (_dedoEspera > 0 && --_dedoEspera > 0)) return;
+    final raiz = _llaveEscena.currentContext;
+    if (raiz == null || cajaDe(raiz, d.objetivo) == null) {
+      _dedoEspera = 5;
+      return;
+    }
+    _dedo = d;
+  }
+
+  void _verDedo(Dedo d) {
+    _c.marcarGuia(claveDedo(d.paso));
+    _c.anotar('imperio_dedo', {'paso': d.paso, 'accion': 'ver'});
+  }
+
+  void _quitarDedo(Dedo d, {required bool tocado}) {
+    if (tocado) _c.anotar('imperio_dedo', {'paso': d.paso, 'accion': 'toque'});
+    if (!tocado) _dedoEspera = 5;
+    if (mounted && _dedo == d) setState(() => _dedo = null);
+  }
+
   void _queHago(BuildContext context) => abrirQueHago(context, _c,
       cadenaLista: () => botonJalar(_c.imperio, _c.cadena).encendido,
       alIr: (s) => switch (s.ir) {
@@ -254,7 +307,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
 
   /// Un empujón de la guía de los alquileres si toca: nunca encima de un aviso, de otro empujón ni con una hoja abierta.
   void _revisarEmpujon() {
-    if (_empujon != null || _aviso != null || _c.cargando || !(ModalRoute.isCurrentOf(context) ?? true)) return;
+    if (_empujon != null || _dedo != null || _aviso != null || _c.cargando || !(ModalRoute.isCurrentOf(context) ?? true)) return;
     final e = _guia.siguiente(_c.imperio, _c.ahora);
     if (e == null) return;
     _timerEmpujon?.cancel();
@@ -572,6 +625,15 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                         : null,
                   ),
                 ),
+              if (_dedo case final d?)
+                DedoImperio(
+                  key: ValueKey(d.paso),
+                  dedo: d,
+                  escena: _llaveEscena,
+                  alVer: () => _verDedo(d),
+                  alTocar: () => _quitarDedo(d, tocado: true),
+                  alPerder: () => _quitarDedo(d, tocado: false),
+                ),
             ],
           ),
         ),
@@ -618,7 +680,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       _anchoCajon = max(zona.maxWidth, 1);
       return Stack(
         children: [
-          Positioned.fill(child: KeyedSubtree(key: const Key('recorrido_poceta'), child: KeyedSubtree(key: _llavePoceta, child: _poceta(ahora)))),
+          Positioned.fill(child: KeyedSubtree(key: const Key('dedo_poceta'), child: KeyedSubtree(key: _llavePoceta, child: _poceta(ahora)))),
           // Atasco: la tarjeta para destaparlo también sale en el baño, no solo en el cajón de edificios.
           if (_c.imperio.atasco case final a?) Positioned(
               key: const Key('tarjeta_atasco'), left: 32, right: 12, bottom: 12, child: _tarjetaAtasco(context, a)),
@@ -1153,6 +1215,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     final ofertas = misterio ? const <Mejora>[] : im.mejorasDeEdificio(e.id);
     final siguiente = misterio ? null : im.siguienteMejora(e.id);
     final fila = GestureDetector(
+      key: Key('fila_${e.id}'),
       onTap: alcanza ? () => _c.comprarEdificio(e.id, n) : null,
       child: _fila(
         context,
@@ -1188,6 +1251,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     final p = paleta(context);
     final listas = _alcanzan(ofertas);
     return GestureDetector(
+      key: Key('flecha_$clave'),
       behavior: HitTestBehavior.opaque,
       onTap: () => _alternar(clave),
       child: Container(
@@ -1276,6 +1340,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
           ),
           const SizedBox(width: 8),
           FilledButton(
+            key: Key('comprar_mejora_${m.id}'),
             style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
             onPressed: alcanza
                 ? () async {
