@@ -83,6 +83,13 @@ class FlagsImperio {
   final int mudanzaDescubreJaladas;
   final double mudanzaDescubrePct, mudanzaDescubreMin;
 
+  /// Abdicar ([Ajustes.abdicarMudanzas]): `abdicar_mudanzas`, `abdicar_llaves` (Llaves ganadas), `abdicar_cagadas`,
+  /// `abdicar_coronas_exponente`, `abdicar_coronas_factor` y `corona_pct`. El servidor lee las mismas claves en
+  /// imperio_abdicar; los requisitos de verdad los valida él. Cuándo aparece el botón: `abdicar_descubre_pct` y
+  /// `abdicar_descubre_dias`.
+  final int abdicarMudanzas, abdicarCagadas;
+  final double abdicarLlaves, abdicarCoronasExponente, abdicarCoronasFactor, coronaPct, abdicarDescubrePct, abdicarDescubreDias;
+
   /// `version_minima`: build mínimo para jugar el Imperio. Con uno menor la pestaña pide actualizar; el servidor
   /// ignora los guardados de versiones más viejas (imperio_guardar, p_version). 0 = sin mínimo.
   final int versionMinima;
@@ -152,6 +159,14 @@ class FlagsImperio {
     this.mudanzaDescubreJaladas = 4,
     this.mudanzaDescubrePct = 0.25,
     this.mudanzaDescubreMin = 30,
+    this.abdicarMudanzas = 4,
+    this.abdicarLlaves = 120,
+    this.abdicarCagadas = 60,
+    this.abdicarCoronasExponente = 0.5,
+    this.abdicarCoronasFactor = 3,
+    this.coronaPct = 0.5,
+    this.abdicarDescubrePct = 0.25,
+    this.abdicarDescubreDias = 3,
     this.versionMinima = 0,
     this.escalaEdificios = 10,
     this.escalaMejoras = 100,
@@ -208,6 +223,14 @@ class FlagsImperio {
         mudanzaDescubreJaladas: mudanzaDescubreJaladas,
         mudanzaDescubrePct: mudanzaDescubrePct,
         mudanzaDescubreMin: mudanzaDescubreMin,
+        abdicarMudanzas: abdicarMudanzas,
+        abdicarLlaves: abdicarLlaves,
+        abdicarCagadas: abdicarCagadas,
+        abdicarCoronasExponente: abdicarCoronasExponente,
+        abdicarCoronasFactor: abdicarCoronasFactor,
+        coronaPct: coronaPct,
+        abdicarDescubrePct: abdicarDescubrePct,
+        abdicarDescubreDias: abdicarDescubreDias,
         escalaEdificios: escalaEdificios,
         escalaMejoras: escalaMejoras,
         temporadas: temporadas,
@@ -284,6 +307,14 @@ class FlagsImperio {
       mudanzaDescubreJaladas: numero('mudanza_descubre_jaladas', d.mudanzaDescubreJaladas.toDouble(), 0, 1000).round(),
       mudanzaDescubrePct: numero('mudanza_descubre_pct', d.mudanzaDescubrePct, 0, 1),
       mudanzaDescubreMin: numero('mudanza_descubre_min', d.mudanzaDescubreMin, 0, 10000),
+      abdicarMudanzas: numero('abdicar_mudanzas', d.abdicarMudanzas.toDouble(), 1, 1000).round(),
+      abdicarLlaves: numero('abdicar_llaves', d.abdicarLlaves, 1, 1e6),
+      abdicarCagadas: numero('abdicar_cagadas', d.abdicarCagadas.toDouble(), 0, 10000).round(),
+      abdicarCoronasExponente: numero('abdicar_coronas_exponente', d.abdicarCoronasExponente, 0.05, 1),
+      abdicarCoronasFactor: numero('abdicar_coronas_factor', d.abdicarCoronasFactor, 0.1, 1000),
+      coronaPct: numero('corona_pct', d.coronaPct, 0, 10),
+      abdicarDescubrePct: numero('abdicar_descubre_pct', d.abdicarDescubrePct, 0, 1),
+      abdicarDescubreDias: numero('abdicar_descubre_dias', d.abdicarDescubreDias, 0, 1000),
       versionMinima: numero('version_minima', d.versionMinima.toDouble(), 0, 1e9).round(),
       escalaEdificios: numero('escala_edificios', d.escalaEdificios, 1, 1000),
       escalaMejoras: numero('escala_mejoras', d.escalaMejoras, 1, 10000),

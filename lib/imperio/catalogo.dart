@@ -499,6 +499,50 @@ MejoraLlavero? mejoraLlaveroPorId(String id) => _mejoraLlaveroPorId[id];
 /// Cada cuánto compra el Mayordomo según su nivel (1, 2, 3).
 const List<double> segundosMayordomo = [10, 3, 1];
 
+/// Mejora de La Corte 👑: misma forma que el Llavero, pero se paga con Coronas (salen de abdicar) y sobrevive a las
+/// abdicaciones. Los textos dicen "entre abdicaciones" y no "para siempre": puede venir otra capa.
+typedef MejoraCorte = MejoraLlavero;
+
+/// Heraldo, tesorero, maestro de obras y mayordomo real los aplica el servidor (imperio_abdicar, imperio_mudar,
+/// imperio_guardar); bufón y catador son de producción y duración, del cliente.
+const List<MejoraCorte> mejorasCorte = [
+  MejoraCorte('bufon', '🤡', 'Bufón', 'Jester', 'Producción x3 por nivel, entre abdicaciones', 'Production x3 per level, across abdications',
+      [1], 20, subida: 1),
+  MejoraCorte('heraldo', '📯', 'Heraldo', 'Herald', 'Al abdicar arrancas más arriba: nivel 1 la Casa, 2 la Quinta y 3 la Mansión',
+      'When you abdicate you start higher up: level 1 the House, 2 the Villa and 3 the Mansion', [4, 8, 16], 3),
+  MejoraCorte('tesorero', '💰', 'Tesorero', 'Treasurer', 'Al abdicar te quedas el 10% de las Llaves ganadas por nivel (el Llavero sí se vacía)',
+      'When you abdicate you keep 10% of the Keys you earned per level (the Keyring still empties)', [2], 5, subida: 2),
+  MejoraCorte('maestro_obras', '👷', 'Maestro de obras', 'Master builder', 'Cada mudanza pide 10% menos Rollos por nivel',
+      'Each move asks for 10% fewer Rolls per level', [2], 5, subida: 2),
+  MejoraCorte('catador', '🍷', 'Catador', 'Taster', 'El buff de cada cagada dura 30 min más por nivel',
+      'The buff from each poop lasts 30 min longer per level', [1], 4, subida: 1),
+  MejoraCorte('mayordomo_real', '🤵', 'Mayordomo real', 'Royal butler', 'Cada reinado arranca con el Mayordomo del Llavero en nivel 1 gratis',
+      'Every reign starts with the Keyring Butler at level 1 for free', [6], 1),
+];
+
+final Map<String, MejoraCorte> _mejoraCortePorId = {for (final m in mejorasCorte) m.id: m};
+
+/// Coronas que costó toda [corte] (id → nivel). Ids que no existen no cuestan; niveles de más se cortan al máximo.
+/// El servidor hace la misma cuenta (imperio_corte_costo) para no aceptar Coronas inventadas.
+int costoCorte(Map<String, int> corte) {
+  var total = 0;
+  corte.forEach((id, n) {
+    final m = _mejoraCortePorId[id];
+    if (m == null) return;
+    for (var i = 0; i < min(n, m.limite); i++) {
+      total += m.precio(i);
+    }
+  });
+  return total;
+}
+
+/// Mejora de La Corte por id, o null si no existe.
+MejoraCorte? mejoraCortePorId(String id) => _mejoraCortePorId[id];
+
+/// Lo que el Mayordomo real le descuenta al Llavero: su nivel 1 (3 Llaves) no se cobra si lo tienes en La Corte.
+int descuentoLlaveroCorte(Map<String, int> corte, Map<String, int> llavero) =>
+    (corte['mayordomo_real'] ?? 0) >= 1 && (llavero['mayordomo'] ?? 0) >= 1 ? _mejoraLlaveroPorId['mayordomo']!.precio(0) : 0;
+
 final Map<String, Objeto> _objetoPorId = {for (final o in objetos) o.id: o};
 
 /// Objeto por id, o null si no existe.
@@ -525,8 +569,8 @@ int _toques(Partida p, String id) => p.toques[id] ?? 0;
 /// Niveles de Plomería que tienes (sin la Cadena de reserva, que se gasta).
 int nivelesPlomeria(Partida p) => p.objetosRollos.entries.where((e) => e.key != 'cadena_reserva').fold(0, (a, e) => a + e.value);
 
-/// Los 62 logros: 20 de la fase 1, 4 de la cadena, el de la racha, 15 de la fase 2, 8 escondidos del baño, 1 de temporada,
-/// 3 del Cagadón con apuesta, 3 de regalos y 7 de la mudanza (1 escondido).
+/// Los 68 logros: 20 de la fase 1, 4 de la cadena, el de la racha, 15 de la fase 2, 8 escondidos del baño, 1 de temporada,
+/// 3 del Cagadón con apuesta, 3 de regalos, 7 de la mudanza (1 escondido) y 6 de abdicar (1 escondido).
 final List<Logro> logros = [
   Logro('primer_pujo', 'Primer pujo', 'First push', '1 pujo', '1 push', (p, _) => p.pujos >= 1),
   Logro('calentando', 'Calentando', 'Warming up', '100 pujos', '100 pushes', (p, _) => p.pujos >= 100),
@@ -613,6 +657,16 @@ final List<Logro> logros = [
       (p, _) => nivelesPlomeria(p) >= 50),
   Logro('mudanza_limpia', 'Ni un rollo', 'Not a single roll', 'Mudarte sin gastar un solo Rollo en esa casa', 'Move without spending a single Roll in that house',
       (p, _) => p.mudanzasLimpias >= 1, oculto: true),
+  // Abdicar 👑 y La Corte.
+  Logro('primera_abdicacion', 'Abdico', 'I abdicate', 'Abdicar por primera vez', 'Abdicate for the first time', (p, _) => p.abdicaciones >= 1),
+  Logro('dinastia_iii', 'Dinastía III', 'Dynasty III', 'Llegar a la Dinastía III', 'Reach Dynasty III', (p, _) => p.abdicaciones >= 2),
+  Logro('dinastia_v', 'Dinastía V', 'Dynasty V', 'Llegar a la Dinastía V', 'Reach Dynasty V', (p, _) => p.abdicaciones >= 4),
+  Logro('corte_20', 'Corte llena', 'Full court', '20 niveles en La Corte', '20 levels in the Court',
+      (p, _) => p.corte.values.fold(0, (a, n) => a + n) >= 20),
+  Logro('heraldo_max', 'Que suenen las trompetas', 'Sound the trumpets', 'Heraldo al máximo', 'Herald maxed out',
+      (p, _) => (p.corte['heraldo'] ?? 0) >= 3),
+  Logro('abdicar_avaro', 'Rey avaro', 'Miser king', 'Abdicar sin haber gastado una Llave en ese reinado',
+      'Abdicate without spending a single Key that reign', (p, _) => p.abdicacionesAvaras >= 1, oculto: true),
   // Exclusivo de temporada: solo se gana jugando mientras el servidor tenga encendido el Día Mundial del Retrete.
   Logro('dia_retrete', 'Día Mundial del Retrete', 'World Toilet Day', 'Jugar el Imperio el Día Mundial del Retrete (19 nov)',
       'Play the Imperio on World Toilet Day (Nov 19)', (p, _) => p.temporadas.contains(temporadaDiaRetrete)),
@@ -650,6 +704,9 @@ class BuffTipo {
 }
 
 const Duration duracionBuffTipo = Duration(hours: 1);
+
+/// Lo que alarga el buff del tipo cada nivel del Catador de La Corte.
+const Duration catadorPorNivel = Duration(minutes: 30);
 
 /// Repetir el mismo tipo dentro de esta ventana (desde la última cagada con tipo) cansa su buff.
 const Duration ventanaRachaTipo = Duration(hours: 24);
@@ -770,6 +827,18 @@ class Ajustes {
   final int mudanzaDescubreJaladas;
   final double mudanzaDescubrePct, mudanzaDescubreMin;
 
+  /// Abdicar: [abdicarMudanzas] mudanzas en la dinastía, [abdicarLlaves] Llaves ganadas y [abdicarCagadas] cagadas
+  /// reales desde la última abdicación (máx 3 por día; el servidor manda la cuenta buena). Coronas =
+  /// piso((Llaves ganadas / [abdicarLlaves]) ^ [abdicarCoronasExponente] x [abdicarCoronasFactor]). Cada Corona sin
+  /// gastar: +[coronaPct] de producción. Los mismos defaults están en la migración (imperio_abdicar).
+  final int abdicarMudanzas, abdicarCagadas;
+  final double abdicarLlaves, abdicarCoronasExponente, abdicarCoronasFactor, coronaPct;
+
+  /// El botón ABDICAR aparece cuando ya no rinde mudarse: con [abdicarMudanzas] mudanzas, la mudanza siguiente da menos
+  /// que [abdicarDescubrePct] de las Llaves ya ganadas y llevas [abdicarDescubreDias] días en la casa (o si ya
+  /// abdicaste o ya lo viste). Solo es pantalla.
+  final double abdicarDescubrePct, abdicarDescubreDias;
+
   const Ajustes({
     this.doradoMinMin = 5,
     this.doradoMaxMin = 15,
@@ -812,6 +881,14 @@ class Ajustes {
     this.mudanzaDescubreJaladas = 4,
     this.mudanzaDescubrePct = 0.25,
     this.mudanzaDescubreMin = 30,
+    this.abdicarMudanzas = 4,
+    this.abdicarLlaves = 120,
+    this.abdicarCagadas = 60,
+    this.abdicarCoronasExponente = 0.5,
+    this.abdicarCoronasFactor = 3,
+    this.coronaPct = 0.5,
+    this.abdicarDescubrePct = 0.25,
+    this.abdicarDescubreDias = 3,
     this.escalaEdificios = 1,
     this.escalaMejoras = 1,
     this.temporadas = const [],

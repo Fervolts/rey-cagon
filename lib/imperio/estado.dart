@@ -293,11 +293,24 @@ class Partida {
   /// Mudanzas hechas sin gastar ni un Rollo en esa casa (logro escondido).
   int mudanzasLimpias;
 
+  /// Abdicaciones hechas (0 = Dinastía I, no se muestra) y Coronas ganadas abdicando (las manda el servidor, que lleva la
+  /// cuenta buena en `imperio.abdicaciones` / `imperio.coronas_ganadas`). La Corte (id → nivel) se paga con ellas; las
+  /// Coronas sin gastar son las ganadas menos lo que cuesta La Corte ([costoCorte]). Abdicar no las borra.
+  int abdicaciones;
+  int coronasGanadas;
+  Map<String, int> corte;
+
+  /// Abdicaciones hechas sin haber gastado una Llave en ese reinado (logro escondido).
+  int abdicacionesAvaras;
+
+  /// Cuándo llegaste a la casa de ahora (ms desde 1970; 0 = no se sabe). Sirve para ver si la casa ya no rinde.
+  int casaEn;
+
   /// Jaladas en la casa de ahora.
   int get jaladasCasa => max(0, jaladas - jaladasBase);
 
   /// MJ ganados en la casa de ahora.
-  double get mjCasa => mudanzas <= 0 ? mjTotal : max(0, mjEnCasa);
+  double get mjCasa => mudanzas <= 0 && abdicaciones <= 0 ? mjTotal : max(0, mjEnCasa);
 
   Partida({
     this.saldo = 0,
@@ -374,8 +387,14 @@ class Partida {
     Map<String, int>? llavero,
     this.mayordomoApagado = false,
     this.mudanzasLimpias = 0,
+    this.abdicaciones = 0,
+    this.coronasGanadas = 0,
+    Map<String, int>? corte,
+    this.abdicacionesAvaras = 0,
+    this.casaEn = 0,
   })  : vista = vista ?? {},
         llavero = llavero ?? {},
+        corte = corte ?? {},
         edificios = edificios ?? {},
         mejoras = mejoras ?? {},
         logros = logros ?? {},
@@ -471,12 +490,17 @@ class Partida {
         if (vista.isNotEmpty) 'vista': vista,
         if (mudanzas > 0) 'mudanzas': mudanzas,
         if (mjBase > 0) 'mj_base': mjBase,
-        if (mudanzas > 0 && mjEnCasa > 0) 'mj_casa': mjEnCasa,
+        if ((mudanzas > 0 || abdicaciones > 0) && mjEnCasa > 0) 'mj_casa': mjEnCasa,
         if (jaladasBase > 0) 'jaladas_base': jaladasBase,
         if (llavesGanadas > 0) 'llaves_ganadas': llavesGanadas,
         if (llavero.isNotEmpty) 'llavero': llavero,
         if (mayordomoApagado) 'mayordomo_off': true,
         if (mudanzasLimpias > 0) 'mudanzas_limpias': mudanzasLimpias,
+        if (abdicaciones > 0) 'abdicaciones': abdicaciones,
+        if (coronasGanadas > 0) 'coronas_ganadas': coronasGanadas,
+        if (corte.isNotEmpty) 'corte': corte,
+        if (abdicacionesAvaras > 0) 'abdicaciones_avaras': abdicacionesAvaras,
+        if (casaEn > 0) 'casa_en': casaEn,
       };
 
   /// Lee una partida guardada. Aguanta claves que faltan, sobran o vienen con otro tipo.
@@ -565,6 +589,11 @@ class Partida {
       llavero: _mapaEnt(j['llavero'])..removeWhere((_, n) => n <= 0),
       mayordomoApagado: _bool(j['mayordomo_off']),
       mudanzasLimpias: max(0, _ent(j['mudanzas_limpias'])),
+      abdicaciones: max(0, _ent(j['abdicaciones'])),
+      coronasGanadas: max(0, _ent(j['coronas_ganadas'])),
+      corte: _mapaEnt(j['corte'])..removeWhere((_, n) => n <= 0),
+      abdicacionesAvaras: max(0, _ent(j['abdicaciones_avaras'])),
+      casaEn: max(0, _ent(j['casa_en'])),
     );
   }
 }
