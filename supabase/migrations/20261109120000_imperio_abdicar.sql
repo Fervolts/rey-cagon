@@ -13,7 +13,7 @@
 --     ganadas; el Mayordomo real regala el primer nivel del Mayordomo del Llavero.
 --  6. imperio_cadena, imperio_ranking, imperio_perfil y la tarjeta del baño mandan también las abdicaciones.
 --  7. Los reinicios pendientes también borran las dinastías.
--- La simulación de 600 días está en test/imperio_abdicar_ritmo_test.dart (SIM_ABDICAR=1).
+-- La simulación de 600 días está en test/imperio_mudanza_ritmo_test.dart (SIM_ABDICAR=1).
 
 begin;
 
@@ -80,7 +80,7 @@ begin
   if fila.mudanzas < round(public.imperio_flag_numero('abdicar_mudanzas', 4, 1, 1000)) then
     return jsonb_build_object('ok', false, 'motivo', 'mudanzas');
   end if;
-  pedidas := public.imperio_flag_numero('abdicar_llaves', 120, 1, 1e6);
+  pedidas := public.imperio_flag_numero('abdicar_llaves', 87, 1, 1e6);
   if fila.llaves_ganadas < pedidas then
     return jsonb_build_object('ok', false, 'motivo', 'llaves');
   end if;

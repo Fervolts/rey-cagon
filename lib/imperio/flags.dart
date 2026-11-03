@@ -160,7 +160,7 @@ class FlagsImperio {
     this.mudanzaDescubrePct = 0.25,
     this.mudanzaDescubreMin = 30,
     this.abdicarMudanzas = 4,
-    this.abdicarLlaves = 120,
+    this.abdicarLlaves = 87,
     this.abdicarCagadas = 60,
     this.abdicarCoronasExponente = 0.5,
     this.abdicarCoronasFactor = 3,

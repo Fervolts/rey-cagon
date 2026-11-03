@@ -9,6 +9,10 @@
 //
 // Tarda unos 5 min: solo corre con SIM_MUDANZA=1 (las aserciones son flojas; lo importante es la tabla que imprime).
 // Mismo perfil por variables que la otra simulación (SES, LARGO, TOQUES, CPD, DIAS; con cualquiera puesta no hay aserciones).
+//
+// Con SIM_ABDICAR=1 corre la otra, de 600 días (DIAS la cambia): el mismo jugador abdica apenas puede (Palacio, Llaves
+// ganadas en el reinado y cagadas reales desde la última abdicación, máx 3 por día) y gasta las Coronas en La Corte:
+// Heraldo y Tesorero primero, después Bufón. Tarda unos 10 min.
 import 'dart:io';
 import 'dart:math';
 
@@ -22,18 +26,23 @@ const int _hora = 3600 * _seg;
 const int _dia = 24 * _hora;
 final Map<String, String> _env = Platform.environment;
 final bool _correr = _env['SIM_MUDANZA'] == '1';
+final bool _correrAbdicar = _env['SIM_ABDICAR'] == '1';
 final bool _perfilPropio = ['SES', 'LARGO', 'TOQUES', 'CPD', 'DIAS'].any(_env.containsKey);
 final List<int> _sesiones = (_env['SES'] ?? '8,14,20').split(',').map(int.parse).toList();
 final int _largoSesion = int.parse(_env['LARGO'] ?? '600');
 final int _toques = int.parse(_env['TOQUES'] ?? '5');
 final double _cagadasPorDia = double.parse(_env['CPD'] ?? '0.7');
 final int _dias = int.parse(_env['DIAS'] ?? '300');
+final int _diasAbdicar = int.parse(_env['DIAS'] ?? '600');
 
 /// Nodos de la Plomería que suben el MJ/s o los pujos: se compran hasta con el 20% de los rollos.
 const Set<String> _plomeriaFuerte = {'tuberia_ancha', 'llave_paso'};
 
 /// Orden en el que gasta las Llaves cuando ya no le alcanzan para Cimientos.
 const List<String> _ordenLlavero = ['cimientos', 'camion_mudanza', 'ahorros', 'mayordomo'];
+
+/// Orden en el que gasta las Coronas: el primero que le alcance.
+const List<String> _ordenCorte = ['heraldo', 'tesorero', 'bufon'];
 
 class _Opcion {
   final String id;
@@ -47,7 +56,12 @@ class _Opcion {
 class _Casa {
   final int mudanzas;
   final int dia;
+  final int abdicaciones;
   int? fin;
+  bool abdico = false; // se fue abdicando (no mudándose)
+  int llavesReinado = 0; // Llaves ganadas en el reinado al irse
+  int coronas = 0; // Coronas sin gastar al irse
+  String corte = '-'; // La Corte comprada al abdicar
   int jaladas = 0;
   int rollos = 0;
   int llaves = 0;
@@ -57,11 +71,15 @@ class _Casa {
   double plomeriaIngreso = 1; // lo mismo con los pujos contados
   int nivelesPlomeria = 0;
   String llavero = '-';
-  _Casa(this.mudanzas, this.dia);
+  _Casa(this.mudanzas, this.dia, [this.abdicaciones = 0]);
 }
 
 class _Simulacion {
   final Imperio imp;
+  final int dias;
+  final bool abdica;
+  int cagadasReinado = 0;
+  final List<int> diasAbdicacion = [];
   final Random azar;
   final List<_Casa> casasVividas = [_Casa(0, 0)];
   int cagadasDesde = 0;
@@ -71,7 +89,7 @@ class _Simulacion {
   final Map<int, int> cagadasPorDia = {};
   final Map<String, int> plomeriaComprada = {};
   final List<double> mpsDiario = [];
-  _Simulacion(int semilla, Ajustes ajustes)
+  _Simulacion(int semilla, Ajustes ajustes, {this.dias = 300, this.abdica = false})
       : azar = Random(semilla),
         imp = Imperio(azar: Random(semilla + 1), ajustes: ajustes);
 
@@ -210,25 +228,58 @@ class _Simulacion {
       ..plomeriaIngreso = ingreso
       ..nivelesPlomeria = imp.partida.objetosRollos.values.fold(0, (a, b) => a + b);
     c.llaves = imp.mudarse();
+    c.llavero = _comprarLlavero();
+    casasVividas.add(_Casa(imp.partida.mudanzas, dia, imp.partida.abdicaciones));
+    c.llavesReinado = imp.partida.llavesGanadas;
+    diaJalada = dia;
+    cagadasCasa = 0;
+  }
+
+  /// Gasta todas las Llaves en [_ordenLlavero] y devuelve lo comprado ("cimientos+2 ...").
+  String _comprarLlavero() {
     final compras = <String, int>{};
     for (var k = 0; k < 100; k++) {
       final id = _ordenLlavero.firstWhere(imp.puedeComprarLlavero, orElse: () => '');
       if (id.isEmpty || !imp.comprarLlavero(id)) break;
       compras[id] = (compras[id] ?? 0) + 1;
     }
-    c.llavero = compras.isEmpty ? '-' : compras.entries.map((e) => '${e.key}+${e.value}').join(' ');
-    casasVividas.add(_Casa(imp.partida.mudanzas, dia));
+    return compras.isEmpty ? '-' : compras.entries.map((e) => '${e.key}+${e.value}').join(' ');
+  }
+
+  void _quizasAbdicar(int inicio) {
+    if (!abdica || !imp.puedeAbdicar(cagadasReinado)) return;
+    final dia = inicio ~/ _dia;
+    final c = casasVividas.last;
+    c
+      ..fin = dia
+      ..abdico = true
+      ..rollos = imp.rollosCasa
+      ..llavesReinado = imp.partida.llavesGanadas;
+    imp.abdicar();
+    final compras = <String, int>{};
+    for (var k = 0; k < 100; k++) {
+      final id = _ordenCorte.firstWhere(imp.puedeComprarCorte, orElse: () => '');
+      if (id.isEmpty || !imp.comprarCorte(id)) break;
+      compras[id] = (compras[id] ?? 0) + 1;
+    }
+    c
+      ..coronas = imp.coronas
+      ..corte = compras.isEmpty ? '-' : compras.entries.map((e) => '${e.key}+${e.value}').join(' ')
+      ..llavero = _comprarLlavero();
+    casasVividas.add(_Casa(imp.partida.mudanzas, dia, imp.partida.abdicaciones));
+    diasAbdicacion.add(dia);
     diaJalada = dia;
     cagadasCasa = 0;
+    cagadasReinado = 0;
   }
 
   void correr() {
     final siguienteCagada = <int>[];
-    for (var t = 0.0; t < _dias * _dia; t += _dia / _cagadasPorDia) {
+    for (var t = 0.0; t < dias * _dia; t += _dia / _cagadasPorDia) {
       siguienteCagada.add((t + _dia / _cagadasPorDia).round());
     }
     var finAnterior = -1;
-    for (var d = 0; d < _dias; d++) {
+    for (var d = 0; d < dias; d++) {
       imp.pases++;
       for (final h in _sesiones) {
         final inicio = d * _dia + h * _hora;
@@ -252,10 +303,12 @@ class _Simulacion {
           imp.cagadasCandado = cagadasCandado;
           cagadasDesde += cuentan;
           cagadasCasa += cuentan;
+          cagadasReinado += cuentan;
           imp.aplicarCagadas(nuevas, inicio);
         }
         _quizasJalar(inicio);
         _quizasMudarse(inicio);
+        _quizasAbdicar(inicio);
         _comprarPlomeria(inicio);
         if (nuevas.isNotEmpty) imp.aplicarFrescaHasta(inicio + 3600000);
         for (var s = 0; s < _largoSesion; s++) {
@@ -284,8 +337,10 @@ class _Simulacion {
       mpsDiario.add(imp.mpsSinEfectos());
     }
     final c = casasVividas.last;
-    final (mps, ingreso) = _aportePlomeria(_dias * _dia);
+    final (mps, ingreso) = _aportePlomeria(dias * _dia);
     c
+      ..llavesReinado = imp.partida.llavesGanadas
+      ..coronas = imp.coronas
       ..rollos = imp.rollosCasa
       ..plomeriaMps = mps
       ..plomeriaIngreso = ingreso
@@ -293,13 +348,15 @@ class _Simulacion {
   }
 }
 
-/// Ajustes de la mudanza por variables (para afinar sin tocar los flags): MR, MRS, MJ, MC, MD.
+/// Ajustes de la mudanza y de abdicar por variables (para afinar sin tocar los flags): MR, MRS, MJ, MC, MD, AL, AF.
 FlagsImperio _flags() => FlagsImperio(
       mudanzaRollos: double.tryParse(_env['MR'] ?? '') ?? FlagsImperio.porDefecto.mudanzaRollos,
       mudanzaRollosSubida: double.tryParse(_env['MRS'] ?? '') ?? FlagsImperio.porDefecto.mudanzaRollosSubida,
       mudanzaJaladas: int.tryParse(_env['MJ'] ?? '') ?? FlagsImperio.porDefecto.mudanzaJaladas,
       mudanzaCagadas: int.tryParse(_env['MC'] ?? '') ?? FlagsImperio.porDefecto.mudanzaCagadas,
       mudanzaDivisorX: double.tryParse(_env['MD'] ?? '') ?? FlagsImperio.porDefecto.mudanzaDivisorX,
+      abdicarLlaves: double.tryParse(_env['AL'] ?? '') ?? FlagsImperio.porDefecto.abdicarLlaves,
+      abdicarCoronasFactor: double.tryParse(_env['AF'] ?? '') ?? FlagsImperio.porDefecto.abdicarCoronasFactor,
     );
 
 void main() {
@@ -356,4 +413,44 @@ void main() {
       expect(sim.casasVividas[i].diaPicoAnterior, isNotNull, reason: '${nombreCasa(i)} no vuelve al pico de la casa anterior');
     }
   }, skip: _correr ? false : 'Simulación larga: correr con SIM_MUDANZA=1', timeout: const Timeout(Duration(minutes: 15)));
+
+  test('abdicaciones a lo largo de 600 días', () {
+    final flags = _flags();
+    final sim = _Simulacion(7, flags.ajustes, dias: _diasAbdicar, abdica: true)..correr();
+    final imp = sim.imp;
+    String e(num v) => v.toStringAsExponential(2);
+    String rom(int a) => a <= 0 ? '-' : dinastia(a).split(' ').last;
+    final lineas = <String>[
+      'Casas (día de llegada → día en que se fue, dinastía, casa, Llaves ganadas en el reinado al irse, Coronas sin gastar, '
+          'Corte comprada al abdicar, Llavero):',
+    ];
+    for (final c in sim.casasVividas) {
+      final fin = c.fin == null ? 'sigue' : 'día ${c.fin! + 1}${c.abdico ? ' 👑' : ''}';
+      lineas.add('  día ${c.dia + 1} → $fin, dinastía ${rom(c.abdicaciones)}, ${casaConEmoji(c.mudanzas)}, '
+          '${c.llavesReinado} llaves, ${c.coronas} coronas, corte: ${c.corte}, llavero: ${c.llavero}');
+    }
+    final palacios = <(int, int)>[]; // (abdicaciones, día de llegada al Palacio)
+    for (final c in sim.casasVividas) {
+      if (c.mudanzas >= flags.ajustes.abdicarMudanzas && !palacios.any((x) => x.$1 == c.abdicaciones)) {
+        palacios.add((c.abdicaciones, c.dia));
+      }
+    }
+    lineas.add('Llegada al Palacio por dinastía: '
+        '${palacios.map((x) => '${rom(x.$1)}: día ${x.$2 + 1}').join(', ')}');
+    lineas.add('Abdicaciones: ${sim.diasAbdicacion.map((d) => 'día ${d + 1}').join(', ')}');
+    lineas.add('Al final: ${imp.partida.abdicaciones} abdicaciones, ${imp.partida.coronasGanadas} Coronas ganadas, '
+        '${imp.coronas} sin gastar, corte ${imp.partida.corte}, ${imp.partida.mudanzas} mudanzas, x${e(imp.multiplicadorCorte)} '
+        'de La Corte, ${e(imp.mjTotal)} MJ en total');
+    // ignore: avoid_print
+    print(lineas.join('\n'));
+    if (_perfilPropio) return;
+
+    expect(palacios, isNotEmpty, reason: 'no llegó al Palacio');
+    expect(palacios.first.$2 + 1, inInclusiveRange(230, 300), reason: 'Palacio');
+    expect(sim.diasAbdicacion, isNotEmpty, reason: 'no abdicó en $_diasAbdicar días');
+    expect(sim.diasAbdicacion.first + 1, inInclusiveRange(330, 420), reason: '1.ª abdicación');
+    final vuelta = palacios.where((x) => x.$1 == 1).map((x) => x.$2 - sim.diasAbdicacion.first).firstOrNull;
+    expect(vuelta, isNotNull, reason: 'después de abdicar no volvió al Palacio');
+    expect(vuelta!, lessThan(palacios.first.$2 / 2), reason: 'vuelta al Palacio');
+  }, skip: _correrAbdicar ? false : 'Simulación larga: correr con SIM_ABDICAR=1', timeout: const Timeout(Duration(minutes: 30)));
 }
