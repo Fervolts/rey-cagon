@@ -65,6 +65,14 @@ const _errores = {
   'Eso es un premio exclusivo': 'That is an exclusive prize',
   'Todavía no llegas a ese número': "You haven't reached that number yet",
   'Ya tienen un Cagadón hoy': 'You already have a Poop-Off today',
+  'Las apuestas están apagadas': 'Bets are turned off',
+  'Esa apuesta pasa del tope': 'That bet is over the limit',
+  'Abre el Imperio antes de apostar': 'Open the Empire before betting',
+  'Esa persona todavía no juega al Imperio: reta sin apuesta': "That person doesn't play the Empire yet: challenge without a bet",
+  'La apuesta cambió: vuelve a abrir el reto': 'The bet changed: open the challenge again',
+  'Esa apuesta todavía no se puede cobrar': "That bet can't be collected yet",
+  'Ya cobraste esa apuesta': 'You already collected that bet',
+  'Perdiste esa apuesta': 'You lost that bet',
 };
 
 /// Un mensaje de error del servidor en el idioma de la app.
