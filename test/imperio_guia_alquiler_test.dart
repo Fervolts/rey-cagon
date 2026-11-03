@@ -147,8 +147,8 @@ void main() {
       await t.pumpWidget(_hoja(c, ids: ['primo']));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('guia_ficha_primo')), findsOneWidget);
-      expect(find.textContaining('Puja 10 veces por segundo por ti mientras la app está abierta'), findsOneWidget);
-      expect(find.textContaining('Ahora serían $esperado'), findsOneWidget);
+      expect(find.textContaining('Puja por ti 10 veces por segundo'), findsOneWidget);
+      expect(find.textContaining('Ahora cada primo te daría $esperado'), findsOneWidget);
     });
 
     testWidgets('ALQUILAR desde la ficha: alquila y la da por vista; sin plata no hay botón', (t) async {
@@ -192,14 +192,15 @@ void main() {
       }
       im.partida.destapes = 7;
       expect(textosGuia(im, 'robot', t0).ejemplo, 'Llevas 7 destapes a mano.');
-      expect(textosGuia(im, 'robot_turbo', t0).que, contains('el Atasco no frena la producción'));
+      expect(textosGuia(im, 'robot_turbo', t0).que, contains('tu producción no baja'));
       expect(textosGuia(im, 'plomero_horas', t0).que, contains('producción x3 por 1 min'));
       expect(textosGuia(im, 'plomero_horas', t0).ejemplo, contains(formatoMj(im.mpsSinEfectos() * 120, ingles: false)));
       final barato = edificioMasBarato(im, t0)!;
       expect(textosGuia(im, 'cuadrilla', t0).ejemplo, contains(barato.nombreEs));
       final g = textosGuia(im, 'guardia', t0);
       expect(g.que, contains('al 100% y hasta 8 h'));
-      expect(g.ejemplo, contains('${(im.porcentajeOffline * 100).round()}%'));
+      expect(g.que, contains('${(im.porcentajeOffline * 100).round()}%'));
+      expect(g.ejemplo, contains('con Guardia'));
     });
   });
 

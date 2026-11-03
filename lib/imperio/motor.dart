@@ -217,7 +217,7 @@ const Map<String, (String, String, String, String, String)> _textosEfecto = {
   'empujon': ('🎁', 'Empujón', 'Boost', 'Producción x2', 'Production x2'),
   'pujo_loco': ('🍑', 'Pujo loco', 'Crazy push', 'Pujos x777', 'Pushes x777'),
   'constructor': ('🧱', 'Constructor', 'Builder', 'Cagadores a mitad de precio', 'Poopers at half price'),
-  'offline_bonus': ('🌋', 'Offline x1,5', 'Offline x1.5', 'El próximo offline cuenta x1,5', 'Next offline counts x1.5'),
+  'offline_bonus': ('🌋', 'Offline x1,5', 'Offline x1.5', 'Lo que ganas con la app cerrada la próxima vez: x1,5', 'What you make with the app closed next time: x1.5'),
   'jalon_doble': ('🚽', 'Jalón doble', 'Double flush', 'Producción x2', 'Production x2'),
   'pujo_sagrado': ('🙌', 'Pujo sagrado', 'Holy push', 'Pujos x10', 'Pushes x10'),
   'plomero_bono': ('🧰', 'Plomero', 'Plumber', 'Producción x3', 'Production x3'),
@@ -1280,8 +1280,8 @@ class Imperio {
     if (_p.offlineBonus) {
       final x = _textosEfecto['offline_bonus']!;
       if (_p.offlineBonusFuerza < 1) {
-        r.add(EfectoActivo('offline_bonus', x.$1, 'Offline x1,25', 'Offline x1.25', 'El próximo offline cuenta x1,25 (cansado: mitad)',
-            'Next offline counts x1.25 (tired: half)', null));
+        r.add(EfectoActivo('offline_bonus', x.$1, 'Offline x1,25', 'Offline x1.25', 'Lo que ganas con la app cerrada la próxima vez: x1,25 (cansado: mitad)',
+            'What you make with the app closed next time: x1.25 (tired: half)', null));
       } else {
         r.add(EfectoActivo('offline_bonus', x.$1, x.$2, x.$3, x.$4, x.$5, null));
       }

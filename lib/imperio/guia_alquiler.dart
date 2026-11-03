@@ -52,24 +52,30 @@ Edificio? edificioMasBarato(Imperio im, int ahora) {
       : tr('Llevas ${p.destapes} destapes a mano.', 'You have unclogged ${p.destapes} by hand.');
   switch (id) {
     case 'robot':
-      return (que: tr('Destapa solo cada Atasco mientras dure. No tienes que tocar nada.', 'Unclogs every Clog by itself while it lasts. No tapping.'), ejemplo: destapes());
+      return (
+        que: tr('Cuando sale un Atasco, tienes que tocarlo para destaparlo. El Robot los destapa solo, sin que toques nada, mientras lo tengas alquilado.',
+            'When a Clog shows up, you have to tap it to clear it. The Robot clears them by itself, no tapping, while you rent it.'),
+        ejemplo: destapes(),
+      );
     case 'robot_turbo':
       return (
-        que: tr('Destapa solo cada Atasco y el Atasco no frena la producción.', 'Unclogs every Clog by itself and the Clog does not slow production.'),
+        que: tr('Como el Robot: destapa solo cada Atasco. Además, mientras haya un Atasco tu producción no baja ni un poco.',
+            'Like the Robot: it clears every Clog by itself. On top of that, your production does not drop at all while there is a Clog.'),
         ejemplo: destapes(),
       );
     case 'plomero_horas':
       final extra = im.mpsSinEfectos() * 2 * duracionBonoPlomero.inSeconds;
       return (
-        que: tr('Cada Atasco que destapes: producción x3 por 1 min.', 'Every Clog you unclog: production x3 for 1 min.'),
-        ejemplo: tr('Ahora eso es +${_mj(extra)} $mon por destape.', 'Right now that is +${_mj(extra)} $mon per unclog.'),
+        que: tr('Cada Atasco que destapes con el dedo te da producción x3 por 1 min. Conviene si te gusta destapar a mano.',
+            'Every Clog you clear with your finger gives you production x3 for 1 min. Good if you like clearing them by hand.'),
+        ejemplo: tr('Ahora cada destape te daría +${_mj(extra)} $mon.', 'Right now every clear would give you +${_mj(extra)} $mon.'),
       );
     case 'primo':
       final mjs = im.valorPujo(ahora) * pujosPrimo;
       return (
-        que: tr('Puja ${pujosPrimo.round()} veces por segundo por ti mientras la app está abierta.',
-            'Pushes ${pujosPrimo.round()} times per second for you while the app is open.'),
-        ejemplo: tr('Ahora serían +${_mj(mjs)} $mon/s.', 'Right now that is +${_mj(mjs)} $mon/s.'),
+        que: tr('Puja por ti ${pujosPrimo.round()} veces por segundo, como si tocaras la poceta sin parar. Solo trabaja con la app abierta. Mientras más produces, más primos vienen.',
+            'Pushes for you ${pujosPrimo.round()} times per second, as if you tapped the toilet nonstop. Only works with the app open. The more you make, the more cousins come.'),
+        ejemplo: tr('Ahora cada primo te daría +${_mj(mjs)} $mon por segundo.', 'Right now each cousin would give you +${_mj(mjs)} $mon per second.'),
       );
     case 'cuadrilla':
       final e = edificioMasBarato(im, ahora);
@@ -83,14 +89,25 @@ Edificio? edificioMasBarato(Imperio im, int ahora) {
             ? tr('Ahora compraría: $nombre.', 'Right now it would buy: $nombre.')
             : tr('Ahora compraría: $nombre, cuando tengas ${_mj(precio)} $mon.', 'Right now it would buy: $nombre, once you have ${_mj(precio)} $mon.');
       }
-      return (que: tr('Cada minuto compra el cagador más barato si te alcanza.', 'Every minute it buys the cheapest pooper if you can afford it.'), ejemplo: ejemplo);
+      return (
+        que: tr('Cada minuto compra sola el cagador más barato, si te alcanza el saldo. Así sigues creciendo sin comprar a mano.',
+            'Every minute it buys the cheapest pooper by itself, if your balance is enough. You keep growing without buying by hand.'),
+        ejemplo: ejemplo,
+      );
     case 'guardia':
       final tope = im.topeOffline > topeGuardia ? im.topeOffline : topeGuardia;
       final pct = (im.porcentajeOffline * 100).round();
+      final mps = im.mpsSinEfectos();
+      final sinGuardia = mps * im.porcentajeOffline * (im.topeOffline < tope ? im.topeOffline : tope).inSeconds;
+      final conGuardia = mps * tope.inSeconds;
       return (
-        que: tr('Tu próximo offline cuenta al 100% y hasta ${_horas(tope)}. Se gasta al volver.',
-            'Your next offline counts at 100% and up to ${_horas(tope)}. It is used up when you come back.'),
-        ejemplo: tr('Hoy cuenta al $pct% hasta ${_horas(im.topeOffline)}.', 'Today it counts at $pct% up to ${_horas(im.topeOffline)}.'),
+        que: tr(
+            'Con la app cerrada tus cagadores siguen produciendo, pero menos: hoy al $pct% y máximo ${_horas(im.topeOffline)}. '
+                'Con el Guardia, la próxima vez que cierres la app producen al 100% y hasta ${_horas(tope)}. Se gasta cuando vuelves a abrirla.',
+            'With the app closed your poopers keep producing, but less: today at $pct% and ${_horas(im.topeOffline)} at most. '
+                'With the Watchman, the next time you close the app they produce at 100% and up to ${_horas(tope)}. It is used up when you open it again.'),
+        ejemplo: tr('Si cierras ${_horas(tope)}: sin Guardia ~${_mj(sinGuardia)} $mon, con Guardia ~${_mj(conGuardia)} $mon.',
+            'If you close it for ${_horas(tope)}: without the Watchman ~${_mj(sinGuardia)} $mon, with it ~${_mj(conGuardia)} $mon.'),
       );
   }
   final o = objetoPorId(id);

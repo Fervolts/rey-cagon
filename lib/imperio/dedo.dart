@@ -1,4 +1,4 @@
-// Dedos de la primera vez: un resaltado, un 👆 y una línea corta sobre la próxima cosa que hay que tocar. Salen solos,
+// Dedos de la primera vez: un resaltado, un 👆, una línea corta sobre la próxima cosa que hay que tocar y una frase de para qué sirve. Salen solos,
 // según cómo vas, uno a la vez y una vez cada uno (clave `dedo_<paso>` en Partida.guiaVista). Un toque en cualquier
 // parte lo quita y el toque sigue de largo. Reemplaza al recorrido guiado de la 2.15.0.
 import 'dart:math' as math;
@@ -16,14 +16,19 @@ String claveDedo(String paso) => 'dedo_$paso';
 
 /// Un dedo: [paso] va a la telemetría (`imperio_dedo`) y a la clave; [objetivo] es la llave del widget que señala.
 class Dedo {
-  const Dedo(this.paso, this.objetivo, this.es, this.en);
+  const Dedo(this.paso, this.objetivo, this.es, this.en, [this.detalleEs = '', this.detalleEn = '']);
 
   final String paso;
   final Key objetivo;
   final String es;
   final String en;
 
+  /// Una frase más chica debajo: para qué sirve (vacía = sin frase).
+  final String detalleEs;
+  final String detalleEn;
+
   String get texto => tr(es, en);
+  String get detalle => tr(detalleEs, detalleEn);
 
   @override
   bool operator ==(Object other) => other is Dedo && other.paso == paso && other.objetivo == objetivo;
@@ -76,15 +81,18 @@ Dedo? siguienteDedo(Imperio im, int ahora,
 
   if (empezando && sinCagadores && pa.mejoras.isEmpty && !cajonAbierto && libre('poceta') &&
       im.mjTotal < edificios.first.precioBase * im.ajustes.escalaEdificios) {
-    return const Dedo('poceta', Key('dedo_poceta'), 'Toca para pujar', 'Tap to push');
+    return const Dedo('poceta', Key('dedo_poceta'), 'Toca para pujar', 'Tap to push', 'Cada pujo suma a tu saldo. Con el saldo compras cagadores, que producen solos.',
+        'Every push adds to your balance. With it you buy poopers, which produce by themselves.');
   }
   if (empezando && sinCagadores) {
     final e = primerEdificioComprable(im, ahora, n: cantidad);
     if (e != null && !cajonAbierto && libre('cagadores')) {
-      return const Dedo('cagadores', Key('boton_edificios'), 'Ya te alcanza: compra un cagador', 'You can afford it: buy a pooper');
+      return const Dedo('cagadores', Key('boton_edificios'), 'Ya te alcanza: compra un cagador', 'You can afford it: buy a pooper',
+          'Un cagador produce cada segundo, aunque no toques nada.', 'A pooper makes money every second, even if you tap nothing.');
     }
     if (e != null && cajonAbierto && libre('cagadores_fila')) {
-      return Dedo('cagadores_fila', Key('fila_${e.id}'), 'Toca para comprarlo', 'Tap to buy it');
+      return Dedo('cagadores_fila', Key('fila_${e.id}'), 'Toca para comprarlo', 'Tap to buy it',
+          'Cada uno suma producción por segundo. El siguiente cuesta un poco más.', 'Each one adds production per second. The next one costs a bit more.');
     }
   }
   if (empezando && pa.mejoras.isEmpty) {
@@ -92,23 +100,30 @@ Dedo? siguienteDedo(Imperio im, int ahora,
     if (m != null) {
       final clave = m.edificio ?? 'poceta';
       const es = 'Una mejora multiplica lo que produces', en = 'An upgrade multiplies what you make';
-      if (!cajonAbierto && libre('mejora')) return const Dedo('mejora', Key('boton_edificios'), es, en);
+      const dEs = 'Se paga una sola vez y dura hasta que jales la Cadena.', dEn = 'You pay once and it lasts until you pull the Chain.';
+      if (!cajonAbierto && libre('mejora')) return const Dedo('mejora', Key('boton_edificios'), es, en, dEs, dEn);
       if (cajonAbierto && !abiertos.contains(clave) && libre('mejora_flecha')) {
-        return Dedo('mejora_flecha', Key('flecha_$clave'), es, en);
+        return Dedo('mejora_flecha', Key('flecha_$clave'), es, en, dEs, dEn);
       }
       if (cajonAbierto && abiertos.contains(clave) && libre('mejora_comprar')) {
-        return Dedo('mejora_comprar', Key('comprar_mejora_${m.id}'), 'Toca para comprarla', 'Tap to buy it');
+        return Dedo('mejora_comprar', Key('comprar_mejora_${m.id}'), 'Toca para comprarla', 'Tap to buy it', dEs, dEn);
       }
     }
   }
   if (empezando && im.cadenaDesbloqueada && jalarVisible && libre('jalar')) {
-    return const Dedo('jalar', Key('boton_jalar'), 'La Cadena: cambia todo por Rollos de Oro', 'The Chain: trade it all for Golden Rolls');
+    return const Dedo('jalar', Key('boton_jalar'), 'La Cadena: cambia todo por Rollos de Oro', 'The Chain: trade it all for Golden Rolls',
+        'Pierdes saldo, cagadores y mejoras. Los Rollos compran Plomería, que se queda y te hace crecer más rápido cada vuelta.',
+        'You lose balance, poopers and upgrades. Rolls buy Plumbing, which stays and makes every run grow faster.');
   }
   if (mudanza && pa.mudanzas == 0 && libre('mudanza')) {
-    return const Dedo('mudanza', Key('boton_mudanza'), 'Ya no cabes: múdate', "You don't fit anymore: move");
+    return const Dedo('mudanza', Key('boton_mudanza'), 'Ya no cabes: múdate', "You don't fit anymore: move",
+        'Dejas Rollos, Plomería y jaladas. Ganas Llaves para el Llavero, y la casa nueva produce mucho más.',
+        'You leave Rolls, Plumbing and flushes. You get Keys for the Keyring, and the new house makes way more.');
   }
   if (abdicar && pa.abdicaciones == 0 && libre('abdicar')) {
-    return const Dedo('abdicar', Key('boton_abdicar'), 'Ni el Palacio te alcanza: abdica', 'Not even the Palace is enough: abdicate');
+    return const Dedo('abdicar', Key('boton_abdicar'), 'Ni el Palacio te alcanza: abdica', 'Not even the Palace is enough: abdicate',
+        'Vuelves al Rancho, pero ganas Coronas: cada una sin gastar da +50% de producción, o gástalas en La Corte.',
+        'You go back to the Shack, but you get Crowns: each unspent one gives +50% production, or spend them in the Court.');
   }
   return null;
 }
@@ -260,13 +275,23 @@ class _DedoImperioState extends State<DedoImperio> with SingleTickerProviderStat
   Widget _linea(BuildContext context) {
     final p = paleta(context);
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 280),
+      constraints: const BoxConstraints(maxWidth: 300),
       child: Container(
         key: const Key('dedo_linea'),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(color: p.fondo, border: Border.all(color: acento), borderRadius: BorderRadius.circular(radio)),
-        child: TextoConEmojis(widget.dedo.texto,
-            textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w800, color: p.texto, height: 1.25)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextoConEmojis(widget.dedo.texto,
+                textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w800, color: p.texto, height: 1.25)),
+            if (widget.dedo.detalle.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              TextoConEmojis(widget.dedo.detalle,
+                  textAlign: TextAlign.center, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500, color: p.textoSuave, height: 1.3)),
+            ],
+          ],
+        ),
       ),
     );
   }

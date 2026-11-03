@@ -322,8 +322,8 @@ const List<Objeto> objetos = [
       'Every minute buys the cheapest pooper if you can afford it', TipoObjeto.alquilable,
       duracion: Duration(minutes: 10), minutosPrecio: 7, candado: 15),
   // Sin duración: dura hasta que vuelves a abrir la app (se gasta en el offline).
-  Objeto('guardia', '🔦', 'Guardia nocturno', 'Night watchman', 'Tu próximo offline cuenta al 100% y hasta 8 h',
-      'Your next offline counts 100% and up to 8 h', TipoObjeto.alquilable,
+  Objeto('guardia', '🔦', 'Guardia nocturno', 'Night watchman', 'La próxima vez que cierres la app, produces al 100% hasta 8 h',
+      'Next time you close the app, you produce at 100% for up to 8 h', TipoObjeto.alquilable,
       minutosPrecio: 60, candado: 30, ciruelas: 4),
   // Fase 2: consumibles (candado 15).
   Objeto('pino', '🌲', 'Ambientador de pino', 'Pine air freshener', 'Producción +50%, mojones dorados la mitad de seguido',
@@ -718,7 +718,7 @@ const Map<int, BuffTipo> buffsTipo = {
   3: BuffTipo(3, '🌽', 'Mazorca', 'Corn cob', 'Cagadores 10% más baratos', 'Poopers 10% cheaper'),
   4: BuffTipo(4, '🐍', 'Anaconda', 'Anaconda', 'Todo x2', 'Everything x2'),
   5: BuffTipo(5, '🍦', 'Helado suave', 'Soft serve', 'Mojones dorados el doble de seguido', 'Golden poops twice as often'),
-  6: BuffTipo(6, '🌋', 'Volcán', 'Volcano', 'El próximo offline cuenta x1,5', 'Next offline counts x1.5'),
+  6: BuffTipo(6, '🌋', 'Volcán', 'Volcano', 'Lo que ganas con la app cerrada la próxima vez: x1,5', 'What you make with the app closed next time: x1.5'),
   7: BuffTipo(7, '💧', 'Manguera', 'Fire hose', 'Producción x3 y pujos a la mitad', 'Production x3, pushes halved'),
 };
 

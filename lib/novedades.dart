@@ -28,6 +28,8 @@ const historialNovedades = <VersionNovedades>[
         'THE COURT: spend your Crowns on the Jester, the Herald, the Treasurer, the Master builder, the Taster and the Royal butler. What you buy stays forever.'),
     ('🔨', 'El Maestro de obras hace que cada mudanza pida menos jaladas y menos cagadas, así cada reinado va más rápido.',
         'The Master builder makes every move ask for fewer flushes and fewer poops, so every reign goes faster.'),
+    ('❓', 'Explicaciones más claras: el ? de cada alquiler dice qué hace con tus números, eliges cuánto tiempo alquilar en horas y no en x2 o x5, y los dedos de la primera vez dicen para qué sirve cada cosa.',
+        'Clearer help: the ? on every rental explains what it does with your numbers, you pick how long to rent in hours instead of x2 or x5, and the first-time fingers say what each thing is for.'),
   ]),
   VersionNovedades('2.16.0', '2026-11-03', [
     ('✨', 'Pantalla más limpia: arriba quedan tu saldo, el ? y el ⋯. Toca el saldo para ver tus Fichas, Ciruelas, el Cofre y los Rollos; en ⋯ están el estilo, el ranking, la foto del baño y la cartera.',

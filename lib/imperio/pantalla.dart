@@ -1586,6 +1586,28 @@ final Set<String> _pagandoCiruelas = {};
 final Map<String, int> _vecesElegidas = {};
 
 /// Multiplicador corto para la UI: x1,6 en español, x1.6 en inglés (sin ",0" de sobra).
+/// Lo que dura un alquiler en el selector, corto: "15 min", "1 h", "2,5 h", "1h15".
+String _largoCorto(Duration d) {
+  final m = d.inMinutes;
+  if (m < 60) return '$m min';
+  final h = m ~/ 60, r = m % 60;
+  if (r == 0) return '$h h';
+  if (r == 30) return tr('$h,5 h', '$h.5 h');
+  return '${h}h${r.toString().padLeft(2, '0')}';
+}
+
+/// La línea bajo el selector: qué pasa con lo elegido ([veces] periodos, 0 = Indefinido).
+String _explicaPeriodo(Objeto o, int veces) {
+  final uno = _largoCorto(o.duracion!);
+  if (veces == 0) {
+    return tr('∞ Se renueva solo cada $uno y te cobra cada vez. Si un día no te alcanza, se apaga solo. Lo apagas cuando quieras.',
+        '∞ Renews itself every $uno and charges you each time. If you ever can\'t afford it, it turns off. Turn it off any time.');
+  }
+  final total = _largoCorto(o.duracion! * veces);
+  return tr('Pagas $total de una vez. Cada $uno seguido sale un poco más caro; si lo dejas descansar unas horas vuelve a su precio.',
+      'You pay for $total at once. Each $uno in a row costs a bit more; let it rest a few hours and it goes back to its price.');
+}
+
 String _xCorto(double v) {
   var s = v >= 10 ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
   if (s.endsWith('.0')) s = s.substring(0, s.length - 2);
@@ -1692,7 +1714,7 @@ class _HojaObjetos extends StatelessWidget {
     if (alquilable) {
       final queda = _cuenta(Duration(milliseconds: max(0, (im.partida.alquilados[o.id] ?? 0) - ahora)));
       if (o.duracion == null) {
-        if (im.alquiladoActivo(o.id, ahora)) return (o.emoji, tr('Ya está activo hasta tu próximo offline', 'Already active until your next offline'));
+        if (im.alquiladoActivo(o.id, ahora)) return (o.emoji, tr('Ya está activo hasta que cierres la app y vuelvas', 'Already active until you close the app and come back'));
       } else if (veces == 0) {
         if (conCiruelas) return ('🫐', tr('Con Ciruelas se alquila solo x1', 'Plums rent x1 only'));
         if (im.alquilerIndefinido(o.id)) {
@@ -1726,7 +1748,7 @@ class _HojaObjetos extends StatelessWidget {
     if (o.tipo == TipoObjeto.consumible) {
       return tr('$nombre: tienes ${im.enInventario(o.id)}/${o.maxInventario}. Toca USAR', '$nombre: you have ${im.enInventario(o.id)}/${o.maxInventario}. Tap USE');
     }
-    if (o.duracion == null) return tr('¡$nombre alquilado! Activo hasta tu próximo offline', '$nombre rented! Active until your next offline');
+    if (o.duracion == null) return tr('¡$nombre alquilado! Cuida tu próxima ausencia: cierra la app tranquilo', '$nombre rented! It covers your next time away: close the app');
     if (indefinido) {
       return tr('$nombre en Indefinido: se renueva solo mientras puedas pagarlo', '$nombre on Indefinite: it renews itself while you can pay');
     }
@@ -1824,7 +1846,7 @@ class _HojaObjetos extends StatelessWidget {
     final calorX = alquilable ? im.multiplicadorCalor(o.id, ahora) : 1.0;
     final estiloInfo = numeros(context, tamano: 11, color: p.textoSuave);
     final infoAlquiler = [
-      if (calorX >= 1.05) Text('${_xCorto(calorX)} ${tr('por uso', 'from use')}', key: Key('calor_${o.id}'), style: estiloInfo),
+      if (calorX >= 1.05) Text(tr('Sale ${_xCorto(calorX)} más caro por usarlo seguido', '${_xCorto(calorX)} pricier from recent use'), key: Key('calor_${o.id}'), style: estiloInfo),
       if (o.id == 'primo')
         Text(im.primosActivos() == 1 ? tr('1 primo', '1 cousin') : tr('${im.primosActivos()} primos', '${im.primosActivos()} cousins'),
             key: const Key('primos_cuenta'), style: estiloInfo),
@@ -1847,7 +1869,11 @@ class _HojaObjetos extends StatelessWidget {
               HapticFeedback.selectionClick();
               refrescar(() => _vecesElegidas[o.id] = n);
             },
-            child: Text(n == 0 ? '∞' : 'x$n', style: numeros(context, tamano: 13, weight: FontWeight.w900, color: sel ? acentoTexto : p.texto)),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(n == 0 ? '∞' : _largoCorto(o.duracion! * n),
+                  style: numeros(context, tamano: 13, weight: FontWeight.w900, color: sel ? acentoTexto : p.texto)),
+            ),
           ),
         ),
       );
@@ -1938,7 +1964,7 @@ class _HojaObjetos extends StatelessWidget {
               if (alquilado) ...[
                 Text(
                     o.duracion == null
-                        ? tr('Activo hasta tu próximo offline', 'Active until your next offline')
+                        ? tr('Activo: cuida tu próxima ausencia', 'Active: covers your next time away')
                         : tr('Activo: ${_cuenta(Duration(milliseconds: finAlquiler - ahora))}',
                             'Active: ${_cuenta(Duration(milliseconds: finAlquiler - ahora))}'),
                     style: numeros(context, tamano: 12, color: acento)),
@@ -1965,7 +1991,12 @@ class _HojaObjetos extends StatelessWidget {
                 const SizedBox(height: 6),
               ],
               if (elige && abierto) ...[
+                Text(tr('¿CUÁNTO TIEMPO?', 'HOW LONG?'),
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1, color: p.textoSuave)),
+                const SizedBox(height: 4),
                 Row(children: [for (final n in opcionesAlquiler) opcion(n), opcion(0)]),
+                const SizedBox(height: 4),
+                Text(_explicaPeriodo(o, veces), key: Key('explica_periodo_${o.id}'), style: TextStyle(fontSize: 12, color: p.textoSuave)),
                 const SizedBox(height: 6),
               ],
               Text(consumible ? tr('COMPRAR CON', 'BUY WITH') : tr('ALQUILAR CON', 'RENT WITH'),
