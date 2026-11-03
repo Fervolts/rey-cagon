@@ -21,6 +21,14 @@ class VersionNovedades {
 
 /// El historial público, de la más nueva a la más vieja. Al sacar una versión nueva se agrega arriba.
 const historialNovedades = <VersionNovedades>[
+  VersionNovedades('2.17.0', '2026-11-03', [
+    ('👑', 'ABDICAR: cuando ni el Palacio te alcanza, abdica. Vuelves al Rancho, pero ganas Coronas y empiezas una dinastía nueva. Cada Corona sin gastar te da +50% de producción.',
+        'ABDICATE: when not even the Palace is enough, abdicate. You go back to the Shack, but you earn Crowns and start a new dynasty. Every unspent Crown gives you +50% production.'),
+    ('🏰', 'LA CORTE: gasta tus Coronas en el Bufón, el Heraldo, el Tesorero, el Maestro de obras, el Catador y el Mayordomo real. Lo que compras se queda para siempre.',
+        'THE COURT: spend your Crowns on the Jester, the Herald, the Treasurer, the Master builder, the Taster and the Royal butler. What you buy stays forever.'),
+    ('🔨', 'El Maestro de obras hace que cada mudanza pida menos jaladas y menos cagadas, así cada reinado va más rápido.',
+        'The Master builder makes every move ask for fewer flushes and fewer poops, so every reign goes faster.'),
+  ]),
   VersionNovedades('2.16.0', '2026-11-03', [
     ('✨', 'Pantalla más limpia: arriba quedan tu saldo, el ? y el ⋯. Toca el saldo para ver tus Fichas, Ciruelas, el Cofre y los Rollos; en ⋯ están el estilo, el ranking, la foto del baño y la cartera.',
         'A cleaner screen: up top you only see your balance, the ? and the ⋯. Tap the balance to see your Tokens, Plums, the Chest and your Rolls; ⋯ holds style, the leaderboard, the bathroom photo and your wallet.'),
