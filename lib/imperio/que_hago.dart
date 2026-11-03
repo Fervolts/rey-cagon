@@ -1,5 +1,5 @@
 // "¿Qué hago ahora?": la próxima jugada que más conviene, calculada solo con el Imperio (sin widgets ni red).
-// La hoja y el botón ? viven en recorrido.dart; aquí solo está la cuenta, para poder probarla sola.
+// La hoja y el botón ? viven en hoja_que_hago.dart; aquí solo está la cuenta, para poder probarla sola.
 
 import 'dart:math';
 
@@ -231,9 +231,9 @@ Sugerencia queHagoAhora(Imperio im, int ahora, {bool cadenaLista = false, bool m
     final precio = _mj(im.precioObjetoRollos(o.id));
     final salto = _mj((plomeria.salto * 100).roundToDouble() / 100);
     return Sugerencia('plomeria', o.emoji, tr('Compra ${o.nombreEs}', 'Buy ${o.nombreEn}'),
-        tr('En la Plomería: cuesta $precio Rollos de Oro y aun así todo produce x$salto hasta la mudanza.',
-            'In Plumbing: it costs $precio Golden Rolls and everything still makes x$salto until you move.'),
-        DestinoQueHago.tienda,
+        tr('En la Plomería de la Cadena: cuesta $precio Rollos de Oro y aun así todo produce x$salto hasta la mudanza.',
+            'In the Chain\'s Plumbing: it costs $precio Golden Rolls and everything still makes x$salto until you move.'),
+        DestinoQueHago.jalar,
         objetivo: o.id);
   }
   final ya = mejorCompra(im, ahora, soloAlcanzan: true);

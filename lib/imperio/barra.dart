@@ -5,8 +5,10 @@ import '../idioma.dart';
 import '../tema.dart';
 import 'cadena.dart';
 
-/// Barra de abajo del Imperio: EDIFICIOS, TIENDA, JALAR (solo si [jalar] es visible) y SALA. Baja, para no tapar el baño.
+/// Barra de abajo del Imperio: CAGADORES, TIENDA, JALAR (solo si [jalar] es visible), MUDANZA (solo si [mudanza]) y SALA.
+/// Baja, para no tapar el baño. Hasta 5 botones en 360dp: los rótulos se achican si no caben.
 /// JALAR no sale hasta comprar La cadena del trono; después de la primera jalada sale para siempre. Sin hueco.
+/// JALAR abre la hoja de la Cadena y MUDANZA la de la Mudanza (las capas de la escalera).
 /// EDIFICIOS abre el cajón; [avisoEdificios] va en la esquina (cuántos se pueden comprar, '!' con un atasco o 'xN' con N atascos).
 class BarraImperio extends StatelessWidget {
   const BarraImperio({
@@ -19,6 +21,9 @@ class BarraImperio extends StatelessWidget {
     required this.alEdificios,
     this.avisoEdificios,
     this.atasco = false,
+    this.mudanza = false,
+    this.mudanzaResaltada = false,
+    this.alMudanza,
   });
 
   final BotonJalar jalar;
@@ -31,6 +36,10 @@ class BarraImperio extends StatelessWidget {
 
   /// Con atasco el botón de edificios muestra el desatascador.
   final bool atasco;
+
+  /// El botón MUDANZA ya se descubrió (ver mudanza.dart) y [mudanzaResaltada] lo hace brillar hasta abrir su hoja.
+  final bool mudanza, mudanzaResaltada;
+  final VoidCallback? alMudanza;
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +68,14 @@ class BarraImperio extends StatelessWidget {
                   children: [
                     Emoji(emoji, tamano: nota == null ? 18 : 15),
                     if (nota == null) const SizedBox(height: 2),
-                    Text(texto, maxLines: 1, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 10, letterSpacing: 0.5, color: p.texto)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(texto,
+                            maxLines: 1, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 10, letterSpacing: 0.5, color: p.texto)),
+                      ),
+                    ),
                     if (nota != null)
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -110,6 +126,8 @@ class BarraImperio extends StatelessWidget {
                 apagado: !jalar.encendido,
                 resaltado: jalar.encendido,
                 rollo: jalar.encendido),
+          if (mudanza)
+            boton('🏠', tr('MUDANZA', 'MOVING'), alMudanza, key: const Key('boton_mudanza'), resaltado: mudanzaResaltada),
           boton('🕹️', tr('SALA', 'ARCADE'), alSala),
         ],
       ),

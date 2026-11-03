@@ -77,6 +77,11 @@ class FlagsImperio {
   final double mudanzaRollos, mudanzaRollosSubida, mudanzaLlavesExponente, mudanzaLlavesFactor, llavePct, mudanzaDivisorX;
   final int mudanzaJaladas, mudanzaCagadas;
 
+  /// Cuándo aparece el botón MUDANZA ([Ajustes.mudanzaDescubreJaladas]): `mudanza_descubre_jaladas` (jaladas en la casa)
+  /// y `mudanza_descubre_pct` (la próxima jalada da menos que esta parte de los Rollos ya ganados en la casa).
+  final int mudanzaDescubreJaladas;
+  final double mudanzaDescubrePct;
+
   /// `version_minima`: build mínimo para jugar el Imperio. Con uno menor la pestaña pide actualizar; el servidor
   /// ignora los guardados de versiones más viejas (imperio_guardar, p_version). 0 = sin mínimo.
   final int versionMinima;
@@ -143,6 +148,8 @@ class FlagsImperio {
     this.mudanzaLlavesFactor = 3,
     this.llavePct = 0.25,
     this.mudanzaDivisorX = 15,
+    this.mudanzaDescubreJaladas = 4,
+    this.mudanzaDescubrePct = 0.25,
     this.versionMinima = 0,
     this.escalaEdificios = 10,
     this.escalaMejoras = 100,
@@ -196,6 +203,8 @@ class FlagsImperio {
         mudanzaLlavesFactor: mudanzaLlavesFactor,
         llavePct: llavePct,
         mudanzaDivisorX: mudanzaDivisorX,
+        mudanzaDescubreJaladas: mudanzaDescubreJaladas,
+        mudanzaDescubrePct: mudanzaDescubrePct,
         escalaEdificios: escalaEdificios,
         escalaMejoras: escalaMejoras,
         temporadas: temporadas,
@@ -269,6 +278,8 @@ class FlagsImperio {
       mudanzaLlavesFactor: numero('mudanza_llaves_x', d.mudanzaLlavesFactor, 0.1, 1000),
       llavePct: numero('llave_pct', d.llavePct, 0, 10),
       mudanzaDivisorX: numero('mudanza_divisor_x', d.mudanzaDivisorX, 1, 1e12),
+      mudanzaDescubreJaladas: numero('mudanza_descubre_jaladas', d.mudanzaDescubreJaladas.toDouble(), 0, 1000).round(),
+      mudanzaDescubrePct: numero('mudanza_descubre_pct', d.mudanzaDescubrePct, 0, 1),
       versionMinima: numero('version_minima', d.versionMinima.toDouble(), 0, 1e9).round(),
       escalaEdificios: numero('escala_edificios', d.escalaEdificios, 1, 1000),
       escalaMejoras: numero('escala_mejoras', d.escalaMejoras, 1, 10000),

@@ -10,11 +10,12 @@ import '../tema.dart';
 import 'casas.dart';
 import 'catalogo.dart';
 import 'control.dart';
+import 'decision.dart';
 import 'formato.dart';
 import 'nube.dart';
 
-// La Mudanza 🏠 en pantalla: la tira con los 3 requisitos (encima de la barra de abajo), la hoja con el detalle, la
-// confirmación, el camión y el resultado. También la sección LLAVERO 🔑 de la tienda.
+// La Mudanza 🏠 en pantalla (capa 2 de la escalera): cuándo sale el botón de la barra, la hoja con la tarjeta de
+// decisión, la confirmación, el camión y el resultado. También el LLAVERO 🔑 y el Mayordomo, que viven en la hoja.
 
 /// Aviso corto de la pantalla del Imperio (emoji, texto).
 typedef AvisarMudanza = void Function(String emoji, String texto);
@@ -33,10 +34,32 @@ String _x(double v) {
 
 String _num(double v) => formatoMj(v, ingles: enIngles);
 
-/// La tira sale cuando el servidor ya conoce la mudanza y hubo al menos una jalada, o si ya te mudaste alguna vez.
-bool mostrarTiraMudanza(ControlImperio c) {
+/// Clave en [Partida.guiaVista] cuando el botón MUDANZA ya se descubrió (sigue visible aunque la regla deje de cumplirse).
+const claveMudanzaVista = 'mudanza_vista';
+
+/// Clave en [Partida.guiaVista] cuando ya abriste la hoja de la Mudanza: el botón deja de brillar.
+const claveMudanzaAbierta = 'mudanza_abierta';
+
+/// El botón MUDANZA 🏠 de la barra: sale si ya te mudaste, si ya lo descubriste o si ya no cabes en la casa (ver [noCabes]).
+bool mudanzaDescubierta(ControlImperio c) {
   final pa = c.imperio.partida;
-  return (c.mudanzaDisponible && pa.jaladas >= 1) || pa.mudanzas > 0;
+  return pa.mudanzas > 0 || pa.guiaVista.contains(claveMudanzaVista) || noCabes(c);
+}
+
+/// Ya no cabes en esta casa: la mudanza está disponible, jalaste `mudanza_descubre_jaladas` veces en ella y la próxima
+/// jalada da menos que `mudanza_descubre_pct` de los Rollos que ya ganaste aquí.
+bool noCabes(ControlImperio c) {
+  final im = c.imperio;
+  final a = im.ajustes;
+  return c.mudanzaDisponible &&
+      im.partida.jaladasCasa >= a.mudanzaDescubreJaladas &&
+      im.rollosPorGanar < a.mudanzaDescubrePct * im.rollosCasa;
+}
+
+/// El botón brilla hasta que abres la hoja por primera vez (solo antes de la primera mudanza).
+bool mudanzaResaltada(ControlImperio c) {
+  final pa = c.imperio.partida;
+  return pa.mudanzas == 0 && !pa.guiaVista.contains(claveMudanzaAbierta);
 }
 
 /// Barra fina y cuadrada: [f] de 0 a 1.
@@ -78,102 +101,11 @@ List<(String, double, double, String, String)> _requisitos(ControlImperio c) {
 
 double _fraccion(double valor, double meta) => meta <= 0 ? 1 : valor / meta;
 
-/// Tira compacta encima de la barra de abajo: la casa, los 3 requisitos en mini y el Mayordomo si lo tienes.
-class TiraMudanza extends StatelessWidget {
-  const TiraMudanza({super.key, required this.control, required this.avisar});
-
-  final ControlImperio control;
-  final AvisarMudanza avisar;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = paleta(context);
-    final im = control.imperio;
-    final m = im.partida.mudanzas;
-    final lista = control.mudanzaDisponible && im.puedeMudarse(control.cagadasCasa);
-    final mayordomo = im.nivelLlavero('mayordomo') > 0;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: InkWell(
-              key: const Key('tira_mudanza'),
-              borderRadius: BorderRadius.circular(radio),
-              onTap: () => abrirMudanza(context, control, avisar),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                decoration: _caja(context, borde: lista ? acento : null),
-                child: Row(
-                  children: [
-                    Emoji(casaDe(m).emoji, tamano: 22),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(nombreCasa(m).toUpperCase(),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: numeros(context, tamano: 11, weight: FontWeight.w800).copyWith(letterSpacing: 1)),
-                          const SizedBox(height: 3),
-                          Row(
-                            children: [
-                              for (final (i, r) in _requisitos(control).indexed) ...[
-                                if (i > 0) const SizedBox(width: 6),
-                                Emoji(r.$1, tamano: 12),
-                                const SizedBox(width: 3),
-                                Expanded(child: _Barra(_fraccion(r.$2, r.$3), alto: 5)),
-                              ],
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(lista ? tr('MUDARSE', 'MOVE') : tr('MUDANZA', 'MOVING'),
-                        style: numeros(context, tamano: 11, weight: FontWeight.w900, color: lista ? p.texto : p.textoSuave)
-                            .copyWith(letterSpacing: 1)),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          if (mayordomo) ...[
-            const SizedBox(width: 6),
-            Tooltip(
-              message: im.mayordomoTrabajando
-                  ? tr('Mayordomo trabajando. Toca para apagarlo', 'Butler working. Tap to switch him off')
-                  : tr('Mayordomo apagado. Toca para prenderlo', 'Butler off. Tap to switch him on'),
-              child: InkWell(
-                key: const Key('mayordomo_cambiar'),
-                borderRadius: BorderRadius.circular(radio),
-                onTap: () {
-                  control.cambiarMayordomo();
-                  avisar('🤵', control.imperio.mayordomoTrabajando
-                      ? tr('Mayordomo prendido: compra cagadores solo', 'Butler on: he buys Poopers by himself')
-                      : tr('Mayordomo apagado', 'Butler off'));
-                },
-                child: Container(
-                  width: 44,
-                  height: 44,
-                  alignment: Alignment.center,
-                  decoration: _caja(context, borde: im.mayordomoTrabajando ? acento : null),
-                  child: Opacity(opacity: im.mayordomoTrabajando ? 1 : .35, child: const Emoji('🤵', tamano: 22)),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// Hoja de la mudanza: la casa, los requisitos completos, las Llaves por ganar y el botón MUDARSE.
+/// Hoja de la Mudanza (capa 2): la tarjeta DEJAS / RECIBES con los 3 requisitos y el botón MUDARSE, el Mayordomo, el
+/// Llavero y, después de la primera mudanza, el candado de lo que viene.
 Future<void> abrirMudanza(BuildContext context, ControlImperio control, AvisarMudanza avisar) {
   control.anotar('mudanza_abre');
+  control.marcarGuia(claveMudanzaAbierta);
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -198,7 +130,6 @@ class _HojaMudanza extends StatelessWidget {
     final im = control.imperio;
     final m = im.partida.mudanzas;
     final casa = casaDe(m);
-    final siguiente = casaDe(m + 1);
     final puede = control.mudanzaDisponible && im.puedeMudarse(control.cagadasCasa);
     final llaves = im.llavesPorGanar;
     final suave = TextStyle(fontSize: 12, color: p.textoSuave);
@@ -210,12 +141,15 @@ class _HojaMudanza extends StatelessWidget {
           children: [
             Rotulo(tr('Mudanza', 'Moving')),
             const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: _caja(context),
-              child: Row(
+            TarjetaDecision(
+              key: const Key('decision_mudanza'),
+              lista: puede,
+              dejas: tr('Rollos de Oro, Plomería y jaladas de esta casa', 'Golden Rolls, Plumbing and flushes of this house'),
+              recibes: tr('+$llaves Llaves y la casa siguiente: ${nombreCasa(m + 1)} (producción ${_x(multiplicadorCasa(m + 1))})',
+                  '+$llaves Keys and the next house: ${nombreCasa(m + 1)} (production ${_x(multiplicadorCasa(m + 1))})'),
+              cabeza: Row(
                 children: [
-                  Emoji(casa.emoji, tamano: 40),
+                  Emoji(casa.emoji, tamano: 36),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -234,90 +168,126 @@ class _HojaMudanza extends StatelessWidget {
                   ),
                 ],
               ),
+              hijos: [
+                const SizedBox(height: 12),
+                for (final r in _requisitos(control))
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        Emoji(r.$1, tamano: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(child: Text(tr(r.$4, r.$5), style: TextStyle(fontSize: 12, color: p.texto))),
+                                  Text('${_num(min(r.$2, r.$3))}/${_num(r.$3)}', style: numeros(context, tamano: 12)),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              _Barra(_fraccion(r.$2, r.$3), alto: 8),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                Text(
+                    tr('Cada Llave sin gastar da +${(im.ajustes.llavePct * 100).round()}% de producción. Más Rollos en esta casa, más Llaves.',
+                        'Each unspent Key gives +${(im.ajustes.llavePct * 100).round()}% production. More Rolls in this house, more Keys.'),
+                    style: suave),
+                if (!control.mudanzaDisponible) ...[
+                  const SizedBox(height: 6),
+                  Text(tr('La mudanza necesita conexión. Prueba en un rato.', 'Moving needs a connection. Try again in a while.'),
+                      style: suave),
+                ],
+                const SizedBox(height: 10),
+                FilledButton(
+                  key: const Key('mudarse'),
+                  style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+                  onPressed: puede && !control.mudando && !control.jalando ? () => _mudarse(context, control, avisar) : null,
+                  child: Text(control.mudando ? tr('MUDANDO...', 'MOVING...') : tr('MUDARSE', 'MOVE')),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            Rotulo(tr('Para mudarte', 'To move')),
-            const SizedBox(height: 6),
-            for (final r in _requisitos(control))
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
+            if (im.nivelLlavero('mayordomo') > 0) ...[
+              const SizedBox(height: 12),
+              _Mayordomo(control: control, avisar: avisar),
+            ],
+            const SizedBox(height: 16),
+            SeccionLlavero(control: control, avisar: avisar),
+            if (m > 0) ...[
+              const SizedBox(height: 8),
+              Container(
+                key: const Key('capa_3_candado'),
+                padding: const EdgeInsets.all(12),
+                decoration: _caja(context),
                 child: Row(
                   children: [
-                    Emoji(r.$1, tamano: 22),
+                    const Emoji('🔒', tamano: 26),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              Expanded(child: Text(tr(r.$4, r.$5), style: TextStyle(fontSize: 12, color: p.texto))),
-                              Text('${_num(min(r.$2, r.$3))}/${_num(r.$3)}', style: numeros(context, tamano: 12)),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          _Barra(_fraccion(r.$2, r.$3), alto: 8),
+                          Text('???', style: numeros(context, tamano: 14, weight: FontWeight.w900, color: p.textoSuave)),
+                          Text(tr('Algún día ni el Palacio te va a alcanzar.', 'Someday not even the Palace will be enough.'),
+                              style: suave),
                         ],
                       ),
                     ),
                   ],
                 ),
               ),
-            const SizedBox(height: 4),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: _caja(context, borde: puede ? acento : null),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Emoji('🔑', tamano: 22),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                            llaves > 0
-                                ? tr('Si te mudas ahora: +$llaves Llaves', 'If you move now: +$llaves Keys')
-                                : tr('Todavía no ganas Llaves', 'No Keys yet'),
-                            style: TextStyle(fontWeight: FontWeight.w800, color: p.texto)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                      tr('Cada Llave sin gastar da +${(im.ajustes.llavePct * 100).round()}% de producción. Más Rollos en esta casa, más Llaves.',
-                          'Each unspent Key gives +${(im.ajustes.llavePct * 100).round()}% production. More Rolls in this house, more Keys.'),
-                      style: suave),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Text(tr('Siguiente: ', 'Next: '), style: suave),
-                      Emoji(siguiente.emoji, tamano: 16),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                            tr('${nombreCasa(m + 1)}, producción ${_x(multiplicadorCasa(m + 1))}',
-                                '${nombreCasa(m + 1)}, production ${_x(multiplicadorCasa(m + 1))}'),
-                            style: suave),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            if (!control.mudanzaDisponible) ...[
-              const SizedBox(height: 8),
-              Text(tr('La mudanza necesita conexión. Prueba en un rato.', 'Moving needs a connection. Try again in a while.'),
-                  style: suave),
             ],
-            const SizedBox(height: 12),
-            FilledButton(
-              key: const Key('mudarse'),
-              style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
-              onPressed: puede && !control.mudando && !control.jalando ? () => _mudarse(context, control, avisar) : null,
-              child: Text(control.mudando ? tr('MUDANDO...', 'MOVING...') : tr('MUDARSE', 'MOVE')),
-            ),
             const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// El Mayordomo 🤵 del Llavero: prenderlo o apagarlo (compra cagadores solo).
+class _Mayordomo extends StatelessWidget {
+  const _Mayordomo({required this.control, required this.avisar});
+
+  final ControlImperio control;
+  final AvisarMudanza avisar;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paleta(context);
+    final trabajando = control.imperio.mayordomoTrabajando;
+    return InkWell(
+      key: const Key('mayordomo_cambiar'),
+      borderRadius: BorderRadius.circular(radio),
+      onTap: () {
+        control.cambiarMayordomo();
+        avisar('🤵', control.imperio.mayordomoTrabajando
+            ? tr('Mayordomo prendido: compra cagadores solo', 'Butler on: he buys Poopers by himself')
+            : tr('Mayordomo apagado', 'Butler off'));
+      },
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 48),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: _caja(context, borde: trabajando ? acento : null),
+        child: Row(
+          children: [
+            Opacity(opacity: trabajando ? 1 : .35, child: const Emoji('🤵', tamano: 26)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                  trabajando
+                      ? tr('Mayordomo trabajando: compra cagadores solo', 'Butler working: he buys Poopers by himself')
+                      : tr('Mayordomo apagado', 'Butler off'),
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: p.texto)),
+            ),
+            Text(trabajando ? tr('APAGAR', 'TURN OFF') : tr('PRENDER', 'TURN ON'),
+                style: numeros(context, tamano: 11, weight: FontWeight.w900, color: p.textoSuave).copyWith(letterSpacing: 1)),
           ],
         ),
       ),
@@ -477,8 +447,8 @@ class _Resultado extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-              tr('Producción ${_x(multiplicadorCasa(mudanzas))} y ${_x(factorRollosCasa(mudanzas).toDouble())} Rollos por jalada. Gasta Llaves en el Llavero de la tienda.',
-                  'Production ${_x(multiplicadorCasa(mudanzas))} and ${_x(factorRollosCasa(mudanzas).toDouble())} Rolls per flush. Spend Keys in the shop\'s Key ring.'),
+              tr('Producción ${_x(multiplicadorCasa(mudanzas))} y ${_x(factorRollosCasa(mudanzas).toDouble())} Rollos por jalada. Gasta Llaves en el Llavero de la Mudanza.',
+                  'Production ${_x(multiplicadorCasa(mudanzas))} and ${_x(factorRollosCasa(mudanzas).toDouble())} Rolls per flush. Spend Keys in the Key ring, in Moving.'),
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12, color: p.textoSuave)),
         ],
@@ -568,15 +538,12 @@ class _CamionState extends State<_Camion> with SingleTickerProviderStateMixin {
   }
 }
 
-/// Sección LLAVERO 🔑 de la tienda: mejoras que se pagan con Llaves y sobreviven a las mudanzas.
+/// Sección LLAVERO 🔑 de la hoja de la Mudanza: mejoras que se pagan con Llaves y sobreviven a las mudanzas.
 class SeccionLlavero extends StatelessWidget {
   const SeccionLlavero({super.key, required this.control, required this.avisar});
 
   final ControlImperio control;
   final AvisarMudanza avisar;
-
-  /// Sale si ya te mudaste o tienes Llaves.
-  static bool visible(ControlImperio c) => c.imperio.partida.mudanzas > 0 || c.imperio.llaves > 0;
 
   @override
   Widget build(BuildContext context) {

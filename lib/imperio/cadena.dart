@@ -87,11 +87,13 @@ String porcentajeRollos(int rollos, double pct) {
   return '+$t%';
 }
 
-/// Toque en JALAR encendido: confirmar, remolino, resultado y PRESUMIR.
-Future<void> jalarLaCadena(BuildContext context, ControlImperio c, {required void Function(String emoji, String texto) avisar}) async {
+/// Toque en JALAR encendido: confirmar, remolino, resultado y PRESUMIR. [anotar] en false cuando ya se anotó
+/// `cadena_abre` al abrir la hoja de la Cadena (así no sale dos veces).
+Future<void> jalarLaCadena(BuildContext context, ControlImperio c,
+    {required void Function(String emoji, String texto) avisar, bool anotar = true}) async {
   final im = c.imperio;
   final boton = botonJalar(im, c.cadena);
-  c.abrirCadena(boton.encendido);
+  if (anotar) c.abrirCadena(boton.encendido);
   if (!boton.encendido || c.jalando) return;
   final antes = im.partida.rollos;
   final pct = im.ajustes.rolloPct;

@@ -35,8 +35,9 @@ import 'personalizar.dart';
 import 'tarjeta_bano.dart' show presumirBano;
 import 'poceta.dart';
 import 'que_hago.dart';
+import 'hoja_cadena.dart';
+import 'hoja_que_hago.dart';
 import 'racha_imperio.dart' show diasRacha;
-import 'recorrido.dart';
 import 'regalos.dart' show ChipRegalos, hayRegalos;
 import 'ranking_amigos.dart';
 import 'sala.dart';
@@ -103,10 +104,6 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
   late final ControlImperio _c = widget.control ?? ControlImperio();
   late final AnimationController _pulso = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
   bool _dialogoAbierto = false;
-
-  // Recorrido guiado (recorrido.dart): mientras corre no salen empujones de la guía ni avisos de atascos.
-  List<PasoRecorrido>? _pasosRecorrido;
-  bool get _recorrido => _pasosRecorrido != null;
 
   // Cuántos edificios compra cada toque (x1, x10, x100, x1000) y qué botones ya salieron alguna vez.
   int _cantidad = 1;
@@ -202,7 +199,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       // Con 2 o más abiertos (y sin Robot, que los destapa en el tick) avisa cuántos hay y lleva a los objetos.
       final atascos = _c.imperio.atascos;
       final nuevos = atascos.where((a) => !_atascosAvisados.contains(a)).toList();
-      if (nuevos.isNotEmpty && !_recorrido) {
+      if (nuevos.isNotEmpty) {
         if (atascos.length >= 2 && !_c.imperio.robotActivo(_c.ahora)) {
           final n = atascos.length;
           _avisoAtascos = ('🪠', tr('¡$n atascos! El Robot destapa solo', '$n clogs! The Plunger bot unclogs them by itself'), null);
@@ -230,28 +227,19 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
         _c.cadenaSincronizadaPendiente = false;
         _avisar('⛓️', tr('Tu cadena se puso al día con la nube', 'Your chain caught up with the cloud'));
       }
+      _revisarMudanza();
       _revisarEmpujon();
       _mostrarDialogos();
-      _revisarRecorrido();
     }
     setState(() {});
   }
 
-  /// El recorrido sale una sola vez, cuando no hay nada más en pantalla: ni carga, ni diálogos, ni hojas, ni pendientes.
-  void _revisarRecorrido() {
-    if (_recorrido || !widget.activo || _c.cargando || _c.apagado || _c.versionVieja || _dialogoAbierto) return;
-    if (_c.bienvenidaPendiente || _c.offlinePendiente != null || _c.descargaPendiente != null || _c.rachaPendiente) return;
-    if (!(ModalRoute.isCurrentOf(context) ?? true) || _c.imperio.partida.guiaVista.contains(claveRecorrido)) return;
-    _empezarRecorrido();
-  }
-
-  void _empezarRecorrido() {
-    if (_cajon.value > 0) _abrirCajon(false);
-    _cerrarEmpujon();
-    final jalar = botonJalar(_c.imperio, _c.cadena);
-    setState(() => _pasosRecorrido = pasosRecorrido(_c.imperio, _c.ahora,
-        moneda: monedaActual().abreviatura, jalarVisible: jalar.visible, cadenaLista: jalar.encendido,
-        tiraMudanza: mostrarTiraMudanza(_c)));
+  /// La primera vez que el botón MUDANZA aparece: aviso de una línea y queda marcado (el botón brilla hasta abrir la hoja).
+  void _revisarMudanza() {
+    if (_c.cargando || !mudanzaDescubierta(_c) || _c.imperio.partida.guiaVista.contains(claveMudanzaVista)) return;
+    // Antes del aviso: marcarGuia avisa a los oyentes y vuelve a entrar aquí.
+    _c.marcarGuia(claveMudanzaVista);
+    _avisar('🏠', tr('Ya no cabes en esta casa: 🏠 MUDANZA', 'You no longer fit in this house: 🏠 MOVING'));
   }
 
   void _queHago(BuildContext context) => abrirQueHago(context, _c,
@@ -259,15 +247,14 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       alIr: (s) => switch (s.ir) {
             DestinoQueHago.edificios => _abrirCajon(true),
             DestinoQueHago.tienda => _abrirObjetos(context),
-            DestinoQueHago.jalar => _jalar(context, botonJalar(_c.imperio, _c.cadena)),
+            DestinoQueHago.jalar => _abrirCadena(context),
             DestinoQueHago.mudanza => abrirMudanza(context, _c, _avisar),
             DestinoQueHago.cerrar => null,
-          },
-      alRecorrido: _empezarRecorrido);
+          });
 
   /// Un empujón de la guía de los alquileres si toca: nunca encima de un aviso, de otro empujón ni con una hoja abierta.
   void _revisarEmpujon() {
-    if (_empujon != null || _aviso != null || _recorrido || _c.cargando || !(ModalRoute.isCurrentOf(context) ?? true)) return;
+    if (_empujon != null || _aviso != null || _c.cargando || !(ModalRoute.isCurrentOf(context) ?? true)) return;
     final e = _guia.siguiente(_c.imperio, _c.ahora);
     if (e == null) return;
     _timerEmpujon?.cancel();
@@ -542,7 +529,6 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                   if (_c.sinConexion) _sinConexion(context),
                   if (_c.imperio.enTemporada(temporadaDiaRetrete, ahora)) _avisoTemporada(context, ahora),
                   Expanded(child: _zona(context, ahora)),
-                  if (mostrarTiraMudanza(_c)) TiraMudanza(control: _c, avisar: _avisar),
                   _botonesAbajo(context, ahora),
                 ],
               ),
@@ -584,17 +570,6 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                             _abrirObjetos(context);
                           }
                         : null,
-                  ),
-                ),
-              // Con llave: si sale o se va otro hijo de la pila (un atasco, el dorado) el recorrido no vuelve al paso 1.
-              if (_pasosRecorrido case final pasos?)
-                Positioned.fill(
-                  key: const ValueKey('recorrido'),
-                  child: RecorridoImperio(
-                    control: _c,
-                    pasos: pasos,
-                    escena: _llaveEscena,
-                    alTerminar: () => setState(() => _pasosRecorrido = null),
                   ),
                 ),
             ],
@@ -998,7 +973,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
           ? () => abrirPersonalizar(context, _c).then((_) => mounted ? setState(() {}) : null)
           : null,
       jalar: im.cadenaDesbloqueada ? jalar.encendido : null,
-      alJalar: () => _jalar(context, jalar),
+      alJalar: () => _abrirCadena(context),
       // El cartelito solo la primera vez que la cadena queda lista.
       cartelJalar: jalar.encendido && im.partida.jaladas == 0,
       // El baño ocupa todo el alto de la zona: más pared y piso, la poceta igual.
@@ -1006,15 +981,8 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     );
   }
 
-  // Botón JALAR y palanca de la poceta hacen lo mismo.
-  void _jalar(BuildContext context, BotonJalar jalar) {
-    if (jalar.encendido) {
-      unawaited(jalarLaCadena(context, _c, avisar: (e, t) => _avisar(e, t)));
-    } else {
-      _c.abrirCadena(false);
-      _avisar('🚽', jalar.aviso(monedaActual().abreviatura));
-    }
-  }
+  // Botón JALAR y palanca de la poceta abren la hoja de la Cadena (decisión, JALAR y Plomería).
+  void _abrirCadena(BuildContext context) => abrirHojaCadena(context, _c, _avisar);
 
   Widget _barraEfectos(BuildContext context, int ahora) {
     final efectos = _c.imperio.efectosActivos(ahora);
@@ -1413,7 +1381,10 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       jalar: jalar,
       moneda: moneda,
       alObjetos: () => _abrirObjetos(context),
-      alJalar: () => _jalar(context, jalar),
+      alJalar: () => _abrirCadena(context),
+      mudanza: mudanzaDescubierta(_c),
+      mudanzaResaltada: mudanzaResaltada(_c),
+      alMudanza: () => abrirMudanza(context, _c, _avisar),
       alSala: () {
         _c.anotar('sala_abre');
         Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaSala()));
@@ -1438,7 +1409,7 @@ String _xCorto(double v) {
   return 'x${tr(s.replaceAll('.', ','), s)}';
 }
 
-/// Secciones OBJETOS y ALQUILER de la tienda: cada uno se paga con MJ o con Ciruelas.
+/// Secciones OBJETOS y ALQUILER de la tienda: cada uno se paga con MJ o con Ciruelas (la Plomería vive en la hoja de la Cadena).
 class _HojaObjetos extends StatelessWidget {
   const _HojaObjetos({required this.control, required this.avisar});
   final ControlImperio control;
@@ -1470,85 +1441,7 @@ class _HojaObjetos extends StatelessWidget {
           const SizedBox(height: 8),
           for (final o in alquiler) _fila(context, p, im, o, ahora),
         ],
-        if (im.objetosRollosAbiertos) ...[
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(child: Rotulo(tr('Plomería', 'Plumbing'))),
-              const Emoji('🔧', tamano: 16),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-              tr('Se paga con Rollos de Oro y dura hasta la mudanza: las jaladas no la borran. '
-                      'Cada Rollo que gastas deja de darte ${porcentajeRollos(1, im.ajustes.rolloPct)}.',
-                  'Paid with Golden Rolls and lasts until you move: flushes don\'t reset it. '
-                      'Each Roll you spend stops giving you ${porcentajeRollos(1, im.ajustes.rolloPct)}.'),
-              style: TextStyle(fontSize: 12, color: p.textoSuave)),
-          const SizedBox(height: 8),
-          for (final r in objetosRollos) _filaRollos(context, p, im, r, ahora),
-        ],
-        if (SeccionLlavero.visible(control)) ...[
-          const SizedBox(height: 8),
-          SeccionLlavero(control: control, avisar: avisar),
-        ],
       ],
-    );
-  }
-
-  void _comprarRollos(ObjetoRollos r) {
-    if (control.comprarObjetoRollos(r.id)) avisar(r.emoji, tr('${r.nombreEs}: listo', '${r.nombreEn}: done'));
-  }
-
-  Widget _filaRollos(BuildContext context, Paleta p, Imperio im, ObjetoRollos r, int ahora) {
-    final tiene = im.tieneObjetoRollos(r.id);
-    final nivel = im.nivelPlomeria(r.id);
-    final tope = r.id != 'cadena_reserva' && nivel >= r.limite;
-    final espera = r.id == 'cadena_reserva' ? im.esperaCadena(ahora) : null;
-    final pendiente = r.id == 'cadena_reserva' && tiene > 0;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(10),
-      decoration: _caja(context),
-      child: Row(
-        children: [
-          Emoji(r.emoji, tamano: 30),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(tr(r.nombreEs, r.nombreEn), style: TextStyle(fontWeight: FontWeight.w800, color: p.texto)),
-                Text(tr(r.descEs, r.descEn), style: TextStyle(fontSize: 12, color: p.textoSuave)),
-                const SizedBox(height: 2),
-                Text(
-                    pendiente
-                        ? tr('Lista para tu próxima jalada', 'Ready for your next flush')
-                        : espera != null
-                            ? tr('Otra en ${_cuenta(espera)}', 'Another in ${_cuenta(espera)}')
-                            : '$nivel/${r.limite}',
-                    style: numeros(context, tamano: 11, color: p.textoSuave)),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          OutlinedButton(
-            key: Key('pagar_rollos_${r.id}'),
-            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10), minimumSize: const Size(0, 44)),
-            onPressed: im.puedeComprarObjetoRollos(r.id, ahora) ? () => _comprarRollos(r) : null,
-            child: tope
-                ? Text(tr('MÁX', 'MAX'), style: numeros(context, tamano: 13, weight: FontWeight.w900))
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('${formatoMj(im.precioObjetoRollos(r.id), ingles: enIngles)} ',
-                          style: numeros(context, tamano: 13, weight: FontWeight.w900)),
-                      const Emoji('🧻', tamano: 18),
-                    ],
-                  ),
-          ),
-        ],
-      ),
     );
   }
 

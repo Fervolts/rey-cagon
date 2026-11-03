@@ -764,6 +764,11 @@ class Ajustes {
   final double mudanzaRollos, mudanzaRollosSubida, mudanzaLlavesExponente, mudanzaLlavesFactor, llavePct, mudanzaDivisorX;
   final int mudanzaJaladas, mudanzaCagadas;
 
+  /// El botón MUDANZA aparece con [mudanzaDescubreJaladas] jaladas en la casa y cuando la próxima jalada da menos que
+  /// [mudanzaDescubrePct] de los Rollos ya ganados en ella (o si ya te mudaste o ya lo viste). Solo es pantalla.
+  final int mudanzaDescubreJaladas;
+  final double mudanzaDescubrePct;
+
   const Ajustes({
     this.doradoMinMin = 5,
     this.doradoMaxMin = 15,
@@ -803,6 +808,8 @@ class Ajustes {
     this.mudanzaLlavesFactor = 3,
     this.llavePct = 0.25,
     this.mudanzaDivisorX = 15,
+    this.mudanzaDescubreJaladas = 4,
+    this.mudanzaDescubrePct = 0.25,
     this.escalaEdificios = 1,
     this.escalaMejoras = 1,
     this.temporadas = const [],

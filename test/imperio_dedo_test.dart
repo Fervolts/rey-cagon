@@ -1,5 +1,6 @@
-// Recorrido guiado de la primera vez y "¿Qué hago ahora?" (recorrido.dart, que_hago.dart).
-// Capturas: CAPTURAS_RECORRIDO=1 flutter test test/imperio_recorrido_test.dart (escribe PNG en build/capturas_recorrido/).
+// La escalera de capas (hojas de la Cadena y la Mudanza), los dedos de la primera vez (dedo.dart) y "¿Qué hago ahora?"
+// (que_hago.dart, hoja_que_hago.dart).
+// Capturas: CAPTURAS_DEDO=1 flutter test test/imperio_dedo_test.dart (escribe PNG en build/capturas_dedo/).
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
@@ -9,12 +10,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rey_cagon/imperio/barra.dart';
+import 'package:rey_cagon/imperio/cadena.dart';
 import 'package:rey_cagon/imperio/control.dart';
 import 'package:rey_cagon/imperio/motor.dart';
+import 'package:rey_cagon/imperio/mudanza.dart';
 import 'package:rey_cagon/imperio/nube.dart';
 import 'package:rey_cagon/imperio/pantalla.dart';
 import 'package:rey_cagon/imperio/que_hago.dart';
-import 'package:rey_cagon/imperio/recorrido.dart';
 import 'package:rey_cagon/imperio/telemetria.dart';
 import 'package:rey_cagon/tema.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -64,7 +67,7 @@ Imperio _veterano() {
 }
 
 /// Estado guardado como lo deja el control (con `_cagadas`, que no va en la partida). Guardado recién, para que no
-/// salga el aviso de lo ganado sin jugar (ese diálogo va antes que el recorrido y tiene su propia prueba).
+/// salga el aviso de lo ganado sin jugar (ese diálogo va antes que los dedos y tiene su propia prueba).
 Map<String, dynamic> _estado(Imperio im, {int cagadas = 0}) =>
     {...im.toJson(), 'ultima_vez': DateTime.now().millisecondsSinceEpoch, '_cagadas': cagadas};
 
@@ -104,7 +107,9 @@ Future<void> _desmontar(WidgetTester t) async {
   await t.pump(const Duration(seconds: 1));
 }
 
-final _tarjeta = find.byKey(const Key('recorrido_tarjeta'));
+/// Hay algún widget con una llave que empieza por [prefijo] (filas de la Plomería, del Llavero...).
+Finder _conPrefijo(String prefijo) =>
+    find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith(prefijo));
 
 void main() {
   setUpAll(() async {
@@ -175,7 +180,7 @@ void main() {
       expect(s.id, mejor.esEdificio ? 'edificio' : 'mejora');
       expect(s.ir, DestinoQueHago.edificios);
 
-      // Solo edificios (lo que usa el recorrido): el de menor retorno entre los edificios.
+      // Solo edificios: el de menor retorno entre los edificios.
       final soloE = mejorCompra(im, t0, soloEdificios: true)!;
       expect(soloE.esEdificio, isTrue);
       for (final c in comprasPosibles(im, t0, soloEdificios: true)) {
@@ -216,29 +221,12 @@ void main() {
       expect(queHagoAhora(im, t0, cadenaLista: true).id, isNot('jalar'));
     });
 
-    test('veterano con todo: el dorado manda sobre comprar y el recorrido trae todos los pasos', () {
+    test('veterano con todo: el dorado manda sobre comprar y el atasco sobre el dorado', () {
       final im = _veterano();
       im.partida.dorado = const DoradoVisible(t0, t0 + 60000, .5, .5);
       expect(queHagoAhora(im, t0, cadenaLista: true).id, 'dorado');
       im.partida.atasco = Atasco(im.partida.edificios.keys.first, t0);
       expect(queHagoAhora(im, t0, cadenaLista: true).id, 'destapar');
-
-      final pasos = pasosRecorrido(im, t0, jalarVisible: true, cadenaLista: true);
-      expect([for (final p in pasos) p.id], ['poceta', 'saldo', 'edificios', 'mejoras', 'atascos', 'dorado', 'objetos', 'que_hago', 'cadena', 'mudanza']);
-      final cadena = pasos[pasos.length - 2];
-      expect(cadena.objetivo, const Key('boton_jalar'));
-      expect(cadena.texto, contains('Tienes 10 Rollos de Oro'));
-      expect(cadena.texto, contains('Si jalas ahora ganas'));
-      expect(cadena.texto, isNot(contains('cagadas reales')));
-      expect(pasos[4].objetivo, const Key('tarjeta_atasco'));
-      expect(pasos[5].objetivo, const Key('mojon_dorado'));
-      // Plomería y Mudanza: después de la primera jalada, al final; apunta a la tira si se ve, si no a la tienda.
-      expect(pasos.last.texto, contains('Plomería'));
-      expect(pasos.last.texto, contains('Casa'));
-      expect(pasos.last.objetivo, const Key('boton_tienda'));
-      expect(pasosRecorrido(im, t0, tiraMudanza: true).last.objetivo, const Key('tira_mudanza'));
-      im.partida.jaladas = 0;
-      expect([for (final p in pasosRecorrido(im, t0)) p.id], isNot(contains('mudanza')));
     });
 
     test('mudanza lista: mudarse va antes que jalar; sin requisitos, nunca', () {
@@ -259,7 +247,8 @@ void main() {
       expect(pl!.salto, greaterThanOrEqualTo(saltoPlomeriaConviene));
       final s = queHagoAhora(im, t0);
       expect(s.id, 'plomeria');
-      expect(s.ir, DestinoQueHago.tienda);
+      expect(s.ir, DestinoQueHago.jalar);
+      expect(s.texto, contains('Cadena'));
       expect(s.objetivo, pl.objeto.id);
       // La prueba deshace la compra.
       expect(im.partida.rollos, 100);
@@ -273,17 +262,6 @@ void main() {
       expect(plomeriaConviene(im, t0), isNull);
     });
 
-    test('jugador nuevo: solo lo abierto (poceta, saldo, edificios, dorado y el ?)', () {
-      final pasos = pasosRecorrido(_nuevo(), t0);
-      final ids = [for (final p in pasos) p.id];
-      expect(ids, containsAllInOrder(['poceta', 'saldo', 'edificios', 'dorado', 'que_hago']));
-      expect(ids, isNot(contains('atascos')));
-      expect(ids, isNot(contains('objetos')));
-      expect(ids, isNot(contains('cadena')));
-      expect(pasos.length, inInclusiveRange(5, 6));
-      expect(pasos[1].texto, contains('compra un cagador'));
-    });
-
     test('duraciones y porcentajes cortos', () {
       expect(duracionCorta(40), '40 s');
       expect(duracionCorta(720), '12 min');
@@ -293,101 +271,9 @@ void main() {
     });
   });
 
-  group('Recorrido en la pantalla', () {
-    testWidgets('sale una vez: SALTAR lo marca visto y no vuelve, ni al recargar', (t) async {
+  group('Escalera en la pantalla', () {
+    testWidgets('¿Qué hago? abre la hoja e IR la cierra', (t) async {
       final (c, tele, enviados) = await _montar(t, _estado(_nuevo()));
-      expect(_tarjeta, findsOneWidget);
-      expect(find.byKey(const Key('boton_que_hago')), findsOneWidget);
-      await t.tap(find.byKey(const Key('recorrido_saltar')));
-      await _esperar(t);
-      expect(_tarjeta, findsNothing);
-      expect(c.imperio.partida.guiaVista, contains(claveRecorrido));
-      expect(_eventos(enviados, tele, 'imperio_recorrido', 'paso'), [('poceta', 'ver'), ('poceta', 'saltar')]);
-      await _esperar(t, 20);
-      expect(_tarjeta, findsNothing);
-      final guardado = _estado(c.imperio);
-      await _desmontar(t);
-
-      await _montar(t, guardado);
-      expect(_tarjeta, findsNothing);
-      await _desmontar(t);
-    });
-
-    testWidgets('sale una vez: al terminar (LISTO) no vuelve', (t) async {
-      final (c, tele, enviados) = await _montar(t, _estado(_nuevo()));
-      final n = pasosRecorrido(c.imperio, c.ahora).length;
-      for (var i = 0; i < n; i++) {
-        expect(_tarjeta, findsOneWidget);
-        expect(find.text('${i + 1}/$n'), findsOneWidget);
-        await t.tap(find.byKey(const Key('recorrido_siguiente')));
-        await _esperar(t, 3);
-      }
-      expect(_tarjeta, findsNothing);
-      expect(c.imperio.partida.guiaVista, contains(claveRecorrido));
-      final ev = _eventos(enviados, tele, 'imperio_recorrido', 'paso');
-      expect(ev.last.$2, 'fin');
-      expect(ev.where((e) => e.$2 == 'ver').length, n);
-      await _esperar(t, 20);
-      expect(_tarjeta, findsNothing);
-      await _desmontar(t);
-    });
-
-    testWidgets('se salta los pasos cerrados (nuevo) y el veterano termina en la cadena y la mudanza', (t) async {
-      var (c, tele, enviados) = await _montar(t, _estado(_nuevo()));
-      final vistos = <Object?>[];
-      while (_tarjeta.evaluate().isNotEmpty) {
-        await t.tap(find.byKey(const Key('recorrido_siguiente')));
-        await _esperar(t, 3);
-      }
-      for (final e in _eventos(enviados, tele, 'imperio_recorrido', 'paso')) {
-        if (e.$2 == 'ver') vistos.add(e.$1);
-      }
-      expect(vistos, containsAllInOrder(['poceta', 'saldo', 'edificios', 'dorado', 'que_hago']));
-      expect(vistos, isNot(contains('atascos')));
-      expect(vistos, isNot(contains('objetos')));
-      expect(vistos, isNot(contains('cadena')));
-      await _desmontar(t);
-
-      (c, tele, enviados) = await _montar(t, _estado(_veterano(), cagadas: 30));
-      expect(_tarjeta, findsOneWidget);
-      vistos.clear();
-      while (_tarjeta.evaluate().isNotEmpty) {
-        await t.tap(find.byKey(const Key('recorrido_siguiente')));
-        await _esperar(t, 3);
-      }
-      for (final e in _eventos(enviados, tele, 'imperio_recorrido', 'paso')) {
-        if (e.$2 == 'ver') vistos.add(e.$1);
-      }
-      expect(vistos, containsAllInOrder(['poceta', 'saldo', 'edificios', 'mejoras', 'atascos', 'dorado', 'objetos', 'que_hago', 'cadena', 'mudanza']));
-      expect(vistos.last, 'mudanza');
-      // Cada paso se ve una sola vez: que salga un atasco o el dorado a mitad no lo devuelve al principio.
-      expect(vistos.toSet().length, vistos.length);
-      await _desmontar(t);
-    });
-
-    testWidgets('no arranca con un diálogo abierto; sale al cerrarlo', (t) async {
-      final nav = GlobalKey<NavigatorState>();
-      final espera = Completer<void>();
-      await _montar(t, _estado(_nuevo()), nav: nav, espera: espera);
-      expect(_tarjeta, findsNothing);
-      nav.currentState!.push(DialogRoute<void>(context: nav.currentContext!, builder: (_) => const AlertDialog(content: Text('hola'))));
-      await _esperar(t, 3);
-      espera.complete();
-      await _esperar(t, 20);
-      expect(find.text('hola'), findsOneWidget);
-      expect(_tarjeta, findsNothing);
-      nav.currentState!.pop();
-      await _esperar(t, 20);
-      expect(_tarjeta, findsOneWidget);
-      await _desmontar(t);
-    });
-
-    testWidgets('¿Qué hago? abre la hoja, IR la cierra y desde ahí se repite el recorrido', (t) async {
-      final (c, tele, enviados) = await _montar(t, _estado(_nuevo()));
-      await t.tap(find.byKey(const Key('recorrido_saltar')));
-      await _esperar(t);
-      expect(_tarjeta, findsNothing);
-
       await t.tap(find.byKey(const Key('boton_que_hago')));
       await _esperar(t);
       expect(find.byKey(const Key('hoja_que_hago')), findsOneWidget);
@@ -397,18 +283,10 @@ void main() {
       await _esperar(t);
       expect(find.byKey(const Key('hoja_que_hago')), findsNothing);
       expect(_eventos(enviados, tele, 'imperio_que_hago', 'sugerencia').last, (s.id, 'ir'));
-
-      await t.tap(find.byKey(const Key('boton_que_hago')));
-      await _esperar(t);
-      await t.tap(find.byKey(const Key('que_hago_recorrido')));
-      await _esperar(t);
-      expect(find.byKey(const Key('hoja_que_hago')), findsNothing);
-      expect(_tarjeta, findsOneWidget);
-      expect(find.text('1/${pasosRecorrido(c.imperio, c.ahora).length}'), findsOneWidget);
       await _desmontar(t);
     });
 
-    testWidgets('un JSON viejo sin las claves nuevas carga y muestra el recorrido', (t) async {
+    testWidgets('un JSON viejo sin las claves nuevas carga', (t) async {
       // Guardado de antes: sin guia_vista ni nada de esta versión, pero con la guía de alquileres vista en otro caso.
       final viejo = Partida.desdeJson({'saldo': 120.0, 'edificios': {edificios.first.id: 2}});
       expect(viejo.guiaVista, isEmpty);
@@ -418,14 +296,105 @@ void main() {
 
       final (c, _, _) = await _montar(t, {'saldo': 120.0, 'edificios': {edificios.first.id: 2}, 'guia_vista': ['primo']});
       expect(c.imperio.partida.edificios[edificios.first.id], 2);
-      expect(_tarjeta, findsOneWidget);
+      expect(find.byKey(const Key('boton_mudanza')), findsNothing);
       await _desmontar(t);
+    });
+
+    testWidgets('JALAR abre la hoja de la Cadena: tarjeta, lo que falta y la Plomería; la TIENDA ya no la trae', (t) async {
+      final (_, tele, enviados) = await _montar(t, _estado(_veterano(), cagadas: 30));
+      await t.tap(find.byKey(const Key('boton_jalar')));
+      await _esperar(t);
+      expect(find.byKey(const Key('decision_cadena')), findsOneWidget);
+      // Sin red no se sabe cuántas cagadas reales lleva: sale lo que falta y el JALAR de adentro apagado.
+      expect(find.byKey(const Key('cadena_falta')), findsOneWidget);
+      expect(t.widget<FilledButton>(find.byKey(const Key('cadena_jalar'))).onPressed, isNull);
+      expect(_conPrefijo('pagar_rollos_'), findsWidgets);
+      expect(_eventos(enviados, tele, 'cadena_abre', 'puede').length, 1);
+      Navigator.of(t.element(find.byKey(const Key('decision_cadena')))).pop();
+      await _esperar(t);
+      expect(find.byKey(const Key('decision_cadena')), findsNothing);
+
+      await t.tap(find.byKey(const Key('boton_tienda')));
+      await _esperar(t);
+      expect(_conPrefijo('pagar_rollos_'), findsNothing);
+      expect(_conPrefijo('llavero_'), findsNothing);
+      expect(t.takeException(), isNull);
+      await _desmontar(t);
+    });
+
+    testWidgets('MUDANZA no sale al jugador nuevo; descubierta sale con su hoja y deja de brillar al abrirla', (t) async {
+      await _montar(t, _estado(_nuevo()));
+      expect(find.byKey(const Key('boton_mudanza')), findsNothing);
+      await _desmontar(t);
+
+      final im = _veterano();
+      im.partida.guiaVista.add(claveMudanzaVista);
+      final (c, _, _) = await _montar(t, _estado(im, cagadas: 30));
+      expect(find.byKey(const Key('boton_mudanza')), findsOneWidget);
+      expect(mudanzaResaltada(c), isTrue);
+      await t.tap(find.byKey(const Key('boton_mudanza')));
+      await _esperar(t);
+      expect(find.byKey(const Key('decision_mudanza')), findsOneWidget);
+      expect(find.byKey(const Key('mudarse')), findsOneWidget);
+      // La capa 3 (🔒 ???) se asoma después de la primera mudanza.
+      expect(find.byKey(const Key('capa_3_candado')), findsNothing);
+      expect(_conPrefijo('llavero_'), findsWidgets);
+      expect(c.imperio.partida.guiaVista, contains(claveMudanzaAbierta));
+      expect(mudanzaResaltada(c), isFalse);
+      expect(t.takeException(), isNull);
+      await _desmontar(t);
+    });
+
+    testWidgets('la primera vez que se descubre: marca la clave y avisa "Ya no cabes"', (t) async {
+      final im = _veterano();
+      im.partida.mudanzas = 1;
+      final (c, _, _) = await _montar(t, _estado(im, cagadas: 30));
+      expect(c.imperio.partida.guiaVista, contains(claveMudanzaVista));
+      // El aviso va a la cola (detrás de los logros del veterano).
+      final aviso = find.textContaining('Ya no cabes en esta casa', findRichText: true);
+      for (var i = 0; i < 600 && aviso.evaluate().isEmpty; i++) {
+        await t.pump(const Duration(milliseconds: 100));
+      }
+      expect(aviso, findsOneWidget);
+      await t.tap(find.byKey(const Key('boton_mudanza')));
+      await _esperar(t);
+      expect(find.byKey(const Key('capa_3_candado')), findsOneWidget);
+      await _desmontar(t);
+    });
+
+    testWidgets('la barra con sus 5 botones cabe en 360 dp', (t) async {
+      await t.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.bottomCenter,
+            child: SizedBox(
+              width: 360,
+              child: BarraImperio(
+                  jalar: const BotonJalar(EstadoJalar.listo, rollos: 12),
+                  moneda: 'MjBs',
+                  alObjetos: () {},
+                  alJalar: () {},
+                  alSala: () {},
+                  alEdificios: () {},
+                  mudanza: true,
+                  mudanzaResaltada: true,
+                  alMudanza: () {}),
+            ),
+          ),
+        ),
+      ));
+      await t.pump();
+      for (final k in ['boton_edificios', 'boton_tienda', 'boton_jalar', 'boton_mudanza']) {
+        expect(find.byKey(Key(k)), findsOneWidget);
+      }
+      expect(find.text('SALA'), findsOneWidget);
+      expect(t.takeException(), isNull);
     });
   });
 
   group('Capturas', () {
-    final capturas = Platform.environment['CAPTURAS_RECORRIDO'] != null;
-    testWidgets('pasos del recorrido y la hoja a PNG', (t) async {
+    final capturas = Platform.environment['CAPTURAS_DEDO'] != null;
+    testWidgets('hojas de la escalera a PNG', (t) async {
       await _cargarLetras();
       t.view.physicalSize = const Size(1080, 2340);
       t.view.devicePixelRatio = 3;
@@ -444,36 +413,39 @@ void main() {
           final img = await borde.toImage(pixelRatio: 3);
           return (await img.toByteData(format: ui.ImageByteFormat.png))!.buffer.asUint8List();
         });
-        final f = File('build/capturas_recorrido/$nombre.png');
+        final f = File('build/capturas_dedo/$nombre.png');
         f.parent.createSync(recursive: true);
         f.writeAsBytesSync(png!);
       }
 
-      Future<void> siguiente([int veces = 1]) async {
-        for (var i = 0; i < veces; i++) {
-          await t.tap(find.byKey(const Key('recorrido_siguiente')));
-          await _esperar(t, 4);
-        }
+      Future<void> cerrarHoja(Key dentro) async {
+        Navigator.of(t.element(find.byKey(dentro))).pop();
+        await _esperar(t);
       }
 
       for (final (brillo, sufijo) in [(Brightness.dark, 'oscuro'), (Brightness.light, 'claro')]) {
         final estilo = _conLetraEnBotones(tema(brillo));
-        // Nuevo: la poceta y los edificios.
+        // Nuevo: la pantalla de entrada y el ¿Qué hago?.
         await _montar(t, _estado(_nuevo()), tema: estilo, foto: llave);
-        await foto('poceta_$sufijo');
-        await siguiente(2);
-        await foto('edificios_$sufijo');
-        await t.tap(find.byKey(const Key('recorrido_saltar')));
-        await _esperar(t);
+        await foto('nuevo_$sufijo');
         await t.tap(find.byKey(const Key('boton_que_hago')));
         await _esperar(t);
         await foto('que_hago_$sufijo');
         await _desmontar(t);
 
-        // Veterano: la cadena al final, con sus números.
-        final (c, _, _) = await _montar(t, _estado(_veterano(), cagadas: 30), tema: estilo, foto: llave);
-        await siguiente(pasosRecorrido(c.imperio, c.ahora).length - 1);
+        // Veterano con la mudanza descubierta: la barra de 5, la Cadena y la Mudanza.
+        final im = _veterano();
+        im.partida.guiaVista.add(claveMudanzaVista);
+        await _montar(t, _estado(im, cagadas: 30), tema: estilo, foto: llave);
+        await foto('veterano_$sufijo');
+        await t.tap(find.byKey(const Key('boton_jalar')));
+        await _esperar(t);
         await foto('cadena_$sufijo');
+        await cerrarHoja(const Key('decision_cadena'));
+        await t.tap(find.byKey(const Key('boton_mudanza')));
+        await _esperar(t);
+        await foto('mudanza_$sufijo');
+        await cerrarHoja(const Key('decision_mudanza'));
         await _desmontar(t);
       }
     }, skip: !capturas);
