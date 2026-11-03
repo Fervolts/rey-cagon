@@ -150,6 +150,8 @@ class _DedoImperioState extends State<DedoImperio> with SingleTickerProviderStat
   var _visto = false;
   var _fallos = 0;
   var _tocado = false;
+  // Quien está pujando a toda velocidad no alcanza a verlo: el primer rato solo lo quita un toque en el objetivo.
+  final _desde = Stopwatch();
   // Tres brincos y quieto: una animación que se repite para siempre no deja asentarse a la pantalla.
   late final AnimationController _brinco = AnimationController(vsync: this, duration: const Duration(milliseconds: 2100));
 
@@ -175,13 +177,16 @@ class _DedoImperioState extends State<DedoImperio> with SingleTickerProviderStat
     if (cambio) setState(() => _hueco = nuevo);
     if (!_visto) {
       _visto = true;
+      _desde.start();
       if (movimiento(context) != Movimiento.nada) _brinco.forward();
       widget.alVer();
     }
   }
 
-  void _tocar() {
+  void _tocar(Offset donde) {
     if (_tocado) return;
+    final enObjetivo = _hueco?.inflate(4).contains(donde) ?? false;
+    if (!enObjetivo && (!_desde.isRunning || _desde.elapsedMilliseconds < 4000)) return;
     _tocado = true;
     widget.alTocar();
   }
@@ -196,7 +201,7 @@ class _DedoImperioState extends State<DedoImperio> with SingleTickerProviderStat
       child: Listener(
         key: const Key('dedo'),
         behavior: HitTestBehavior.translucent,
-        onPointerDown: (_) => _tocar(),
+        onPointerDown: (e) => _tocar(e.localPosition),
         child: IgnorePointer(
           child: hueco == null
               ? const SizedBox.expand()
