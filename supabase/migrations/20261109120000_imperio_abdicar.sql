@@ -291,8 +291,8 @@ begin
   -- Llavero: lo comprado no puede costar más Llaves de las ganadas al mudarse. El Mayordomo real de La Corte regala
   -- el primer nivel del Mayordomo (3 Llaves).
   if public.imperio_llavero_costo(p_estado -> 'llavero')
-     - case when public.imperio_corte_nivel(p_estado -> 'corte', 'mayordomo_real', 1) >= 1
-                 and public.imperio_corte_nivel(p_estado -> 'llavero', 'mayordomo', 3) >= 1 then 3 else 0 end
+     - (case when public.imperio_corte_nivel(p_estado -> 'corte', 'mayordomo_real', 1) >= 1
+                  and public.imperio_corte_nivel(p_estado -> 'llavero', 'mayordomo', 3) >= 1 then 3 else 0 end)
      > fila.llaves_ganadas then
     return jsonb_build_object('mj_total', fila.mj_total, 'recortado', false, 'guardado', fila.guardado, 'ignorado', true,
                               'mudanzas', fila.mudanzas);
