@@ -166,6 +166,14 @@ const _archivos = {
   '🧊': 'ice',
   '🎁': 'wrapped_gift',
   '⏩': 'fast-forward_button',
+  // Imperio fase 4: Mudanza, casas, Llavero y Mayordomo.
+  '🛖': 'hut',
+  '🏠': 'house',
+  '🏡': 'house_with_garden',
+  '🏰': 'castle',
+  '🔑': 'key',
+  '🚚': 'delivery_truck',
+  '🤵': 'person_in_tuxedo',
 };
 
 // Las mismas claves sin FE0F, para encontrar '🌶' igual que '🌶️'.

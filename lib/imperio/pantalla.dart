@@ -17,6 +17,7 @@ import 'bienvenida.dart';
 import 'cadena.dart';
 import 'cantidades.dart';
 import 'cartera.dart';
+import 'casas.dart';
 import 'cofre.dart';
 import 'control.dart';
 import 'fichas.dart';
@@ -29,6 +30,7 @@ import 'logros.dart' show presumirLogroImperio;
 import 'mana.dart';
 import 'moneda_app.dart';
 import 'motor.dart';
+import 'mudanza.dart';
 import 'personalizar.dart';
 import 'tarjeta_bano.dart' show presumirBano;
 import 'poceta.dart';
@@ -206,7 +208,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
           _avisar(_avisoAtascos!.$1, _avisoAtascos!.$2);
         } else {
           final e = edificioPorId(nuevos.last.edificio);
-          final nombre = e == null ? '' : tr(e.nombreEs, e.nombreEn);
+          final nombre = e == null ? '' : nombreEdificio(e.id, _c.imperio.partida.mudanzas);
           _avisar('🪠', tr('¡Se tapó $nombre! No produce hasta que lo destapes', '$nombre is clogged! It won\'t produce until you unclog it'));
         }
         if (movimiento(context) != Movimiento.nada) HapticFeedback.mediumImpact();
@@ -247,7 +249,8 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     _cerrarEmpujon();
     final jalar = botonJalar(_c.imperio, _c.cadena);
     setState(() => _pasosRecorrido = pasosRecorrido(_c.imperio, _c.ahora,
-        moneda: monedaActual().abreviatura, jalarVisible: jalar.visible, cadenaLista: jalar.encendido));
+        moneda: monedaActual().abreviatura, jalarVisible: jalar.visible, cadenaLista: jalar.encendido,
+        tiraMudanza: mostrarTiraMudanza(_c)));
   }
 
   void _queHago(BuildContext context) => abrirQueHago(context, _c,
@@ -256,6 +259,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
             DestinoQueHago.edificios => _abrirCajon(true),
             DestinoQueHago.tienda => _abrirObjetos(context),
             DestinoQueHago.jalar => _jalar(context, botonJalar(_c.imperio, _c.cadena)),
+            DestinoQueHago.mudanza => abrirMudanza(context, _c, _avisar),
             DestinoQueHago.cerrar => null,
           },
       alRecorrido: _empezarRecorrido);
@@ -422,7 +426,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
   /// Línea del Atasco offline en "Mientras no estabas": qué se atascó, a qué hora y cuánto se dejó de ganar.
   String _lineaAtascoOffline(ResultadoOffline off) {
     final e = edificioPorId(off.atascoEdificio!);
-    final nombre = e == null ? '' : tr(e.nombreEs, e.nombreEn);
+    final nombre = e == null ? '' : nombreEdificio(e.id, _c.imperio.partida.mudanzas);
     final h = DateTime.fromMillisecondsSinceEpoch(off.atascoEn);
     final hora = '${h.hour.toString().padLeft(2, '0')}:${h.minute.toString().padLeft(2, '0')}';
     if (off.atascoCubierto) return tr('🤖 A las $hora se atascó tu $nombre y se destapó solo.', '🤖 Your $nombre clogged at $hora and unclogged itself.');
@@ -537,6 +541,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                   if (_c.sinConexion) _sinConexion(context),
                   if (_c.imperio.enTemporada(temporadaDiaRetrete, ahora)) _avisoTemporada(context, ahora),
                   Expanded(child: _zona(context, ahora)),
+                  if (mostrarTiraMudanza(_c)) TiraMudanza(control: _c, avisar: _avisar),
                   _botonesAbajo(context, ahora),
                 ],
               ),
@@ -798,8 +803,8 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       if (rollos > 0)
         GestureDetector(
           key: const Key('chip_rollos'),
-          onTap: () => _avisar('🧻', tr('${_mj(rollos.toDouble())} Rollos de Oro: todo produce ${_pctRollos(im)} para siempre',
-              '${_mj(rollos.toDouble())} Golden Rolls: everything makes ${_pctRollos(im)} forever')),
+          onTap: () => _avisar('🧻', tr('${_mj(rollos.toDouble())} Rollos de Oro: todo produce ${_pctRollos(im)} hasta la mudanza',
+              '${_mj(rollos.toDouble())} Golden Rolls: everything makes ${_pctRollos(im)} until you move')),
           child: _chip(context, '🧻', '${_mj(rollos.toDouble())} · ${_pctRollos(im)}'),
         ),
     ];
@@ -1093,7 +1098,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
   Widget _tarjetaAtasco(BuildContext context, Atasco atasco) {
     final p = paleta(context);
     final e = edificioPorId(atasco.edificio);
-    final nombre = e == null ? '' : tr(e.nombreEs, e.nombreEn);
+    final nombre = e == null ? '' : nombreEdificio(e.id, _c.imperio.partida.mudanzas);
     final quieto = movimiento(context) == Movimiento.nada;
     return GestureDetector(
       key: const Key('tarjeta_atasco'),
@@ -1159,7 +1164,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     if (im.atascado(e.id)) {
       return _fila(context,
           emoji: '🪠',
-          titulo: tr(e.nombreEs, e.nombreEn),
+          titulo: nombreEdificio(e.id, im.partida.mudanzas),
           detalle: tr('Atascado: no produce hasta que lo destapes', 'Clogged: no output until you unclog it'),
           contador: im.cantidad(e.id),
           apagada: true);
@@ -1181,7 +1186,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       child: _fila(
         context,
         emoji: misterio ? '❓' : e.emoji,
-        titulo: misterio ? '???' : tr(e.nombreEs, e.nombreEn),
+        titulo: misterio ? '???' : nombreEdificio(e.id, im.partida.mudanzas),
         detalle: detalle,
         derecha: _mj(precio),
         contador: im.cantidad(e.id),
@@ -1321,9 +1326,10 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     final im = _c.imperio;
     final hoy = im.cantidad(e.id);
     final n = _umbrales.putIfAbsent('${e.id}/${m.id}/$hoy', () => _umbral(m, e.id));
+    final (nEs, nEn) = nombresEdificio(e.id, im.partida.mudanzas);
     final cuando = n == null
         ? tr('Sigue jugando para que salga', 'Keep playing to unlock it')
-        : tr('Sale con $n ${e.nombreEs} (tienes $hoy)', 'Unlocks at $n ${e.nombreEn} (you have $hoy)');
+        : tr('Sale con $n $nEs (tienes $hoy)', 'Unlocks at $n $nEn (you have $hoy)');
     return Opacity(
       opacity: .6,
       child: Padding(
@@ -1463,14 +1469,25 @@ class _HojaObjetos extends StatelessWidget {
         ],
         if (im.objetosRollosAbiertos) ...[
           const SizedBox(height: 8),
-          Rotulo(tr('Rollos de Oro', 'Golden Rolls')),
+          Row(
+            children: [
+              Expanded(child: Rotulo(tr('Plomería', 'Plumbing'))),
+              const Emoji('🔧', tamano: 16),
+            ],
+          ),
           const SizedBox(height: 4),
           Text(
-              tr('Cada Rollo que gastas deja de darte ${porcentajeRollos(1, im.ajustes.rolloPct)}. Edificios y mejoras siguen abiertos.',
-                  'Each Roll you spend stops giving you ${porcentajeRollos(1, im.ajustes.rolloPct)}. Buildings and upgrades stay open.'),
+              tr('Se paga con Rollos de Oro y dura hasta la mudanza: las jaladas no la borran. '
+                      'Cada Rollo que gastas deja de darte ${porcentajeRollos(1, im.ajustes.rolloPct)}.',
+                  'Paid with Golden Rolls and lasts until you move: flushes don\'t reset it. '
+                      'Each Roll you spend stops giving you ${porcentajeRollos(1, im.ajustes.rolloPct)}.'),
               style: TextStyle(fontSize: 12, color: p.textoSuave)),
           const SizedBox(height: 8),
           for (final r in objetosRollos) _filaRollos(context, p, im, r, ahora),
+        ],
+        if (SeccionLlavero.visible(control)) ...[
+          const SizedBox(height: 8),
+          SeccionLlavero(control: control, avisar: avisar),
         ],
       ],
     );
@@ -1482,6 +1499,8 @@ class _HojaObjetos extends StatelessWidget {
 
   Widget _filaRollos(BuildContext context, Paleta p, Imperio im, ObjetoRollos r, int ahora) {
     final tiene = im.tieneObjetoRollos(r.id);
+    final nivel = im.nivelPlomeria(r.id);
+    final tope = r.id != 'cadena_reserva' && nivel >= r.limite;
     final espera = r.id == 'cadena_reserva' ? im.esperaCadena(ahora) : null;
     final pendiente = r.id == 'cadena_reserva' && tiene > 0;
     return Container(
@@ -1504,7 +1523,7 @@ class _HojaObjetos extends StatelessWidget {
                         ? tr('Lista para tu próxima jalada', 'Ready for your next flush')
                         : espera != null
                             ? tr('Otra en ${_cuenta(espera)}', 'Another in ${_cuenta(espera)}')
-                            : '$tiene/${r.limite}',
+                            : '$nivel/${r.limite}',
                     style: numeros(context, tamano: 11, color: p.textoSuave)),
               ],
             ),
@@ -1514,10 +1533,16 @@ class _HojaObjetos extends StatelessWidget {
             key: Key('pagar_rollos_${r.id}'),
             style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10), minimumSize: const Size(0, 44)),
             onPressed: im.puedeComprarObjetoRollos(r.id, ahora) ? () => _comprarRollos(r) : null,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [Text('${r.costo} ', style: numeros(context, tamano: 13, weight: FontWeight.w900)), const Emoji('🧻', tamano: 18)],
-            ),
+            child: tope
+                ? Text(tr('MÁX', 'MAX'), style: numeros(context, tamano: 13, weight: FontWeight.w900))
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('${formatoMj(im.precioObjetoRollos(r.id), ingles: enIngles)} ',
+                          style: numeros(context, tamano: 13, weight: FontWeight.w900)),
+                      const Emoji('🧻', tamano: 18),
+                    ],
+                  ),
           ),
         ],
       ),
@@ -1553,14 +1578,15 @@ class _HojaObjetos extends StatelessWidget {
                         onPressed: () {
                           Navigator.pop(hoja);
                           if (control.usarPintura(id)) {
-                            avisar(o.emoji, tr('${e.nombreEs} pintado: +10% hasta jalar', '${e.nombreEn} painted: +10% until you flush'));
+                            avisar(o.emoji, tr('${nombreEdificio(e.id, control.imperio.partida.mudanzas)} pintado: +10% hasta jalar',
+                                '${nombreEdificio(e.id, control.imperio.partida.mudanzas)} painted: +10% until you flush'));
                           }
                         },
                         child: Row(
                           children: [
                             Emoji(e.emoji, tamano: 24),
                             const SizedBox(width: 10),
-                            Expanded(child: Text(tr(e.nombreEs, e.nombreEn), style: TextStyle(color: p.texto))),
+                            Expanded(child: Text(nombreEdificio(e.id, control.imperio.partida.mudanzas), style: TextStyle(color: p.texto))),
                           ],
                         ),
                       ),

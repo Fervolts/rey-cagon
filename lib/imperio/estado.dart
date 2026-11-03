@@ -166,7 +166,8 @@ class Partida {
   /// Edificios con Pintura marrón (+10% c/u). Se borra al jalar la cadena.
   Set<String> pintura;
 
-  /// Objetos de Rollos de Oro: 'super_plomero' (0/1), 'tanque_lujo' (0 a 6), 'cadena_reserva' (1 = pendiente). No se borran al jalar.
+  /// Plomería (objetos de Rollos de Oro): id → nivel ('cadena_reserva' 1 = pendiente). No se borra al jalar; mudarse la
+  /// borra (el Camión de mudanza se lleva una parte).
   Map<String, int> objetosRollos;
 
   /// Veces que se tocó cada cosa del baño en la Poceta (id de [objetosTocables]), para los logros escondidos.
@@ -270,6 +271,34 @@ class Partida {
   /// Cómo se ve el baño (Personalizar): 'ocultos' (lista de ids), 'dedos' (int), 'ambiente' (nombre). Solo visual.
   Map<String, dynamic> vista;
 
+  /// Mudanzas hechas (0 = Rancho). El servidor lleva la cuenta buena en `imperio.mudanzas`.
+  int mudanzas;
+
+  /// [mjTotal] y [jaladas] el día de la última mudanza: los Rollos y las jaladas de la casa se cuentan desde ahí.
+  double mjBase;
+  int jaladasBase;
+
+  /// MJ ganados en la casa de ahora, contados aparte: con números grandes mjTotal - mjBase da 0 (1e34 + 1e13 = 1e34 en
+  /// double). En el Rancho no se usa (ahí son todos los MJ). El servidor lleva el tope en `imperio.mj_casa`.
+  double mjEnCasa;
+
+  /// Llaves ganadas mudándose (las manda el servidor) y mejoras del Llavero (id → nivel). Las Llaves sin gastar son las
+  /// ganadas menos lo que cuesta el Llavero ([costoLlavero]). Mudarse no las borra.
+  int llavesGanadas;
+  Map<String, int> llavero;
+
+  /// El Mayordomo está apagado (el jugador lo apagó en el Imperio).
+  bool mayordomoApagado;
+
+  /// Mudanzas hechas sin gastar ni un Rollo en esa casa (logro escondido).
+  int mudanzasLimpias;
+
+  /// Jaladas en la casa de ahora.
+  int get jaladasCasa => max(0, jaladas - jaladasBase);
+
+  /// MJ ganados en la casa de ahora.
+  double get mjCasa => mudanzas <= 0 ? mjTotal : max(0, mjEnCasa);
+
   Partida({
     this.saldo = 0,
     this.mjTotal = 0,
@@ -337,7 +366,16 @@ class Partida {
     this.primerDia = 0,
     this.jaladas = 0,
     Map<String, dynamic>? vista,
+    this.mudanzas = 0,
+    this.mjBase = 0,
+    this.mjEnCasa = 0,
+    this.jaladasBase = 0,
+    this.llavesGanadas = 0,
+    Map<String, int>? llavero,
+    this.mayordomoApagado = false,
+    this.mudanzasLimpias = 0,
   })  : vista = vista ?? {},
+        llavero = llavero ?? {},
         edificios = edificios ?? {},
         mejoras = mejoras ?? {},
         logros = logros ?? {},
@@ -431,6 +469,14 @@ class Partida {
         'primer_dia': primerDia,
         'jaladas': jaladas,
         if (vista.isNotEmpty) 'vista': vista,
+        if (mudanzas > 0) 'mudanzas': mudanzas,
+        if (mjBase > 0) 'mj_base': mjBase,
+        if (mudanzas > 0 && mjEnCasa > 0) 'mj_casa': mjEnCasa,
+        if (jaladasBase > 0) 'jaladas_base': jaladasBase,
+        if (llavesGanadas > 0) 'llaves_ganadas': llavesGanadas,
+        if (llavero.isNotEmpty) 'llavero': llavero,
+        if (mayordomoApagado) 'mayordomo_off': true,
+        if (mudanzasLimpias > 0) 'mudanzas_limpias': mudanzasLimpias,
       };
 
   /// Lee una partida guardada. Aguanta claves que faltan, sobran o vienen con otro tipo.
@@ -508,6 +554,17 @@ class Partida {
       primerDia: max(0, _ent(j['primer_dia'])),
       jaladas: _ent(j['jaladas']) < 0 ? 0 : _ent(j['jaladas']),
       vista: _vista(j['vista']),
+      mudanzas: max(0, _ent(j['mudanzas'])),
+      mjBase: min(max(0.0, _dbl(j['mj_base'])), total < saldo ? saldo : total),
+      // Partidas de antes de la cuenta aparte: la resta (bien mientras los números no sean enormes).
+      mjEnCasa: j['mj_casa'] is num
+          ? max(0.0, _dbl(j['mj_casa']))
+          : max(0.0, (total < saldo ? saldo : total) - min(max(0.0, _dbl(j['mj_base'])), total < saldo ? saldo : total)),
+      jaladasBase: max(0, _ent(j['jaladas_base'])),
+      llavesGanadas: max(0, _ent(j['llaves_ganadas'])),
+      llavero: _mapaEnt(j['llavero'])..removeWhere((_, n) => n <= 0),
+      mayordomoApagado: _bool(j['mayordomo_off']),
+      mudanzasLimpias: max(0, _ent(j['mudanzas_limpias'])),
     );
   }
 }

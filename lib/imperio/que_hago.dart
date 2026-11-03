@@ -4,6 +4,7 @@
 import 'dart:math';
 
 import '../idioma.dart';
+import 'casas.dart';
 import 'formato.dart';
 import 'motor.dart';
 
@@ -13,11 +14,17 @@ const double toquesSupuestos = 1;
 /// Jalar conviene cuando los Rollos nuevos suben la producción al menos esto (x1,5) o abren un edificio de la fase 2.
 const double saltoRollosConviene = 1.5;
 
-/// A dónde lleva el botón IR de la hoja.
-enum DestinoQueHago { cerrar, edificios, tienda, jalar }
+/// Un nivel de la Plomería conviene cuando sube lo que entra al menos esto (x1,2), aun gastando sus Rollos de Oro.
+const double saltoPlomeriaConviene = 1.2;
 
-/// Una jugada sugerida. [id] va a la telemetría (`imperio_que_hago`): destapar, robot, dorado, jalar, edificio, mejora,
-/// esperar o pujar. [objetivo] es el edificio o la mejora (si aplica) y [segundos], lo que falta esperando (si aplica).
+/// Nodos de la Plomería que suben lo que entra (los demás no se pueden medir con el ritmo).
+const List<String> plomeriaQueProduce = ['tuberia_ancha', 'llave_paso'];
+
+/// A dónde lleva el botón IR de la hoja.
+enum DestinoQueHago { cerrar, edificios, tienda, jalar, mudanza }
+
+/// Una jugada sugerida. [id] va a la telemetría (`imperio_que_hago`): destapar, robot, dorado, mudanza, jalar, plomeria,
+/// edificio, mejora, esperar o pujar. [objetivo] es el edificio o la mejora (si aplica) y [segundos], lo que falta esperando (si aplica).
 class Sugerencia {
   const Sugerencia(this.id, this.emoji, this.titulo, this.texto, this.ir, {this.objetivo, this.segundos});
 
@@ -72,7 +79,7 @@ List<Compra> comprasPosibles(Imperio im, int ahora, {bool soloEdificios = false}
         p.edificios[e.id] = antes;
       }
     }
-    if (suma > 0 && precio.isFinite) r.add(Compra(e.id, e.emoji, tr(e.nombreEs, e.nombreEn), precio, suma, esEdificio: true));
+    if (suma > 0 && precio.isFinite) r.add(Compra(e.id, e.emoji, nombreEdificio(e.id, p.mudanzas), precio, suma, esEdificio: true));
   }
   if (soloEdificios) return r;
   for (final m in im.mejorasDisponibles()) {
@@ -123,6 +130,36 @@ bool jalarConviene(Imperio im, {required bool cadenaLista}) {
   return j.nuevos >= 1 && (j.salto >= saltoRollosConviene || j.abre != null);
 }
 
+/// El nivel de la Plomería que más sube lo que entra, contando los Rollos de Oro que gasta (bajan el +% por rollo).
+/// Null si ninguno alcanza o ninguno sube al menos [saltoPlomeriaConviene]. Prueba cada compra y la deshace.
+({ObjetoRollos objeto, double salto})? plomeriaConviene(Imperio im, int ahora) {
+  final p = im.partida;
+  final base = _ritmo(im, ahora);
+  if (base <= 0) return null;
+  ({ObjetoRollos objeto, double salto})? mejor;
+  for (final id in plomeriaQueProduce) {
+    final o = objetoRollosPorId(id);
+    if (o == null || !im.puedeComprarObjetoRollos(id, ahora)) continue;
+    final precio = im.precioObjetoRollos(id).toInt();
+    final antes = p.objetosRollos[id];
+    p.rollos -= precio;
+    p.objetosRollos[id] = (antes ?? 0) + 1;
+    final double salto;
+    try {
+      salto = _ritmo(im, ahora) / base;
+    } finally {
+      p.rollos += precio;
+      if (antes == null) {
+        p.objetosRollos.remove(id);
+      } else {
+        p.objetosRollos[id] = antes;
+      }
+    }
+    if (salto >= saltoPlomeriaConviene && (mejor == null || salto > mejor.salto)) mejor = (objeto: o, salto: salto);
+  }
+  return mejor;
+}
+
 /// Duración corta para el texto: "40 s", "12 min", "3 h", "2 d".
 String duracionCorta(int s) {
   if (s < 60) return '$s s';
@@ -138,10 +175,12 @@ String pctRollos(int rollos, double pct) {
 }
 
 /// La próxima jugada, en este orden: 1) un Atasco abierto (con dos o más y el Robot abierto, alquilarlo); 2) el mojón
-/// dorado en pantalla; 3) jalar si conviene (si no, siempre habría algo barato que comprar y nunca saldría); 4) la compra
-/// que alcanza con menor retorno; 5) pujar o esperar lo que falta para la mejor compra. [cadenaLista]: el botón JALAR
-/// está encendido (lo decide cadena.dart, que pide red; por eso llega de afuera). [moneda]: la abreviatura de los MJ.
-Sugerencia queHagoAhora(Imperio im, int ahora, {bool cadenaLista = false, String moneda = 'MJ'}) {
+/// dorado en pantalla; 3) mudarse si se puede; 4) jalar si conviene (si no, siempre habría algo barato que comprar y
+/// nunca saldría); 5) un nivel de la Plomería que rinde; 6) la compra que alcanza con menor retorno; 7) pujar o esperar
+/// lo que falta para la mejor compra. [cadenaLista]: el botón JALAR está encendido (lo decide cadena.dart, que pide red;
+/// por eso llega de afuera). [mudanzaLista]: el servidor conoce la mudanza y se cumplen los requisitos (las cagadas las
+/// cuenta el servidor). [moneda]: la abreviatura de los MJ.
+Sugerencia queHagoAhora(Imperio im, int ahora, {bool cadenaLista = false, bool mudanzaLista = false, String moneda = 'MJ'}) {
   final atascos = im.atascos;
   if (atascos.isNotEmpty && !im.robotActivo(ahora)) {
     if (atascos.length >= 2 && im.objetoAbierto('robot')) {
@@ -151,7 +190,7 @@ Sugerencia queHagoAhora(Imperio im, int ahora, {bool cadenaLista = false, String
           DestinoQueHago.tienda);
     }
     final e = edificioPorId(atascos.first.edificio);
-    final nombre = e == null ? '' : tr(e.nombreEs, e.nombreEn);
+    final nombre = e == null ? '' : nombreEdificio(e.id, im.partida.mudanzas);
     return Sugerencia('destapar', '🪠', tr('Destapa $nombre', 'Unclog $nombre'),
         tr('Está tapado y no produce ni un $moneda. Dale a la tarjeta de abajo hasta que suelte.',
             "It's clogged and makes zero $moneda. Tap the card below until it lets go."),
@@ -163,17 +202,39 @@ Sugerencia queHagoAhora(Imperio im, int ahora, {bool cadenaLista = false, String
         tr('Anda flotando por la pantalla y se va rápido. Trae premio.', "It's floating around the screen and leaves fast. It brings a prize."),
         DestinoQueHago.cerrar);
   }
+  if (mudanzaLista) {
+    final m = im.partida.mudanzas + 1;
+    final llaves = im.llavesPorGanar;
+    final pct = (im.ajustes.llavePct * 100).round();
+    return Sugerencia('mudanza', casaDe(m).emoji, tr('Múdate a ${nombreCasa(m)}', 'Move to the ${nombreCasa(m)}'),
+        tr('Produce x${_mj(multiplicadorCasa(m) / multiplicadorCasa(m - 1))} y te llevas ${_mj(llaves.toDouble())} Llaves (+$pct% cada una). '
+                'Empiezas de cero en una casa más grande.',
+            'It makes x${_mj(multiplicadorCasa(m) / multiplicadorCasa(m - 1))} and you take ${_mj(llaves.toDouble())} Keys (+$pct% each). '
+                'You start over in a bigger house.'),
+        DestinoQueHago.mudanza);
+  }
   if (jalarConviene(im, cadenaLista: cadenaLista)) {
     final j = cuentaJalar(im);
     final pct = im.ajustes.rolloPct;
     final total = im.partida.rollos + j.nuevos;
-    final abre = j.abre == null ? '' : tr(' y se abre ${j.abre!.nombreEs}', ' and unlocks ${j.abre!.nombreEn}');
+    final abre = j.abre == null ? '' : tr(' y se abre ', ' and unlocks ') + nombreEdificio(j.abre!.id, im.partida.mudanzas);
     return Sugerencia('jalar', '🧻', tr('Jala la cadena', 'Flush the chain'),
-        tr('Te da ${_mj(j.nuevos.toDouble())} Rollos de Oro: todo pasa a producir ${pctRollos(total, pct)} para siempre$abre. '
+        tr('Te da ${_mj(j.nuevos.toDouble())} Rollos de Oro: todo pasa a producir ${pctRollos(total, pct)} hasta la mudanza$abre. '
                 'Empiezas de cero, pero más rápido.',
-            'You get ${_mj(j.nuevos.toDouble())} Golden Rolls: everything makes ${pctRollos(total, pct)} forever$abre. '
+            'You get ${_mj(j.nuevos.toDouble())} Golden Rolls: everything makes ${pctRollos(total, pct)} until you move$abre. '
                 'You start over, but faster.'),
         DestinoQueHago.jalar);
+  }
+  final plomeria = plomeriaConviene(im, ahora);
+  if (plomeria != null) {
+    final o = plomeria.objeto;
+    final precio = _mj(im.precioObjetoRollos(o.id));
+    final salto = _mj((plomeria.salto * 100).roundToDouble() / 100);
+    return Sugerencia('plomeria', o.emoji, tr('Compra ${o.nombreEs}', 'Buy ${o.nombreEn}'),
+        tr('En la Plomería: cuesta $precio Rollos de Oro y aun así todo produce x$salto hasta la mudanza.',
+            'In Plumbing: it costs $precio Golden Rolls and everything still makes x$salto until you move.'),
+        DestinoQueHago.tienda,
+        objetivo: o.id);
   }
   final ya = mejorCompra(im, ahora, soloAlcanzan: true);
   if (ya != null) {

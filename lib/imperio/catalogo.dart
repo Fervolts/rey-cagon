@@ -1,6 +1,8 @@
 // Catálogo del Imperio Cagón, fase 1. Solo datos: los números salen de la nota "Imperio Cagón (catálogo)".
 // Dart puro (sin Flutter) para poder probarlo. Los textos vienen en pares es/en; la pantalla escoge con tr().
 
+import 'dart:math';
+
 import 'estado.dart';
 import 'temporadas.dart';
 
@@ -384,26 +386,50 @@ final Map<String, Habilidad> _habilidadPorId = {for (final h in habilidades) h.i
 /// Habilidad por id, o null si no existe.
 Habilidad? habilidadPorId(String id) => _habilidadPorId[id];
 
-/// Objeto que se paga con Rollos de Oro (sale después de la primera jalada). No se borra al jalar.
+/// Nodo de la Plomería 🔧: se paga con Rollos de Oro (sale después de la primera jalada). Sobrevive a las jaladas y se
+/// pierde al mudarse (el Camión de mudanza del Llavero se lleva una parte). Se guarda en `objetosRollos` (id → nivel).
 class ObjetoRollos {
   final String id;
   final String emoji;
   final String nombreEs, nombreEn;
   final String descEs, descEn;
+
+  /// Precio del primer nivel, en Rollos.
   final int costo;
 
-  /// Cuántos se pueden tener (la Cadena de reserva: 1 por semana).
+  /// Nivel máximo (la Cadena de reserva: 1 pendiente, 1 por semana).
   final int limite;
-  const ObjetoRollos(this.id, this.emoji, this.nombreEs, this.nombreEn, this.descEs, this.descEn, this.costo, this.limite);
+
+  /// Cada nivel cuesta esto por el anterior (1 = precio fijo).
+  final double crecimiento;
+  const ObjetoRollos(this.id, this.emoji, this.nombreEs, this.nombreEn, this.descEs, this.descEn, this.costo, this.limite,
+      {this.crecimiento = 1});
+
+  /// Precio en Rollos del nivel siguiente cuando ya tienes [nivel].
+  double precio(int nivel) => costo * pow(crecimiento, nivel).toDouble();
 }
 
+/// La Plomería. Ningún nodo sube los Rollos por jalada: el servidor no puede validar niveles que manda el cliente.
 const List<ObjetoRollos> objetosRollos = [
-  ObjetoRollos('super_plomero', '🦸', 'Súper Plomero', 'Super Plumber', 'Para siempre: destapa solo y 1 vez al día suelta 1 h de producción',
-      'Forever: unclogs by itself and drops 1 h of production once a day', 5, 1),
+  ObjetoRollos('super_plomero', '🦸', 'Súper Plomero', 'Super Plumber', 'Hasta la mudanza: destapa solo y 1 vez al día suelta 1 h de producción',
+      'Until you move: unclogs by itself and drops 1 h of production once a day', 5, 1),
   ObjetoRollos('cadena_reserva', '⛓️', 'Cadena de reserva', 'Spare chain', 'Tu próxima jalada te devuelve 1 edificio de cada tipo que tenías',
       'Your next pull gives you back 1 of each building you had', 2, 1),
-  ObjetoRollos('tanque_lujo', '🛁', 'Tanque de lujo', 'Luxury tank', '+1 h al tope offline para siempre (hasta +6 h)',
-      '+1 h to your offline cap forever (up to +6 h)', 5, 6),
+  ObjetoRollos('tanque_lujo', '🛁', 'Tanque de lujo', 'Luxury tank', '+1 h al tope offline hasta la mudanza (hasta +6 h)',
+      '+1 h to your offline cap until you move (up to +6 h)', 5, 6),
+  ObjetoRollos('tuberia_ancha', '🚰', 'Tubería ancha', 'Wide pipe', 'Producción x1,5 por nivel', 'Production x1.5 per level', 3, 30,
+      crecimiento: 8),
+  ObjetoRollos('llave_paso', '🔧', 'Llave de paso', 'Shutoff valve', 'Pujos x3 por nivel', 'Pushes x3 per level', 2, 20, crecimiento: 6),
+  ObjetoRollos('tuberia_lista', '🏗️', 'Tubería lista', 'Pre-laid pipes', 'Cada corrida empieza con +10 de cada edificio de la fase 1 por nivel',
+      'Each run starts with +10 of every phase 1 building per level', 5, 10, crecimiento: 10),
+  ObjetoRollos('destapador_fino', '🪠', 'Destapador fino', 'Fine plunger', 'Atascos 25% menos seguido por nivel', 'Clogs 25% less often per level', 2, 3,
+      crecimiento: 5),
+  ObjetoRollos('iman_dorado', '🧲', 'Imán dorado', 'Golden magnet', 'Mojón dorado 10% más seguido y +2 s en pantalla por nivel',
+      'Golden poop 10% more often and +2 s on screen per level', 20, 5, crecimiento: 10),
+  ObjetoRollos('rebaja', '💸', 'Rebaja de ferretería', 'Hardware store sale', 'Edificios 2% más baratos por nivel', 'Buildings 2% cheaper per level', 50, 10,
+      crecimiento: 10),
+  ObjetoRollos('tanque_hondo', '🛢️', 'Tanque hondo', 'Deep tank', 'Producción offline +10 puntos por nivel (hasta 75%)',
+      'Offline production +10 points per level (up to 75%)', 10, 5, crecimiento: 8),
 ];
 
 final Map<String, ObjetoRollos> _objetoRollosPorId = {for (final o in objetosRollos) o.id: o};
@@ -413,6 +439,65 @@ ObjetoRollos? objetoRollosPorId(String id) => _objetoRollosPorId[id];
 
 /// Una Cadena de reserva por semana.
 const Duration esperaCadenaReserva = Duration(days: 7);
+
+/// Mejora del Llavero 🔑: se paga con Llaves (salen de mudarse). Sobrevive a las mudanzas; una capa más arriba la podría
+/// reiniciar, por eso los textos dicen "entre mudanzas" y no "para siempre".
+class MejoraLlavero {
+  final String id;
+  final String emoji;
+  final String nombreEs, nombreEn;
+  final String descEs, descEn;
+
+  /// Precio de cada nivel en Llaves (el último se repite si [limite] es mayor que la lista).
+  final List<int> precios;
+
+  /// Lo que sube el precio por nivel después de la lista ([precios] de un solo número + [subida] = 1, 2, 3...).
+  final int subida;
+  final int limite;
+  const MejoraLlavero(this.id, this.emoji, this.nombreEs, this.nombreEn, this.descEs, this.descEn, this.precios, this.limite, {this.subida = 0});
+
+  /// Llaves que cuesta el nivel siguiente cuando ya tienes [nivel].
+  int precio(int nivel) {
+    if (nivel < precios.length) return precios[nivel];
+    return precios.last + subida * (nivel - precios.length + 1);
+  }
+}
+
+const List<MejoraLlavero> mejorasLlavero = [
+  MejoraLlavero('cimientos', '🧱', 'Cimientos', 'Foundations', 'Producción x2 por nivel, entre mudanzas', 'Production x2 per level, across moves',
+      [1], 20, subida: 1),
+  MejoraLlavero('mayordomo', '🤵', 'Mayordomo', 'Butler', 'Compra solo el edificio que se paga más rápido: cada 10 s, 3 s y 1 s. Se puede apagar',
+      'Buys the building that pays off fastest by himself: every 10 s, 3 s and 1 s. You can switch him off', [3, 5, 8], 3),
+  MejoraLlavero('camion_mudanza', '🚚', 'Camión de mudanza', 'Moving truck', 'Al mudarte te llevas el 10% de cada nodo de la Plomería por nivel',
+      'When you move you keep 10% of every Plumbing node per level', [2], 5, subida: 2),
+  MejoraLlavero('ahorros', '💰', 'Ahorros', 'Savings', 'Cada corrida y cada casa empieza con plata: 1 millón de MJ, x1.000 por nivel',
+      'Every run and every house starts with cash: 1 million MJ, x1,000 per level', [1], 10, subida: 1),
+  MejoraLlavero('primo_extra', '👦', 'Primo extra', 'Extra cousin', '+1 primo alquilado a la vez', '+1 rented cousin at a time', [4, 8], 2),
+  MejoraLlavero('alquiler_barato', '🎟️', 'Alquiler barato', 'Cheap rentals', 'Alquileres 10% más baratos por nivel', 'Rentals 10% cheaper per level',
+      [2], 5, subida: 1),
+];
+
+final Map<String, MejoraLlavero> _mejoraLlaveroPorId = {for (final m in mejorasLlavero) m.id: m};
+
+/// Llaves que costó todo el [llavero] (id → nivel). Ids que no existen no cuestan; niveles de más se cortan al máximo.
+/// El servidor hace la misma cuenta (imperio_llavero_costo) para no aceptar Llaves inventadas.
+int costoLlavero(Map<String, int> llavero) {
+  var total = 0;
+  llavero.forEach((id, n) {
+    final m = _mejoraLlaveroPorId[id];
+    if (m == null) return;
+    for (var i = 0; i < min(n, m.limite); i++) {
+      total += m.precio(i);
+    }
+  });
+  return total;
+}
+
+/// Mejora del Llavero por id, o null si no existe.
+MejoraLlavero? mejoraLlaveroPorId(String id) => _mejoraLlaveroPorId[id];
+
+/// Cada cuánto compra el Mayordomo según su nivel (1, 2, 3).
+const List<double> segundosMayordomo = [10, 3, 1];
 
 final Map<String, Objeto> _objetoPorId = {for (final o in objetos) o.id: o};
 
@@ -437,7 +522,11 @@ class Logro {
 /// Veces que se tocó una cosa del baño ([Partida.toques]).
 int _toques(Partida p, String id) => p.toques[id] ?? 0;
 
-/// Los 49 logros: 20 de la fase 1, 4 de la cadena, el de la racha, 15 de la fase 2, 8 escondidos del baño y 1 de temporada.
+/// Niveles de Plomería que tienes (sin la Cadena de reserva, que se gasta).
+int nivelesPlomeria(Partida p) => p.objetosRollos.entries.where((e) => e.key != 'cadena_reserva').fold(0, (a, e) => a + e.value);
+
+/// Los 56 logros: 20 de la fase 1, 4 de la cadena, el de la racha, 15 de la fase 2, 8 escondidos del baño, 1 de temporada y
+/// 7 de la mudanza (1 escondido).
 final List<Logro> logros = [
   Logro('primer_pujo', 'Primer pujo', 'First push', '1 pujo', '1 push', (p, _) => p.pujos >= 1),
   Logro('calentando', 'Calentando', 'Warming up', '100 pujos', '100 pushes', (p, _) => p.pujos >= 100),
@@ -513,6 +602,17 @@ final List<Logro> logros = [
       (p, _) => _toques(p, 'cuadro') >= 8, oculto: true),
   Logro('metiche', 'Metiche', 'Nosy', 'Tocar 6 cosas distintas del baño', 'Touch 6 different things in the bathroom',
       (p, _) => p.toques.length >= 6, oculto: true),
+  // Mudanza 🏠, Plomería y Llavero.
+  Logro('primera_mudanza', 'Me mudé', 'Moving day', 'Mudarte por primera vez', 'Move house for the first time', (p, _) => p.mudanzas >= 1),
+  Logro('en_la_quinta', 'Vida de quinta', 'Villa life', 'Llegar a la Quinta', 'Reach the Villa', (p, _) => p.mudanzas >= 2),
+  Logro('en_la_mansion', 'Mármol en el bidet', 'Marble bidet', 'Llegar a la Mansión', 'Reach the Mansion', (p, _) => p.mudanzas >= 3),
+  Logro('en_el_palacio', 'Trono de verdad', 'A real throne', 'Llegar al Palacio', 'Reach the Palace', (p, _) => p.mudanzas >= 4),
+  Logro('con_mayordomo', 'El señor está en el baño', 'The master is in the bathroom', 'Contratar al Mayordomo', 'Hire the Butler',
+      (p, _) => (p.llavero['mayordomo'] ?? 0) >= 1),
+  Logro('plomero_mayor', 'Plomero mayor', 'Master plumber', '50 niveles de Plomería en una casa', '50 Plumbing levels in one house',
+      (p, _) => nivelesPlomeria(p) >= 50),
+  Logro('mudanza_limpia', 'Ni un rollo', 'Not a single roll', 'Mudarte sin gastar un solo Rollo en esa casa', 'Move without spending a single Roll in that house',
+      (p, _) => p.mudanzasLimpias >= 1, oculto: true),
   // Exclusivo de temporada: solo se gana jugando mientras el servidor tenga encendido el Día Mundial del Retrete.
   Logro('dia_retrete', 'Día Mundial del Retrete', 'World Toilet Day', 'Jugar el Imperio el Día Mundial del Retrete (19 nov)',
       'Play the Imperio on World Toilet Day (Nov 19)', (p, _) => p.temporadas.contains(temporadaDiaRetrete)),
@@ -631,7 +731,7 @@ class Ajustes {
   /// Rollos de Oro totales = piso((MJ ganados en total / divisor) ^ exponente).
   final double cadenaDivisor, cadenaExponente;
 
-  /// Producción extra por cada Rollo de Oro (0,01 = +1%), para siempre: MJ/s y pujo.
+  /// Producción extra por cada Rollo de Oro sin gastar (0,01 = +1%), hasta la mudanza: MJ/s y pujo.
   final double rolloPct;
 
   /// Alquileres. Con todo en indefinido al tope (Turbo, Plomero, Primo, Cuadrilla) cuesta 10 x 2,6 minutos de producción
@@ -645,6 +745,15 @@ class Ajustes {
   /// Pujos de la mano que cuentan por segundo (ventana deslizante de 1 s); los de más no dan nada. Los Primos no
   /// pasan por aquí. También es el ritmo de pujos que se manda al guardar ([Imperio.ritmoEfectivo]).
   final int topePujosSeg;
+
+  /// Mudanza: Rollos ganados en la casa que pide el Rancho ([mudanzaRollos]) y cuánto sube por casa ([mudanzaRollosSubida]);
+  /// jaladas en la casa ([mudanzaJaladas]) y cagadas reales desde que llegaste ([mudanzaCagadas], máx 3 por día; el servidor
+  /// manda la cuenta buena). Llaves = piso((rollos de la casa / requisito) ^ [mudanzaLlavesExponente] x [mudanzaLlavesFactor]).
+  /// Cada Llave sin gastar: +[llavePct] de producción. Los mismos defaults están en la migración (imperio_mudar).
+  /// [mudanzaDivisorX]: en cada casa los MJ rinden menos Rollos (MJ / divisor ^ mudanzas), para que los Rollos no se
+  /// disparen con la producción de la casa nueva ni lleguen al tope. El servidor usa la misma cuenta (imperio_rollos_casa).
+  final double mudanzaRollos, mudanzaRollosSubida, mudanzaLlavesExponente, mudanzaLlavesFactor, llavePct, mudanzaDivisorX;
+  final int mudanzaJaladas, mudanzaCagadas;
 
   const Ajustes({
     this.doradoMinMin = 5,
@@ -677,6 +786,14 @@ class Ajustes {
     this.calorVidaMediaH = 6,
     this.maxPrimos = 4,
     this.topePujosSeg = 20,
+    this.mudanzaRollos = 1e8,
+    this.mudanzaRollosSubida = 30,
+    this.mudanzaJaladas = 9,
+    this.mudanzaCagadas = 30,
+    this.mudanzaLlavesExponente = 1 / 3,
+    this.mudanzaLlavesFactor = 3,
+    this.llavePct = 0.25,
+    this.mudanzaDivisorX = 15,
     this.escalaEdificios = 1,
     this.escalaMejoras = 1,
     this.temporadas = const [],

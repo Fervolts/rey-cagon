@@ -11,6 +11,7 @@ import '../emoji.dart';
 import '../idioma.dart';
 import '../tema.dart';
 import 'bano.dart';
+import 'casas.dart';
 import 'catalogo.dart';
 import 'control.dart';
 import 'poceta.dart';
@@ -26,11 +27,11 @@ const _edificioDe = {
   AmbienteBano.agujero: 'agujero',
 };
 
-/// Emoji y nombre de un ambiente.
-(String, String) nombreAmbiente(AmbienteBano a) {
+/// Emoji y nombre de un ambiente, con el nombre del edificio en la casa de [mudanzas].
+(String, String) nombreAmbiente(AmbienteBano a, [int mudanzas = 0]) {
   final e = _edificioDe[a] == null ? null : edificioPorId(_edificioDe[a]!);
   if (e == null) return ('🚽', tr('Casa', 'Home'));
-  return (e.emoji, tr(e.nombreEs, e.nombreEn));
+  return (e.emoji, nombreEdificio(e.id, mudanzas));
 }
 
 /// Abre la hoja. Al cerrarla guarda la partida.
@@ -150,7 +151,7 @@ class _PersonalizarState extends State<Personalizar> {
                     _ficha(context, '✨', tr('El más alto', 'Highest'), elegido == null, () => _cambiar((v) => v.remove('ambiente')),
                         key: const Key('ambiente_auto')),
                     for (final a in ambientes)
-                      _ficha(context, nombreAmbiente(a).$1, nombreAmbiente(a).$2, elegido == a.name, () => _cambiar((v) => v['ambiente'] = a.name),
+                      _ficha(context, nombreAmbiente(a).$1, nombreAmbiente(a, widget.control.imperio.partida.mudanzas).$2, elegido == a.name, () => _cambiar((v) => v['ambiente'] = a.name),
                           key: Key('ambiente_${a.name}')),
                   ],
                 ),

@@ -70,6 +70,13 @@ class FlagsImperio {
   /// `pujos_max_seg`: pujos de la mano que cuentan por segundo ([Ajustes.topePujosSeg]).
   final int topePujosSeg;
 
+  /// Mudanza ([Ajustes.mudanzaRollos]): `mudanza_rollos` (Rollos de la casa que pide el Rancho), `mudanza_rollos_subida`
+  /// (x por cada casa), `mudanza_jaladas`, `mudanza_cagadas`, `mudanza_llaves_exp`, `mudanza_llaves_x`, `llave_pct` y
+  /// `mudanza_divisor_x` (los MJ de cada casa rinden divisor ^ mudanzas veces menos Rollos).
+  /// El servidor lee las mismas claves en imperio_mudar e imperio_rollos_casa; los requisitos de verdad los valida él.
+  final double mudanzaRollos, mudanzaRollosSubida, mudanzaLlavesExponente, mudanzaLlavesFactor, llavePct, mudanzaDivisorX;
+  final int mudanzaJaladas, mudanzaCagadas;
+
   /// `version_minima`: build mínimo para jugar el Imperio. Con uno menor la pestaña pide actualizar; el servidor
   /// ignora los guardados de versiones más viejas (imperio_guardar, p_version). 0 = sin mínimo.
   final int versionMinima;
@@ -124,6 +131,14 @@ class FlagsImperio {
     this.calorVidaMediaH = 6,
     this.maxPrimos = 4,
     this.topePujosSeg = 20,
+    this.mudanzaRollos = 1e8,
+    this.mudanzaRollosSubida = 30,
+    this.mudanzaJaladas = 9,
+    this.mudanzaCagadas = 30,
+    this.mudanzaLlavesExponente = 1 / 3,
+    this.mudanzaLlavesFactor = 3,
+    this.llavePct = 0.25,
+    this.mudanzaDivisorX = 15,
     this.versionMinima = 0,
     this.escalaEdificios = 10,
     this.escalaMejoras = 100,
@@ -168,6 +183,14 @@ class FlagsImperio {
         calorVidaMediaH: calorVidaMediaH,
         maxPrimos: maxPrimos,
         topePujosSeg: topePujosSeg,
+        mudanzaRollos: mudanzaRollos,
+        mudanzaRollosSubida: mudanzaRollosSubida,
+        mudanzaJaladas: mudanzaJaladas,
+        mudanzaCagadas: mudanzaCagadas,
+        mudanzaLlavesExponente: mudanzaLlavesExponente,
+        mudanzaLlavesFactor: mudanzaLlavesFactor,
+        llavePct: llavePct,
+        mudanzaDivisorX: mudanzaDivisorX,
         escalaEdificios: escalaEdificios,
         escalaMejoras: escalaMejoras,
         temporadas: temporadas,
@@ -233,6 +256,14 @@ class FlagsImperio {
       calorVidaMediaH: numero('calor_vida_media_h', d.calorVidaMediaH, 0.25, 168),
       maxPrimos: numero('max_primos', d.maxPrimos.toDouble(), 1, 8).round(),
       topePujosSeg: numero('pujos_max_seg', d.topePujosSeg.toDouble(), 5, 50).round(),
+      mudanzaRollos: numero('mudanza_rollos', d.mudanzaRollos, 1, 1e20),
+      mudanzaRollosSubida: numero('mudanza_rollos_subida', d.mudanzaRollosSubida, 1, 1e6),
+      mudanzaJaladas: numero('mudanza_jaladas', d.mudanzaJaladas.toDouble(), 0, 1000).round(),
+      mudanzaCagadas: numero('mudanza_cagadas', d.mudanzaCagadas.toDouble(), 0, 10000).round(),
+      mudanzaLlavesExponente: numero('mudanza_llaves_exp', d.mudanzaLlavesExponente, 0.05, 1),
+      mudanzaLlavesFactor: numero('mudanza_llaves_x', d.mudanzaLlavesFactor, 0.1, 1000),
+      llavePct: numero('llave_pct', d.llavePct, 0, 10),
+      mudanzaDivisorX: numero('mudanza_divisor_x', d.mudanzaDivisorX, 1, 1e12),
       versionMinima: numero('version_minima', d.versionMinima.toDouble(), 0, 1e9).round(),
       escalaEdificios: numero('escala_edificios', d.escalaEdificios, 1, 1000),
       escalaMejoras: numero('escala_mejoras', d.escalaMejoras, 1, 10000),

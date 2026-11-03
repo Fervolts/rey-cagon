@@ -15,7 +15,7 @@ import 'moneda_app.dart';
 import 'motor.dart';
 import 'nube.dart';
 
-// Jalar la cadena: el prestigio del Imperio. Se pierde la corrida y se ganan Rollos de Oro (+% para siempre).
+// Jalar la cadena: el prestigio del Imperio. Se pierde la corrida y se ganan Rollos de Oro (+% hasta la mudanza).
 
 /// Qué muestra el botón JALAR.
 enum EstadoJalar {
@@ -174,8 +174,8 @@ class _Confirmar extends StatelessWidget {
                               maxLines: 1, softWrap: false, style: numeros(context, tamano: 18, weight: FontWeight.w900)),
                         ),
                         Text(
-                          tr('Producción ${porcentajeRollos(antes, pct)} → ${porcentajeRollos(antes + rollos, pct)} para siempre',
-                              'Production ${porcentajeRollos(antes, pct)} → ${porcentajeRollos(antes + rollos, pct)} forever'),
+                          tr('Producción ${porcentajeRollos(antes, pct)} → ${porcentajeRollos(antes + rollos, pct)} hasta la mudanza',
+                              'Production ${porcentajeRollos(antes, pct)} → ${porcentajeRollos(antes + rollos, pct)} until you move'),
                           style: suave,
                         ),
                       ],
@@ -276,8 +276,8 @@ class _ConfirmarCadena extends StatelessWidget {
                 tr('Tus logros, tus Rollos de Oro y lo que pagaste con cagadas reales.',
                     'Your achievements, your Golden Rolls and what you paid for with real poops.')),
             linea('🧻', tr('QUÉ GANAS', 'WHAT YOU GET'),
-                tr('Rollos de Oro: cada uno suma $uno de producción para siempre, aunque vuelvas a jalar.',
-                    'Golden Rolls: each one adds $uno production forever, even after you flush again.')),
+                tr('Rollos de Oro: cada uno suma $uno de producción hasta la mudanza, aunque vuelvas a jalar.',
+                    'Golden Rolls: each one adds $uno production until you move, even after you flush again.')),
             linea('💩', tr('QUÉ HACE FALTA', 'WHAT YOU NEED'), falta),
           ],
         ),
@@ -326,7 +326,7 @@ class _Resultado extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            tr('Ahora todo produce ${porcentajeRollos(total, pct)} para siempre', 'Everything now makes ${porcentajeRollos(total, pct)} forever'),
+            tr('Ahora todo produce ${porcentajeRollos(total, pct)} hasta la mudanza', 'Everything now makes ${porcentajeRollos(total, pct)} until you move'),
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 13, color: p.textoSuave),
           ),

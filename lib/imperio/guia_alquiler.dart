@@ -8,6 +8,7 @@ import '../animaciones.dart';
 import '../emoji.dart';
 import '../idioma.dart';
 import '../tema.dart';
+import 'casas.dart';
 import 'control.dart';
 import 'formato.dart';
 import 'moneda_app.dart';
@@ -76,7 +77,7 @@ Edificio? edificioMasBarato(Imperio im, int ahora) {
       if (e == null) {
         ejemplo = tr('Ahora no hay edificio que comprar.', 'There is no building to buy right now.');
       } else {
-        final nombre = '${e.emoji} ${tr(e.nombreEs, e.nombreEn)}';
+        final nombre = '${e.emoji} ${nombreEdificio(e.id, im.partida.mudanzas)}';
         final precio = im.precioEdificio(e.id, ahora);
         ejemplo = precio <= im.saldo
             ? tr('Ahora compraría: $nombre.', 'Right now it would buy: $nombre.')

@@ -13,6 +13,7 @@ import '../main.dart' show db, textoError;
 import '../presumir.dart' show preguntarPresumir;
 import '../tema.dart';
 import 'bano.dart';
+import 'casas.dart';
 import 'control.dart';
 import 'personalizar.dart' show nombreAmbiente;
 import 'poceta.dart';
@@ -48,8 +49,11 @@ Map<String, dynamic> tarjetaBano(Object? estado, Iterable<Object?> esteticas) {
   final ocultos = _limpios(v['ocultos'] is List ? v['ocultos'] : null, _oculto, 100);
   final dedos = v['dedos'];
   final ambiente = v['ambiente'];
+  final m = e['mudanzas'];
   return {
     'tipo': 'bano',
+    // En qué casa va (0 = Rancho). El servidor lo saca de la fila, igual que lo demás.
+    'mudanzas': m is num && m.isFinite && m > 0 ? m.floor() : 0,
     'edificios': {
       for (final id in edificiosTarjetaBano)
         if (ed[id] is num && (ed[id] as num) >= 1) id: (ed[id] as num) >= 1000000 ? 1000000 : (ed[id] as num).floor(),
@@ -65,7 +69,7 @@ Map<String, dynamic> tarjetaBano(Object? estado, Iterable<Object?> esteticas) {
 }
 
 /// Lo que dibuja una tarjeta del chat: el baño y cuántos dedos se ven. Aguanta datos rotos o vacíos (baño básico).
-({EstadoBano bano, int dedos}) banoDeTarjeta(Map<String, dynamic> t) {
+({EstadoBano bano, int dedos, int mudanzas}) banoDeTarjeta(Map<String, dynamic> t) {
   final limpia = tarjetaBano(t, t['esteticas'] is List ? t['esteticas'] as List : const []);
   final ed = limpia['edificios'] as Map<String, int>;
   final mejoras = (limpia['mejoras'] as List<String>).toSet();
@@ -76,7 +80,7 @@ Map<String, dynamic> tarjetaBano(Object? estado, Iterable<Object?> esteticas) {
   // Igual que en la pestaña: lo elegido en Personalizar, nunca más de los que tienes.
   final tope = min(cantidad('dedo'), Poceta.topeDedos);
   final dedos = min(tope, (vista['dedos'] as int?) ?? tope);
-  return (bano: bano, dedos: dedos);
+  return (bano: bano, dedos: dedos, mudanzas: limpia['mudanzas'] as int);
 }
 
 /// La escena quieta: el baño a su tamaño de verdad, en 4:3 (el baño es apaisado), encogido a lo que le den.
@@ -119,7 +123,7 @@ class TarjetaBano extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = paleta(context);
-    final (:bano, :dedos) = banoDeTarjeta(t);
+    final (:bano, :dedos, :mudanzas) = banoDeTarjeta(t);
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: anchoMaximo),
@@ -128,7 +132,7 @@ class TarjetaBano extends StatelessWidget {
           label: tr('Foto del baño. Toca para verla en grande', 'Bathroom photo. Tap to see it big'),
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () => _verGrande(context, bano, dedos),
+            onTap: () => _verGrande(context, bano, dedos, mudanzas),
             child: Container(
               padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
               decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: p.bordeFuerte), borderRadius: BorderRadius.circular(radio)),
@@ -138,7 +142,7 @@ class TarjetaBano extends StatelessWidget {
                   decoration: BoxDecoration(border: Border.all(color: p.borde)),
                   child: _Escena(bano, dedos),
                 ),
-                _Pie(bano.ambiente, color: p.texto, suave: p.textoSuave),
+                _Pie(bano.ambiente, mudanzas, color: p.texto, suave: p.textoSuave),
               ]),
             ),
           ),
@@ -150,15 +154,18 @@ class TarjetaBano extends StatelessWidget {
 
 /// "🚽 Mi baño" a la izquierda y el ambiente a la derecha.
 class _Pie extends StatelessWidget {
-  const _Pie(this.ambiente, {required this.color, required this.suave, this.tamano = 13});
+  const _Pie(this.ambiente, this.mudanzas, {required this.color, required this.suave, this.tamano = 13});
 
   final AmbienteBano ambiente;
+  final int mudanzas;
   final Color color, suave;
   final double tamano;
 
   @override
   Widget build(BuildContext context) {
-    final (emoji, nombre) = nombreAmbiente(ambiente);
+    final (emoji, nombre) = nombreAmbiente(ambiente, mudanzas);
+    // Desde la primera mudanza el pie dice en qué casa está el baño: "🏡 Quinta".
+    final casa = mudanzas > 0 ? casaConEmoji(mudanzas) : '🚽 ${tr('Mi baño', 'My bathroom')}';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       // Cada lado se queda con lo suyo (el ambiente, que es más largo, con más sitio) y va pegado a la derecha aunque
@@ -166,7 +173,7 @@ class _Pie extends StatelessWidget {
       child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
         Flexible(
           flex: 2,
-          child: TextoConEmojis('🚽 ${tr('Mi baño', 'My bathroom')}',
+          child: TextoConEmojis(casa,
               maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: tamano, fontWeight: FontWeight.w900, color: color)),
         ),
         const SizedBox(width: 8),
@@ -193,7 +200,7 @@ class _Pie extends StatelessWidget {
 /// Fondo de la vista en grande.
 const _fondoGrande = Color(0xFF0D0D0D);
 
-Future<void> _verGrande(BuildContext context, EstadoBano bano, int dedos) {
+Future<void> _verGrande(BuildContext context, EstadoBano bano, int dedos, int mudanzas) {
   final quieto = movimiento(context) == Movimiento.nada;
   return showGeneralDialog<void>(
     context: context,
@@ -202,15 +209,15 @@ Future<void> _verGrande(BuildContext context, EstadoBano bano, int dedos) {
     barrierColor: _fondoGrande,
     transitionDuration: quieto ? Duration.zero : const Duration(milliseconds: 160),
     transitionBuilder: (context, a, _, hijo) => quieto ? hijo : FadeTransition(opacity: a, child: hijo),
-    pageBuilder: (context, _, _) => _Grande(bano, dedos),
+    pageBuilder: (context, _, _) => _Grande(bano, dedos, mudanzas),
   );
 }
 
 class _Grande extends StatelessWidget {
-  const _Grande(this.bano, this.dedos);
+  const _Grande(this.bano, this.dedos, this.mudanzas);
 
   final EstadoBano bano;
-  final int dedos;
+  final int dedos, mudanzas;
 
   @override
   Widget build(BuildContext context) {
@@ -232,7 +239,7 @@ class _Grande extends StatelessWidget {
                       decoration: BoxDecoration(border: Border.all(color: Colors.white24)),
                       child: _Escena(bano, dedos),
                     ),
-                    _Pie(bano.ambiente, color: Colors.white, suave: Colors.white60, tamano: 15),
+                    _Pie(bano.ambiente, mudanzas, color: Colors.white, suave: Colors.white60, tamano: 15),
                   ]),
                 ),
               );

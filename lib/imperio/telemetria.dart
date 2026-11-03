@@ -81,7 +81,12 @@ Future<int> _enviarPorRpc(List<Map<String, Object?>> lote) async {
 /// - `imperio_que_hago` {sugerencia, accion}: hoja "¿Qué hago ahora?" (botón ? de la cabecera). sugerencia = destapar, robot,
 ///   dorado, jalar, edificio, mejora, esperar o pujar (que_hago.dart); accion = `abrir` (abrió la hoja) o `ir` (tocó el botón IR)
 /// - `consumible_usar` {id, quedan, edificio?}: usó un consumible (va con `objeto_uso`, salvo la Pintura marrón, que trae `edificio`)
-/// - `rollos_gastar` {id, costo, quedan, tiene}: compró un objeto de Rollos de Oro (id de `objetosRollos`)
+/// - `rollos_gastar` {id, costo, quedan, tiene}: compró un nivel de la Plomería con Rollos de Oro (id de `objetosRollos`; tiene = nivel)
+/// - `imperio_plomeria` {id, nivel}: compró un nivel de la Plomería 🔧 (va con `rollos_gastar`; nivel = el que quedó)
+/// - `imperio_llavero` {id, nivel}: compró un nivel del Llavero 🔑 con Llaves (id de `mejorasLlavero`)
+/// - `imperio_mudanza` {mudanzas, llaves, dia}: se mudó de casa (mudanzas = las que lleva, llaves = las que ganó, dia = día de juego)
+/// - `mudanza_rechazada` {motivo}: el servidor no dejó mudarse (motivo de `imperio_mudar`)
+/// - `mudanza_sincroniza` {mudanzas_servidor, mudanzas_partida}: al cargar, el servidor tenía una mudanza que la partida no; se aplicó
 /// - `estilo_abre` {}: abrió la tienda de estilo (botón 🎨 de la cabecera)
 /// - `estilo_compra` {id, mj, rollos}: compró un estilo (id de `estilos`; mj = precio con `estilo_precio_mult`, rollos gastados)
 /// - `estilo_usa` {id}: se puso un tema, un efecto de CAGUÉ o un movimiento del avatar
