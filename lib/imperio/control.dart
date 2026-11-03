@@ -63,9 +63,11 @@ int? inicioOffline(Iterable<int?> marcas, int ahora) {
 }
 
 /// Si el servidor recortó los MJ totales (antitrampa), la partida los acepta y el saldo no puede pasarlos.
-/// [mjCasaServidor]: los MJ de la casa que dejó el servidor (después de mudarse se recortan aparte).
+/// [mjCasaServidor]: los MJ de la casa que dejó el servidor (después de mudarse o abdicar se recortan aparte).
 void aceptarRecorte(Partida p, double mjServidor, {double? mjCasaServidor}) {
-  if (mjCasaServidor != null && p.mudanzas > 0 && mjCasaServidor < p.mjEnCasa) p.mjEnCasa = max(0.0, mjCasaServidor);
+  if (mjCasaServidor != null && (p.mudanzas > 0 || p.abdicaciones > 0) && mjCasaServidor < p.mjEnCasa) {
+    p.mjEnCasa = max(0.0, mjCasaServidor);
+  }
   if (mjServidor >= p.mjTotal) return;
   p.mjTotal = mjServidor;
   if (p.saldo > mjServidor) p.saldo = mjServidor;
@@ -263,6 +265,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       _ocupadoNube = false;
     }
     if (_cerrado) return;
+    _marcarCasaEn();
     _sumarLogros(imperio.revisarLogros());
     _mirarCambios(anotar: false);
     _cargado = true;
@@ -328,12 +331,30 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
             cagadas: viejo.cagadas, fichas: viejo.fichas, ciruelas: viejo.ciruelas, esteticas: viejo.esteticas, ajustes: viejo.ajustes,
             cagadasCandado: viejo.cagadasCandado, pases: viejo.pases);
         _anotar('partida_adoptada', {'jaladas': c.jaladas});
+        _marcarCasaEn();
         _mirarCambios(anotar: false);
         unawaited(_guardarLocal());
+      } else if (c.abdicaciones != null && c.abdicaciones! > p.abdicaciones) {
+        // La abdicación quedó marcada en el servidor pero el guardado se perdió: se abdica aquí con los datos del servidor
+        // (va antes que la mudanza: abdicar baja las mudanzas).
+        _anotar('abdicar_sincroniza', {'abdicaciones_servidor': c.abdicaciones, 'abdicaciones_partida': p.abdicaciones});
+        imperio.abdicar(
+            coronasServidor: max(0, (c.coronasGanadas ?? p.coronasGanadas) - p.coronasGanadas),
+            mudanzasServidor: c.mudanzas,
+            llavesServidor: c.llavesGanadas,
+            mjBaseServidor: c.mjBase,
+            ahora: ahora);
+        p
+          ..abdicaciones = c.abdicaciones!
+          ..jaladas = max(p.jaladas, c.jaladas)
+          ..jaladasBase = p.jaladas;
+        if (c.coronasGanadas != null) p.coronasGanadas = c.coronasGanadas!;
+        _mirarCambios(anotar: false);
+        unawaited(guardarTodo());
       } else if (c.mudanzas != null && c.mudanzas! > p.mudanzas) {
         // La mudanza quedó marcada en el servidor pero el guardado se perdió: se muda aquí con los datos del servidor.
         _anotar('mudanza_sincroniza', {'mudanzas_servidor': c.mudanzas, 'mudanzas_partida': p.mudanzas});
-        imperio.mudarse(llavesServidor: max(0, (c.llavesGanadas ?? p.llavesGanadas) - p.llavesGanadas), mjBaseServidor: c.mjBase);
+        imperio.mudarse(llavesServidor: max(0, (c.llavesGanadas ?? p.llavesGanadas) - p.llavesGanadas), mjBaseServidor: c.mjBase, ahora: ahora);
         p
           ..mudanzas = c.mudanzas!
           ..jaladas = max(p.jaladas, c.jaladas)
@@ -1164,7 +1185,11 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       }
       final ganados = imperio.jalar();
       imperio.partida.jaladas = n;
-      cadena = EstadoCadena(cagadas: 0, necesarias: cadena?.necesarias ?? imperio.ajustes.cadenaCagadas, jaladas: n);
+      final c0 = cadena;
+      // Jalar no cambia la mudanza ni la abdicación: se conservan sus datos para que los botones no se apaguen.
+      cadena = EstadoCadena(cagadas: 0, necesarias: c0?.necesarias ?? imperio.ajustes.cadenaCagadas, jaladas: n, mudanzas: c0?.mudanzas,
+          cagadasCasa: c0?.cagadasCasa, llavesGanadas: c0?.llavesGanadas, mjBase: c0?.mjBase, abdicaciones: c0?.abdicaciones,
+          coronasGanadas: c0?.coronasGanadas, cagadasReinado: c0?.cagadasReinado);
       _mirarCambios(anotar: false);
       _anotar('cadena_jala', {'rollos': ganados, 'jaladas': n});
       notifyListeners();
@@ -1208,13 +1233,14 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       }
       final p = imperio.partida;
       final llavesAntes = p.llavesGanadas;
-      imperio.mudarse(llavesServidor: r.llaves, mjBaseServidor: r.mjBase);
+      imperio.mudarse(llavesServidor: r.llaves, mjBaseServidor: r.mjBase, ahora: ahora);
       p.mudanzas = max(p.mudanzas, r.mudanzas);
       p.llavesGanadas = max(p.llavesGanadas, llavesAntes + r.llaves);
       final c = cadena;
       if (c != null) {
         cadena = EstadoCadena(cagadas: c.cagadas, necesarias: c.necesarias, jaladas: c.jaladas, mudanzas: p.mudanzas, cagadasCasa: 0,
-            llavesGanadas: p.llavesGanadas, mjBase: p.mjBase);
+            llavesGanadas: p.llavesGanadas, mjBase: p.mjBase, abdicaciones: c.abdicaciones, coronasGanadas: c.coronasGanadas,
+            cagadasReinado: c.cagadasReinado);
       }
       final dia = p.primerDia > 0 ? ((ahora - p.primerDia) / Duration.millisecondsPerDay).floor() + 1 : 1;
       _anotar('imperio_mudanza', {'mudanzas': p.mudanzas, 'llaves': r.llaves, 'dia': dia});
@@ -1226,6 +1252,75 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     } finally {
       mudando = false;
     }
+  }
+
+  /// Partidas de antes de abdicar no sabían cuándo llegaste a la casa: se cuenta desde ahora.
+  void _marcarCasaEn() {
+    final p = imperio.partida;
+    if (p.casaEn <= 0 && (p.mudanzas > 0 || p.abdicaciones > 0)) p.casaEn = ahora;
+  }
+
+  // ---------- Abdicar 👑 ----------
+
+  /// Se está pidiendo la abdicación al servidor (el botón espera).
+  bool abdicando = false;
+
+  /// Cagadas reales que cuentan para abdicar (desde la última abdicación, máx 3 por día). 0 sin el dato del servidor.
+  int get cagadasReinado => cadena?.cagadasReinado ?? 0;
+
+  /// El servidor ya conoce la abdicación (migración aplicada).
+  bool get abdicarDisponible => cadena?.abdicaciones != null;
+
+  /// Abdica: sube lo jugado, el servidor revisa los requisitos, cuenta las Coronas y aplica lo suyo de La Corte; aquí se
+  /// reinicia y se guarda. Devuelve el resultado del servidor (con [ResultadoAbdicar.motivo] si dijo que no). Lanza el
+  /// error de red sin tocar la partida.
+  Future<ResultadoAbdicar> abdicar() async {
+    if (abdicando || mudando || jalando) throw StateError('Ya se está abdicando');
+    abdicando = true;
+    try {
+      await _guardarNube();
+      final ResultadoAbdicar r;
+      try {
+        r = await nube.abdicar();
+      } catch (e) {
+        _error('abdicar', e);
+        rethrow;
+      }
+      if (!r.ok) {
+        _anotar('abdicar_rechazada', {'motivo': r.motivo});
+        return r;
+      }
+      final p = imperio.partida;
+      final dia = p.primerDia > 0 ? ((ahora - p.primerDia) / Duration.millisecondsPerDay).floor() + 1 : 1;
+      final antes = p.abdicaciones;
+      imperio.abdicar(
+          coronasServidor: r.coronas, mudanzasServidor: r.mudanzas, llavesServidor: r.llavesGanadas, mjBaseServidor: r.mjBase, ahora: ahora);
+      p.abdicaciones = max(p.abdicaciones, max(antes + 1, r.abdicaciones));
+      final c = cadena;
+      if (c != null) {
+        cadena = EstadoCadena(cagadas: c.cagadas, necesarias: c.necesarias, jaladas: c.jaladas, mudanzas: p.mudanzas, cagadasCasa: 0,
+            llavesGanadas: p.llavesGanadas, mjBase: p.mjBase, abdicaciones: p.abdicaciones, coronasGanadas: p.coronasGanadas,
+            cagadasReinado: 0);
+      }
+      _anotar('imperio_abdicar', {'abdicaciones': p.abdicaciones, 'coronas': r.coronas, 'dia': dia});
+      _mirarCambios(anotar: false);
+      notifyListeners();
+      await _guardarLocal();
+      await _guardarNube();
+      return r;
+    } finally {
+      abdicando = false;
+    }
+  }
+
+  /// Compra el nivel siguiente de [id] en La Corte con Coronas y guarda.
+  bool comprarCorte(String id) {
+    if (!imperio.comprarCorte(id)) return false;
+    _anotar('imperio_corte', {'id': id, 'nivel': imperio.nivelCorte(id)});
+    _mirarCambios(anotar: false);
+    notifyListeners();
+    unawaited(guardarTodo());
+    return true;
   }
 
   // ---------- Cartera ----------

@@ -134,8 +134,14 @@ class EstadoCadena {
   final int? cagadasCasa;
   final int? llavesGanadas;
   final double? mjBase;
+
+  /// Abdicar (null = servidor sin la migración de abdicar): abdicaciones hechas, Coronas ganadas en total y cagadas
+  /// reales que cuentan desde la última abdicación (máx 3 por día).
+  final int? abdicaciones;
+  final int? coronasGanadas;
+  final int? cagadasReinado;
   const EstadoCadena({required this.cagadas, required this.necesarias, required this.jaladas, this.mudanzas, this.cagadasCasa,
-      this.llavesGanadas, this.mjBase});
+      this.llavesGanadas, this.mjBase, this.abdicaciones, this.coronasGanadas, this.cagadasReinado});
 
   factory EstadoCadena.desdeJson(Map<String, dynamic> j) => EstadoCadena(
         cagadas: _ent(j['cagadas']),
@@ -145,6 +151,9 @@ class EstadoCadena {
         cagadasCasa: j['cagadas_casa'] is num ? _ent(j['cagadas_casa']) : null,
         llavesGanadas: j['llaves_ganadas'] is num ? _ent(j['llaves_ganadas']) : null,
         mjBase: j['mj_base'] is num ? _dbl(j['mj_base']) : null,
+        abdicaciones: j['abdicaciones'] is num ? _ent(j['abdicaciones']) : null,
+        coronasGanadas: j['coronas_ganadas'] is num ? _ent(j['coronas_ganadas']) : null,
+        cagadasReinado: j['cagadas_reinado'] is num ? _ent(j['cagadas_reinado']) : null,
       );
 }
 
@@ -162,6 +171,30 @@ class ResultadoMudanza {
         ok: j['ok'] == true,
         llaves: _ent(j['llaves']),
         mudanzas: _ent(j['mudanzas']),
+        mjBase: j['mj_base'] is num ? _dbl(j['mj_base']) : null,
+        motivo: j['motivo']?.toString(),
+      );
+}
+
+/// Respuesta de `imperio_abdicar`: [ok] con las Coronas ganadas, las abdicaciones, la casa donde arrancas, las Llaves que
+/// guardó el Tesorero y los MJ de llegada; si no, [motivo] (mudanzas, llaves, cagadas o sin_imperio).
+class ResultadoAbdicar {
+  final bool ok;
+  final int coronas;
+  final int abdicaciones;
+  final int mudanzas;
+  final int llavesGanadas;
+  final double? mjBase;
+  final String? motivo;
+  const ResultadoAbdicar(
+      {required this.ok, this.coronas = 0, this.abdicaciones = 0, this.mudanzas = 0, this.llavesGanadas = 0, this.mjBase, this.motivo});
+
+  factory ResultadoAbdicar.desdeJson(Map<String, dynamic> j) => ResultadoAbdicar(
+        ok: j['ok'] == true,
+        coronas: _ent(j['coronas']),
+        abdicaciones: _ent(j['abdicaciones']),
+        mudanzas: _ent(j['mudanzas']),
+        llavesGanadas: _ent(j['llaves_ganadas']),
         mjBase: j['mj_base'] is num ? _dbl(j['mj_base']) : null,
         motivo: j['motivo']?.toString(),
       );
@@ -318,6 +351,13 @@ class NubeImperio {
   Future<ResultadoMudanza> mudar() async {
     final r = await db.rpc('imperio_mudar');
     return ResultadoMudanza.desdeJson(Map<String, dynamic>.from(r as Map));
+  }
+
+  /// Pide abdicar al servidor, que revisa mudanzas, Llaves ganadas y cagadas del reinado, y cuenta las Coronas.
+  /// Sin reintento, por lo mismo que [jalar]: si la respuesta se pierde, la abdicación se recupera al recargar.
+  Future<ResultadoAbdicar> abdicar() async {
+    final r = await db.rpc('imperio_abdicar');
+    return ResultadoAbdicar.desdeJson(Map<String, dynamic>.from(r as Map));
   }
 
   String _clave(String userId) => 'imperio_local_$userId';
