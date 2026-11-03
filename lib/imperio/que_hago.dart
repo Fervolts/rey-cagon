@@ -168,8 +168,8 @@ String duracionCorta(int s) {
   return '${(s / 86400).round()} d';
 }
 
-/// Orden en que conviene La Corte: Heraldo y Tesorero primero, después Bufón; el resto al final.
-const ordenCorte = ['heraldo', 'tesorero', 'bufon', 'maestro_obras', 'catador', 'mayordomo_real'];
+/// Orden en que conviene La Corte: Maestro de obras y Heraldo primero, después Tesorero y Bufón; el resto al final.
+const ordenCorte = ['maestro_obras', 'heraldo', 'tesorero', 'bufon', 'catador', 'mayordomo_real'];
 
 /// El primer nodo de La Corte (en [ordenCorte]) que alcanza con las Coronas sin gastar, o null.
 MejoraCorte? corteConviene(Imperio im) {
@@ -187,7 +187,7 @@ String pctRollos(int rollos, double pct) {
 
 /// La próxima jugada, en este orden: 1) un Atasco abierto (con dos o más y el Robot abierto, alquilarlo); 2) el mojón
 /// dorado en pantalla; 3) abdicar si se puede; 4) mudarse si se puede; 5) un nodo de La Corte si alcanzan las Coronas
-/// (Heraldo y Tesorero primero); 6) jalar si conviene (si no, siempre habría algo barato que comprar y nunca saldría);
+/// (Maestro de obras y Heraldo primero); 6) jalar si conviene (si no, siempre habría algo barato que comprar y nunca saldría);
 /// 7) un nivel de la Plomería que rinde; 8) la compra que alcanza con menor retorno; 9) pujar o esperar lo que falta para
 /// la mejor compra. [cadenaLista]: el botón JALAR está encendido (lo decide cadena.dart, que pide red; por eso llega de
 /// afuera). [mudanzaLista]: el servidor conoce la mudanza y se cumplen los requisitos (las cagadas las cuenta el

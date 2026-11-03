@@ -94,12 +94,11 @@ class BarraRequisito extends StatelessWidget {
 /// Los 3 requisitos: (emoji, valor, meta, texto es, texto en).
 List<(String, double, double, String, String)> _requisitos(ControlImperio c) {
   final im = c.imperio;
-  final a = im.ajustes;
   final pa = im.partida;
   return [
     ('🧻', im.rollosCasa.toDouble(), im.rollosParaMudanza, 'Rollos de Oro en esta casa', 'Golden Rolls in this house'),
-    ('🚽', pa.jaladasCasa.toDouble(), a.mudanzaJaladas.toDouble(), 'Jaladas en esta casa', 'Flushes in this house'),
-    ('💩', c.cagadasCasa.toDouble(), a.mudanzaCagadas.toDouble(), 'Cagadas reales (3 por día como máximo)', 'Real poops (3 per day at most)'),
+    ('🚽', pa.jaladasCasa.toDouble(), im.jaladasParaMudanza.toDouble(), 'Jaladas en esta casa', 'Flushes in this house'),
+    ('💩', c.cagadasCasa.toDouble(), im.cagadasParaMudanza.toDouble(), 'Cagadas reales (3 por día como máximo)', 'Real poops (3 per day at most)'),
   ];
 }
 

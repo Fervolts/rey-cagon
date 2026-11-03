@@ -8,7 +8,7 @@
 --  3. imperio_abdicar(): revisa mudanzas, Llaves ganadas y cagadas reales del reinado (tope 3 por día), cuenta las
 --     Coronas y aplica lo que hace La Corte en el servidor (Heraldo, Tesorero y Mayordomo real). Requisitos y fórmula
 --     en imperio_flags con los mismos defaults que la app (lib/imperio/flags.dart).
---  4. imperio_mudar: el Maestro de obras pide menos Rollos (las Llaves se cuentan sin descuento).
+--  4. imperio_mudar: el Maestro de obras pide menos jaladas y menos cagadas reales (los Rollos no cambian).
 --  5. imperio_guardar: ignora el guardado con otra cuenta de abdicaciones o con La Corte más cara que las Coronas
 --     ganadas; el Mayordomo real regala el primer nivel del Mayordomo del Llavero.
 --  6. imperio_cadena, imperio_ranking, imperio_perfil y la tarjeta del baño mandan también las abdicaciones.
@@ -30,15 +30,15 @@ language sql immutable set search_path = '' as $$
 $$;
 
 -- Coronas que cuesta La Corte (suma de los precios de cada nivel comprado), con los mismos topes que la app.
---  bufon y catador: 1, 2, 3... ; heraldo: 4, 8, 16 ; tesorero y maestro_obras: 2, 4, 6... ; mayordomo_real: 6.
+--  bufon, catador y maestro_obras: 1, 2, 3... ; heraldo: 2, 4, 8 ; tesorero: 2, 4, 6... ; mayordomo_real: 6.
 create or replace function public.imperio_corte_costo(p_corte jsonb)
 returns bigint
 language sql immutable set search_path = '' as $$
   select coalesce(sum(case x.k
       when 'bufon' then least(x.n, 20) + least(x.n, 20) * (least(x.n, 20) - 1) / 2
-      when 'heraldo' then case least(x.n, 3) when 0 then 0 when 1 then 4 when 2 then 12 else 28 end
+      when 'heraldo' then case least(x.n, 3) when 0 then 0 when 1 then 2 when 2 then 6 else 14 end
       when 'tesorero' then 2 * least(x.n, 5) + least(x.n, 5) * (least(x.n, 5) - 1)
-      when 'maestro_obras' then 2 * least(x.n, 5) + least(x.n, 5) * (least(x.n, 5) - 1)
+      when 'maestro_obras' then least(x.n, 5) + least(x.n, 5) * (least(x.n, 5) - 1) / 2
       when 'catador' then least(x.n, 4) + least(x.n, 4) * (least(x.n, 4) - 1) / 2
       when 'mayordomo_real' then case when x.n >= 1 then 6 else 0 end
       else 0 end), 0)::bigint
@@ -127,7 +127,7 @@ AS $function$
               else greatest(coalesce(p_fila.mj_casa, 0), 0) end;
 $function$;
 
--- Mudarse: el Maestro de obras baja los Rollos pedidos.
+-- Mudarse: el Maestro de obras baja las jaladas y las cagadas pedidas.
 CREATE OR REPLACE FUNCTION public.imperio_mudar()
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -142,6 +142,8 @@ declare
   cagadas bigint;
   llaves int;
   descuento double precision;
+  maestro int;
+  jaladas_pedidas int;
 begin
   if uid is null then raise exception 'Sin sesión' using errcode = 'P0001'; end if;
   select * into fila from public.imperio where user_id = uid for update;
@@ -152,17 +154,20 @@ begin
   pedidos := public.imperio_flag_numero('mudanza_rollos', 1e8, 1, 1e20)
              * power(public.imperio_flag_numero('mudanza_rollos_subida', 30, 1, 1e6), greatest(fila.mudanzas, 0));
   rollos := public.imperio_rollos_de(fila);
-  -- Maestro de obras (La Corte): pide 10% menos Rollos por nivel, nunca menos de la mitad. Las Llaves se cuentan
-  -- contra lo pedido sin descuento (igual que Imperio.llavesPorGanar).
-  descuento := greatest(0.5, 1 - 0.1 * public.imperio_corte_nivel(fila.estado -> 'corte', 'maestro_obras', 5));
-  if rollos < pedidos * descuento then
+  if rollos < pedidos then
     return jsonb_build_object('ok', false, 'motivo', 'rollos');
   end if;
-  if fila.jaladas - fila.jaladas_base < round(public.imperio_flag_numero('mudanza_jaladas', 9, 0, 1000)) then
+  -- Maestro de obras (La Corte), por nivel: 1 jalada menos (nunca menos de 4, ni más de lo que pide el flag) y 10%
+  -- menos cagadas reales (nunca menos de la mitad). Igual que Imperio.jaladasParaMudanza y cagadasParaMudanza.
+  maestro := public.imperio_corte_nivel(fila.estado -> 'corte', 'maestro_obras', 5);
+  jaladas_pedidas := round(public.imperio_flag_numero('mudanza_jaladas', 9, 0, 1000))::int;
+  jaladas_pedidas := greatest(least(jaladas_pedidas, 4), jaladas_pedidas - maestro);
+  if fila.jaladas - fila.jaladas_base < jaladas_pedidas then
     return jsonb_build_object('ok', false, 'motivo', 'jaladas');
   end if;
+  descuento := greatest(0.5, 1 - 0.1 * maestro);
   cagadas := public.imperio_cagadas_tope(uid, coalesce(fila.mudanza_en, fila.creado));
-  if cagadas < round(public.imperio_flag_numero('mudanza_cagadas', 30, 0, 10000)) then
+  if cagadas < round((round(public.imperio_flag_numero('mudanza_cagadas', 30, 0, 10000)) * descuento)::numeric) then
     return jsonb_build_object('ok', false, 'motivo', 'cagadas');
   end if;
 

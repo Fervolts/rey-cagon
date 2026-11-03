@@ -1885,9 +1885,19 @@ class Imperio {
   /// Rollos de la casa contra los que se cuentan las Llaves: `ajustes.mudanzaRollos` x `mudanzaRollosSubida` ^ mudanzas.
   double get rollosBaseMudanza => ajustes.mudanzaRollos * pow(ajustes.mudanzaRollosSubida, _p.mudanzas);
 
-  /// Rollos ganados en esta casa que pide la mudanza: [rollosBaseMudanza] con el Maestro de obras de La Corte (10% menos
-  /// por nivel, nunca menos de la mitad). El servidor hace lo mismo en `imperio_mudar`.
-  double get rollosParaMudanza => rollosBaseMudanza * max(0.5, 1 - 0.1 * nivelCorte('maestro_obras'));
+  /// Rollos ganados en esta casa que pide la mudanza (lo mismo que [rollosBaseMudanza]).
+  double get rollosParaMudanza => rollosBaseMudanza;
+
+  /// Jaladas en esta casa que pide la mudanza: `ajustes.mudanzaJaladas` menos 1 por nivel del Maestro de obras de La
+  /// Corte, nunca menos de 4 (ni más de lo que piden los ajustes). El servidor hace lo mismo en `imperio_mudar`.
+  int get jaladasParaMudanza {
+    final base = ajustes.mudanzaJaladas;
+    return max(min(base, 4), base - nivelCorte('maestro_obras'));
+  }
+
+  /// Cagadas reales en esta casa que pide la mudanza: `ajustes.mudanzaCagadas` con 10% menos por nivel del Maestro de
+  /// obras, nunca menos de la mitad (redondeado). El servidor hace lo mismo en `imperio_mudar`.
+  int get cagadasParaMudanza => (ajustes.mudanzaCagadas * max(0.5, 1 - 0.1 * nivelCorte('maestro_obras'))).round();
 
   /// Rollos ganados en esta casa (los gastados en la Plomería cuentan).
   int get rollosCasa => _p.rollosGanados;
@@ -1895,14 +1905,14 @@ class Imperio {
   /// Llaves que daría mudarse ahora: piso((rollos de la casa / requisito) ^ exponente x factor). 0 sin llegar al requisito.
   int get llavesPorGanar {
     final r = rollosBaseMudanza;
-    if (rollosCasa < rollosParaMudanza || r <= 0) return 0;
+    if (rollosCasa < r || r <= 0) return 0;
     return (pow(rollosCasa / r, ajustes.mudanzaLlavesExponente) * ajustes.mudanzaLlavesFactor + 1e-9).floor();
   }
 
   /// Se puede mudar: rollos de la casa, jaladas en la casa y [cagadasCasa] reales desde que llegaste (las cuenta el
   /// servidor, máx 3 por día). El servidor revisa lo mismo en `imperio_mudar`.
   bool puedeMudarse(int cagadasCasa) =>
-      rollosCasa >= rollosParaMudanza && _p.jaladasCasa >= ajustes.mudanzaJaladas && cagadasCasa >= ajustes.mudanzaCagadas;
+      rollosCasa >= rollosParaMudanza && _p.jaladasCasa >= jaladasParaMudanza && cagadasCasa >= cagadasParaMudanza;
 
   /// Se muda a la casa siguiente y devuelve las Llaves ganadas ([llavesServidor] si las mandó el servidor).
   /// Se va: la corrida (como al jalar), los Rollos (saldo y ganados), la Plomería (el Camión de mudanza se lleva un

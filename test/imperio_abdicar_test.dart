@@ -18,8 +18,9 @@ int _costoServidor(Map<String, int> corte) {
     final n = v < 0 ? 0 : _m(v, 1000);
     final int c = switch (k) {
       'bufon' => _m(n, 20) + _m(n, 20) * (_m(n, 20) - 1) ~/ 2,
-      'heraldo' => const [0, 4, 12, 28][_m(n, 3)],
-      'tesorero' || 'maestro_obras' => 2 * _m(n, 5) + _m(n, 5) * (_m(n, 5) - 1),
+      'heraldo' => const [0, 2, 6, 14][_m(n, 3)],
+      'tesorero' => 2 * _m(n, 5) + _m(n, 5) * (_m(n, 5) - 1),
+      'maestro_obras' => _m(n, 5) + _m(n, 5) * (_m(n, 5) - 1) ~/ 2,
       'catador' => _m(n, 4) + _m(n, 4) * (_m(n, 4) - 1) ~/ 2,
       'mayordomo_real' => n >= 1 ? 6 : 0,
       _ => 0,
@@ -57,18 +58,18 @@ void main() {
       }
       final llena = {for (final m in mejorasCorte) m.id: m.limite};
       expect(costoCorte(llena), _costoServidor(llena));
-      expect(costoCorte(llena), 210 + 28 + 30 + 30 + 10 + 6);
+      expect(costoCorte(llena), 210 + 14 + 30 + 15 + 10 + 6);
       expect(costoCorte({'no_existe': 4}), 0);
     });
 
     test('comprar: alcanza o no, tope por nodo y las Coronas se descuentan', () {
-      final im = _rey(coronas: 5);
-      expect(im.coronas, 5);
+      final im = _rey(coronas: 3);
+      expect(im.coronas, 3);
       expect(im.puedeComprarCorte('mayordomo_real'), isFalse, reason: 'cuesta 6');
       expect(im.comprarCorte('heraldo'), isTrue);
       expect(im.coronas, 1);
       expect(im.nivelCorte('heraldo'), 1);
-      expect(im.comprarCorte('heraldo'), isFalse, reason: 'el nivel 2 cuesta 8');
+      expect(im.comprarCorte('heraldo'), isFalse, reason: 'el nivel 2 cuesta 4');
       expect(im.comprarCorte('bufon'), isTrue);
       expect(im.coronas, 0);
       expect(im.comprarCorte('no_existe'), isFalse);
@@ -90,16 +91,31 @@ void main() {
       expect(im.multiplicadorCorte, closeTo(3 * (1 + 2 * im.ajustes.coronaPct), 1e-9));
     });
 
-    test('Maestro de obras: 10% menos Rollos por nivel para mudarse', () {
+    test('Maestro de obras: 1 jalada menos (mínimo 4) y 10% menos cagadas (mínimo la mitad) por nivel', () {
       final im = _rey(coronas: 1000);
-      final base = im.rollosParaMudanza;
-      im.comprarCorte('maestro_obras');
-      expect(im.rollosParaMudanza, closeTo(base * .9, base * 1e-9));
-      for (var i = 0; i < 10; i++) {
-        im.comprarCorte('maestro_obras');
+      final rollos = im.rollosParaMudanza;
+      expect(im.jaladasParaMudanza, 9);
+      expect(im.cagadasParaMudanza, 30);
+      final jaladas = <int>[];
+      final cagadas = <int>[];
+      for (var i = 0; i < 5; i++) {
+        expect(im.comprarCorte('maestro_obras'), isTrue);
+        jaladas.add(im.jaladasParaMudanza);
+        cagadas.add(im.cagadasParaMudanza);
       }
-      expect(im.nivelCorte('maestro_obras'), 5);
-      expect(im.rollosParaMudanza, closeTo(base * .5, base * 1e-9));
+      expect(jaladas, [8, 7, 6, 5, 4]);
+      expect(cagadas, [27, 24, 21, 18, 15]);
+      expect(im.comprarCorte('maestro_obras'), isFalse, reason: 'máximo 5');
+      expect(im.rollosParaMudanza, rollos, reason: 'los Rollos no cambian');
+
+      // puedeMudarse usa los requisitos rebajados: 4 jaladas y 15 cagadas reales en la casa.
+      im.partida
+        ..jaladasBase = im.partida.jaladas - 4
+        ..rollos = im.rollosParaMudanza.ceil() + 1;
+      expect(im.puedeMudarse(15), isTrue);
+      expect(im.puedeMudarse(14), isFalse);
+      im.partida.jaladasBase = im.partida.jaladas - 3;
+      expect(im.puedeMudarse(1000), isFalse);
     });
 
     test('Mayordomo real: trae el Mayordomo del Llavero en este reinado', () {
@@ -166,7 +182,7 @@ void main() {
       im.comprarCorte('tesorero');
       im.comprarCorte('tesorero');
       im.comprarCorte('mayordomo_real');
-      expect(im.coronas, 40 - 12 - 6 - 6);
+      expect(im.coronas, 40 - 6 - 6 - 6);
       im.abdicar(ahora: t0);
       final p = im.partida;
       expect(p.mudanzas, 2, reason: 'el Heraldo 2 arranca en la Quinta');
@@ -202,12 +218,12 @@ void main() {
       expect(queHagoAhora(im, t0, mudanzaLista: true, abdicarLista: true).id, 'abdicar');
       expect(queHagoAhora(im, t0, mudanzaLista: true).id, 'mudanza');
       im.abdicar(ahora: t0);
-      im.partida.coronasGanadas = 4;
+      im.partida.coronasGanadas = 1;
       final s = queHagoAhora(im, t0);
       expect(s.id, 'corte');
       expect(s.ir, DestinoQueHago.abdicar);
-      expect(s.objetivo, 'heraldo');
-      im.comprarCorte('heraldo');
+      expect(s.objetivo, 'maestro_obras');
+      im.comprarCorte('maestro_obras');
       expect(corteConviene(im), isNull);
       expect(queHagoAhora(im, t0).id, isNot('corte'));
     });
