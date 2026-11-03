@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rey_cagon/imperio/abdicar.dart';
 import 'package:rey_cagon/imperio/barra.dart';
 import 'package:rey_cagon/imperio/cadena.dart';
 import 'package:rey_cagon/imperio/control.dart';
@@ -370,7 +371,39 @@ void main() {
       await _desmontar(t);
     });
 
-    testWidgets('la barra con sus 5 botones cabe en 360 dp', (t) async {
+    testWidgets('ABDICAR no sale sin descubrir; descubierto sale con su hoja, La Corte y la puerta en la Mudanza', (t) async {
+      final im = _veterano();
+      im.partida.guiaVista.add(claveMudanzaVista);
+      await _montar(t, _estado(im, cagadas: 30));
+      expect(find.byKey(const Key('boton_abdicar')), findsNothing);
+      await _desmontar(t);
+
+      final rey = _veterano();
+      rey.partida
+        ..mudanzas = 4
+        ..abdicaciones = 1
+        ..coronasGanadas = 3;
+      rey.partida.guiaVista.addAll({claveMudanzaVista, claveAbdicarVista});
+      final (c, tele, enviados) = await _montar(t, _estado(rey, cagadas: 30));
+      expect(find.byKey(const Key('boton_abdicar')), findsOneWidget);
+      await t.tap(find.byKey(const Key('boton_abdicar')));
+      await _esperar(t);
+      expect(find.byKey(const Key('decision_abdicar')), findsOneWidget);
+      expect(_conPrefijo('corte_'), findsWidgets);
+      expect(c.imperio.partida.guiaVista, contains(claveAbdicarAbierta));
+      expect(_eventos(enviados, tele, 'abdicar_abre', 'x'), isNotEmpty);
+      Navigator.of(t.element(find.byKey(const Key('decision_abdicar')))).pop();
+      await _esperar(t);
+
+      await t.tap(find.byKey(const Key('boton_mudanza')));
+      await _esperar(t);
+      expect(find.byKey(const Key('ir_a_abdicar')), findsOneWidget);
+      expect(find.byKey(const Key('capa_3_candado')), findsNothing);
+      expect(t.takeException(), isNull);
+      await _desmontar(t);
+    });
+
+    testWidgets('la barra con sus 6 botones cabe en 360 dp', (t) async {
       await t.pumpWidget(MaterialApp(
         home: Scaffold(
           body: Align(
@@ -386,13 +419,16 @@ void main() {
                   alEdificios: () {},
                   mudanza: true,
                   mudanzaResaltada: true,
-                  alMudanza: () {}),
+                  alMudanza: () {},
+                  abdicar: true,
+                  abdicarResaltada: true,
+                  alAbdicar: () {}),
             ),
           ),
         ),
       ));
       await t.pump();
-      for (final k in ['boton_edificios', 'boton_tienda', 'boton_jalar', 'boton_mudanza']) {
+      for (final k in ['boton_edificios', 'boton_tienda', 'boton_jalar', 'boton_mudanza', 'boton_abdicar']) {
         expect(find.byKey(Key(k)), findsOneWidget);
       }
       expect(find.text('SALA'), findsOneWidget);
