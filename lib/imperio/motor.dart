@@ -369,7 +369,7 @@ class Imperio {
     if (mj.isNaN || mj <= 0) return;
     _p.saldo += mj;
     _p.mjTotal += mj;
-    if (_p.mudanzas > 0) _p.mjEnCasa += mj;
+    if (_p.mudanzas > 0 || _p.abdicaciones > 0) _p.mjEnCasa += mj;
   }
 
   bool _activo(String id, int ahora) => (_p.efectos[id] ?? 0) > ahora;
@@ -438,8 +438,9 @@ class Imperio {
     return s;
   }
 
-  /// Llaves sin gastar: las ganadas al mudarte menos lo que costó el Llavero.
-  int get llaves => max(0, _p.llavesGanadas - costoLlavero(_p.llavero));
+  /// Llaves sin gastar: las ganadas al mudarte menos lo que costó el Llavero (el Mayordomo real de La Corte regala el
+  /// nivel 1 del Mayordomo).
+  int get llaves => max(0, _p.llavesGanadas - costoLlavero(_p.llavero) + descuentoLlaveroCorte(_p.corte, _p.llavero));
 
   /// Nivel de [id] en el Llavero (cortado a su máximo).
   int nivelLlavero(String id) => min(_p.llavero[id] ?? 0, mejoraLlaveroPorId(id)?.limite ?? 0);
@@ -458,9 +459,9 @@ class Imperio {
   /// Llave de paso: la parte del clic del pujo x3 por nivel.
   double get multiplicadorLlavePaso => pow(3, nivelPlomeria('llave_paso')).toDouble();
 
-  /// Cagadas x logros x rollos x comodidad x mudanza: lo que no se acaba en la corrida.
+  /// Cagadas x logros x rollos x comodidad x mudanza x Corte: lo que no se acaba en la corrida.
   double get multiplicadorPermanente =>
-      multiplicadorCagadas * multiplicadorLogros * multiplicadorRollos * multiplicadorComodidad * multiplicadorMudanza;
+      multiplicadorCagadas * multiplicadorLogros * multiplicadorRollos * multiplicadorComodidad * multiplicadorMudanza * multiplicadorCorte;
 
   /// Suma de efectos temporales sobre la producción (objetos + tipo), tope x4. No incluye la Fiebre.
   double multiplicadorProduccionTemporal(int ahora) {
@@ -1780,7 +1781,7 @@ class Imperio {
     // Con fuerza 0 no hay buff nuevo: el que estaba sigue hasta su fin, sin alargarse.
     if (tipo != null && fuerza > 0) {
       _p.tipoBuff = tipo;
-      _p.tipoBuffHasta = ahora + duracionBuffTipo.inMilliseconds;
+      _p.tipoBuffHasta = ahora + duracionBuffTipo.inMilliseconds + nivelCorte('catador') * catadorPorNivel.inMilliseconds;
       _p.tipoBuffFuerza = fuerza;
       if (tipo == 6) {
         _p.offlineBonus = true;
@@ -1881,16 +1882,20 @@ class Imperio {
 
   // ---------- Mudanza 🏠 ----------
 
-  /// Rollos ganados en esta casa que pide la mudanza: `ajustes.mudanzaRollos` x `mudanzaRollosSubida` ^ mudanzas.
-  double get rollosParaMudanza => ajustes.mudanzaRollos * pow(ajustes.mudanzaRollosSubida, _p.mudanzas);
+  /// Rollos de la casa contra los que se cuentan las Llaves: `ajustes.mudanzaRollos` x `mudanzaRollosSubida` ^ mudanzas.
+  double get rollosBaseMudanza => ajustes.mudanzaRollos * pow(ajustes.mudanzaRollosSubida, _p.mudanzas);
+
+  /// Rollos ganados en esta casa que pide la mudanza: [rollosBaseMudanza] con el Maestro de obras de La Corte (10% menos
+  /// por nivel, nunca menos de la mitad). El servidor hace lo mismo en `imperio_mudar`.
+  double get rollosParaMudanza => rollosBaseMudanza * max(0.5, 1 - 0.1 * nivelCorte('maestro_obras'));
 
   /// Rollos ganados en esta casa (los gastados en la Plomería cuentan).
   int get rollosCasa => _p.rollosGanados;
 
   /// Llaves que daría mudarse ahora: piso((rollos de la casa / requisito) ^ exponente x factor). 0 sin llegar al requisito.
   int get llavesPorGanar {
-    final r = rollosParaMudanza;
-    if (rollosCasa < r || r <= 0) return 0;
+    final r = rollosBaseMudanza;
+    if (rollosCasa < rollosParaMudanza || r <= 0) return 0;
     return (pow(rollosCasa / r, ajustes.mudanzaLlavesExponente) * ajustes.mudanzaLlavesFactor + 1e-9).floor();
   }
 
@@ -1903,7 +1908,8 @@ class Imperio {
   /// Se va: la corrida (como al jalar), los Rollos (saldo y ganados), la Plomería (el Camión de mudanza se lleva un
   /// 10% por nivel de cada nodo) y las jaladas de la casa. Se queda: logros, cosméticos, mjTotal, jaladas históricas,
   /// Llaves y Llavero. [mjBaseServidor]: los MJ con los que el servidor marcó la llegada (si no, los de aquí).
-  int mudarse({int? llavesServidor, double? mjBaseServidor}) {
+  /// [ahora]: cuándo llegaste a la casa nueva ([Partida.casaEn]).
+  int mudarse({int? llavesServidor, double? mjBaseServidor, int? ahora}) {
     final ganadas = max(0, llavesServidor ?? llavesPorGanar);
     if (_p.rollosGastados == 0) _p.mudanzasLimpias += 1;
     final camion = nivelLlavero('camion_mudanza');
@@ -1925,7 +1931,8 @@ class Imperio {
       ..mjEnCasa = 0
       ..jaladasBase = _p.jaladas
       ..mudanzas += 1
-      ..llavesGanadas += ganadas;
+      ..llavesGanadas += ganadas
+      ..casaEn = ahora ?? 0;
     _empezarCorrida();
     revisarLogros();
     return ganadas;
@@ -1944,6 +1951,81 @@ class Imperio {
     if (!puedeComprarLlavero(id)) return false;
     _p.llavero[id] = nivelLlavero(id) + 1;
     if (id == 'mayordomo' && _p.llavero[id] == 1) _p.mayordomoApagado = false;
+    revisarLogros();
+    return true;
+  }
+
+  // ---------- Abdicar 👑 y La Corte ----------
+
+  /// Coronas sin gastar: las ganadas abdicando menos lo que costó La Corte.
+  int get coronas => max(0, _p.coronasGanadas - costoCorte(_p.corte));
+
+  /// Nivel de [id] en La Corte (cortado a su máximo).
+  int nivelCorte(String id) => min(_p.corte[id] ?? 0, mejoraCortePorId(id)?.limite ?? 0);
+
+  /// Lo que viene de La Corte: Bufón (x3 por nivel) y +`ajustes.coronaPct` por Corona sin gastar. Sin abdicar da x1.
+  double get multiplicadorCorte => pow(3, nivelCorte('bufon')) * (1 + coronas * ajustes.coronaPct);
+
+  /// Coronas que daría abdicar ahora: piso((Llaves ganadas / requisito) ^ exponente x factor). 0 sin llegar al requisito.
+  int get coronasPorGanar {
+    final r = ajustes.abdicarLlaves;
+    if (_p.llavesGanadas < r || r <= 0) return 0;
+    return (pow(_p.llavesGanadas / r, ajustes.abdicarCoronasExponente) * ajustes.abdicarCoronasFactor + 1e-9).floor();
+  }
+
+  /// Se puede abdicar: mudanzas, Llaves ganadas en el reinado y [cagadasReinado] reales desde la última abdicación (las
+  /// cuenta el servidor, máx 3 por día). El servidor revisa lo mismo en `imperio_abdicar`.
+  bool puedeAbdicar(int cagadasReinado) =>
+      _p.mudanzas >= ajustes.abdicarMudanzas && _p.llavesGanadas >= ajustes.abdicarLlaves && cagadasReinado >= ajustes.abdicarCagadas;
+
+  /// Abdica y devuelve las Coronas ganadas ([coronasServidor] si las mandó el servidor).
+  /// Se va: todo lo que se va al mudarse, las casas (vuelves al Rancho, o más arriba con el Heraldo), las Llaves (el
+  /// Tesorero guarda un 10% por nivel de las ganadas) y el Llavero (el Mayordomo real deja el Mayordomo en nivel 1).
+  /// Se queda: logros, cosméticos, mjTotal, jaladas históricas, Coronas y La Corte. Los datos del servidor
+  /// ([mudanzasServidor], [llavesServidor], [mjBaseServidor]) mandan sobre la cuenta de aquí.
+  int abdicar({int? coronasServidor, int? mudanzasServidor, int? llavesServidor, double? mjBaseServidor, int? ahora}) {
+    final ganadas = max(0, coronasServidor ?? coronasPorGanar);
+    if (costoLlavero(_p.llavero) - descuentoLlaveroCorte(_p.corte, _p.llavero) <= 0) _p.abdicacionesAvaras += 1;
+    final casa = max(0, mudanzasServidor ?? nivelCorte('heraldo'));
+    final llavesQuedan = max(0, llavesServidor ?? (_p.llavesGanadas * 0.1 * nivelCorte('tesorero') + 1e-9).floor());
+    final mayordomo = nivelCorte('mayordomo_real') >= 1;
+    _reiniciarCorrida();
+    _p
+      ..rollos = 0
+      ..rollosGastados = 0
+      ..objetosRollos = {}
+      ..cadenaReservaEn = 0
+      ..mjBase = min(_p.mjTotal, max(0.0, mjBaseServidor ?? _p.mjTotal))
+      ..mjEnCasa = 0
+      ..jaladasBase = _p.jaladas
+      ..mudanzas = casa
+      ..llavesGanadas = llavesQuedan
+      ..llavero = {if (mayordomo) 'mayordomo': 1}
+      ..abdicaciones += 1
+      ..coronasGanadas += ganadas
+      ..casaEn = ahora ?? 0;
+    if (mayordomo) _p.mayordomoApagado = false;
+    _empezarCorrida();
+    revisarLogros();
+    return ganadas;
+  }
+
+  /// Se puede comprar el nivel siguiente de [id] en La Corte.
+  bool puedeComprarCorte(String id) {
+    final m = mejoraCortePorId(id);
+    if (m == null) return false;
+    final n = nivelCorte(id);
+    return n < m.limite && coronas >= m.precio(n);
+  }
+
+  /// Compra el nivel siguiente de [id] con Coronas. El Mayordomo real trae el Mayordomo del Llavero ya en este reinado.
+  bool comprarCorte(String id) {
+    if (!puedeComprarCorte(id)) return false;
+    _p.corte[id] = nivelCorte(id) + 1;
+    if (id == 'mayordomo_real' && nivelLlavero('mayordomo') == 0) {
+      _p.llavero['mayordomo'] = 1;
+      _p.mayordomoApagado = false;
+    }
     revisarLogros();
     return true;
   }
