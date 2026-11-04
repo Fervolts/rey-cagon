@@ -21,7 +21,8 @@ import 'tema.dart';
 class Ir {
   Ir(this.a, {this.hilo, this.periodo, this.usuario});
 
-  /// 'inicio', 'todos' (o una sala: 'global', 'es', 'en'), 'amigos', 'soporte', 'avisos' o 'ranking'.
+  /// 'inicio', 'todos' (o una sala: 'global', 'es', 'en'), 'amigos', 'soporte', 'avisos', 'ranking',
+  /// o la zona de la Cloaca: 'cloaca', 'cloaca_liga' o su sala `cloaca:<id>`.
   final String a;
 
   /// Id del mensaje padre: la sala abre ese hilo encima.

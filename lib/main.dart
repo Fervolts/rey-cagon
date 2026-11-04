@@ -17,7 +17,7 @@ import 'avisos_resumen.dart';
 import 'cagadon.dart';
 import 'efecto_cague.dart';
 import 'chat.dart';
-import 'cloaca.dart' show RankingCloacasVista, rankingCloacas;
+import 'cloaca.dart' show abrirCloaca, vistaChat, vistaCloaca, vistaLiga;
 import 'comunidad.dart';
 import 'fresca.dart';
 import 'idioma.dart';
@@ -381,12 +381,16 @@ class _PantallaInicioState extends State<PantallaInicio> {
     if (destino == null || destino.inicio || !mounted) return;
     destino.inicio = true;
     Navigator.of(context).popUntil((r) => r.isFirst);
+    // La Cloaca vive en su propia zona, que se abre desde YO ('cloaca:<id>' es su chat).
+    final cloaca = destino.a == 'cloaca_liga' ? vistaLiga : (destino.a.startsWith('cloaca:') ? vistaChat : (destino.a == 'cloaca' ? vistaCloaca : null));
     setState(() => _tab = switch (destino.a) {
           'inicio' || 'avisos' => 0,
           'ranking' => 1,
           'imperio' => 2,
+          _ when cloaca != null => 4,
           _ => _tabBano,
         });
+    if (cloaca != null) abrirCloaca(context, vista: cloaca);
     if (_tab == _tabBano) _marcarVisto();
     if (destino.a == 'avisos') {
       Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaAvisos()));
@@ -548,17 +552,14 @@ class _PantallaRankingState extends State<PantallaRanking> {
     }
     if (!widget.trono) irA.addListener(_irAPeriodo);
     if (!widget.trono) rankingImperio.addListener(_alCambiarJuego);
-    if (!widget.trono) rankingCloacas.addListener(_alCambiarJuego);
   }
 
   void _alCambiarJuego() {
-    // Ir al Imperio desde otro lado (verRankingImperio) apaga las Cloacas.
-    if (rankingImperio.value && rankingCloacas.value) rankingCloacas.value = false;
     if (mounted) setState(() {});
   }
 
-  /// Qué ranking se ve: 0 cagadas, 1 Imperio, 2 Cloacas.
-  int get _juegoActual => rankingImperio.value ? 1 : (rankingCloacas.value ? 2 : 0);
+  /// Qué ranking se ve: 0 cagadas, 1 Imperio. Las Cloacas tienen su propia zona (desde YO).
+  int get _juegoActual => rankingImperio.value ? 1 : 0;
 
   // Push de ganadores o de cierre: RANKING con ese periodo (si la pestaña aún no existía, lo toma al nacer).
   void _irAPeriodo({bool alNacer = false}) {
@@ -567,7 +568,6 @@ class _PantallaRankingState extends State<PantallaRanking> {
     if (destino == null || destino.a != 'ranking' || destino.ranking || periodo == null || !periodos.containsKey(periodo)) return;
     destino.ranking = true;
     rankingImperio.value = false; // los push de ganadores y cierres son de cagadas
-    rankingCloacas.value = false;
     if (periodo == _periodo) return;
     if (alNacer) {
       _periodo = periodo;
@@ -581,7 +581,6 @@ class _PantallaRankingState extends State<PantallaRanking> {
   void dispose() {
     irA.removeListener(_irAPeriodo);
     rankingImperio.removeListener(_alCambiarJuego);
-    rankingCloacas.removeListener(_alCambiarJuego);
     secretoAbierto.removeListener(_alAbrirSecreto);
     _ciclo.dispose();
     _relojActualizacion?.cancel();
@@ -856,8 +855,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
     final p = paleta(context);
     // Fuera del podio, su puesto queda fijo abajo con cuánto le falta para el de arriba.
     final puesto = _cargando ? -1 : _miPuesto;
-    // En las Cloacas no: la barra es del ranking de cagadas.
-    final barra = !widget.trono && !_modoSecreto && puesto >= 3 && _juegoActual != 2;
+    final barra = !widget.trono && !_modoSecreto && puesto >= 3;
 
     final lista = RefreshIndicator(
       onRefresh: () {
@@ -958,33 +956,22 @@ class _PantallaRankingState extends State<PantallaRanking> {
     ];
   }
 
-  /// CAGADAS, IMPERIO o CLOACAS: qué ranking muestra la pestaña.
+  /// CAGADAS o IMPERIO: qué ranking muestra la pestaña.
   Widget _juego() => SegmentedButton<int>(
         key: const Key('ranking_juego'),
         segments: [
           ButtonSegment(value: 0, icon: const Emoji('💩', tamano: 18), label: _UnaLinea(tr('CAGADAS', 'POOPS'))),
           ButtonSegment(value: 1, icon: const Emoji('🏭', tamano: 18), label: _UnaLinea(tr('IMPERIO', 'EMPIRE'))),
-          ButtonSegment(value: 2, icon: const Emoji('🚽', tamano: 18), label: _UnaLinea(tr('CLOACAS', 'SEWERS'))),
         ],
         selected: {_juegoActual},
         showSelectedIcon: false,
         style: _compacto,
-        onSelectionChanged: (s) {
-          rankingCloacas.value = s.first == 2;
-          rankingImperio.value = s.first == 1;
-        },
+        onSelectionChanged: (s) => rankingImperio.value = s.first == 1,
       );
 
   /// El ranking: cagadas (periodo, alcance, podio y la tabla) o el Imperio.
   List<Widget> _ranking() {
     final maximo = _filas.isEmpty ? 0 : _filas.first['total'] as int;
-    if (_juegoActual == 2) {
-      return [
-        _juego(),
-        const SizedBox(height: 10),
-        RankingCloacasVista(vuelta: _vueltaImperio),
-      ];
-    }
     if (rankingImperio.value) {
       return [
         _juego(),

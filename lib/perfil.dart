@@ -14,6 +14,7 @@ import 'avisos.dart';
 import 'cagadon.dart';
 import 'calendario.dart';
 import 'chat.dart' show abrirReporteDeError;
+import 'cloaca.dart' show TarjetaMiCloaca;
 import 'comunidad.dart';
 import 'icono_app_pantalla.dart';
 import 'idioma.dart';
@@ -661,6 +662,9 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                       caja(total, tr('total', 'total')),
                     ],
                   ),
+                  const SizedBox(height: 20),
+                  // La Cloaca tiene su propia zona y se entra por aquí.
+                  const TarjetaMiCloaca(),
                   const SizedBox(height: 20),
                   if (_partida != null) ...[_TarjetaImperio(partida: _partida!), const SizedBox(height: 20)],
                   if (_cagadas == null)

@@ -15,7 +15,7 @@ import 'animaciones.dart';
 import 'avisos.dart';
 import 'cagadon.dart' show TarjetaReto;
 import 'chat_vivo.dart';
-import 'cloaca.dart' show PestanaCloaca, TarjetaCloaca;
+import 'cloaca.dart' show TarjetaCloaca;
 import 'popups.dart' show PantallaPopups;
 import 'presumir.dart';
 import 'emoji.dart';
@@ -185,12 +185,9 @@ class PantallaChat extends StatefulWidget {
   State<PantallaChat> createState() => _PantallaChatState();
 }
 
-class _PantallaChatState extends State<PantallaChat> with SingleTickerProviderStateMixin {
-  // Salas en public.mensajes: 'global' es la general, 'es' y 'en' las de cada idioma.
-  // 'cloaca' es el chat de mi Cloaca (sala 'cloaca:<id>', solo para sus miembros; cloaca.dart).
-  final _pestanas = ['global', idioma.value, if (enIngles) 'es' else 'en', 'amigos', 'cloaca'];
-  // Cambiar de sala cierra el panel de emojis de la anterior (si no, la barra de abajo se queda escondida).
-  late final _tabs = TabController(length: _pestanas.length, vsync: this)..addListener(() => panelEmojisAbierto.value = false);
+class _PantallaChatState extends State<PantallaChat> {
+  // Salas en public.mensajes: 'global' es la general, 'es' y 'en' las de cada idioma (las tres en _PantallaGeneral).
+  // El chat de la Cloaca está en su propia zona (cloaca.dart), que se abre desde YO.
   bool _soyAdmin = false;
 
   @override
@@ -206,40 +203,34 @@ class _PantallaChatState extends State<PantallaChat> with SingleTickerProviderSt
   @override
   void dispose() {
     irA.removeListener(_irA);
-    _tabs.dispose();
     super.dispose();
   }
 
-  // Un toque en un push o en un aviso: elegir la pestaña del baño.
+  // Un toque en un push o en un aviso: abrir ese chat encima de la lista (la sala abre después su hilo).
   void _irA() {
     final destino = irA.value;
     if (destino == null || destino.bano || !mounted) return;
     destino.bano = true;
-    if (destino.a == 'soporte') {
-      _abrirSoporte();
-      return;
+    switch (destino.a) {
+      case 'soporte':
+        _abrirSoporte();
+      case 'amigos':
+        _abrirAmigos();
+      case 'todos' || 'global' || 'es' || 'en':
+        _abrirGeneral(destino.a == 'todos' ? 'global' : destino.a);
     }
-    final i = _pestanas.indexOf(destino.a == 'todos' ? 'global' : destino.a);
-    if (i >= 0) _tabs.animateTo(i);
   }
 
-  void _abrirSoporte() => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => Scaffold(
-            appBar: AppBar(title: Text(tr('SOPORTE 🛠️', 'SUPPORT 🛠️'))),
-            body: _soyAdmin ? const _Bandeja() : Sala(sala: 'soporte', hilo: db.auth.currentUser!.id),
-          ),
-        ),
-      );
+  void _abrir(Widget pantalla) => Navigator.push(context, MaterialPageRoute(builder: (_) => pantalla));
 
-  String _nombrePestana(String sala) => switch (sala) {
-        'global' => 'GENERAL 🌎',
-        'es' => 'ESPAÑOL',
-        'en' => 'ENGLISH',
-        'cloaca' => tr('CLOACA 🚽', 'SEWER 🚽'),
-        _ => tr('AMIGOS 👥', 'FRIENDS 👥'),
-      };
+  void _abrirGeneral([String sala = 'global']) => _abrir(_PantallaGeneral(sala: sala));
+
+  void _abrirAmigos() => _abrir(Scaffold(appBar: AppBar(title: Text(tr('AMIGOS 👥', 'FRIENDS 👥'))), body: const PantallaAmigos()));
+
+  void _abrirSoporte() => _abrir(Scaffold(
+        appBar: AppBar(title: Text(tr('SOPORTE 🛠️', 'SUPPORT 🛠️'))),
+        body: _soyAdmin ? const _Bandeja() : Sala(sala: 'soporte', hilo: db.auth.currentUser!.id),
+      ));
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -250,34 +241,136 @@ class _PantallaChatState extends State<PantallaChat> with SingleTickerProviderSt
               IconButton(
                 tooltip: 'Pop-ups',
                 icon: const Icon(Icons.campaign_outlined),
-                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaPopups())),
+                onPressed: () => _abrir(const PantallaPopups()),
               ),
             if (_soyAdmin)
               IconButton(
                 tooltip: tr('Panel', 'Dashboard'),
                 icon: const Icon(Icons.insights_outlined),
-                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaPanel())),
+                onPressed: () => _abrir(const PantallaPanel()),
               ),
-            IconButton(
-              tooltip: tr('Soporte', 'Support'),
-              icon: const Icon(Icons.support_agent),
-              onPressed: _abrirSoporte,
+          ],
+        ),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          children: [
+            _FilaChat(
+              key: const Key('bano_general'),
+              emoji: '🌎',
+              titulo: tr('General', 'General'),
+              detalle: tr('Todo el mundo. También salas en español y en inglés.', 'Everyone. Also rooms in Spanish and in English.'),
+              alTocar: _abrirGeneral,
+            ),
+            _FilaChat(
+              key: const Key('bano_amigos'),
+              emoji: '👥',
+              titulo: tr('Amigos', 'Friends'),
+              detalle: tr('A quién sigues, quién te sigue y sus mensajes.', 'Who you follow, who follows you and their messages.'),
+              alTocar: _abrirAmigos,
+            ),
+            _FilaChat(
+              key: const Key('bano_soporte'),
+              emoji: '🛠️',
+              titulo: tr('Soporte', 'Support'),
+              detalle: _soyAdmin
+                  ? tr('Los mensajes que llegan a soporte.', 'Messages sent to support.')
+                  : tr('Un error, una idea o una queja: escríbenos.', 'A bug, an idea or a complaint: write to us.'),
+              alTocar: _abrirSoporte,
             ),
           ],
-          bottom: TabBar(
-            controller: _tabs,
-            isScrollable: true,
-            tabAlignment: TabAlignment.start,
-            tabs: [for (final p in _pestanas) Tab(text: _nombrePestana(p))],
+        ),
+      );
+}
+
+/// Una fila de la lista del baño: emoji, nombre y de qué va. Cuadrada y alta para leer fácil.
+class _FilaChat extends StatelessWidget {
+  const _FilaChat({super.key, required this.emoji, required this.titulo, required this.detalle, required this.alTocar});
+
+  final String emoji, titulo, detalle;
+  final VoidCallback alTocar;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paleta(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: p.tarjeta,
+        shape: RoundedRectangleBorder(side: BorderSide(color: p.borde), borderRadius: BorderRadius.circular(radio)),
+        child: InkWell(
+          onTap: alTocar,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(children: [
+              Container(
+                width: 48,
+                height: 48,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(color: p.suave, border: Border.all(color: p.borde), borderRadius: BorderRadius.circular(radio)),
+                child: Emoji(emoji, tamano: 28),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(titulo, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                  const SizedBox(height: 2),
+                  Text(detalle, style: TextStyle(color: p.textoSuave, fontSize: 13, height: 1.3)),
+                ]),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.chevron_right),
+            ]),
           ),
         ),
-        body: TabBarView(controller: _tabs, children: [
-          for (final p in _pestanas)
-            p == 'amigos'
-                ? const PantallaAmigos()
-                : p == 'cloaca'
-                    ? const PestanaCloaca()
-                    : Sala(key: ValueKey(p), sala: p),
+      ),
+    );
+  }
+}
+
+/// El chat general a pantalla completa, con las salas por idioma en un selector fijo arriba (nada se desliza de lado).
+class _PantallaGeneral extends StatefulWidget {
+  const _PantallaGeneral({this.sala = 'global'});
+
+  final String sala;
+
+  @override
+  State<_PantallaGeneral> createState() => _PantallaGeneralState();
+}
+
+class _PantallaGeneralState extends State<_PantallaGeneral> {
+  late String _sala = widget.sala;
+
+  @override
+  void dispose() {
+    panelEmojisAbierto.value = false;
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: Text(tr('CHAT GENERAL', 'GENERAL CHAT'))),
+        body: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+            child: SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<String>(
+                key: const Key('general_sala'),
+                segments: [
+                  ButtonSegment(value: 'global', label: Text(tr('TODOS', 'ALL'))),
+                  const ButtonSegment(value: 'es', label: Text('ESPAÑOL')),
+                  const ButtonSegment(value: 'en', label: Text('ENGLISH')),
+                ],
+                selected: {_sala},
+                showSelectedIcon: false,
+                onSelectionChanged: (s) {
+                  panelEmojisAbierto.value = false;
+                  setState(() => _sala = s.first);
+                },
+              ),
+            ),
+          ),
+          Expanded(child: Sala(key: ValueKey(_sala), sala: _sala)),
         ]),
       );
 }

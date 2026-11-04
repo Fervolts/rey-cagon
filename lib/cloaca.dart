@@ -12,10 +12,11 @@ import 'avisos.dart' show ir;
 import 'chat.dart' show Sala;
 import 'emoji.dart';
 import 'idioma.dart';
-import 'imperio/ranking_amigos.dart' show faltaFuncion, rankingImperio;
+import 'imperio/ranking_amigos.dart' show faltaFuncion;
 import 'main.dart' show conReintento, db, textoError;
 import 'perfil.dart' show PantallaPerfil;
 import 'periodos.dart' show ContadorCierre;
+import 'teclado_emojis.dart' show panelEmojisAbierto;
 import 'tema.dart';
 import 'vivo.dart' show Cargando;
 
@@ -35,18 +36,18 @@ const double bonoTopeDefecto = 0.5;
 /// Emojis para elegir al crear una Cloaca (el servidor acepta cualquier emoji corto).
 const emojisCloaca = ['💩', '🚽', '🧻', '🪠', '🦨', '🐀', '👑', '🔥', '💀', '🤢', '🪰', '🧼'];
 
-/// true = la pestaña RANKING muestra la liga de Cloacas.
-final rankingCloacas = ValueNotifier<bool>(false);
-
 /// Sube cada vez que alguien crea, entra, sale o saca a alguien: el Imperio vuelve a pedir el bono y el chat su sala.
 final cloacaCambio = ValueNotifier<int>(0);
 
-/// Lleva a la pestaña RANKING con las Cloacas a la vista.
-void verCloacas() {
-  rankingImperio.value = false;
-  rankingCloacas.value = true;
-  ir('ranking');
-}
+/// Abre la zona de la Cloaca desde cualquier lado (avisos, tarjeta del chat): 'cloaca' o 'cloaca_liga'.
+void verCloacas({bool liga = false}) => ir(liga ? 'cloaca_liga' : 'cloaca');
+
+/// Vistas de la zona de la Cloaca, en el orden de su barra de abajo.
+const vistaCloaca = 0, vistaLiga = 1, vistaChat = 2;
+
+/// Abre la zona de la Cloaca encima de lo que haya.
+Future<void> abrirCloaca(BuildContext context, {int vista = vistaCloaca}) =>
+    Navigator.push(context, MaterialPageRoute(builder: (_) => PantallaZonaCloaca(vista: vista)));
 
 class MiembroCloaca {
   const MiembroCloaca({
@@ -351,10 +352,12 @@ NubeCloacas nubeCloacas = const NubeCloacas();
 
 /// La liga de Cloacas dentro de la lista de la pestaña RANKING: mi Cloaca, la tabla de la semana y cómo funciona.
 /// [vuelta] sube al tirar para refrescar.
+/// Una vista de la zona: mi Cloaca (o cómo entrar a una) con su explicación, o la liga de la semana.
 class RankingCloacasVista extends StatefulWidget {
-  const RankingCloacasVista({super.key, this.vuelta = 0});
+  const RankingCloacasVista({super.key, this.vuelta = 0, this.liga = false});
 
   final int vuelta;
+  final bool liga;
 
   @override
   State<RankingCloacasVista> createState() => _RankingCloacasVistaState();
@@ -488,10 +491,9 @@ class _RankingCloacasVistaState extends State<RankingCloacasVista> {
       return const Padding(padding: EdgeInsets.symmetric(vertical: 32), child: Center(child: Cargando()));
     }
     final c = mia.cloaca;
+    if (widget.liga) return _liga(ranking);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       if (c == null) _sinCloaca(mia) else _miCloaca(c, mia),
-      const SizedBox(height: 24),
-      _liga(ranking),
       const SizedBox(height: 24),
       _Explicacion(mia),
     ]);
@@ -657,24 +659,12 @@ class _RankingCloacasVistaState extends State<RankingCloacasVista> {
           ),
         ],
         const SizedBox(height: 16),
-        Row(children: [
-          Expanded(
-            child: OutlinedButton(
-              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-              onPressed: () => ir('cloaca'),
-              child: TextoConEmojis(tr('CHAT 💬', 'CHAT 💬')),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: OutlinedButton(
-              key: const Key('cloaca_salir'),
-              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-              onPressed: _ocupado ? null : () => _salir(c),
-              child: Text(tr('SALIR', 'LEAVE')),
-            ),
-          ),
-        ]),
+        OutlinedButton(
+          key: const Key('cloaca_salir'),
+          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+          onPressed: _ocupado ? null : () => _salir(c),
+          child: Text(tr('SALIR DE LA CLOACA', 'LEAVE THE SEWER')),
+        ),
       ]),
     );
   }
@@ -1000,9 +990,12 @@ class _DialogoUnirseState extends State<_DialogoUnirse> {
   }
 }
 
-/// La pestaña CLOACA del baño: el chat de mi Cloaca, o cómo entrar a una.
+/// La vista CHAT de la zona: el chat de mi Cloaca, o cómo entrar a una.
 class PestanaCloaca extends StatefulWidget {
-  const PestanaCloaca({super.key});
+  const PestanaCloaca({super.key, this.alVerCloaca});
+
+  /// Sin Cloaca: el botón lleva a la vista CLOACA de la zona.
+  final VoidCallback? alVerCloaca;
 
   @override
   State<PestanaCloaca> createState() => _PestanaCloacaState();
@@ -1064,8 +1057,8 @@ class _PestanaCloacaState extends State<PestanaCloaca> {
           ],
           const SizedBox(height: 12),
           FilledButton(
-            onPressed: _fallo ? _cargar : verCloacas,
-            child: Text(_fallo ? tr('REINTENTAR', 'RETRY') : tr('VER CLOACAS', 'SEE SEWERS')),
+            onPressed: _fallo ? _cargar : widget.alVerCloaca,
+            child: Text(_fallo ? tr('REINTENTAR', 'RETRY') : tr('CREAR O ENTRAR', 'CREATE OR JOIN')),
           ),
         ]),
       ),
@@ -1087,7 +1080,7 @@ class TarjetaCloaca extends StatelessWidget {
     final puntos = _ent(t['puntos']);
     final rollos = _ent(t['rollos']);
     return InkWell(
-      onTap: verCloacas,
+      onTap: () => abrirCloaca(context, vista: vistaLiga),
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: acento), borderRadius: BorderRadius.circular(radio)),
@@ -1107,6 +1100,180 @@ class TarjetaCloaca extends StatelessWidget {
             ]),
           ),
         ]),
+      ),
+    );
+  }
+}
+
+/// La zona de la Cloaca: pantalla propia con su barra abajo (CLOACA, LIGA, CHAT). Se abre desde YO y desde los avisos.
+class PantallaZonaCloaca extends StatefulWidget {
+  const PantallaZonaCloaca({super.key, this.vista = vistaCloaca});
+
+  final int vista;
+
+  @override
+  State<PantallaZonaCloaca> createState() => _PantallaZonaCloacaState();
+}
+
+class _PantallaZonaCloacaState extends State<PantallaZonaCloaca> {
+  late int _vista = widget.vista;
+  // El chat se arma la primera vez que se abre (no conecta la sala si nunca se mira).
+  late final _vistas = {_vista};
+  int _vuelta = 0;
+
+  @override
+  void dispose() {
+    panelEmojisAbierto.value = false;
+    super.dispose();
+  }
+
+  void _cambiar(int i) {
+    panelEmojisAbierto.value = false;
+    setState(() {
+      _vista = i;
+      _vistas.add(i);
+    });
+  }
+
+  Widget _lista({required bool liga}) => RefreshIndicator(
+        onRefresh: () async => setState(() => _vuelta++),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+          children: [RankingCloacasVista(vuelta: _vuelta, liga: liga)],
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final titulos = [tr('MI CLOACA', 'MY SEWER'), tr('LIGA DE CLOACAS', 'SEWER LEAGUE'), tr('CHAT DE LA CLOACA', 'SEWER CHAT')];
+    return Scaffold(
+      appBar: AppBar(title: Text(titulos[_vista])),
+      body: IndexedStack(index: _vista, children: [
+        _lista(liga: false),
+        _lista(liga: true),
+        if (_vistas.contains(vistaChat)) PestanaCloaca(alVerCloaca: () => _cambiar(vistaCloaca)) else const SizedBox.shrink(),
+      ]),
+      // Con el panel de emojis del chat abierto la barra se va, igual que en la de la app.
+      bottomNavigationBar: ValueListenableBuilder(
+        valueListenable: panelEmojisAbierto,
+        builder: (context, abierto, barra) => abierto ? const SizedBox.shrink() : barra!,
+        child: DecoratedBox(
+          decoration: BoxDecoration(border: Border(top: BorderSide(color: paleta(context).borde))),
+          child: MediaQuery.withClampedTextScaling(
+            maxScaleFactor: 1.0,
+            child: NavigationBar(
+              selectedIndex: _vista,
+              onDestinationSelected: _cambiar,
+              destinations: [
+                NavigationDestination(key: const Key('zona_cloaca'), icon: const Emoji('🚽', tamano: 24), label: tr('CLOACA', 'SEWER')),
+                NavigationDestination(key: const Key('zona_liga'), icon: const Emoji('🏆', tamano: 24), label: tr('LIGA', 'LEAGUE')),
+                NavigationDestination(
+                  key: const Key('zona_chat'),
+                  icon: Icon(_vista == vistaChat ? Icons.chat_bubble : Icons.chat_bubble_outline),
+                  label: tr('CHAT', 'CHAT'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// La tarjeta de YO que abre la zona de la Cloaca: tu Cloaca con su puesto, o la invitación a entrar a una.
+/// Si el servidor aún no tiene Cloacas, no sale.
+class TarjetaMiCloaca extends StatefulWidget {
+  const TarjetaMiCloaca({super.key});
+
+  @override
+  State<TarjetaMiCloaca> createState() => _TarjetaMiCloacaState();
+}
+
+class _TarjetaMiCloacaState extends State<TarjetaMiCloaca> {
+  EstadoCloaca? _mia;
+  bool _noHay = false;
+
+  @override
+  void initState() {
+    super.initState();
+    cloacaCambio.addListener(_cargar);
+    _cargar();
+  }
+
+  @override
+  void dispose() {
+    cloacaCambio.removeListener(_cargar);
+    super.dispose();
+  }
+
+  Future<void> _cargar() async {
+    try {
+      final m = await nubeCloacas.mia();
+      if (mounted) setState(() => _mia = m);
+    } catch (e) {
+      if (mounted && faltaFuncion(e)) setState(() => _noHay = true);
+    }
+  }
+
+  Future<void> _abrir() async {
+    await abrirCloaca(context);
+    _cargar();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_noHay) return const SizedBox.shrink();
+    final p = paleta(context);
+    final c = _mia?.cloaca;
+    final rollos = _mia?.rollosPorCobrar ?? 0;
+    final detalle = c == null
+        ? tr('Crea una con tu gente o entra con un código.', 'Create one with your people or join with a code.')
+        : [
+            if (c.puesto != null) tr('Puesto #${c.puesto}', 'Place #${c.puesto}'),
+            '${c.puntos} pts',
+            tr('${c.cagaronHoy}/${c.miembros.length} cagaron hoy', '${c.cagaronHoy}/${c.miembros.length} pooped today'),
+          ].join(' · ');
+    return Material(
+      color: p.tarjeta,
+      shape: RoundedRectangleBorder(side: BorderSide(color: c == null ? p.borde : acento), borderRadius: BorderRadius.circular(radio)),
+      child: InkWell(
+        key: const Key('yo_cloaca'),
+        onTap: _abrir,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(children: [
+            Container(
+              width: 52,
+              height: 52,
+              alignment: Alignment.center,
+              decoration: _caja(p, fondo: p.suave),
+              child: Emoji(c?.emoji ?? '🚽', tamano: 32),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Rotulo(tr('Mi Cloaca', 'My Sewer')),
+                const SizedBox(height: 2),
+                TextoConEmojis(
+                  c?.nombre ?? tr('Únete a una Cloaca', 'Join a Sewer'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+                ),
+                const SizedBox(height: 2),
+                Text(detalle, style: TextStyle(color: p.textoSuave, fontSize: 12.5, height: 1.3)),
+                if (rollos > 0) ...[
+                  const SizedBox(height: 4),
+                  TextoConEmojis(tr('🏆 $rollos Rollos de Oro por cobrar', '🏆 $rollos Golden Rolls to claim'),
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5)),
+                ],
+              ]),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.chevron_right),
+          ]),
+        ),
       ),
     );
   }
