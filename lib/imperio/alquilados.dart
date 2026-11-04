@@ -11,7 +11,6 @@ import 'package:flutter/material.dart';
 import '../emoji.dart';
 import '../idioma.dart';
 import '../tema.dart';
-import 'catalogo.dart' show objetoPorId;
 import 'formato.dart';
 import 'motor.dart';
 

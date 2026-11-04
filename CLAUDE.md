@@ -25,6 +25,7 @@ Repo público: nada de refs de proyecto, keys, correos ni usernames reales en c�
 | `chat.dart` | Baño: `PantallaChat` (pestañas), sala general y DMs sobre la tabla `mensajes`, reportar/bloquear/ocultar/fijar, `ofrecerPresumir`, hitos |
 | `amigos.dart` | `PantallaAmigos` (listas sigues/te siguen) y `PantallaBuscarAmigos` |
 | `perfil.dart` | `PantallaPerfil` (YO y perfil de otros), `_EditarPerfil`, `PantallaBuscar`, ajustes en la tuerca |
+| `icono_app.dart` / `icono_app_pantalla.dart` | Íconos alternos ganados con logros: lógica pura (`iconosGanados`), canal `rey_cagon/icono` (MainActivity.kt, activity-alias `.Icono<Alias>` en el manifest), pantalla en Ajustes. PNGs generados por `scripts/iconos_alternos.py` |
 | `vitrina.dart` | Trofeos (`trofeos()`, `Vitrina`), `tituloPorTotal`, `MapaDelMes` |
 | `racha.dart` | `nombreRacha`, `estiloRacha`, `mostrarRacha` (anuncio a pantalla completa), historia para compartir |
 | `inodoro.dart` | Animación del mojón al inodoro al cagar |
