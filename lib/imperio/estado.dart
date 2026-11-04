@@ -154,6 +154,9 @@ class Partida {
   /// Alquileres en modo Indefinido: se renuevan solos cada periodo mientras alcance la plata (2.13.1).
   Set<String> indefinidos;
 
+  /// Alquileres pausados a mano: id → lo que les queda (ms). Mientras tanto no están en [alquilados].
+  Map<String, int> pausados;
+
   /// Guía de los alquileres ya vista: ids de alquilables cuya ficha ya entendió y claves de empujones ya mostrados
   /// (`empujon_robot`, `empujon_primo`, `trabaja_<id>`). Jalar la cadena no la borra.
   Set<String> guiaVista;
@@ -338,6 +341,7 @@ class Partida {
     this.consumiblesUsados = 0,
     Set<String>? alquiladosUsados,
     Set<String>? indefinidos,
+    Map<String, int>? pausados,
     Set<String>? guiaVista,
     Map<String, double>? calor,
     Map<String, int>? calorEn,
@@ -405,6 +409,7 @@ class Partida {
         alquilados = alquilados ?? {},
         alquiladosUsados = alquiladosUsados ?? {},
         indefinidos = indefinidos ?? {},
+        pausados = pausados ?? {},
         guiaVista = guiaVista ?? {},
         calor = calor ?? {},
         calorEn = calorEn ?? {},
@@ -445,6 +450,7 @@ class Partida {
         'consumibles_usados': consumiblesUsados,
         'alquilados_usados': alquiladosUsados.toList(),
         if (indefinidos.isNotEmpty) 'alquilados_indef': indefinidos.toList(),
+        if (pausados.isNotEmpty) 'alquilados_pausa': pausados,
         if (guiaVista.isNotEmpty) 'guia_vista': guiaVista.toList(),
         if (calor.isNotEmpty) 'calor': calor,
         if (calorEn.isNotEmpty) 'calor_en': calorEn,
@@ -538,6 +544,7 @@ class Partida {
       consumiblesUsados: max(0, _ent(j['consumibles_usados'])),
       alquiladosUsados: _conjunto(j['alquilados_usados']),
       indefinidos: _conjunto(j['alquilados_indef']),
+      pausados: _mapaEnt(j['alquilados_pausa'])..removeWhere((_, n) => n <= 0),
       guiaVista: _conjunto(j['guia_vista']),
       calor: _mapaDbl(j['calor'])..removeWhere((_, n) => n <= 0),
       calorEn: _mapaEnt(j['calor_en']),

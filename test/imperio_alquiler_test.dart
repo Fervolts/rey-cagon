@@ -301,6 +301,85 @@ void main() {
     });
   });
 
+  group('Pausa a mano', () {
+    test('pausar guarda lo que queda y seguir lo devuelve', () {
+      final imp = _imperio();
+      expect(imp.comprarObjeto('primo', t0), isTrue);
+      expect(imp.pausarAlquiler('primo', t0 + 60000), isTrue);
+      expect(imp.alquiladoActivo('primo', t0 + 60000), isFalse);
+      expect(imp.enPausa('primo'), Duration(milliseconds: _dur('primo') - 60000));
+      expect(imp.reanudarAlquiler('primo', t0 + 10 * hora), isTrue);
+      expect(imp.enPausa('primo'), isNull);
+      expect(imp.partida.alquilados['primo'], t0 + 10 * hora + _dur('primo') - 60000);
+    });
+
+    test('solo Primo, Cuadrilla y Plomero por horas, y solo activos', () {
+      final imp = _imperio();
+      for (final id in ['primo', 'cuadrilla', 'plomero_horas', 'robot', 'robot_turbo', 'guardia']) {
+        expect(imp.comprarObjeto(id, t0), isTrue, reason: id);
+      }
+      for (final id in ['robot', 'robot_turbo', 'guardia']) {
+        expect(imp.pausarAlquiler(id, t0), isFalse, reason: id);
+      }
+      expect(imp.pausarAlquiler('cuadrilla', t0 + _dur('cuadrilla')), isFalse);
+      expect(imp.pausarAlquiler('plomero_horas', t0), isTrue);
+      expect(imp.pausarAlquiler('plomero_horas', t0), isFalse);
+      expect(imp.reanudarAlquiler('primo', t0), isFalse);
+    });
+
+    test('en pausa el Indefinido no se renueva ni cobra; sigue siendo Indefinido', () {
+      final imp = _imperio();
+      expect(imp.comprarObjeto('cuadrilla', t0, indefinido: true), isTrue);
+      expect(imp.pausarAlquiler('cuadrilla', t0 + 1000), isTrue);
+      final antes = imp.saldo;
+      imp.tick(t0 + 3 * _dur('cuadrilla'), 0);
+      expect(imp.saldo, antes);
+      expect(imp.alquilerIndefinido('cuadrilla'), isTrue);
+      expect(imp.enPausa('cuadrilla'), Duration(milliseconds: _dur('cuadrilla') - 1000));
+    });
+
+    test('alquilar en pausa lo sigue y le suma el periodo', () {
+      final imp = _imperio();
+      expect(imp.comprarObjeto('primo', t0), isTrue);
+      expect(imp.pausarAlquiler('primo', t0), isTrue);
+      final t = t0 + 5 * hora;
+      expect(imp.comprarObjeto('primo', t), isTrue);
+      expect(imp.enPausa('primo'), isNull);
+      expect(imp.partida.alquilados['primo'], t + 2 * _dur('primo'));
+    });
+
+    test('Indefinido en pausa: activarlo lo sigue sin cobrar', () {
+      final imp = _imperio();
+      expect(imp.comprarObjeto('primo', t0), isTrue);
+      expect(imp.pausarAlquiler('primo', t0), isTrue);
+      final antes = imp.saldo;
+      expect(imp.puedeIndefinido('primo', t0 + hora), isTrue);
+      expect(imp.comprarObjeto('primo', t0 + hora, indefinido: true), isTrue);
+      expect(imp.saldo, antes);
+      expect(imp.partida.alquilados['primo'], t0 + hora + _dur('primo'));
+    });
+
+    test('el resumen offline cuenta lo que corrió sin pausar, no lo pausado', () {
+      final imp = _imperio();
+      expect(imp.comprarObjeto('primo', t0), isTrue);
+      expect(imp.comprarObjeto('cuadrilla', t0), isTrue);
+      expect(imp.pausarAlquiler('cuadrilla', t0), isTrue);
+      final r = imp.aplicarOffline(t0, t0 + hora);
+      expect(r.corridos, [('primo', _dur('primo'))]);
+      expect(imp.enPausa('cuadrilla'), Duration(milliseconds: _dur('cuadrilla')));
+    });
+
+    test('ida y vuelta conserva la pausa; jalar la borra', () {
+      final imp = _imperio();
+      expect(imp.comprarObjeto('primo', t0), isTrue);
+      expect(imp.pausarAlquiler('primo', t0 + 1000), isTrue);
+      final p = Partida.desdeJson(imp.toJson());
+      expect(p.pausados, {'primo': _dur('primo') - 1000});
+      expect(p.alquilados.containsKey('primo'), isFalse);
+      expect(Partida.desdeJson(_imperio().toJson()).pausados, isEmpty);
+    });
+  });
+
   test('EstadoBano compara también lo alquilado', () {
     const a = EstadoBano(alquiler: (primos: 2, cuadrilla: false, plomero: false, robot: 0, guardia: false));
     const b = EstadoBano(alquiler: (primos: 2, cuadrilla: false, plomero: false, robot: 0, guardia: false));

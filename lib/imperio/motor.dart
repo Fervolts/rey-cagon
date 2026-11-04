@@ -93,8 +93,12 @@ class ResultadoOffline {
 
   /// Atascos offline que quedaron tapados al volver (los no cubiertos).
   int get atascosTapados => atascos.where((a) => !a.cubierto).length;
+
+  /// Alquileres de [alquileresSoloAbierta] sin pausar que corrieron con la app cerrada sin trabajar: (id, ms). Solo los
+  /// de 1 min o más.
+  final List<(String, int)> corridos;
   const ResultadoOffline(this.segundosAusente, this.segundosContados, this.ganado, this.tanqueLleno, this.conBonus,
-      {this.conGuardia = false, this.regalo = 0, this.fuerzaBonus = 1, this.atascos = const [], this.mjPerdidos = 0});
+      {this.conGuardia = false, this.regalo = 0, this.fuerzaBonus = 1, this.atascos = const [], this.mjPerdidos = 0, this.corridos = const []});
 }
 
 /// Atasco offline programado al salir: en [en] (ms epoch) se atasca [edificio]. [cubierto] = un Robot, Robot Turbo o
@@ -238,6 +242,9 @@ const Duration duracionBonoPlomero = Duration(minutes: 1);
 
 /// Tope offline del Guardia nocturno.
 const Duration topeGuardia = Duration(hours: 8);
+
+/// Alquileres que solo trabajan con la app abierta. Su tiempo corre igual con la app cerrada: se pausan a mano.
+const alquileresSoloAbierta = {'primo', 'cuadrilla', 'plomero_horas'};
 
 /// Día real local (días desde epoch) de [ms]: el Súper Plomero regala 1 vez por día.
 int diaLocal(int ms) {
@@ -881,11 +888,36 @@ class Imperio {
     final o = objetoPorId(id);
     if (o == null || o.tipo != TipoObjeto.alquilable || o.duracion == null || !objetoAbierto(id)) return false;
     if (alquilerIndefinido(id)) return false;
-    return alquiladoActivo(id, ahora) || precioAlquiler(id, ahora, 1) <= _p.saldo;
+    return alquiladoActivo(id, ahora) || _p.pausados.containsKey(id) || precioAlquiler(id, ahora, 1) <= _p.saldo;
   }
 
   /// Apaga el Indefinido de [id]: el alquiler sigue hasta su fin y no se renueva. false si no estaba.
   bool apagarIndefinido(String id) => _p.indefinidos.remove(id);
+
+  /// Lo que le queda a [id] en pausa. null = no está en pausa.
+  Duration? enPausa(String id) {
+    final ms = _p.pausados[id];
+    return ms == null ? null : Duration(milliseconds: ms);
+  }
+
+  /// [id] se puede pausar: es de [alquileresSoloAbierta] y está activo.
+  bool puedePausar(String id, int ahora) => alquileresSoloAbierta.contains(id) && alquiladoActivo(id, ahora);
+
+  /// Pausa [id] a mano: deja de trabajar y su tiempo no corre (ni con la app cerrada) hasta [reanudarAlquiler].
+  /// Si está en Indefinido, tampoco se renueva mientras tanto.
+  bool pausarAlquiler(String id, int ahora) {
+    if (!puedePausar(id, ahora)) return false;
+    _p.pausados[id] = _p.alquilados.remove(id)! - ahora;
+    return true;
+  }
+
+  /// Sigue un alquiler pausado con lo que le quedaba. false si no estaba en pausa.
+  bool reanudarAlquiler(String id, int ahora) {
+    final ms = _p.pausados.remove(id);
+    if (ms == null) return false;
+    _p.alquilados[id] = ahora + ms;
+    return true;
+  }
 
   /// Indefinidos cortados por falta de MJ que la app aún no anotó (id, precio que no alcanzó). Los entrega una vez.
   List<(String, double)> tomarIndefinidosCortados() {
@@ -903,7 +935,7 @@ class Imperio {
         _p.indefinidos.remove(id);
         continue;
       }
-      if ((_p.alquilados[id] ?? 0) > ahora) continue;
+      if ((_p.alquilados[id] ?? 0) > ahora || _p.pausados.containsKey(id)) continue;
       final precio = precioAlquiler(id, ahora, 1);
       if (!objetoAbierto(id) || precio > _p.saldo) {
         _p.indefinidos.remove(id);
@@ -943,7 +975,15 @@ class Imperio {
     return true;
   }
 
+  /// En pausa: alquilar lo sigue y le suma los periodos (si no se pudo, vuelve a la pausa).
   bool _alquilar(Objeto o, int ahora, {required bool conCiruelas, required int veces, required bool indefinido}) {
+    final pausado = reanudarAlquiler(o.id, ahora);
+    final ok = _alquilarYa(o, ahora, conCiruelas: conCiruelas, veces: veces, indefinido: indefinido);
+    if (!ok && pausado) pausarAlquiler(o.id, ahora);
+    return ok;
+  }
+
+  bool _alquilarYa(Objeto o, int ahora, {required bool conCiruelas, required int veces, required bool indefinido}) {
     if (indefinido) {
       if (conCiruelas || !puedeIndefinido(o.id, ahora)) return false;
       _p.indefinidos.add(o.id);
@@ -967,7 +1007,8 @@ class Imperio {
     if (o == null || o.tipo != TipoObjeto.alquilable) return 0;
     if (o.duracion == null) return alquiladoActivo(id, ahora) ? 0 : 1;
     final d = o.duracion!.inMilliseconds;
-    final desde = max(_p.alquilados[id] ?? 0, ahora);
+    final pausa = _p.pausados[id];
+    final desde = max(_p.alquilados[id] ?? (pausa == null ? 0 : ahora + pausa), ahora);
     return max(0, (ahora + vecesAlquilerMax * d - desde) ~/ d);
   }
 
@@ -1685,6 +1726,10 @@ class Imperio {
     final programados = List.of(_p.atascosOffline)..sort((a, b) => a.en.compareTo(b.en));
     _borrarAtascoOffline();
     if (ausente < minimoOffline.inSeconds) return ResultadoOffline(ausente, 0, 0, false, false);
+    final corridos = [
+      for (final id in alquileresSoloAbierta)
+        if (min(_p.alquilados[id] ?? 0, ahoraMs) - desdeMs >= 60000) (id, min(_p.alquilados[id]!, ahoraMs) - desdeMs),
+    ];
     final guardia = _p.alquilados.remove('guardia') != null;
     final tope = guardia ? max(topeOffline.inSeconds, topeGuardia.inSeconds).toDouble() : topeOffline.inSeconds.toDouble();
     final contados = min(ausente, tope);
@@ -1722,7 +1767,8 @@ class Imperio {
         regalo: regalo,
         fuerzaBonus: fuerzaBonus,
         atascos: caidos,
-        mjPerdidos: perdido);
+        mjPerdidos: perdido,
+        corridos: corridos);
   }
 
   /// Qué avisar con la app cerrada y en cuánto: lo más barato que todavía no alcanza (mejora o edificio) si lo offline
@@ -1862,6 +1908,7 @@ class Imperio {
       ..inventario = {}
       ..esperas = habilidadesEnEspera
       ..alquilados = {}
+      ..pausados = {}
       ..indefinidos = {}
       ..pintura = {}
       ..atascos = []

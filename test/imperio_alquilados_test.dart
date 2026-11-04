@@ -88,8 +88,8 @@ void main() {
   group('Poceta con alquilados', () {
     const todo = EstadoBano(alquiler: (primos: 4, cuadrilla: true, plomero: true, robot: 2, guardia: true));
     const fichas = <FichaAlquiler>[
-      (id: 'primo', emoji: '👦', texto: 'x4 9:59'),
-      (id: 'robot_turbo', emoji: '🦾', texto: '∞'),
+      (id: 'primo', emoji: '👦', texto: 'x4 9:59', pausado: false),
+      (id: 'robot_turbo', emoji: '🦾', texto: '∞', pausado: false),
     ];
 
     Future<void> poner(WidgetTester tester, Widget poceta) async {

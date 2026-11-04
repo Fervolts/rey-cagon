@@ -33,8 +33,8 @@ double montoFlotantePrimo(double pujoPrimoPorSegundo) => pujoPrimoPorSegundo / t
 /// Cada cuántos toques de un primo sale plata de la taza (con 10 por segundo, en todos sería una nube).
 const cadaMonedaPrimo = 3;
 
-/// Una ficha de la tira: el alquilable, su emoji y lo que dice (lo que le queda, ∞ o cuántos primos).
-typedef FichaAlquiler = ({String id, String emoji, String texto});
+/// Una ficha de la tira: el alquilable, su emoji, lo que dice (lo que le queda, ∞ o cuántos primos) y si está en pausa.
+typedef FichaAlquiler = ({String id, String emoji, String texto, bool pausado});
 
 /// Lo que dice una ficha: "∞" si es indefinido, el tiempo que queda ("14:59", "1:59:59") o, sin tiempo (el Guardia),
 /// que está vigilando. Con primos, "x2 " delante.
@@ -52,7 +52,7 @@ String textoFichaAlquiler({Duration? restante, bool indefinido = false, int prim
   return primos > 0 ? 'x$primos $tiempo' : tiempo;
 }
 
-/// Las fichas de lo alquilado activo, en el orden del catálogo.
+/// Las fichas de lo alquilado activo y de lo pausado (lo que le queda, con el ícono de pausa), en el orden del catálogo.
 List<FichaAlquiler> fichasAlquiler(Imperio im, int ahora) => [
       for (final o in objetos)
         if (o.tipo == TipoObjeto.alquilable && im.alquiladoActivo(o.id, ahora))
@@ -64,7 +64,10 @@ List<FichaAlquiler> fichasAlquiler(Imperio im, int ahora) => [
               indefinido: im.alquilerIndefinido(o.id),
               primos: o.id == 'primo' ? im.primosActivos() : 0,
             ),
-          ),
+            pausado: false,
+          )
+        else if (im.enPausa(o.id) case final queda?)
+          (id: o.id, emoji: o.emoji, texto: textoFichaAlquiler(restante: queda), pausado: true),
     ];
 
 /// El aviso corto al tocar una ficha: qué es, qué hace y cuánto le queda.
@@ -108,12 +111,13 @@ class TiraAlquiler extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 decoration: BoxDecoration(
                   color: f.id == resaltado ? acento.withValues(alpha: 0.35) : p.tarjeta,
-                  border: Border.all(color: acento, width: f.id == resaltado ? 2 : 1),
+                  border: Border.all(color: f.pausado ? p.borde : acento, width: f.id == resaltado ? 2 : 1),
                   borderRadius: BorderRadius.circular(radio),
                 ),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                   Emoji(f.emoji, tamano: 14),
                   const SizedBox(width: 3),
+                  if (f.pausado) ...[Icon(Icons.pause, size: 12, color: p.texto), const SizedBox(width: 1)],
                   Text(f.texto, style: estilo),
                 ]),
               ),

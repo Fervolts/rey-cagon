@@ -1120,6 +1120,20 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     return _hecho(ok);
   }
 
+  /// Pausa a mano un alquiler de solo app abierta: su tiempo deja de correr.
+  bool pausarAlquiler(String id) {
+    final ok = imperio.pausarAlquiler(id, ahora);
+    if (ok) _anotar('alquiler_pausa', {'id': id, 'queda': imperio.partida.pausados[id]});
+    return _hecho(ok);
+  }
+
+  /// Sigue un alquiler pausado con lo que le quedaba.
+  bool reanudarAlquiler(String id) {
+    final ok = imperio.reanudarAlquiler(id, ahora);
+    if (ok) _anotar('alquiler_sigue', {'id': id, 'hasta': imperio.partida.alquilados[id]});
+    return _hecho(ok);
+  }
+
   /// Apaga el Indefinido de [id]: sigue hasta su fin y no se renueva.
   bool apagarIndefinido(String id) {
     final ok = imperio.apagarIndefinido(id);

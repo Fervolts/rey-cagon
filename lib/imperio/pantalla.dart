@@ -32,6 +32,7 @@ import 'mana.dart';
 import 'moneda_app.dart';
 import 'motor.dart';
 import 'abdicar.dart';
+import 'pausa_alquiler.dart';
 import 'mudanza.dart';
 import 'personalizar.dart';
 import 'tarjeta_bano.dart' show presumirBano;
@@ -453,6 +454,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
           if (off.atascos.length > 1)
             tr('Fueron ${off.atascos.length} atascos en total (${off.atascosTapados} siguen tapados).',
                 '${off.atascos.length} clogs in total (${off.atascosTapados} still clogged).'),
+          ...lineasCorridos(off.corridos),
         ]);
       }
       if (_c.alquileresCortadosPendientes.isNotEmpty && mounted) {
@@ -1145,7 +1147,9 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       ultimaCuadrilla: edificioPorId(im.ultimaCuadrilla ?? '')?.emoji,
       plomeroBono: plomeroBono,
       alquileres: fichasAlquiler(im, ahora),
-      alTocarAlquiler: (f) => _avisar(f.emoji, avisoAlquiler(f)),
+      alTocarAlquiler: (f) => alquileresSoloAbierta.contains(f.id)
+          ? unawaited(abrirPausaAlquiler(context, _c, f.id, (e, t) => _avisar(e, t)))
+          : _avisar(f.emoji, avisoAlquiler(f)),
       alquilerResaltado: _resaltado,
       dedos: min(im.cantidad('dedo'), (im.partida.vista['dedos'] as int?) ?? im.cantidad('dedo')),
       activo: widget.activo,
@@ -1764,13 +1768,18 @@ class _HojaObjetos extends StatelessWidget {
   /// Periodos elegidos para [o] (0 = Indefinido). El Guardia y los que no son alquilables van de a uno.
   int _veces(Objeto o) => o.tipo == TipoObjeto.alquilable && o.duracion != null ? (_vecesElegidas[o.id] ?? 1) : 1;
 
-  void _conMj(Objeto o) {
+  void _conMj(BuildContext context, Objeto o) {
     final veces = _veces(o);
     if (_porQueNo(control.imperio, o, control.ahora, veces: veces) case (final emoji, final texto)) return avisar(emoji, texto);
     if (control.comprarObjeto(o.id, veces: max(veces, 1), indefinido: veces == 0)) {
       HapticFeedback.mediumImpact();
       avisar(o.emoji, _hechoTexto(o, indefinido: veces == 0));
+      unawaited(avisarSoloAbierta(context, control, o));
     }
+  }
+
+  void _pausa(Objeto o) {
+    if (alternarPausa(control, o.id) case (final emoji, final texto)) avisar(emoji, texto);
   }
 
   void _apagar(Objeto o) {
@@ -1805,13 +1814,14 @@ class _HojaObjetos extends StatelessWidget {
     });
   }
 
-  Future<void> _conCiruelas(Objeto o) async {
+  Future<void> _conCiruelas(BuildContext context, Objeto o) async {
     if (_porQueNo(control.imperio, o, control.ahora, conCiruelas: true, veces: _veces(o)) case (final emoji, final texto)) return avisar(emoji, texto);
     if (!_pagandoCiruelas.add(o.id)) return;
     try {
       final ok = await control.gastarCiruelas('obj_${o.id}');
       if (ok) HapticFeedback.mediumImpact();
       avisar(ok ? o.emoji : '🫐', ok ? _hechoTexto(o) : tr('No te alcanzan las Ciruelas.', 'Not enough Plums.'));
+      if (ok && context.mounted) unawaited(avisarSoloAbierta(context, control, o));
     } catch (e) {
       avisar('💩', textoError(e));
     } finally {
@@ -1846,6 +1856,8 @@ class _HojaObjetos extends StatelessWidget {
     final elige = alquilable && o.duracion != null;
     final veces = _veces(o);
     final indef = alquilable && im.alquilerIndefinido(o.id);
+    final pausable = alquileresSoloAbierta.contains(o.id);
+    final pausa = im.enPausa(o.id);
     final precioPagar = alquilable ? im.precioAlquiler(o.id, ahora, max(veces, 1)) : precio;
     final puedeMj = abierto && (veces == 0 ? im.puedeIndefinido(o.id, ahora) : im.puedeComprarObjeto(o.id, ahora, veces: veces));
     final calorX = alquilable ? im.multiplicadorCalor(o.id, ahora) : 1.0;
@@ -1952,7 +1964,7 @@ class _HojaObjetos extends StatelessWidget {
                 control: control,
                 objeto: o,
                 ahora: ahora,
-                alIr: puedeMj ? () => _conMj(o) : null,
+                alIr: puedeMj ? () => _conMj(context, o) : null,
                 precioIr: '${_mj(precioPagar)} ${monedaActual().abreviatura}',
               ),
             if (esFicha)
@@ -1966,13 +1978,37 @@ class _HojaObjetos extends StatelessWidget {
               )
             else ...[
               const SizedBox(height: 8),
-              if (alquilado) ...[
-                Text(
-                    o.duracion == null
-                        ? tr('Activo: cuida tu próxima ausencia', 'Active: covers your next time away')
-                        : tr('Activo: ${_cuenta(Duration(milliseconds: finAlquiler - ahora))}',
-                            'Active: ${_cuenta(Duration(milliseconds: finAlquiler - ahora))}'),
-                    style: numeros(context, tamano: 12, color: acento)),
+              if (abierto && pausable) ...[
+                Text(tr('Solo trabaja con la app abierta y su tiempo corre aunque la cierres: páusalo antes de salir.',
+                        'It only works with the app open and its time runs even when closed: pause it before leaving.'),
+                    key: Key('solo_abierta_${o.id}'), style: TextStyle(fontSize: 12, color: p.textoSuave)),
+                const SizedBox(height: 6),
+              ],
+              if (alquilado || pausa != null) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                          pausa != null
+                              ? tr('En pausa: le quedan ${_cuenta(pausa)}', 'Paused: ${_cuenta(pausa)} left')
+                              : o.duracion == null
+                                  ? tr('Activo: cuida tu próxima ausencia', 'Active: covers your next time away')
+                                  : tr('Activo: ${_cuenta(Duration(milliseconds: finAlquiler - ahora))}',
+                                      'Active: ${_cuenta(Duration(milliseconds: finAlquiler - ahora))}'),
+                          style: numeros(context, tamano: 12, color: pausa != null ? p.texto : acento)),
+                    ),
+                    if (pausable) ...[
+                      const SizedBox(width: 6),
+                      OutlinedButton.icon(
+                        key: Key('${pausa != null ? 'seguir' : 'pausar'}_${o.id}'),
+                        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10), minimumSize: const Size(0, 36)),
+                        onPressed: () => _pausa(o),
+                        icon: Icon(pausa != null ? Icons.play_arrow : Icons.pause, size: 16),
+                        label: Text(pausa != null ? tr('SEGUIR', 'RESUME') : tr('PAUSAR', 'PAUSE')),
+                      ),
+                    ],
+                  ],
+                ),
                 const SizedBox(height: 6),
               ],
               if (indef) ...[
@@ -2011,11 +2047,11 @@ class _HojaObjetos extends StatelessWidget {
                 children: [
                   pagar(
                     key: Key('pagar_mj_${o.id}'),
-                    precio: veces == 0 && alquilado
+                    precio: veces == 0 && (alquilado || pausa != null)
                         ? Text(tr('ACTIVAR ∞', 'TURN ON ∞'), style: estiloPrecio)
                         : montoMj(_mj(precioPagar), estiloPrecio, alineacion: Alignment.center),
                     puede: puedeMj,
-                    alTocar: () => _conMj(o),
+                    alTocar: () => _conMj(context, o),
                   ),
                   if (o.ciruelas > 0) ...[
                     const SizedBox(width: 6),
@@ -2026,7 +2062,7 @@ class _HojaObjetos extends StatelessWidget {
                         children: [Text('${o.ciruelas} ', style: estiloPrecio), const Emoji('🫐', tamano: 18)],
                       ),
                       puede: abierto && veces == 1 && !_pagandoCiruelas.contains(o.id) && im.puedeComprarObjeto(o.id, ahora, conCiruelas: true),
-                      alTocar: () => _conCiruelas(o),
+                      alTocar: () => _conCiruelas(context, o),
                     ),
                   ],
                   if (consumible) ...[

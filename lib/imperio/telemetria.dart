@@ -76,6 +76,8 @@ Future<int> _enviarPorRpc(List<Map<String, Object?>> lote) async {
 /// - `alquiler_cortado` {id, precio, saldo}: un alquiler Indefinido no se pudo renovar por falta de MJ y se apagó (precio = lo que
 ///   costaba el periodo, saldo = los MJ que había) (2.13.1)
 /// - `alquiler_apagar` {id, hasta}: apagó a mano el Indefinido; el alquiler sigue hasta `hasta` (2.13.1)
+/// - `alquiler_pausa` {id, queda}: pausó a mano un alquiler de solo app abierta; `queda` = ms que le quedaban (2.18.0)
+/// - `alquiler_sigue` {id, hasta}: siguió un alquiler pausado; corre hasta `hasta` (2.18.0)
 /// - `alquiler_guia` {id, accion}: guía de los alquileres. accion = `ficha` (se vio la ficha de qué hace, la primera vez o
 ///   con el botón ?), `entendido` (la cerró), `ir` (alquiló desde la ficha) o `empujon` (salió un consejo en la pantalla:
 ///   id = el alquilable, `robot` con un Atasco de más de 20 s, `primo` pujando rápido a mano, o el recién alquilado)
