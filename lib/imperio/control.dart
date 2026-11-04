@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/widgets.dart';
 
 import '../actualizar.dart' show buildInstalado;
+import '../cloaca.dart' show NubeCloacas, cloacaCambio;
 import '../fresca.dart' show frescaHasta;
 import '../main.dart' show db, esDeRed;
 import '../recordatorio.dart' show cancelarAvisoImperio, programarAvisoAtasco, programarAvisoImperio;
@@ -177,6 +178,9 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   /// Las llamadas de los regalos (en las pruebas, una falsa).
   NubeRegalos nubeRegalos = const NubeRegalos();
 
+  /// Las llamadas de la Cloaca 🚽 (bono de hoy y premios de la liga; en las pruebas, una falsa).
+  NubeCloacas nubeCloaca = const NubeCloacas();
+
   /// Sube cada vez que cae una Ciruela 🫐 (pujo o cagada): la pantalla la hace volar al chip.
   final ValueNotifier<int> ciruelaCae = ValueNotifier(0);
 
@@ -281,6 +285,10 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     if (!sinConexion) unawaited(_cargarProgreso());
     if (!sinConexion) unawaited(cargarCofre());
     if (!sinConexion) unawaited(cargarRegalos());
+    if (!sinConexion) unawaited(cargarCloaca());
+    cloacaCambio
+      ..removeListener(_cloacaCambio)
+      ..addListener(_cloacaCambio);
     if (!sinConexion) unawaited(_cargarEstilos());
   }
 
@@ -412,6 +420,41 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  /// La Cloaca 🚽: trae el bono de producción de hoy (lo calcula el servidor) y cobra los Rollos de Oro de las ligas
+  /// ganadas. Nunca lanza: sin RPC o sin red el bono queda como estaba y los premios esperan a la próxima vez.
+  Future<void> cargarCloaca() async {
+    try {
+      final bono = await nubeCloaca.bono();
+      if (_cerrado) return;
+      if (bono != imperio.bonoCloaca) {
+        imperio.bonoCloaca = bono;
+        notifyListeners();
+      }
+      if (!_cargado) return;
+      final estado = await nubeCloaca.mia();
+      for (final p in estado.premios) {
+        if (_cerrado) return;
+        final r = await nubeCloaca.cobrar(p.id);
+        // Ya cobrado en el servidor: se suma aunque la pantalla se haya cerrado, para no perderlo.
+        if (!r.ok || r.rollos <= 0) continue;
+        imperio.partida.rollos += r.rollos;
+        _anotar('cloaca_premio_cobra', {'rollos': r.rollos, 'semana': p.semana});
+        if (_cerrado) {
+          unawaited(_guardarLocal());
+          unawaited(_guardarNube());
+        } else {
+          _fichasHechas();
+        }
+      }
+    } catch (e) {
+      _error('cloaca', e);
+    }
+  }
+
+  void _cloacaCambio() {
+    if (!_cerrado && !sinConexion) unawaited(cargarCloaca());
+  }
+
   /// Abre un Rollo de regalo: el servidor dice cuántos minutos; aquí se cobran de la producción propia. Devuelve lo que
   /// dijo el servidor y los MJ (0 si no se abrió). Lanza el error de red sin tocar la partida.
   Future<(ResultadoRegalo, double)> abrirRegalo(Regalo g) async {
@@ -530,6 +573,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       unawaited(_cargarProgreso());
       unawaited(cargarCofre());
       unawaited(cargarRegalos());
+      unawaited(cargarCloaca());
     } catch (e) {
       _error('recargar', e);
       if (!sinConexion) {
@@ -1405,6 +1449,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     _cerrado = true;
     if (identical(vivo, this)) vivo = null;
     frescaHasta.removeListener(_ponerFresca);
+    cloacaCambio.removeListener(_cloacaCambio);
     _bucle?.cancel();
     _bucle = null;
     _cerrarSesion();

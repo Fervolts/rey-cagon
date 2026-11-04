@@ -109,6 +109,8 @@ Future<int> _enviarPorRpc(List<Map<String, Object?>> lote) async {
 ///   regalado según el servidor; en_chat = si salió la tarjeta en el chat (la primera del día)
 /// - `imperio_regalo_abre` {minutos, mj, mutuo, quedan}: abrió un Rollo de regalo. minutos = los que pagó el servidor; mj =
 ///   lo que sumó (minutos de la producción propia); mutuo = si ese mismo día yo también le regalé a quien me lo dio; quedan = Rollos por abrir
+/// - `cloaca_premio_cobra` {rollos, semana}: cobró los Rollos de Oro 🧻 de una liga de Cloacas ganada (control.dart, al
+///   abrir el Imperio). rollos = los que pagó el servidor; semana = lunes de esa liga (AAAA-MM-DD)
 /// - `avisos_tarjeta_ve` {total, categoria}: vio la tarjeta "Ordena tus avisos" del inicio (una vez por pantalla;
 ///   avisos_resumen.dart). total = push que le llegaron en 7 días; categoria = la que más mandó
 /// - `avisos_tarjeta_abre` {total}: tocó ELEGIR AVISOS y abrió Ajustes de notificaciones

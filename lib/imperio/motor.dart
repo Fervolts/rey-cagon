@@ -294,6 +294,10 @@ class Imperio {
   /// Estéticas premium compradas (ids de `esteticas`; las guarda el servidor). Solo suben la suerte de las Ciruelas.
   Set<String> esteticas;
 
+  /// Bono de producción de la Cloaca de hoy (0,05 = +5% por cada miembro que cagó, con tope). Lo calcula el
+  /// servidor (`cloaca_bono`) y lo pone el controlador; no se guarda en la partida.
+  double bonoCloaca = 0;
+
   /// Números que vienen de los flags remotos (por defecto, los de siempre).
   final Ajustes ajustes;
   final Random _azar;
@@ -459,9 +463,13 @@ class Imperio {
   /// Llave de paso: la parte del clic del pujo x3 por nivel.
   double get multiplicadorLlavePaso => pow(3, nivelPlomeria('llave_paso')).toDouble();
 
-  /// Cagadas x logros x rollos x comodidad x mudanza x Corte: lo que no se acaba en la corrida.
+  /// Cagadas x logros x rollos x comodidad x mudanza x Corte x Cloaca: lo que no se acaba en la corrida.
   double get multiplicadorPermanente =>
-      multiplicadorCagadas * multiplicadorLogros * multiplicadorRollos * multiplicadorComodidad * multiplicadorMudanza * multiplicadorCorte;
+      multiplicadorCagadas * multiplicadorLogros * multiplicadorRollos * multiplicadorComodidad * multiplicadorMudanza * multiplicadorCorte *
+      multiplicadorCloaca;
+
+  /// La Cloaca: 1 + el bono de hoy. El servidor ya le pone tope; aquí solo se evita algo raro (negativo o más de x2).
+  double get multiplicadorCloaca => 1 + bonoCloaca.clamp(0.0, 1.0);
 
   /// Suma de efectos temporales sobre la producción (objetos + tipo), tope x4. No incluye la Fiebre.
   double multiplicadorProduccionTemporal(int ahora) {
