@@ -34,6 +34,14 @@ class Sonido {
   static AudioPlayer? _musica;
   static String? _musicaActual;
   static AppLifecycleListener? _ciclo;
+  static Future<void>? _contexto;
+
+  // Sin pedir el foco de audio: si no, cada efecto pausa la música del juego (y la de otras apps).
+  static Future<void> _mezclar() => _contexto ??= () async {
+        try {
+          await AudioPlayer.global.setAudioContext(AudioContextConfig(focus: AudioContextConfigFocus.mixWithOthers).build());
+        } catch (_) {}
+      }();
 
   static Future<void> leerPreferencia() async {
     if (_leido) return;
@@ -46,9 +54,14 @@ class Sonido {
 
   static Future<void> alternarSilencio() async {
     silencio.value = !silencio.value;
-    if (silencio.value) {
-      await pararMusica();
-    }
+    // Pausa en vez de parar: al quitar el silencio sigue el loop del juego que está abierto.
+    try {
+      if (silencio.value) {
+        await _musica?.pause();
+      } else if (_musicaActual != null && !apagado) {
+        await _musica?.resume();
+      }
+    } catch (_) {}
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_clave, silencio.value);
@@ -62,6 +75,7 @@ class Sonido {
     if (ya != null) return Future.value(ya);
     return _cargando[nombre] ??= () async {
       try {
+        await _mezclar();
         final p = await AudioPool.createFromAsset(path: 'sonidos/$nombre.wav', maxPlayers: 4);
         _pools[nombre] = p;
         return p;
@@ -102,6 +116,7 @@ class Sonido {
           if (_musicaActual != null && !_mudo) _musica?.resume();
         },
       );
+      await _mezclar();
       final m = _musica ??= AudioPlayer();
       _musicaActual = nombre;
       await m.stop();
