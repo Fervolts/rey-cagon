@@ -24,6 +24,7 @@ import 'imperio/regalos.dart' show regalarRollo;
 import 'logros.dart';
 import 'novedades.dart';
 import 'placer.dart';
+import 'privados.dart' show abrirPrivado, faltaPrivados, privadosDisponibles;
 import 'main.dart' show conReintento, db, escucharCagadas, esDeRed, textoError;
 import 'push.dart';
 import 'recordatorio.dart';
@@ -53,6 +54,10 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
   bool _bloqueado = false;
   // Si esa persona me sigue a mí: el regalo solo sale entre amigos (se siguen los dos).
   bool _meSigue = false;
+  // Privados (lib/privados.dart): si le puedo escribir (RPC dm_puedo) y, en el mío, quién me puede escribir.
+  // _mensajesDe queda en null si la base no tiene la columna todavía: entonces la fila de ajustes no sale.
+  bool _puedoEscribir = false;
+  String? _mensajesDe;
   // Rollo de regalo del Imperio (imperio/regalos.dart): mientras sale y si ya salió hoy desde aquí.
   bool _regalando = false, _regalado = false;
   // Género del perfil propio: no sale en el RPC perfil porque nadie más lo ve.
@@ -92,6 +97,60 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
     _soltar = escucharCagadas('perfil', _cargar);
     if (_esMio) _cargarImperio();
     _cargarPartida();
+    _esMio ? _cargarMensajesDe() : _cargarPuedoEscribir();
+  }
+
+  /// El botón MENSAJE es un extra: si la RPC no existe (migración sin aplicar) o falla, no sale.
+  Future<void> _cargarPuedoEscribir() async {
+    try {
+      final r = await conReintento(() => db.rpc('dm_puedo', params: {'otro': widget.usuarioId}));
+      if (mounted) setState(() => _puedoEscribir = r == true);
+    } catch (e) {
+      if (faltaPrivados(e)) privadosDisponibles.value = false;
+    }
+  }
+
+  Future<void> _cargarMensajesDe() async {
+    try {
+      final r = await conReintento(() => db.from('profiles').select('mensajes_de').eq('id', widget.usuarioId).single());
+      if (mounted) setState(() => _mensajesDe = r['mensajes_de'] as String? ?? 'amigos');
+    } catch (_) {}
+  }
+
+  String _nombreMensajesDe(String v) => switch (v) {
+        'todos' => tr('Todos', 'Everyone'),
+        'nadie' => tr('Nadie', 'Nobody'),
+        _ => tr('Gente que sigues', 'People you follow'),
+      };
+
+  Future<void> _elegirMensajesDe() async {
+    final valor = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          for (final v in ['todos', 'amigos', 'nadie'])
+            ListTile(
+              title: Text(_nombreMensajesDe(v)),
+              trailing: _mensajesDe == v ? const Icon(Icons.check) : null,
+              onTap: () => Navigator.pop(context, v),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            child: Text(
+              tr('Siempre puedes contestarle a quien ya te escribió.', 'You can always reply to whoever already wrote to you.'),
+              style: TextStyle(color: paleta(context).textoSuave, fontSize: 13),
+            ),
+          ),
+        ]),
+      ),
+    );
+    if (valor == null || valor == _mensajesDe) return;
+    try {
+      await conReintento(() => db.from('profiles').update({'mensajes_de': valor}).eq('id', widget.usuarioId));
+      if (mounted) setState(() => _mensajesDe = valor);
+    } catch (e) {
+      _mensaje(textoError(e));
+    }
   }
 
   /// La tarjeta del Imperio es un extra: si la RPC falla o no existe todavía, el perfil sale igual sin ella.
@@ -527,6 +586,15 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaAjustesAvisos())),
                 ),
+                if (_mensajesDe != null)
+                  ListTile(
+                    key: const Key('mensajes_de'),
+                    leading: const Icon(Icons.mail_lock_outlined),
+                    title: Text(tr('Quién te puede escribir', 'Who can message you')),
+                    subtitle: Text(_nombreMensajesDe(_mensajesDe!)),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: luego(_elegirMensajesDe),
+                  ),
                 const FilaAvisosPoceta(),
                 if (Platform.isAndroid)
                   ListTile(
@@ -814,6 +882,14 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                           onPressed: _regalando || _regalado ? null : () => _regalar(p['username'] as String? ?? ''),
                           icon: const Emoji('🎁', tamano: 18),
                           label: Text(_regalado ? tr('REGALADO', 'GIFTED') : tr('REGALAR', 'GIFT')),
+                        ),
+                      // Privado: solo si su ajuste "Quién te puede escribir" me deja (o ya me escribió). Lo decide dm_puedo.
+                      if (_puedoEscribir)
+                        FilledButton.icon(
+                          key: const Key('mensaje'),
+                          onPressed: () => abrirPrivado(context, widget.usuarioId, p['username'] as String? ?? '?'),
+                          icon: const Emoji('💌', tamano: 18),
+                          label: Text(tr('MENSAJE', 'MESSAGE')),
                         ),
                     ]),
                   ),

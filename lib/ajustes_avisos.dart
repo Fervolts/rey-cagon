@@ -24,6 +24,7 @@ List<(String, String, String, String)> get categoriasAvisos => [
       ('ganadores', '🏆', tr('Ganadores', 'Winners'), tr('Quién ganó la semana, el mes y el año entre tus amigos', 'Who won the week, month and year among your friends')),
       ('cierres', '⏳', tr('Fin de periodo', 'Period ending'), tr('Horas antes del cierre: en qué puesto vas y a quién alcanzar', 'Hours before it closes: your spot and who to catch')),
       ('chat', '🚻', tr('Baño', 'Bathroom'), tr('Menciones y respuestas en el chat', 'Mentions and replies in the chat')),
+      ('privados', '💌', tr('Privados', 'Private messages'), tr('Mensajes privados que te mandan', 'Private messages sent to you')),
       ('retos', '⚔️', tr('Retos', 'Challenges'), tr('El Cagadón: te retan, aceptan o se acaba', 'The Poop-off: challenged, accepted or over')),
       ('seguidores', '👀', tr('Nuevos seguidores', 'New followers'), tr('Cuando alguien empieza a seguirte', 'When someone starts following you')),
       ('imperio', '🏭', tr('Imperio', 'Empire'), tr('La poceta y la racha de tu Imperio', 'Your Empire\'s toilet and streak')),
@@ -32,7 +33,11 @@ List<(String, String, String, String)> get categoriasAvisos => [
 Future<Map<String, bool>> _cargarDeLaBase() async {
   final fila = await conReintento(() => db.rpc('push_avisos_mios'));
   final mapa = (fila as Map?)?.cast<String, dynamic>() ?? const {};
-  return {for (final (clave, _, _, _) in categoriasAvisos) clave: mapa[clave] as bool? ?? true};
+  // 'privados' solo si la base ya la conoce (migración de privados): si no, la fila no sale.
+  return {
+    for (final (clave, _, _, _) in categoriasAvisos)
+      if (clave != 'privados' || mapa.containsKey(clave)) clave: mapa[clave] as bool? ?? true,
+  };
 }
 
 Future<void> _guardarEnLaBase(String clave, bool activo) =>
@@ -138,7 +143,8 @@ class _PantallaAjustesAvisosState extends State<PantallaAjustesAvisos> {
                     borderRadius: BorderRadius.circular(radio),
                   ),
                   child: Column(children: [
-                    for (final (i, (clave, emoji, nombre, descripcion)) in categoriasAvisos.indexed) ...[
+                    for (final (i, (clave, emoji, nombre, descripcion)) in categoriasAvisos.indexed)
+                      if (clave != 'privados' || activos.containsKey(clave)) ...[
                       if (i > 0) Divider(height: 1, thickness: 1, color: p.borde),
                       _FilaInterruptor(
                         key: ValueKey('aviso_$clave'),

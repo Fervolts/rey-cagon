@@ -176,6 +176,7 @@ const _archivos = {
   '🤵': 'person_in_tuxedo',
   '📯': 'postal_horn',
   '🍷': 'wine_glass',
+  '💌': 'love_letter',
 };
 
 // Las mismas claves sin FE0F, para encontrar '🌶' igual que '🌶️'.

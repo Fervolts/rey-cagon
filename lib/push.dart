@@ -14,6 +14,7 @@ import 'avisos.dart' show ir;
 import 'idioma.dart' show idioma, tr;
 import 'imperio/regalos.dart' show irARegalos;
 import 'main.dart' show db;
+import 'privados.dart' show privadoAbierto, revisarPrivados;
 import 'recordatorio.dart' show cancelarAvisoImperio, clavePocetaLocal, notificaciones;
 import 'widget.dart' show clienteDeFondo, refrescarRanking;
 
@@ -59,6 +60,8 @@ void _alTocar(RemoteMessage m) {
   }
   final destino = switch (m.data['tipo']) {
     'mencion' || 'reporte_chat' => m.data['sala'] ?? 'todos',
+    // Privado: el baño abre esa conversación (lib/privados.dart). Sin sala válida, a la lista de chats.
+    'dm' => '${m.data['sala']}'.startsWith('dm:') ? m.data['sala'] : 'amigos',
     'soporte' => 'soporte',
     'reto' => 'inicio',
     'follow' || 'placer' || 'anuncio' => 'avisos',
@@ -94,6 +97,11 @@ Future<void> iniciarPush() async {
   FirebaseMessaging.onMessage.listen((m) {
     // Versión nueva con la app abierta: además del aviso, se ofrece ya (el toque al aviso local no abre nada).
     if (m.data['tipo'] == 'version') versionAnunciada.value++;
+    // Privado: prende el puntito; si esa conversación ya está abierta en pantalla, no hace falta el aviso.
+    if (m.data['tipo'] == 'dm') {
+      revisarPrivados();
+      if (m.data['sala'] == privadoAbierto) return;
+    }
     final n = m.notification;
     if (n == null) return;
     notificaciones.show(

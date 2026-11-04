@@ -18,6 +18,7 @@ import 'chat_vivo.dart';
 import 'cloaca.dart' show TarjetaCloaca;
 import 'popups.dart' show PantallaPopups;
 import 'presumir.dart';
+import 'privados.dart';
 import 'emoji.dart';
 import 'idioma.dart';
 import 'imperio/tarjeta_bano.dart';
@@ -208,6 +209,7 @@ class _PantallaChatState extends State<PantallaChat> {
       if (mounted) setState(() => _soyAdmin = v == true);
     }).catchError((_) {});
     irA.addListener(_irA);
+    revisarPrivados();
     WidgetsBinding.instance.addPostFrameCallback((_) => _irA());
   }
 
@@ -272,6 +274,8 @@ class _PantallaChatState extends State<PantallaChat> {
         _abrirAmigos();
       case 'todos' || 'global' || 'es' || 'en':
         _abrirGeneral(destino.a == 'todos' ? 'global' : destino.a);
+      case final a when esSalaDm(a):
+        abrirPrivadoDeSala(context, a);
     }
   }
 
@@ -322,6 +326,36 @@ class _PantallaChatState extends State<PantallaChat> {
               titulo: tr('Amigos', 'Friends'),
               detalle: tr('A quién sigues, quién te sigue y sus mensajes.', 'Who you follow, who follows you and their messages.'),
               alTocar: _abrirAmigos,
+            ),
+            // Sin la migración de privados la fila no sale (privadosDisponibles se apaga solo).
+            ValueListenableBuilder<bool>(
+              valueListenable: privadosDisponibles,
+              builder: (context, hay, _) => !hay
+                  ? const SizedBox.shrink()
+                  : ValueListenableBuilder<bool>(
+                      valueListenable: privadosSinLeer,
+                      builder: (context, nuevo, _) => _FilaChat(
+                        key: const Key('bano_privados'),
+                        emoji: '💌',
+                        titulo: tr('Privados', 'Private'),
+                        detalle: tr('Tus conversaciones de uno a uno.', 'Your one to one conversations.'),
+                        extra: !nuevo
+                            ? null
+                            : Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Row(children: [
+                                  const PuntoSinLeer(),
+                                  const SizedBox(width: 6),
+                                  Text(tr('Tienes mensajes sin leer', 'You have unread messages'),
+                                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                                ]),
+                              ),
+                        alTocar: () async {
+                          await Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaPrivados()));
+                          revisarPrivados();
+                        },
+                      ),
+                    ),
             ),
             _FilaChat(
               key: const Key('bano_soporte'),
@@ -563,7 +597,8 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
   // Si la base todavía no tiene la columna responde_a (migración sin aplicar), _hayHilos queda en
   // false y la sala funciona como antes.
   final _respuestas = <int, Map<int, Map<String, dynamic>>>{};
-  bool _hayHilos = true;
+  // En un privado no hay hilos: es una conversación de dos.
+  late bool _hayHilos = !_esDm;
   // Ids borrados, para que un hilo abierto sepa que su padre ya no está.
   final _borrados = <int>{};
   // Reacciones: id del mensaje → emoji → quiénes la pusieron. Tienen su propio canal de realtime.
@@ -598,6 +633,8 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
 
   String get _yo => db.auth.currentUser!.id;
   bool get _esSoporte => widget.sala == 'soporte';
+  // Chat privado entre dos (lib/privados.dart): sin escribiendo, sin hilos, sin menciones ni fijados.
+  bool get _esDm => esSalaDm(widget.sala);
 
   @override
   bool get wantKeepAlive => true;
@@ -632,11 +669,11 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
       });
     }).catchError((_) {});
     if (widget.abrirBug) WidgetsBinding.instance.addPostFrameCallback((_) => _reportarError());
-    if (!_esSoporte) {
+    if (!_esSoporte && !_esDm) {
       irA.addListener(_irAlHilo);
       WidgetsBinding.instance.addPostFrameCallback((_) => _irAlHilo());
     }
-    if (!_esSoporte) {
+    if (!_esSoporte && !_esDm) {
       _cargarAmigos();
       _texto.addListener(_buscarMencion);
     }
@@ -750,7 +787,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
 
   // Aparte de los 200 últimos: un anuncio fijado puede ser más viejo que eso.
   Future<void> _cargarFijados() async {
-    if (_esSoporte) return;
+    if (_esSoporte || _esDm) return;
     try {
       final r = await db
           .from('mensajes')
@@ -910,7 +947,8 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
     _canalEscribiendo = null;
     if (viejo != null) db.removeChannel(viejo);
     // En la Cloaca no hay "escribiendo": el canal de Realtime no tiene RLS y cualquiera con el id lo oiría.
-    if (widget.sala.startsWith('cloaca:')) return;
+    // En un privado tampoco, por lo mismo.
+    if (widget.sala.startsWith('cloaca:') || _esDm) return;
     _canalEscribiendo = db.channel(_temaEscribiendo).onBroadcast(event: 'escribiendo', callback: _recibirEscribiendo).subscribe();
   }
 
@@ -1278,7 +1316,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
       if (texto == null && tarjeta == null) _texto.clear();
       return true;
     } catch (e) {
-      if (donde.mounted) _aviso(donde, _error(e));
+      if (donde.mounted) _aviso(donde, _esDm ? errorPrivado(e) : _error(e));
       return false;
     } finally {
       if (mounted) setState(() => _enviando = false);
@@ -1369,7 +1407,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
             ListTile(leading: const Icon(Icons.flag_outlined), title: Text(tr('Reportar mensaje', 'Report message')), onTap: () => Navigator.pop(context, 'reportar')),
           if (!suyo && !_esSoporte && !_admins.contains(m['user_id']))
             ListTile(leading: const Icon(Icons.block), title: Text(tr('Bloquear a esta persona', 'Block this person')), onTap: () => Navigator.pop(context, 'bloquear')),
-          if (_soyAdmin && !_esSoporte && !esRespuesta)
+          if (_soyAdmin && !_esSoporte && !_esDm && !esRespuesta)
             _estaFijado(m)
                 ? ListTile(leading: const Icon(Icons.push_pin_outlined), title: Text(tr('Desfijar', 'Unpin')), onTap: () => Navigator.pop(context, 'desfijar'))
                 : ListTile(leading: const Icon(Icons.push_pin), title: Text(tr('Fijar arriba como anuncio', 'Pin on top as announcement')), onTap: () => Navigator.pop(context, 'fijar')),
@@ -1633,7 +1671,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
                   child: ListView(children: [
                     const SizedBox(height: 120),
                     Center(
-                      child: Text(_esSoporte ? tr('Todavía no hay mensajes', 'No messages yet') : tr('Nadie ha dicho nada. Estrena $nombreSala 🚽', 'Nobody has said anything. Break the ice in $nombreSala 🚽'),
+                      child: Text(_esSoporte ? tr('Todavía no hay mensajes', 'No messages yet') : _esDm ? tr('Todavía no hay mensajes. Saluda.', 'No messages yet. Say hi.') : tr('Nadie ha dicho nada. Estrena $nombreSala 🚽', 'Nobody has said anything. Break the ice in $nombreSala 🚽'),
                           style: TextStyle(color: p.textoSuave)),
                     ),
                   ]),
@@ -1681,9 +1719,9 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
             padding: const EdgeInsets.fromLTRB(4, 6, 8, 6),
             decoration: BoxDecoration(border: Border(top: BorderSide(color: p.borde))),
             child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              if (!_esSoporte)
+              if (!_esSoporte && !_esDm)
                 IconButton(onPressed: _enviando ? null : _compartir, icon: const Icon(Icons.emoji_events_outlined), tooltip: tr('Presumir', 'Show off')),
-              if (_esSoporte) const SizedBox(width: 8),
+              if (_esSoporte || _esDm) const SizedBox(width: 8),
               Expanded(
                 child: TextField(
                   controller: _texto,
@@ -1693,7 +1731,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
                   maxLines: 5,
                   maxLength: 1000,
                   textCapitalization: TextCapitalization.sentences,
-                  decoration: decoracionConEmojis(_esSoporte ? tr('Escribe algo…', 'Write something…') : tr('Escribe… (@ para mencionar)', 'Write… (@ to mention)')),
+                  decoration: decoracionConEmojis(_esSoporte || _esDm ? tr('Escribe algo…', 'Write something…') : tr('Escribe… (@ para mencionar)', 'Write… (@ to mention)')),
                 ),
               ),
               const SizedBox(width: 6),

@@ -18,8 +18,9 @@
 //   - imperio_regalar: { tipo: "regalo", id } → un amigo te mandó un Rollo de papel de regalo (categoría imperio).
 //   - cron cloaca_semana (cloaca_cerrar_semana, si el flag cloaca_push está prendido): { tipo: "cloaca", semana }
 //     → a los premiados de la Cloaca que ganó la liga de esa semana (categoría ganadores).
+//   - trigger mensajes_avisar_dm: { tipo: "dm", id } → mensaje privado al otro de la pareja (categoría privados).
 // Cada quien apaga categorías en push_ajustes (cagadas, rachas, ganadores, cierres, chat, retos,
-// seguidores, imperio). Apagar solo quita el push: lo que se guardaba en el centro de avisos se sigue guardando.
+// seguidores, imperio, privados). Apagar solo quita el push: lo que se guardaba en el centro de avisos se sigue guardando.
 // Anuncio, versión y soporte no se apagan.
 // Topes (migración avisos_menos, función push_tope): 'cagada' y 'placer' comparten uno por persona cada
 // push_config.cagadas_cada_min (90); lo que cae dentro no sale y el siguiente aviso de cagada lo resume
@@ -405,6 +406,29 @@ async function avisarReporteChat(mensajeId: number, motivo: string) {
       : aviso("🚩 Reportaron un mensaje", cuerpo, "🚩 A message was reported", cuerpo),
     { tipo: "reporte_chat", sala: m.sala },
   );
+}
+
+// Mensaje privado (sala 'dm:<a>:<b>'): push solo al otro de la pareja, si tiene prendida la categoría privados.
+// No se guarda en el centro de avisos: la bandeja de Privados ya marca lo no leído.
+async function avisarDm(id: number) {
+  const { data: m } = await db.from("mensajes").select("user_id, texto, sala").eq("id", id).single();
+  if (!m || typeof m.sala !== "string" || !m.sala.startsWith("dm:")) return Response.json({ enviados: 0 });
+  const [, a, b] = m.sala.split(":");
+  const otro = m.user_id === a ? b : m.user_id === b ? a : null;
+  if (!otro) return Response.json({ enviados: 0 });
+  const [{ data: perfil }, { data: tokens }] = await Promise.all([
+    db.from("profiles").select("username").eq("id", m.user_id).single(),
+    db.from("push_tokens").select("token, user_id, idioma").eq("user_id", otro),
+  ]);
+  const destinos = await conAviso(tokens ?? [], "privados");
+  if (!destinos.length) return Response.json({ enviados: 0 });
+  const quien = perfil?.username ?? "Alguien";
+  const cuerpo = recortar(m.texto ?? "");
+  const { enviados } = await repartir("dm", destinos, fijo(aviso(`💬 ${quien}`, cuerpo, `💬 ${quien}`, cuerpo), {
+    tipo: "dm",
+    sala: m.sala,
+  }));
+  return Response.json({ enviados });
 }
 
 // "@username" en una sala pública: aviso a los mencionados (el toque abre esa sala).
@@ -882,6 +906,7 @@ Deno.serve(async (req) => {
   if (cuerpo.tipo === "placer") return avisarPlacer(cuerpo.id);
   if (cuerpo.tipo === "soporte") return avisarSoporte(cuerpo.id);
   if (cuerpo.tipo === "mencion") return avisarMencion(cuerpo.id, cuerpo.para);
+  if (cuerpo.tipo === "dm") return avisarDm(Number(cuerpo.id));
   if (cuerpo.tipo === "respuesta") return avisarRespuesta(cuerpo.id, cuerpo.para);
   if (cuerpo.tipo === "reto") return avisarReto(cuerpo.id, cuerpo.evento);
   if (cuerpo.tipo === "anuncio") return avisarAnuncio(cuerpo.id);

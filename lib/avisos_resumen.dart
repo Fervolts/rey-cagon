@@ -95,6 +95,7 @@ String _deLaCategoria(String clave) => switch (clave) {
       'ganadores' => tr('de ganadores', 'about winners'),
       'cierres' => tr('de fin de periodo', 'about periods ending'),
       'chat' => tr('del Baño', 'from the Bathroom'),
+      'privados' => tr('de privados', 'from private messages'),
       'retos' => tr('de retos', 'about challenges'),
       'seguidores' => tr('de nuevos seguidores', 'about new followers'),
       'imperio' => tr('del Imperio', 'from your Empire'),

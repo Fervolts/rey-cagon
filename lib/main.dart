@@ -30,6 +30,7 @@ import 'nuclear.dart';
 import 'onboarding.dart';
 import 'parte.dart';
 import 'perfil.dart';
+import 'privados.dart' show privadosSinLeer, revisarPrivados;
 import 'periodos.dart';
 import 'placer.dart';
 import 'racha.dart';
@@ -322,7 +323,12 @@ class _PantallaInicioState extends State<PantallaInicio> {
   late final AppLifecycleListener _cicloHexa;
 
   String get _yo => db.auth.currentUser!.id;
-  bool get _hayNuevo => _ultimoBano > _vistoBano || _ultimoSoporte > _vistoSoporte;
+  // El puntito del baño también se prende con un privado sin leer (lib/privados.dart).
+  bool get _hayNuevo => _ultimoBano > _vistoBano || _ultimoSoporte > _vistoSoporte || privadosSinLeer.value;
+
+  void _alCambiarPrivados() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void initState() {
@@ -339,9 +345,12 @@ class _PantallaInicioState extends State<PantallaInicio> {
     revisarHazanas(context);
     // Cagada fresca (x2 en el Imperio): se lee al abrir y al volver (pudo cagar desde el widget).
     cargarFresca();
+    privadosSinLeer.addListener(_alCambiarPrivados);
+    revisarPrivados();
     _cicloHexa = AppLifecycleListener(onResume: () {
       revisarHazanas(context);
       cargarFresca();
+      revisarPrivados();
     });
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       _irA();
@@ -414,6 +423,7 @@ class _PantallaInicioState extends State<PantallaInicio> {
   void dispose() {
     _soltarAvisos();
     _cicloHexa.dispose();
+    privadosSinLeer.removeListener(_alCambiarPrivados);
     irA.removeListener(_irA);
     for (final s in _subs) {
       s.cancel();

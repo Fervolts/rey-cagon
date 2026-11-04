@@ -33,6 +33,7 @@ Future<void> elegirIdioma(String valor) async {
 /// Los errores que manda la base de datos vienen en español: aquí su versión en inglés.
 const _errores = {
   'Accesorio desconocido': 'Unknown accessory',
+  'En privado solo van mensajes de texto': 'Private chats are text only',
   'Todavía no has comprado ese movimiento': "You haven't bought that move yet",
   'Ese estilo no existe': "That style doesn't exist",
   'Ese estilo es gratis': 'That style is free',
