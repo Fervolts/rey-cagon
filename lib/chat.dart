@@ -15,6 +15,7 @@ import 'animaciones.dart';
 import 'avisos.dart';
 import 'cagadon.dart' show TarjetaReto;
 import 'chat_vivo.dart';
+import 'cloaca.dart' show PestanaCloaca, TarjetaCloaca;
 import 'popups.dart' show PantallaPopups;
 import 'presumir.dart';
 import 'emoji.dart';
@@ -186,7 +187,8 @@ class PantallaChat extends StatefulWidget {
 
 class _PantallaChatState extends State<PantallaChat> with SingleTickerProviderStateMixin {
   // Salas en public.mensajes: 'global' es la general, 'es' y 'en' las de cada idioma.
-  final _pestanas = ['global', idioma.value, if (enIngles) 'es' else 'en', 'amigos'];
+  // 'cloaca' es el chat de mi Cloaca (sala 'cloaca:<id>', solo para sus miembros; cloaca.dart).
+  final _pestanas = ['global', idioma.value, if (enIngles) 'es' else 'en', 'amigos', 'cloaca'];
   // Cambiar de sala cierra el panel de emojis de la anterior (si no, la barra de abajo se queda escondida).
   late final _tabs = TabController(length: _pestanas.length, vsync: this)..addListener(() => panelEmojisAbierto.value = false);
   bool _soyAdmin = false;
@@ -235,6 +237,7 @@ class _PantallaChatState extends State<PantallaChat> with SingleTickerProviderSt
         'global' => 'GENERAL 🌎',
         'es' => 'ESPAÑOL',
         'en' => 'ENGLISH',
+        'cloaca' => tr('CLOACA 🚽', 'SEWER 🚽'),
         _ => tr('AMIGOS 👥', 'FRIENDS 👥'),
       };
 
@@ -269,7 +272,12 @@ class _PantallaChatState extends State<PantallaChat> with SingleTickerProviderSt
           ),
         ),
         body: TabBarView(controller: _tabs, children: [
-          for (final p in _pestanas) p == 'amigos' ? const PantallaAmigos() : Sala(key: ValueKey(p), sala: p),
+          for (final p in _pestanas)
+            p == 'amigos'
+                ? const PantallaAmigos()
+                : p == 'cloaca'
+                    ? const PestanaCloaca()
+                    : Sala(key: ValueKey(p), sala: p),
         ]),
       );
 }
@@ -2052,6 +2060,7 @@ class _Tarjeta extends StatelessWidget {
     if (t['tipo'] == 'bano') return TarjetaBano(t);
     if (t['tipo'] == 'regalo') return TarjetaRegalo(t);
     if (t['tipo'] == 'imperio') return TarjetaImperio(t);
+    if (t['tipo'] == 'cloaca') return TarjetaCloaca(t);
     final propia = tarjetaPresumir(t);
     if (propia != null) return propia;
     return Container(
