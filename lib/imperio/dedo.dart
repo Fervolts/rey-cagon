@@ -116,7 +116,7 @@ Dedo? siguienteDedo(Imperio im, int ahora,
         'You lose balance, poopers and upgrades. Rolls buy Plumbing, which stays and makes every run grow faster.');
   }
   if (mudanza && pa.mudanzas == 0 && libre('mudanza')) {
-    return const Dedo('mudanza', Key('boton_mudanza'), 'Ya no cabes: múdate', "You don't fit anymore: move",
+    return const Dedo('mudanza', Key('boton_mudanza'), 'La próxima casa: tu meta', 'The next house: your goal',
         'Dejas Rollos, Plomería y jaladas. Ganas Llaves para el Llavero, y la casa nueva produce mucho más.',
         'You leave Rolls, Plumbing and flushes. You get Keys for the Keyring, and the new house makes way more.');
   }

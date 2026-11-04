@@ -35,29 +35,24 @@ String _x(double v) {
 
 String _num(double v) => formatoMj(v, ingles: enIngles);
 
-/// Clave en [Partida.guiaVista] cuando el botón MUDANZA ya se descubrió (sigue visible aunque la regla deje de cumplirse).
+/// Clave en [Partida.guiaVista] cuando ya salió el aviso de que apareció el botón MUDANZA (solo el aviso, no lo deja fijo).
 const claveMudanzaVista = 'mudanza_vista';
 
 /// Clave en [Partida.guiaVista] cuando ya abriste la hoja de la Mudanza: el botón deja de brillar.
 const claveMudanzaAbierta = 'mudanza_abierta';
 
-/// El botón MUDANZA 🏠 de la barra: sale si ya te mudaste o abdicaste, si ya lo descubriste o si ya no cabes en la casa
-/// (ver [noCabes]).
+/// El botón MUDANZA 🏠 de la barra: sale si ya te mudaste o abdicaste, o si ya se ve la próxima casa (ver [casaALaVista]).
 bool mudanzaDescubierta(ControlImperio c) {
   final pa = c.imperio.partida;
-  return pa.mudanzas > 0 || pa.abdicaciones > 0 || pa.guiaVista.contains(claveMudanzaVista) || noCabes(c);
+  return pa.mudanzas > 0 || pa.abdicaciones > 0 || casaALaVista(c);
 }
 
-/// Ya no cabes en esta casa: la mudanza está disponible, jalaste `mudanza_descubre_jaladas` veces en ella y la próxima
-/// jalada da menos que `mudanza_descubre_pct` de los Rollos que ya ganaste aquí, con al menos `mudanza_descubre_min`
-/// minutos de corrida (recién jalado la próxima jalada siempre da casi nada: eso no es estar atascado).
-bool noCabes(ControlImperio c) {
+/// Ya se ve la próxima casa: la mudanza está disponible y los Rollos ganados en esta casa llegan a
+/// `mudanza_descubre_rollos` de los que pide la mudanza. Los Rollos de la casa no bajan (los gastados cuentan), así que
+/// el botón no aparece y desaparece.
+bool casaALaVista(ControlImperio c) {
   final im = c.imperio;
-  final a = im.ajustes;
-  return c.mudanzaDisponible &&
-      im.partida.jaladasCasa >= a.mudanzaDescubreJaladas &&
-      im.partida.segPartida >= a.mudanzaDescubreMin * 60 &&
-      im.rollosPorGanar < a.mudanzaDescubrePct * im.rollosCasa;
+  return c.mudanzaDisponible && im.rollosCasa >= im.ajustes.mudanzaDescubreRollos * im.rollosParaMudanza;
 }
 
 /// El botón brilla hasta que abres la hoja por primera vez (solo antes de la primera mudanza y sin abdicar).

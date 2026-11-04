@@ -830,11 +830,9 @@ class Ajustes {
   final double mudanzaRollos, mudanzaRollosSubida, mudanzaLlavesExponente, mudanzaLlavesFactor, llavePct, mudanzaDivisorX;
   final int mudanzaJaladas, mudanzaCagadas;
 
-  /// El botón MUDANZA aparece con [mudanzaDescubreJaladas] jaladas en la casa y cuando la próxima jalada da menos que
-  /// [mudanzaDescubrePct] de los Rollos ya ganados en ella tras [mudanzaDescubreMin] minutos de corrida (o si ya te
-  /// mudaste o ya lo viste). Solo es pantalla.
-  final int mudanzaDescubreJaladas;
-  final double mudanzaDescubrePct, mudanzaDescubreMin;
+  /// El botón MUDANZA aparece cuando los Rollos ganados en la casa llegan a [mudanzaDescubreRollos] de los que pide la
+  /// mudanza (o si ya te mudaste o abdicaste). Con 0,1 sale unos 8 días antes de poder mudarse. Solo es pantalla.
+  final double mudanzaDescubreRollos;
 
   /// Abdicar: [abdicarMudanzas] mudanzas en la dinastía, [abdicarLlaves] Llaves ganadas y [abdicarCagadas] cagadas
   /// reales desde la última abdicación (máx 3 por día; el servidor manda la cuenta buena). Coronas =
@@ -890,9 +888,7 @@ class Ajustes {
     this.mudanzaLlavesFactor = 3,
     this.llavePct = 0.25,
     this.mudanzaDivisorX = 15,
-    this.mudanzaDescubreJaladas = 4,
-    this.mudanzaDescubrePct = 0.25,
-    this.mudanzaDescubreMin = 30,
+    this.mudanzaDescubreRollos = 0.1,
     this.abdicarMudanzas = 4,
     this.abdicarLlaves = 87,
     this.abdicarCagadas = 60,

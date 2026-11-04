@@ -47,6 +47,9 @@ class _Nube extends NubeImperio {
   Future<CargaImperio> cargar() async => throw StateError('sin red');
 }
 
+/// Cadena del veterano en el Rancho, con la mudanza disponible.
+const _cadenaRancho = EstadoCadena(cagadas: 30, necesarias: 5, jaladas: 3, mudanzas: 0, cagadasCasa: 30);
+
 /// Jugador nuevo: sin cagadas (todo lo de candado cerrado), sin edificios.
 Imperio _nuevo() => Imperio(azar: Random(1));
 
@@ -80,7 +83,7 @@ List<(Object?, Object?)> _eventos(List<Map<String, Object?>> enviados, Telemetri
 
 /// Monta la pantalla del Imperio con [estado] y deja que cargue. Devuelve el control y la telemetría capturada.
 Future<(ControlImperio, Telemetria, List<Map<String, Object?>>)> _montar(WidgetTester t, Map<String, dynamic> estado,
-    {GlobalKey<NavigatorState>? nav, Completer<void>? espera, ThemeData? tema, Key? foto}) async {
+    {GlobalKey<NavigatorState>? nav, Completer<void>? espera, ThemeData? tema, Key? foto, EstadoCadena? cadena}) async {
   final enviados = <Map<String, Object?>>[];
   final tele = Telemetria(enviar: (lote) async {
     enviados.addAll(lote);
@@ -88,6 +91,8 @@ Future<(ControlImperio, Telemetria, List<Map<String, Object?>>)> _montar(WidgetT
   });
   final c = ControlImperio(
       nube: _Nube(estado, espera), telemetria: tele, pedirFlags: () async => throw StateError('sin red'), leerBuild: () async => 1);
+  // Sin red la cadena no se pide: se pone a mano.
+  c.cadena = cadena;
   await t.pumpWidget(MaterialApp(
     navigatorKey: nav,
     theme: tema,
@@ -337,8 +342,9 @@ void main() {
       await _desmontar(t);
 
       final im = _veterano();
-      im.partida.guiaVista.add(claveMudanzaVista);
-      final (c, _, _) = await _montar(t, _estado(im, cagadas: 30));
+      // Ya ganó en la casa el 10% de los Rollos que pide la mudanza: el botón sale.
+      im.partida.rollosGastados = (im.rollosParaMudanza * im.ajustes.mudanzaDescubreRollos).ceil();
+      final (c, _, _) = await _montar(t, _estado(im, cagadas: 30), cadena: _cadenaRancho);
       expect(find.byKey(const Key('boton_mudanza')), findsOneWidget);
       expect(mudanzaResaltada(c), isTrue);
       await t.tap(find.byKey(const Key('boton_mudanza')));
@@ -354,13 +360,13 @@ void main() {
       await _desmontar(t);
     });
 
-    testWidgets('la primera vez que se descubre: marca la clave y avisa "Ya no cabes"', (t) async {
+    testWidgets('la primera vez que se descubre: marca la clave y avisa "Ya se ve la próxima casa"', (t) async {
       final im = _veterano();
       im.partida.mudanzas = 1;
       final (c, _, _) = await _montar(t, _estado(im, cagadas: 30));
       expect(c.imperio.partida.guiaVista, contains(claveMudanzaVista));
       // El aviso va a la cola (detrás de los logros del veterano).
-      final aviso = find.textContaining('Ya no cabes en esta casa', findRichText: true);
+      final aviso = find.textContaining('Ya se ve la próxima casa', findRichText: true);
       for (var i = 0; i < 600 && aviso.evaluate().isEmpty; i++) {
         await t.pump(const Duration(milliseconds: 100));
       }
@@ -687,8 +693,8 @@ void main() {
 
         // Veterano con la mudanza descubierta: la barra de 5, la Cadena y la Mudanza.
         final im = _veterano();
-        im.partida.guiaVista.add(claveMudanzaVista);
-        await _montar(t, _estado(im, cagadas: 30), tema: estilo, foto: llave);
+        im.partida.rollosGastados = (im.rollosParaMudanza * im.ajustes.mudanzaDescubreRollos).ceil();
+        await _montar(t, _estado(im, cagadas: 30), tema: estilo, foto: llave, cadena: _cadenaRancho);
         await foto('veterano_$sufijo');
         await t.tap(find.byKey(const Key('boton_jalar')));
         await _esperar(t);

@@ -77,11 +77,9 @@ class FlagsImperio {
   final double mudanzaRollos, mudanzaRollosSubida, mudanzaLlavesExponente, mudanzaLlavesFactor, llavePct, mudanzaDivisorX;
   final int mudanzaJaladas, mudanzaCagadas;
 
-  /// Cuándo aparece el botón MUDANZA ([Ajustes.mudanzaDescubreJaladas]): `mudanza_descubre_jaladas` (jaladas en la casa)
-  /// y `mudanza_descubre_pct` (la próxima jalada da menos que esta parte de los Rollos ya ganados en la casa) después de
-  /// `mudanza_descubre_min` minutos de corrida (recién jalado la próxima jalada siempre da poco).
-  final int mudanzaDescubreJaladas;
-  final double mudanzaDescubrePct, mudanzaDescubreMin;
+  /// Cuándo aparece el botón MUDANZA ([Ajustes.mudanzaDescubreRollos]): `mudanza_descubre_rollos`, parte de los Rollos
+  /// que pide la mudanza que ya tienes que haber ganado en la casa.
+  final double mudanzaDescubreRollos;
 
   /// Abdicar ([Ajustes.abdicarMudanzas]): `abdicar_mudanzas`, `abdicar_llaves` (Llaves ganadas), `abdicar_cagadas`,
   /// `abdicar_coronas_exponente`, `abdicar_coronas_factor`, `corona_pct` y `abdicar_divisor_rollos`. El servidor lee las mismas claves en
@@ -157,9 +155,7 @@ class FlagsImperio {
     this.mudanzaLlavesFactor = 3,
     this.llavePct = 0.25,
     this.mudanzaDivisorX = 15,
-    this.mudanzaDescubreJaladas = 4,
-    this.mudanzaDescubrePct = 0.25,
-    this.mudanzaDescubreMin = 30,
+    this.mudanzaDescubreRollos = 0.1,
     this.abdicarMudanzas = 4,
     this.abdicarLlaves = 87,
     this.abdicarCagadas = 60,
@@ -222,9 +218,7 @@ class FlagsImperio {
         mudanzaLlavesFactor: mudanzaLlavesFactor,
         llavePct: llavePct,
         mudanzaDivisorX: mudanzaDivisorX,
-        mudanzaDescubreJaladas: mudanzaDescubreJaladas,
-        mudanzaDescubrePct: mudanzaDescubrePct,
-        mudanzaDescubreMin: mudanzaDescubreMin,
+        mudanzaDescubreRollos: mudanzaDescubreRollos,
         abdicarMudanzas: abdicarMudanzas,
         abdicarLlaves: abdicarLlaves,
         abdicarCagadas: abdicarCagadas,
@@ -307,9 +301,7 @@ class FlagsImperio {
       mudanzaLlavesFactor: numero('mudanza_llaves_x', d.mudanzaLlavesFactor, 0.1, 1000),
       llavePct: numero('llave_pct', d.llavePct, 0, 10),
       mudanzaDivisorX: numero('mudanza_divisor_x', d.mudanzaDivisorX, 1, 1e12),
-      mudanzaDescubreJaladas: numero('mudanza_descubre_jaladas', d.mudanzaDescubreJaladas.toDouble(), 0, 1000).round(),
-      mudanzaDescubrePct: numero('mudanza_descubre_pct', d.mudanzaDescubrePct, 0, 1),
-      mudanzaDescubreMin: numero('mudanza_descubre_min', d.mudanzaDescubreMin, 0, 10000),
+      mudanzaDescubreRollos: numero('mudanza_descubre_rollos', d.mudanzaDescubreRollos, 0, 1),
       abdicarMudanzas: numero('abdicar_mudanzas', d.abdicarMudanzas.toDouble(), 1, 1000).round(),
       abdicarLlaves: numero('abdicar_llaves', d.abdicarLlaves, 1, 1e6),
       abdicarCagadas: numero('abdicar_cagadas', d.abdicarCagadas.toDouble(), 0, 10000).round(),

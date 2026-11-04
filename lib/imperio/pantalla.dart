@@ -248,7 +248,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     if (_c.cargando || !mudanzaDescubierta(_c) || _c.imperio.partida.guiaVista.contains(claveMudanzaVista)) return;
     // Antes del aviso: marcarGuia avisa a los oyentes y vuelve a entrar aquí.
     _c.marcarGuia(claveMudanzaVista);
-    _avisar('🏠', tr('Ya no cabes en esta casa: 🏠 MUDANZA', 'You no longer fit in this house: 🏠 MOVING'));
+    _avisar('🏠', tr('Ya se ve la próxima casa: 🏠 MUDANZA', 'The next house is in sight: 🏠 MOVING'));
   }
 
   /// La primera vez que el botón ABDICAR aparece: queda marcado y avisa (el botón brilla hasta abrir la hoja).
