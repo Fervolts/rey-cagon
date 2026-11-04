@@ -490,9 +490,9 @@ class _RankingCloacasVistaState extends State<RankingCloacasVista> {
     final c = mia.cloaca;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       if (c == null) _sinCloaca(mia) else _miCloaca(c, mia),
-      const SizedBox(height: 16),
+      const SizedBox(height: 24),
       _liga(ranking),
-      const SizedBox(height: 16),
+      const SizedBox(height: 24),
       _Explicacion(mia),
     ]);
   }
@@ -500,118 +500,176 @@ class _RankingCloacasVistaState extends State<RankingCloacasVista> {
   Widget _sinCloaca(EstadoCloaca mia) {
     final p = paleta(context);
     return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: p.borde), borderRadius: BorderRadius.circular(radio)),
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+      decoration: _caja(p),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        const Emoji('🚽', tamano: 40),
-        const SizedBox(height: 8),
+        const Center(child: Emoji('🚽', tamano: 44)),
+        const SizedBox(height: 12),
         Text(tr('Aún no estás en una Cloaca', 'You are not in a Sewer yet'),
-            textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-        const SizedBox(height: 4),
+            textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+        const SizedBox(height: 6),
         Text(
           tr('Crea una con tu gente o entra con el código que te pasaron. Hasta ${mia.max} personas por Cloaca.',
               'Create one with your people or join with the code they gave you. Up to ${mia.max} people per Sewer.'),
           textAlign: TextAlign.center,
-          style: TextStyle(color: p.textoSuave),
+          style: TextStyle(color: p.textoSuave, height: 1.4),
         ),
         if (mia.rollosPorCobrar > 0) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: 16),
           _premioPendiente(mia),
         ],
-        const SizedBox(height: 12),
-        FilledButton(key: const Key('cloaca_crear'), onPressed: _ocupado ? null : _crear, child: Text(tr('CREAR CLOACA', 'CREATE SEWER'))),
-        const SizedBox(height: 8),
-        OutlinedButton(key: const Key('cloaca_unirse'), onPressed: _ocupado ? null : _unirme, child: Text(tr('ENTRAR CON CÓDIGO', 'JOIN WITH CODE'))),
+        const SizedBox(height: 20),
+        FilledButton(
+          key: const Key('cloaca_crear'),
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+          onPressed: _ocupado ? null : _crear,
+          child: Text(tr('CREAR CLOACA', 'CREATE SEWER')),
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton(
+          key: const Key('cloaca_unirse'),
+          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+          onPressed: _ocupado ? null : _unirme,
+          child: Text(tr('ENTRAR CON CÓDIGO', 'JOIN WITH CODE')),
+        ),
       ]),
     );
   }
 
-  Widget _premioPendiente(EstadoCloaca mia) => TextoConEmojis(
-        tr('🏆 Tienes ${mia.rollosPorCobrar} Rollos de Oro 🧻 por cobrar. Se cobran solos al abrir el Imperio.',
-            '🏆 You have ${mia.rollosPorCobrar} Golden Rolls 🧻 to claim. They are claimed when you open the Empire.'),
-        textAlign: TextAlign.center,
-        style: const TextStyle(fontWeight: FontWeight.w700),
+  Widget _premioPendiente(EstadoCloaca mia) => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(border: Border.all(color: acento), borderRadius: BorderRadius.circular(radio)),
+        child: Row(children: [
+          const Emoji('🏆', tamano: 26),
+          const SizedBox(width: 12),
+          Expanded(
+            child: TextoConEmojis(
+              tr('Tienes ${mia.rollosPorCobrar} Rollos de Oro 🧻 por cobrar. Se cobran solos al abrir el Imperio.',
+                  'You have ${mia.rollosPorCobrar} Golden Rolls 🧻 to claim. They are claimed when you open the Empire.'),
+              style: const TextStyle(fontWeight: FontWeight.w700, height: 1.35),
+            ),
+          ),
+        ]),
       );
 
   Widget _miCloaca(Cloaca c, EstadoCloaca mia) {
     final p = paleta(context);
     final yo = db.auth.currentUser?.id;
     return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: acento), borderRadius: BorderRadius.circular(radio)),
+      padding: const EdgeInsets.all(16),
+      decoration: _caja(p, borde: acento),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
-          Emoji(c.emoji, tamano: 36),
-          const SizedBox(width: 10),
+          Container(
+            width: 56,
+            height: 56,
+            alignment: Alignment.center,
+            decoration: _caja(p, fondo: p.suave),
+            child: Emoji(c.emoji, tamano: 34),
+          ),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              TextoConEmojis(c.nombre, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
-              Text(
-                [
-                  if (c.puesto != null) tr('Puesto ${c.puesto}', 'Place ${c.puesto}'),
-                  tr('${c.puntos} puntos esta semana', '${c.puntos} points this week'),
-                  '${c.miembros.length}/${mia.max}',
-                ].join(' · '),
-                style: TextStyle(color: p.textoSuave, fontSize: 13),
-              ),
+              TextoConEmojis(c.nombre, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 20, height: 1.2)),
+              const SizedBox(height: 4),
+              Text(tr('${c.miembros.length} de ${mia.max} miembros', '${c.miembros.length} of ${mia.max} members'),
+                  style: TextStyle(color: p.textoSuave, fontSize: 13)),
             ]),
           ),
         ]),
-        const SizedBox(height: 10),
+        const SizedBox(height: 16),
+        IntrinsicHeight(
+          child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            _Dato(tr('Puesto', 'Place'), c.puesto == null ? '-' : '#${c.puesto}'),
+            const SizedBox(width: 8),
+            _Dato(tr('Puntos', 'Points'), '${c.puntos}'),
+            const SizedBox(width: 8),
+            _Dato(tr('Cagaron', 'Pooped'), '${c.cagaronHoy}/${c.miembros.length}'),
+          ]),
+        ),
+        const SizedBox(height: 12),
         // El bono de hoy: lo que más se nota en el Imperio.
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(color: p.suave, borderRadius: BorderRadius.circular(radio)),
-          child: TextoConEmojis(
-            tr('🏭 Bono de hoy: ${textoBono(c.bono)} de producción en el Imperio (${c.cagaronHoy} de ${c.miembros.length} ya cagaron)',
-                '🏭 Today\'s bonus: ${textoBono(c.bono)} production in the Empire (${c.cagaronHoy} of ${c.miembros.length} already pooped)'),
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
+          padding: const EdgeInsets.all(12),
+          decoration: _caja(p, fondo: p.suave),
+          child: Row(children: [
+            const Emoji('🏭', tamano: 28),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Rotulo(tr('Bono de hoy', 'Today\'s bonus')),
+                const SizedBox(height: 2),
+                Text(tr('${textoBono(c.bono)} de producción en el Imperio', '${textoBono(c.bono)} production in the Empire'),
+                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, height: 1.3)),
+              ]),
+            ),
+          ]),
         ),
         if (mia.rollosPorCobrar > 0) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           _premioPendiente(mia),
         ],
-        const SizedBox(height: 10),
+        const SizedBox(height: 20),
+        Rotulo(tr('Código para invitar', 'Invite code')),
+        const SizedBox(height: 8),
         Row(children: [
           Expanded(
-            child: Text(tr('Código: ${c.codigo}', 'Code: ${c.codigo}'),
-                style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.w800, letterSpacing: 1.5)),
+            child: Container(
+              height: 48,
+              alignment: Alignment.center,
+              decoration: _caja(p),
+              child: FittedBox(
+                child: Text(c.codigo, style: const TextStyle(fontFamily: 'monospace', fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: 3)),
+              ),
+            ),
           ),
-          IconButton(
+          const SizedBox(width: 8),
+          IconButton.outlined(
             tooltip: tr('Copiar código', 'Copy code'),
+            style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
             icon: const Icon(Icons.copy, size: 20),
             onPressed: () {
               Clipboard.setData(ClipboardData(text: c.codigo));
               _avisar(tr('Código copiado', 'Code copied'));
             },
           ),
-          FilledButton.tonal(
+          const SizedBox(width: 8),
+          FilledButton(
             key: const Key('cloaca_invitar'),
+            style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
             onPressed: () => SharePlus.instance.share(ShareParams(text: textoInvitacion(c))),
             child: Text(tr('INVITAR', 'INVITE')),
           ),
         ]),
-        const Divider(height: 20),
-        for (final m in c.miembros)
+        const SizedBox(height: 20),
+        Row(children: [
+          Expanded(child: Rotulo(tr('Miembros esta semana', 'Members this week'))),
+          Rotulo(tr('Puntos', 'Points')),
+        ]),
+        const SizedBox(height: 4),
+        for (final (i, m) in c.miembros.indexed) ...[
+          if (i > 0) Divider(height: 1, color: p.borde),
           _FilaMiembro(
             m,
             yo: m.userId == yo,
             puedeSacar: c.soyDueno && m.userId != yo && !_ocupado,
             alSacar: () => _expulsar(m),
           ),
-        const SizedBox(height: 8),
+        ],
+        const SizedBox(height: 16),
         Row(children: [
           Expanded(
             child: OutlinedButton(
+              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
               onPressed: () => ir('cloaca'),
-              child: Text(tr('CHAT 💬', 'CHAT 💬')),
+              child: TextoConEmojis(tr('CHAT 💬', 'CHAT 💬')),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: OutlinedButton(
               key: const Key('cloaca_salir'),
+              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
               onPressed: _ocupado ? null : () => _salir(c),
               child: Text(tr('SALIR', 'LEAVE')),
             ),
@@ -625,31 +683,65 @@ class _RankingCloacasVistaState extends State<RankingCloacasVista> {
     final p = paleta(context);
     final a = r.anterior;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Row(children: [
-        Expanded(
-          child: Text(tr('LIGA DE LA SEMANA', 'WEEKLY LEAGUE'),
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.2, color: p.textoSuave)),
-        ),
-        const ContadorCierre(periodo: 'week'),
-      ]),
-      const SizedBox(height: 8),
+      Rotulo(tr('Liga de la semana', 'Weekly league')),
+      const SizedBox(height: 4),
+      const Align(alignment: Alignment.centerLeft, child: ContadorCierre(periodo: 'week')),
+      const SizedBox(height: 12),
       if (r.filas.isEmpty)
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: _caja(p),
           child: Text(tr('Todavía no hay Cloacas. ¡Crea la primera!', 'No Sewers yet. Create the first one!'),
               textAlign: TextAlign.center, style: TextStyle(color: p.textoSuave)),
         ),
       for (final f in r.filas) _FilaLiga(f),
       if (a != null) ...[
-        const SizedBox(height: 8),
-        TextoConEmojis(
-          tr('🏆 La semana pasada ganó ${a.emoji} ${a.nombre} con ${a.puntos} puntos.',
-              '🏆 Last week ${a.emoji} ${a.nombre} won with ${a.puntos} points.'),
-          style: TextStyle(color: p.textoSuave),
+        const SizedBox(height: 4),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: _caja(p, fondo: p.suave),
+          child: Row(children: [
+            const Emoji('🏆', tamano: 24),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextoConEmojis(
+                tr('La semana pasada ganó ${a.emoji} ${a.nombre} con ${a.puntos} puntos.',
+                    'Last week ${a.emoji} ${a.nombre} won with ${a.puntos} points.'),
+                style: const TextStyle(height: 1.35),
+              ),
+            ),
+          ]),
         ),
       ],
     ]);
   }
+}
+
+/// Fondo y borde de las cajas de la Cloaca.
+BoxDecoration _caja(Paleta p, {Color? borde, Color? fondo}) => BoxDecoration(
+      color: fondo ?? p.tarjeta,
+      border: Border.all(color: borde ?? p.borde),
+      borderRadius: BorderRadius.circular(radio),
+    );
+
+/// Una casilla con un número grande y su nombre arriba.
+class _Dato extends StatelessWidget {
+  const _Dato(this.nombre, this.valor);
+
+  final String nombre, valor;
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          decoration: _caja(paleta(context)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Rotulo(nombre),
+            const SizedBox(height: 4),
+            FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(valor, style: numeros(context, tamano: 20, weight: FontWeight.w800))),
+          ]),
+        ),
+      );
 }
 
 class _FilaMiembro extends StatelessWidget {
@@ -665,26 +757,44 @@ class _FilaMiembro extends StatelessWidget {
     return InkWell(
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PantallaPerfil(usuarioId: m.userId))),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(vertical: 12),
         child: Row(children: [
-          Avatar({'avatar': m.avatar ?? '💩', 'username': m.username}, tamano: 28, animarMovimiento: false),
-          const SizedBox(width: 8),
+          Avatar({'avatar': m.avatar ?? '💩', 'username': m.username}, tamano: 36, animarMovimiento: false),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Flexible(
+                  child: TextoConEmojis(
+                    '${m.username}${m.dueno ? ' 👑' : ''}${yo ? tr(' (tú)', ' (you)') : ''}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                ),
+                if (m.cagoHoy) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(color: acento, borderRadius: BorderRadius.circular(radio)),
+                    child: Text(tr('CAGÓ HOY', 'POOPED'),
+                        style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                  ),
+                ],
+              ]),
+              const SizedBox(height: 3),
               TextoConEmojis(
-                '${m.username}${m.dueno ? ' 👑' : ''}${yo ? tr(' (tú)', ' (you)') : ''}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w700),
+                tr('💩 ${m.ptsCagadas} cagadas · 🏭 ${m.ptsImperio} Imperio', '💩 ${m.ptsCagadas} poops · 🏭 ${m.ptsImperio} Empire'),
+                style: TextStyle(color: p.textoSuave, fontSize: 12.5, height: 1.3),
               ),
-              TextoConEmojis('💩 ${m.ptsCagadas} · 🏭 ${m.ptsImperio}${m.cagoHoy ? tr(' · ✅ cagó hoy', ' · ✅ pooped today') : ''}',
-                  style: TextStyle(color: p.textoSuave, fontSize: 12)),
             ]),
           ),
-          Text('${m.puntos}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+          const SizedBox(width: 8),
+          Text('${m.puntos}', style: numeros(context, tamano: 18, weight: FontWeight.w800)),
           if (puedeSacar)
             IconButton(
               tooltip: tr('Sacar de la Cloaca', 'Remove from the Sewer'),
+              visualDensity: VisualDensity.compact,
               icon: const Icon(Icons.person_remove_outlined, size: 20),
               onPressed: alSacar,
             ),
@@ -702,28 +812,42 @@ class _FilaLiga extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = paleta(context);
+    final primero = f.puesto == 1;
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
         color: p.tarjeta,
         border: Border.all(color: f.mia ? acento : p.borde, width: f.mia ? 2 : 1),
         borderRadius: BorderRadius.circular(radio),
       ),
       child: Row(children: [
-        SizedBox(
-          width: 32,
-          child: Text('${f.puesto}', style: TextStyle(fontWeight: FontWeight.w800, color: f.puesto == 1 ? acento : p.texto)),
+        Container(
+          width: 34,
+          height: 34,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: primero ? acento : null,
+            border: Border.all(color: primero ? acento : p.borde),
+            borderRadius: BorderRadius.circular(radio),
+          ),
+          child: Text('${f.puesto}', style: numeros(context, tamano: 15, weight: FontWeight.w800, color: primero ? Colors.black : p.texto)),
         ),
-        Emoji(f.emoji, tamano: 22),
-        const SizedBox(width: 8),
+        const SizedBox(width: 12),
+        Emoji(f.emoji, tamano: 26),
+        const SizedBox(width: 10),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            TextoConEmojis(f.nombre, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-            Text(tr('${f.miembros} miembros', '${f.miembros} members'), style: TextStyle(color: p.textoSuave, fontSize: 12)),
+            TextoConEmojis(f.nombre, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+            const SizedBox(height: 2),
+            Text(tr('${f.miembros} miembros', '${f.miembros} members'), style: TextStyle(color: p.textoSuave, fontSize: 12.5)),
           ]),
         ),
-        Text(tr('${f.puntos} pts', '${f.puntos} pts'), style: const TextStyle(fontWeight: FontWeight.w800)),
+        const SizedBox(width: 8),
+        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text('${f.puntos}', style: numeros(context, tamano: 18, weight: FontWeight.w800)),
+          Text('pts', style: TextStyle(color: p.textoSuave, fontSize: 11)),
+        ]),
       ]),
     );
   }
@@ -739,27 +863,34 @@ class _Explicacion extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = paleta(context);
     final lineas = [
-      tr('🚽 Una Cloaca es un grupo de hasta ${mia.max} personas. Solo puedes estar en una.',
-          '🚽 A Sewer is a group of up to ${mia.max} people. You can only be in one.'),
-      tr('📅 Cada semana, de lunes a domingo, las Cloacas compiten por puntos.',
-          '📅 Every week, Monday to Sunday, the Sewers compete for points.'),
-      tr('💩 Cada cagada real da 10 puntos, hasta 3 por día por persona.', '💩 Each real poop gives 10 points, up to 3 a day per person.'),
-      tr('🏭 El Imperio da hasta 10 puntos más por persona, según lo que produjiste en la semana.',
-          '🏭 The Empire gives up to 10 more points per person, based on what you produced that week.'),
-      tr('⏱️ Solo cuenta lo que hiciste estando dentro de la Cloaca.', '⏱️ Only what you did while in the Sewer counts.'),
-      tr('🏆 La Cloaca que gana se lleva ${mia.premio} Rollos de Oro 🧻 para cada miembro y el ícono de Cloaca.',
-          '🏆 The winning Sewer gets ${mia.premio} Golden Rolls 🧻 for each member and the Sewer icon.'),
-      tr('⚡ Cada miembro que cagó hoy le da a todos ${textoBono(mia.bonoPor)} de producción en el Imperio, hasta ${textoBono(mia.bonoTope)}.',
-          '⚡ Each member who pooped today gives everyone ${textoBono(mia.bonoPor)} production in the Empire, up to ${textoBono(mia.bonoTope)}.'),
+      ('🚽', tr('Una Cloaca es un grupo de hasta ${mia.max} personas. Solo puedes estar en una.',
+          'A Sewer is a group of up to ${mia.max} people. You can only be in one.')),
+      ('🗓️', tr('Cada semana, de lunes a domingo, las Cloacas compiten por puntos.',
+          'Every week, Monday to Sunday, the Sewers compete for points.')),
+      ('💩', tr('Cada cagada real da 10 puntos, hasta 3 por día por persona.', 'Each real poop gives 10 points, up to 3 a day per person.')),
+      ('🏭', tr('El Imperio da hasta 10 puntos más por persona, según lo que produjiste en la semana.',
+          'The Empire gives up to 10 more points per person, based on what you produced that week.')),
+      ('⏳', tr('Solo cuenta lo que hiciste estando dentro de la Cloaca.', 'Only what you did while in the Sewer counts.')),
+      ('🏆', tr('La Cloaca que gana se lleva ${mia.premio} Rollos de Oro 🧻 para cada miembro y el ícono de Cloaca.',
+          'The winning Sewer gets ${mia.premio} Golden Rolls 🧻 for each member and the Sewer icon.')),
+      ('🔥', tr('Cada miembro que cagó hoy le da a todos ${textoBono(mia.bonoPor)} de producción en el Imperio, hasta ${textoBono(mia.bonoTope)}.',
+          'Each member who pooped today gives everyone ${textoBono(mia.bonoPor)} production in the Empire, up to ${textoBono(mia.bonoTope)}.')),
     ];
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(border: Border.all(color: p.borde), borderRadius: BorderRadius.circular(radio)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(tr('¿CÓMO FUNCIONA?', 'HOW DOES IT WORK?'),
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.2, color: p.textoSuave)),
-        const SizedBox(height: 6),
-        for (final l in lineas) Padding(padding: const EdgeInsets.only(bottom: 4), child: TextoConEmojis(l)),
+        Rotulo(tr('¿Cómo funciona?', 'How does it work?')),
+        const SizedBox(height: 12),
+        for (final (e, t) in lineas)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              SizedBox(width: 28, child: Emoji(e, tamano: 20)),
+              const SizedBox(width: 8),
+              Expanded(child: TextoConEmojis(t, style: const TextStyle(height: 1.4))),
+            ]),
+          ),
       ]),
     );
   }
