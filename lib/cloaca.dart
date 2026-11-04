@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
-import 'accesorios.dart' show Avatar;
+import 'accesorios.dart' show Avatar, columnasAvatar;
 import 'avisos.dart' show ir;
 import 'chat.dart' show Sala;
 import 'emoji.dart';
@@ -368,6 +368,8 @@ class _RankingCloacasVistaState extends State<RankingCloacasVista> {
   RankingCloacas? _ranking;
   Object? _error;
   bool _ocupado = false;
+  // Perfil completo de cada miembro (accesorios, mascota, movimiento): cloaca_mia solo trae el emoji.
+  final _perfiles = <String, Map<String, dynamic>>{};
 
   @override
   void initState() {
@@ -397,9 +399,21 @@ class _RankingCloacasVistaState extends State<RankingCloacasVista> {
         _ranking = r[1] as RankingCloacas;
         _error = null;
       });
+      _pedirPerfiles();
     } catch (e) {
       if (mounted) setState(() => _error = e);
     }
+  }
+
+  void _pedirPerfiles() {
+    final faltan = [for (final m in _mia?.cloaca?.miembros ?? const <MiembroCloaca>[]) if (!_perfiles.containsKey(m.userId)) m.userId];
+    if (faltan.isEmpty) return;
+    db.from('profiles').select(columnasAvatar).inFilter('id', faltan).then((r) {
+      for (final p in r) {
+        _perfiles[p['id'] as String] = p;
+      }
+      if (mounted) setState(() {});
+    }).catchError((_) {});
   }
 
   void _avisar(String texto) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: TextoConEmojis(texto)));
@@ -653,6 +667,7 @@ class _RankingCloacasVistaState extends State<RankingCloacasVista> {
           if (i > 0) Divider(height: 1, color: p.borde),
           _FilaMiembro(
             m,
+            perfil: _perfiles[m.userId],
             yo: m.userId == yo,
             puedeSacar: c.soyDueno && m.userId != yo && !_ocupado,
             alSacar: () => _expulsar(m),
@@ -735,9 +750,10 @@ class _Dato extends StatelessWidget {
 }
 
 class _FilaMiembro extends StatelessWidget {
-  const _FilaMiembro(this.m, {required this.yo, required this.puedeSacar, required this.alSacar});
+  const _FilaMiembro(this.m, {this.perfil, required this.yo, required this.puedeSacar, required this.alSacar});
 
   final MiembroCloaca m;
+  final Map<String, dynamic>? perfil;
   final bool yo, puedeSacar;
   final VoidCallback alSacar;
 
@@ -749,7 +765,7 @@ class _FilaMiembro extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
         child: Row(children: [
-          Avatar({'avatar': m.avatar ?? '💩', 'username': m.username}, tamano: 36, animarMovimiento: false),
+          Avatar(perfil ?? {'avatar': m.avatar ?? '💩', 'username': m.username}, tamano: 36),
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

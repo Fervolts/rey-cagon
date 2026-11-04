@@ -189,10 +189,21 @@ class _PantallaChatState extends State<PantallaChat> {
   // Salas en public.mensajes: 'global' es la general, 'es' y 'en' las de cada idioma (las tres en _PantallaGeneral).
   // El chat de la Cloaca está en su propia zona (cloaca.dart), que se abre desde YO.
   bool _soyAdmin = false;
+  // Lo último de la sala general, para verlo desde la lista sin entrar.
+  List<Map<String, dynamic>> _ultimos = const [];
+  final _perfiles = <String, Map<String, dynamic>>{};
+  StreamSubscription? _subUltimos;
 
   @override
   void initState() {
     super.initState();
+    _subUltimos = db
+        .from('mensajes')
+        .stream(primaryKey: ['id'])
+        .eq('sala', 'global')
+        .order('id', ascending: false)
+        .limit(12)
+        .listen(_alLlegarUltimos, onError: (_) {});
     db.rpc('es_admin').then((v) {
       if (mounted) setState(() => _soyAdmin = v == true);
     }).catchError((_) {});
@@ -202,8 +213,51 @@ class _PantallaChatState extends State<PantallaChat> {
 
   @override
   void dispose() {
+    _subUltimos?.cancel();
     irA.removeListener(_irA);
     super.dispose();
+  }
+
+  // Sin respuestas de hilos ni ocultos: lo mismo que se ve arriba del todo al entrar.
+  void _alLlegarUltimos(List<Map<String, dynamic>> filas) {
+    if (!mounted) return;
+    final ultimos = filas.where((m) => m['responde_a'] == null && m['oculto'] != true).take(3).toList();
+    setState(() => _ultimos = ultimos);
+    final faltan = {for (final m in ultimos) '${m['user_id']}'}.where((id) => !_perfiles.containsKey(id)).toList();
+    if (faltan.isEmpty) return;
+    db.from('profiles').select(_columnasPerfil).inFilter('id', faltan).then((r) {
+      for (final p in r) {
+        _perfiles[p['id'] as String] = p;
+      }
+      if (mounted) setState(() {});
+    }).catchError((_) {});
+  }
+
+  Widget? _vistaUltimos(Paleta p) {
+    if (_ultimos.isEmpty) return null;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      for (final m in _ultimos.reversed)
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Row(children: [
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: _perfiles['${m['user_id']}'] == null ? const Emoji('💩', tamano: 18) : Avatar(_perfiles['${m['user_id']}']!, tamano: 20),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: TextoConEmojis(
+                '${_perfiles['${m['user_id']}']?['username'] ?? '…'}: '
+                '${'${m['texto'] ?? ''}'.trim().isEmpty ? tr('mandó una tarjeta', 'sent a card') : '${m['texto']}'.replaceAll('\n', ' ')}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: p.texto, fontSize: 13),
+              ),
+            ),
+          ]),
+        ),
+    ]);
   }
 
   // Un toque en un push o en un aviso: abrir ese chat encima de la lista (la sala abre después su hilo).
@@ -259,6 +313,7 @@ class _PantallaChatState extends State<PantallaChat> {
               emoji: '🌎',
               titulo: tr('General', 'General'),
               detalle: tr('Todo el mundo. También salas en español y en inglés.', 'Everyone. Also rooms in Spanish and in English.'),
+              extra: _vistaUltimos(paleta(context)),
               alTocar: _abrirGeneral,
             ),
             _FilaChat(
@@ -284,10 +339,12 @@ class _PantallaChatState extends State<PantallaChat> {
 
 /// Una fila de la lista del baño: emoji, nombre y de qué va. Cuadrada y alta para leer fácil.
 class _FilaChat extends StatelessWidget {
-  const _FilaChat({super.key, required this.emoji, required this.titulo, required this.detalle, required this.alTocar});
+  const _FilaChat({super.key, required this.emoji, required this.titulo, required this.detalle, required this.alTocar, this.extra});
 
   final String emoji, titulo, detalle;
   final VoidCallback alTocar;
+  // Debajo de la descripción (los últimos mensajes de la General).
+  final Widget? extra;
 
   @override
   Widget build(BuildContext context) {
@@ -315,6 +372,7 @@ class _FilaChat extends StatelessWidget {
                   Text(titulo, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
                   const SizedBox(height: 2),
                   Text(detalle, style: TextStyle(color: p.textoSuave, fontSize: 13, height: 1.3)),
+                  ?extra,
                 ]),
               ),
               const SizedBox(width: 8),

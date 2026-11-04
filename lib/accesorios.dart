@@ -168,6 +168,10 @@ const _centroLentes = {'👓': .49, '🕶️': .49, '🕶': .49, '🥽': .62};
 // Altura (fracción del PNG) por donde cada sombrero se apoya en la cabeza.
 const _asiento = {'🧢': .70, '👒': .80, '🎓': .62, '🎩': .90, '🪖': .58, gorroSanta: .84};
 
+/// Columnas de profiles que necesita [Avatar] para salir completo (accesorios, mascota, efectos y movimiento).
+const columnasAvatar = 'id, username, avatar, sombrero, lentes, mascota, cagadas, movimiento, '
+    'lentes_x, lentes_y, sombrero_x, sombrero_y, lentes_escala, sombrero_escala';
+
 /// Avatar con sus accesorios encima. Lee avatar, sombrero, lentes, mascota y cagadas de
 /// [perfil] (una fila de profiles, leaderboard o perfil). Ocupa [tamano]; los accesorios y
 /// la mascota se salen del cuadro.
