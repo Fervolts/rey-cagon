@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import '../emoji.dart';
 import '../idioma.dart';
 import '../tema.dart';
+import 'control.dart';
+import 'minijuegos/datos.dart';
+import 'minijuegos/estadisticas.dart' show juegosAbiertos;
+import 'minijuegos/marco.dart';
 import 'telemetria.dart';
 
 class _Minijuego {
@@ -27,69 +31,95 @@ const _juegos = [
   _Minijuego('constructor_bano', '🛁', 'Constructor de baño', 'Bathroom Builder', 'Decora tu baño con los muebles que compres.', 'Decorate your bathroom with furniture you buy.'),
 ];
 
-/// Sala de juegos: todo "PRÓXIMAMENTE" en la fase 1.
+/// Lo que cabe en la tarjeta: cuánto puede dar hoy.
+String lineaTarjeta(ResumenMinijuegos? r) {
+  if (r == null) return tr('Hasta $minutosMaxDefecto min por partida', 'Up to $minutosMaxDefecto min per game');
+  if (!r.activo) return tr('Premios en pausa', 'Prizes paused');
+  final p = r.puedeDarHoy;
+  if (p <= 0) return tr('Hoy: sin más premio', 'Today: no more prize');
+  return tr('Hoy: hasta $p min', 'Today: up to $p min');
+}
+
+/// Sala de juegos: tres juegos abiertos (Tubería Express, Destapa, Memoria del rollo) y el resto "PRÓXIMAMENTE".
+/// [control] es opcional: si no llega se usa el del Imperio abierto ([ControlImperio.vivo]).
 class PantallaSala extends StatelessWidget {
-  const PantallaSala({super.key});
+  const PantallaSala({super.key, this.control});
+  final ControlImperio? control;
+
+  ControlImperio? get _c => control ?? ControlImperio.vivo;
 
   @override
   Widget build(BuildContext context) {
     final p = paleta(context);
+    final c = _c;
     return Scaffold(
       appBar: AppBar(title: Text(tr('SALA DE JUEGOS', 'GAME ROOM'))),
-      body: GridView.builder(
-        padding: const EdgeInsets.all(16),
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 220,
-          mainAxisExtent: 190,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
+      body: ListenableBuilder(
+        listenable: c ?? ValueNotifier(0),
+        builder: (context, _) => GridView.builder(
+          padding: const EdgeInsets.all(16),
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 220,
+            mainAxisExtent: 200,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+          ),
+          itemCount: _juegos.length,
+          itemBuilder: (context, i) {
+            final j = _juegos[i];
+            final abierto = juegosAbiertos.contains(j.id);
+            final etiqueta = abierto
+                ? lineaTarjeta(c?.minijuegos)
+                : tr('PRÓXIMAMENTE', 'COMING SOON');
+            final tarjeta = Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: p.tarjeta,
+                border: Border.all(color: abierto ? p.acento : p.borde),
+                borderRadius: BorderRadius.circular(radio),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Emoji(j.emoji, tamano: 32),
+                  const SizedBox(height: 8),
+                  Text(tr(j.es, j.en), style: TextStyle(fontWeight: FontWeight.w800, color: p.texto)),
+                  const SizedBox(height: 4),
+                  Expanded(
+                    child: Text(
+                      tr(j.lineaEs, j.lineaEn),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12, color: p.textoSuave),
+                    ),
+                  ),
+                  Container(
+                    key: Key(abierto ? 'sala_abierto_${j.id}' : 'sala_proximo_${j.id}'),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: abierto ? p.acento : p.primario),
+                      borderRadius: BorderRadius.circular(radio),
+                    ),
+                    child: Text(
+                      etiqueta,
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: abierto ? 0 : 0.6, color: abierto ? p.texto : p.primario),
+                    ),
+                  ),
+                ],
+              ),
+            );
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                Telemetria.instancia.registrar('minijuego_toca', {'id': j.id});
+                if (abierto) {
+                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => PantallaMinijuego(juego: j.id, control: c)));
+                }
+              },
+              child: tarjeta,
+            );
+          },
         ),
-        itemCount: _juegos.length,
-        itemBuilder: (context, i) {
-          final j = _juegos[i];
-          // Solo se anota el interés: los juegos todavía no existen.
-          final tarjeta = Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: p.tarjeta,
-              border: Border.all(color: p.borde),
-              borderRadius: BorderRadius.circular(radio),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Emoji(j.emoji, tamano: 32),
-                const SizedBox(height: 8),
-                Text(tr(j.es, j.en), style: TextStyle(fontWeight: FontWeight.w800, color: p.texto)),
-                const SizedBox(height: 4),
-                Expanded(
-                  child: Text(
-                    tr(j.lineaEs, j.lineaEn),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12, color: p.textoSuave),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: p.primario),
-                    borderRadius: BorderRadius.circular(radio),
-                  ),
-                  child: Text(
-                    tr('PRÓXIMAMENTE', 'COMING SOON'),
-                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.6, color: p.primario),
-                  ),
-                ),
-              ],
-            ),
-          );
-          return GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => Telemetria.instancia.registrar('minijuego_toca', {'id': j.id}),
-            child: tarjeta,
-          );
-        },
       ),
     );
   }
