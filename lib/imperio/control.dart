@@ -13,6 +13,7 @@ import 'casas.dart';
 import 'estilos.dart';
 import 'estilos_mios.dart';
 import 'flags.dart';
+import 'minijuegos/datos.dart';
 import 'motor.dart';
 import 'nube.dart';
 import 'racha_imperio.dart';
@@ -177,6 +178,12 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   /// Las llamadas de los regalos (en las pruebas, una falsa).
   NubeRegalos nubeRegalos = const NubeRegalos();
 
+  /// Sala de juegos: topes, lo ganado hoy y récords (RPC `imperio_minijuegos_resumen`). null mientras no llega o sin la migración.
+  ResumenMinijuegos? minijuegos;
+
+  /// Las llamadas de los minijuegos (en las pruebas, una falsa).
+  NubeMinijuegos nubeMinijuegos = const NubeMinijuegos();
+
   /// Sube cada vez que cae una Ciruela 🫐 (pujo o cagada): la pantalla la hace volar al chip.
   final ValueNotifier<int> ciruelaCae = ValueNotifier(0);
 
@@ -281,6 +288,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     if (!sinConexion) unawaited(_cargarProgreso());
     if (!sinConexion) unawaited(cargarCofre());
     if (!sinConexion) unawaited(cargarRegalos());
+    if (!sinConexion) unawaited(cargarMinijuegos());
     if (!sinConexion) unawaited(_cargarEstilos());
   }
 
@@ -435,6 +443,46 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     final mj = imperio.abrirRegalo(r.minutos);
     _sumarLogros(imperio.logrosDeRegalos(mutuo: r.mutuo));
     _anotar('imperio_regalo_abre', {'minutos': r.minutos, 'mj': mj, 'mutuo': r.mutuo, 'quedan': regalos?.regalos.length ?? 0});
+    _fichasHechas();
+    return (r, mj);
+  }
+
+  /// Trae el resumen de la Sala de juegos. Nunca lanza: sin RPC o sin red las tarjetas salen sin la línea de "hoy".
+  Future<void> cargarMinijuegos() async {
+    try {
+      final r = await nubeMinijuegos.resumen();
+      if (_cerrado) return;
+      minijuegos = r;
+      r.alGlobal();
+      if (_cargado) _sumarLogros(imperio.revisarLogros());
+      notifyListeners();
+    } catch (e) {
+      _error('minijuegos', e);
+    }
+  }
+
+  /// Guarda una partida de la Sala: el servidor decide los minutos de producción propia y aquí se cobran como un regalo.
+  /// Devuelve lo que dijo el servidor y los MJ (0 si no hubo premio). Sin red devuelve un resultado sin premio, nunca lanza.
+  Future<(ResultadoMinijuego, double)> terminarMinijuego(String juego, int puntos, int duracionMs) async {
+    final ResultadoMinijuego r;
+    try {
+      r = await nubeMinijuegos.guardar(juego, puntos, duracionMs);
+    } catch (e) {
+      _error('minijuego', e);
+      return (ResultadoMinijuego.sinRed(puntos), 0.0);
+    }
+    if (_cerrado) return (r, 0.0);
+    if (r.motivo == 'apagado' || r.motivo == 'juego' || (!r.ok && r.motivo == 'invalida')) {
+      _anotar('minijuego_rechazo', {'juego': juego, 'puntos': puntos, 'motivo': r.motivo});
+      return (r, 0.0);
+    }
+    final antes = minijuegos ?? const ResumenMinijuegos();
+    minijuegos = antes.trasPartida(juego, r);
+    minijuegos!.alGlobal();
+    var mj = 0.0;
+    if (r.ok && r.minutos > 0) mj = imperio.abrirRegalo(r.minutos);
+    _sumarLogros(imperio.revisarLogros());
+    _anotar('minijuego_fin', {'juego': juego, 'puntos': puntos, 'ms': duracionMs, 'minutos': r.minutos, 'mj': mj, 'record': r.nuevoRecord});
     _fichasHechas();
     return (r, mj);
   }

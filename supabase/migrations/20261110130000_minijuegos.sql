@@ -19,14 +19,14 @@ insert into public.imperio_flags (clave, valor, nota) values
   ('minijuego_minutos_dia', '30', 'Minutos máximos de producción propia que dan los minijuegos por día de Caracas (1..120)'),
   ('minijuego_partidas_dia', '20', 'Partidas por día de Caracas que pueden dar premio (1..60)'),
   ('minijuego_meta_tuberia', '600', 'Puntos de Tubería Express que dan el premio completo'),
-  ('minijuego_meta_destapa', '45', 'Puntos de Destapa que dan el premio completo'),
-  ('minijuego_meta_memoria', '900', 'Puntos de Memoria del rollo que dan el premio completo'),
+  ('minijuego_meta_destapa', '60', 'Puntos de Destapa que dan el premio completo'),
+  ('minijuego_meta_memoria', '1800', 'Puntos de Memoria del rollo que dan el premio completo'),
   ('minijuego_pps_tuberia', '16', 'Puntos por segundo máximos creíbles en Tubería Express'),
-  ('minijuego_pps_destapa', '8', 'Puntos por segundo máximos creíbles en Destapa'),
-  ('minijuego_pps_memoria', '300', 'Puntos por segundo máximos creíbles en Memoria del rollo'),
+  ('minijuego_pps_destapa', '14', 'Puntos por segundo máximos creíbles en Destapa'),
+  ('minijuego_pps_memoria', '400', 'Puntos por segundo máximos creíbles en Memoria del rollo'),
   ('minijuego_min_ms_tuberia', '2000', 'Duración mínima creíble de una partida de Tubería Express (ms)'),
-  ('minijuego_min_ms_destapa', '4000', 'Duración mínima creíble de una partida de Destapa (ms)'),
-  ('minijuego_min_ms_memoria', '5000', 'Duración mínima creíble de una partida de Memoria del rollo (ms)')
+  ('minijuego_min_ms_destapa', '1500', 'Duración mínima creíble de una partida de Destapa (ms)'),
+  ('minijuego_min_ms_memoria', '3000', 'Duración mínima creíble de una partida de Memoria del rollo (ms)')
 on conflict (clave) do nothing;
 
 -- ---------------------------------------------------------------- tabla
