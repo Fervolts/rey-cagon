@@ -139,6 +139,10 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   bool bienvenidaPendiente = false;
   ResultadoOffline? offlinePendiente;
 
+  /// Alquileres Indefinidos que se cortaron (id, precio del periodo, saldo que había) y la pantalla todavía no avisó.
+  /// Si pasó con la app cerrada, el primer tick al volver los deja aquí y salen al abrir el Imperio.
+  final List<(String, double, double)> alquileresCortadosPendientes = [];
+
   /// El servidor dio el empujón (x2 por 30 min) y la pantalla todavía no lo avisó.
   bool empujonPendiente = false;
 
@@ -694,6 +698,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     _sumarLogros(imperio.tick(ahora, dt));
     for (final (id, precio) in imperio.tomarIndefinidosCortados()) {
       _anotar('alquiler_cortado', {'id': id, 'precio': precio, 'saldo': imperio.saldo});
+      alquileresCortadosPendientes.add((id, precio, imperio.saldo));
     }
     _mirarCambios();
     if (_sesion != null) _mirarTemporadas(ahora);
