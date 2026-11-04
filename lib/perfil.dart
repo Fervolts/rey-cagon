@@ -47,6 +47,8 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
   Map<String, dynamic>? _p;
   bool _ocupado = false;
   bool _bloqueado = false;
+  // Si esa persona me sigue a mí: el regalo solo sale entre amigos (se siguen los dos).
+  bool _meSigue = false;
   // Rollo de regalo del Imperio (imperio/regalos.dart): mientras sale y si ya salió hoy desde aquí.
   bool _regalando = false, _regalado = false;
   // Género del perfil propio: no sale en el RPC perfil porque nadie más lo ve.
@@ -111,9 +113,12 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
 
   Future<void> _cargar() async {
     try {
-      final (rows, bloqueo) = await conReintento(() => (
+      final (rows, bloqueo, meSigue) = await conReintento(() => (
             db.rpc('perfil', params: {'uid': widget.usuarioId}),
             db.from('bloqueos').select('bloqueado').eq('bloqueado', widget.usuarioId).maybeSingle(),
+            _esMio
+                ? Future<Map<String, dynamic>?>.value(null)
+                : db.from('follows').select('follower').eq('follower', widget.usuarioId).eq('followed', db.auth.currentUser!.id).maybeSingle(),
           ).wait);
       final g = _esMio
           ? await db.from('profiles').select('genero, genero_cambiado, placer_desbloqueado').eq('id', widget.usuarioId).maybeSingle()
@@ -135,6 +140,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
           _nuevos = nuevos;
           _p = (rows as List).firstOrNull;
           _bloqueado = bloqueo != null;
+          _meSigue = meSigue != null;
           _genero = g?['genero'];
           _generoCambiado = DateTime.tryParse(g?['genero_cambiado'] ?? '')?.toLocal();
         });
@@ -786,8 +792,8 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                           icon: const Text('⚔️'),
                           label: Text(tr('RETAR', 'CHALLENGE')),
                         ),
-                      // Rollo de regalo del Imperio: el servidor decide si son amigos (se siguen los dos) y los topes.
-                      if (p['lo_sigo'] == true)
+                      // Regalo del Imperio: solo entre amigos (se siguen los dos). El servidor lo vuelve a revisar con los topes.
+                      if (p['lo_sigo'] == true && _meSigue)
                         FilledButton.icon(
                           key: const Key('regalar'),
                           onPressed: _regalando || _regalado ? null : () => _regalar(p['username'] as String? ?? ''),

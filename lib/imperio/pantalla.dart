@@ -1015,7 +1015,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
           if (hayRegalos(_c))
             _filaSaldo(hoja,
                 chip: ChipRegalos(control: _c, avisar: _avisar),
-                texto: tr('Rollos de regalo por abrir.', 'Gift Rolls to open.'),
+                texto: tr('Regalos de amigos por abrir.', 'Gifts from friends to open.'),
                 alTocar: () => abrirHojaRegalos(hoja, _c, _avisar)),
           if (rollos > 0)
             _filaSaldo(hoja,

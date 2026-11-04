@@ -259,7 +259,7 @@ void main() {
       await t.tap(find.byKey(const Key('abrir_regalo_g1')));
       await t.pumpAndSettle();
       expect(find.byKey(const Key('premio_regalo')), findsOneWidget);
-      expect(find.textContaining('del Rollo de amigo1'), findsOneWidget);
+      expect(find.textContaining('del regalo de amigo1'), findsOneWidget);
       expect(find.text('De amigo1'), findsNothing);
       expect(find.text('×1'), findsOneWidget);
     });
@@ -288,7 +288,7 @@ void main() {
     testWidgets('regalo para mí y sin abrir: sale ABRIR', (tester) async {
       await tester.pumpWidget(app(TarjetaRegalo(t, yo: 'u2', sinAbrir: (_) async => true)));
       await tester.pump();
-      expect(find.text('ROLLO DE REGALO'), findsOneWidget);
+      expect(find.text('REGALO'), findsOneWidget);
       expect(find.byKey(const Key('abrir_regalo_chat')), findsOneWidget);
     });
 
@@ -306,7 +306,7 @@ void main() {
     testWidgets('regalo sin nombres: texto genérico', (tester) async {
       await tester.pumpWidget(app(TarjetaRegalo(const {'tipo': 'regalo', 'id': 'g1'}, yo: 'u2', sinAbrir: (_) async => true)));
       await tester.pump();
-      expect(find.text('ROLLO DE REGALO'), findsOneWidget);
+      expect(find.text('REGALO'), findsOneWidget);
       expect(find.byKey(const Key('abrir_regalo_chat')), findsNothing);
     });
 

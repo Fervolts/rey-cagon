@@ -217,11 +217,11 @@ class _HojaRegalosState extends State<HojaRegalos> with SingleTickerProviderStat
             const SizedBox(width: 12),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Rotulo(tr('Rollos de regalo', 'Gift Rolls')),
+                Rotulo(tr('Regalos de amigos', 'Gifts from friends')),
                 const SizedBox(height: 4),
                 Text(
-                  tr('Cada Rollo trae ${r.minutos} min de tu producción. Hoy puedes abrir ${r.abrirQuedan} más.',
-                      'Each Roll holds ${r.minutos} min of your production. You can open ${r.abrirQuedan} more today.'),
+                  tr('Cada regalo trae ${r.minutos} min de tu producción. Hoy puedes abrir ${r.abrirQuedan} más.',
+                      'Each gift holds ${r.minutos} min of your production. You can open ${r.abrirQuedan} more today.'),
                   style: TextStyle(color: p.textoSuave, fontSize: 13),
                 ),
               ]),
@@ -238,8 +238,8 @@ class _HojaRegalosState extends State<HojaRegalos> with SingleTickerProviderStat
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    tr('+${formatoMj(premio.$2, ingles: enIngles)} MJ del Rollo de ${premio.$1}',
-                        '+${formatoMj(premio.$2, ingles: enIngles)} MJ from ${premio.$1}\'s Roll'),
+                    tr('+${formatoMj(premio.$2, ingles: enIngles)} MJ del regalo de ${premio.$1}',
+                        '+${formatoMj(premio.$2, ingles: enIngles)} MJ from ${premio.$1}\'s gift'),
                     style: numeros(context, tamano: 14, weight: FontWeight.w800),
                   ),
                 ),
@@ -254,7 +254,7 @@ class _HojaRegalosState extends State<HojaRegalos> with SingleTickerProviderStat
           if (r.regalos.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text(tr('No tienes Rollos por abrir.', 'No Rolls to open.'), textAlign: TextAlign.center, style: TextStyle(color: p.textoSuave)),
+              child: Text(tr('No tienes regalos por abrir.', 'No gifts to open.'), textAlign: TextAlign.center, style: TextStyle(color: p.textoSuave)),
             ),
           for (final g in r.regalos)
             Container(
@@ -279,8 +279,8 @@ class _HojaRegalosState extends State<HojaRegalos> with SingleTickerProviderStat
             Text(textoMotivoRegalo('tope_abrir'), textAlign: TextAlign.center, style: TextStyle(color: p.textoSuave, fontSize: 12)),
           const SizedBox(height: 6),
           Text(
-            tr('Tú también puedes regalar: un Rollo al día a cada amigo (se siguen los dos), desde su perfil.',
-                'You can gift too: one Roll a day to each friend (you follow each other), from their profile.'),
+            tr('Tú también puedes regalar: uno al día a cada amigo (se siguen los dos), desde su perfil. No te cuesta nada.',
+                'You can gift too: one a day to each friend (you follow each other), from their profile. It costs you nothing.'),
             textAlign: TextAlign.center,
             style: TextStyle(color: p.textoSuave, fontSize: 12),
           ),
@@ -300,7 +300,7 @@ Future<ResultadoRegalo?> regalarRollo(BuildContext context, String para, String 
     if (r.ok) {
       Telemetria.instancia.registrar('imperio_regalo_envia', {'dados': r.dados, 'en_chat': r.enChat});
       control?.regaloHecho(para, r);
-      avisar(tr('🎁 Le regalaste un Rollo 🧻 a $nombre.', '🎁 You gifted $nombre a Roll 🧻.'));
+      avisar(tr('🎁 Le mandaste un regalo a $nombre. A ti no te cuesta nada.', '🎁 You sent $nombre a gift. It costs you nothing.'));
     } else {
       avisar(textoMotivoRegalo(r.motivo));
     }
@@ -355,8 +355,8 @@ class _TarjetaRegaloState extends State<TarjetaRegalo> {
     final de = '${widget.t['de_nombre'] ?? ''}'.trim();
     final para = '${widget.t['para_nombre'] ?? ''}'.trim();
     final linea = de.isEmpty || para.isEmpty
-        ? tr('Regaló un Rollo de papel 🧻', 'Gifted a Roll of paper 🧻')
-        : tr('$de le regaló un Rollo 🧻 a $para', '$de gifted $para a Roll 🧻');
+        ? tr('Mandó un regalo 🎁', 'Sent a gift 🎁')
+        : tr('$de le mandó un regalo 🎁 a $para', '$de sent $para a gift 🎁');
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: acento), borderRadius: BorderRadius.circular(radio)),
@@ -365,7 +365,7 @@ class _TarjetaRegaloState extends State<TarjetaRegalo> {
         const SizedBox(width: 10),
         Flexible(
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(tr('ROLLO DE REGALO', 'GIFT ROLL'),
+            Text(tr('REGALO', 'GIFT'),
                 style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1.2, color: p.textoSuave)),
             const SizedBox(height: 2),
             TextoConEmojis(linea, style: const TextStyle(fontWeight: FontWeight.w700)),
