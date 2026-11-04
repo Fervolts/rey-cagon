@@ -401,7 +401,10 @@ begin
   if c.id is null then
     return jsonb_build_object('cloaca', null, 'premios', pend, 'semana', sem,
       'cierra', public.cloaca_semana_inicio(sem + 7),
-      'max', public.imperio_flag_numero('cloaca_max_miembros', 25, 2, 100)::int);
+      'max', public.imperio_flag_numero('cloaca_max_miembros', 25, 2, 100)::int,
+      'premio', public.imperio_flag_numero('cloaca_premio_rollos', 2, 0, 1000)::int,
+      'bono_por', public.imperio_flag_numero('cloaca_bono_por_miembro', 0.05, 0, 1),
+      'bono_tope', public.imperio_flag_numero('cloaca_bono_tope', 0.5, 0, 1));
   end if;
   with t as (
     select q.cloaca_id, sum(q.puntos)::int as puntos from public.cloaca_puntos(sem) q
@@ -431,7 +434,10 @@ begin
         left join public.cloaca_puntos(sem) q on q.cloaca_id = c.id and q.user_id = m.user_id
         where m.cloaca_id = c.id), '[]'::jsonb)),
     'premios', pend, 'semana', sem, 'cierra', public.cloaca_semana_inicio(sem + 7),
-    'max', public.imperio_flag_numero('cloaca_max_miembros', 25, 2, 100)::int);
+    'max', public.imperio_flag_numero('cloaca_max_miembros', 25, 2, 100)::int,
+    'premio', public.imperio_flag_numero('cloaca_premio_rollos', 2, 0, 1000)::int,
+    'bono_por', public.imperio_flag_numero('cloaca_bono_por_miembro', 0.05, 0, 1),
+    'bono_tope', public.imperio_flag_numero('cloaca_bono_tope', 0.5, 0, 1));
 end;
 $$;
 revoke all on function public.cloaca_mia() from public, anon;
