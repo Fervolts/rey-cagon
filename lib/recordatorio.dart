@@ -11,6 +11,10 @@ const _id = 1;
 const _hora = 20;
 final notificaciones = FlutterLocalNotificationsPlugin();
 
+/// Tocaron un aviso local con la app viva: recibe su payload. Lo pone lib/push.dart (los push mostrados
+/// con la app abierta). Los recordatorios no llevan payload.
+void Function(String? payload)? alTocarAvisoLocal;
+
 NotificationDetails get _detalles => NotificationDetails(
   android: AndroidNotificationDetails(
     'recordatorio',
@@ -30,6 +34,7 @@ Future<void> iniciarRecordatorio() async {
     settings: const InitializationSettings(
       android: AndroidInitializationSettings('ic_stat_poop'),
     ),
+    onDidReceiveNotificationResponse: (r) => alTocarAvisoLocal?.call(r.payload),
   );
 }
 

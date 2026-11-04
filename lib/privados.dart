@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -59,6 +61,24 @@ final privadosDisponibles = ValueNotifier<bool>(true);
 /// La sala privada que está abierta en pantalla: un push de ella no se muestra ni prende el puntito.
 String? privadoAbierto;
 
+/// Sube cuando llega un push de privado con la app abierta: la bandeja montada lo escucha y se recarga.
+final privadosCambiaron = ValueNotifier<int>(0);
+
+/// Cada cuánto se recarga sola la bandeja mientras está en pantalla y la app al frente.
+const repasoBandeja = Duration(seconds: 20);
+
+var _bandejasMontadas = 0;
+
+/// Push de privado con la app abierta (lib/push.dart). Con la bandeja montada, ella recarga y de paso
+/// prende el puntito; sin bandeja, solo se revisa el puntito. Así es una sola consulta por push.
+void privadoLlego() {
+  if (_bandejasMontadas > 0) {
+    privadosCambiaron.value++;
+  } else {
+    revisarPrivados();
+  }
+}
+
 Future<List<Map<String, dynamic>>> _bandeja() async {
   final r = await conReintento(() => db.rpc('dm_bandeja'));
   return [for (final f in r as List) Map<String, dynamic>.from(f as Map)];
@@ -113,9 +133,23 @@ Future<void> abrirPrivado(BuildContext context, String otroId, String username) 
 }
 
 /// Desde un push o un aviso: solo se sabe la sala. Se busca el nombre y se abre.
+/// Un admin que no es parte (push de mensaje reportado) la ve solo para moderar: lo reportado y sin escribir.
 Future<void> abrirPrivadoDeSala(BuildContext context, String sala) async {
   final otro = otroDeSala(sala, db.auth.currentUser!.id);
-  if (otro == null) return;
+  if (otro == null) {
+    if (!esSalaDm(sala)) return;
+    try {
+      if (await db.rpc('es_admin') != true) return;
+    } catch (_) {
+      return;
+    }
+    if (!context.mounted) return;
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => Scaffold(
+          appBar: AppBar(title: Text(tr('PRIVADO REPORTADO', 'REPORTED PRIVATE CHAT'))),
+          body: Sala(key: ValueKey('moderar_$sala'), sala: sala, soloLeer: true),
+        )));
+    return;
+  }
   var nombre = tr('Privado', 'Private');
   try {
     final p = await conReintento(() => db.from('profiles').select('username').eq('id', otro).maybeSingle());
@@ -164,14 +198,69 @@ class _PantallaPrivadosState extends State<PantallaPrivados> {
   List<Map<String, dynamic>>? _filas;
   SharedPreferences? _prefs;
   Object? _error;
+  // En vivo sin Realtime: se recarga con el push de privado (privadosCambiaron) y cada repasoBandeja
+  // mientras la app está al frente. El reloj se apaga en segundo plano y se salta si hay otra pantalla encima.
+  Timer? _reloj;
+  late final AppLifecycleListener _ciclo;
+  Future<void>? _enCurso;
+  bool _otraVez = false;
 
   @override
   void initState() {
     super.initState();
+    _bandejasMontadas++;
+    privadosCambiaron.addListener(_cargar);
+    _ciclo = AppLifecycleListener(onStateChange: (estado) {
+      if (estado == AppLifecycleState.resumed) {
+        _encenderReloj();
+        _cargar();
+      } else {
+        _apagarReloj();
+      }
+    });
+    final estado = WidgetsBinding.instance.lifecycleState;
+    if (estado == null || estado == AppLifecycleState.resumed) _encenderReloj();
     _cargar();
   }
 
-  Future<void> _cargar() async {
+  @override
+  void dispose() {
+    _bandejasMontadas--;
+    privadosCambiaron.removeListener(_cargar);
+    _ciclo.dispose();
+    _apagarReloj();
+    super.dispose();
+  }
+
+  void _encenderReloj() {
+    _reloj ??= Timer.periodic(repasoBandeja, (_) {
+      // Con una conversación abierta encima no hace falta: al volver de ella se recarga igual.
+      if (mounted && (ModalRoute.of(context)?.isCurrent ?? true)) _cargar();
+    });
+  }
+
+  void _apagarReloj() {
+    _reloj?.cancel();
+    _reloj = null;
+  }
+
+  // Una consulta a la vez. Si piden otra mientras tanto (llegó un push), se repite una vez al terminar
+  // para no quedarse con una bandeja de antes del mensaje nuevo.
+  Future<void> _cargar() {
+    if (_enCurso != null) {
+      _otraVez = true;
+      return _enCurso!;
+    }
+    return _enCurso = _cargarYa().whenComplete(() {
+      _enCurso = null;
+      if (_otraVez && mounted) {
+        _otraVez = false;
+        _cargar();
+      }
+    });
+  }
+
+  Future<void> _cargarYa() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final filas = await _bandeja();

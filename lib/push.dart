@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -14,8 +15,8 @@ import 'avisos.dart' show ir;
 import 'idioma.dart' show idioma, tr;
 import 'imperio/regalos.dart' show irARegalos;
 import 'main.dart' show db;
-import 'privados.dart' show privadoAbierto, revisarPrivados;
-import 'recordatorio.dart' show cancelarAvisoImperio, clavePocetaLocal, notificaciones;
+import 'privados.dart' show privadoAbierto, privadoLlego;
+import 'recordatorio.dart' show alTocarAvisoLocal, cancelarAvisoImperio, clavePocetaLocal, notificaciones;
 import 'widget.dart' show clienteDeFondo, refrescarRanking;
 
 // Mismo id que usa la Edge Function notificaciones en android.notification.channel_id.
@@ -73,6 +74,33 @@ void _alTocar(RemoteMessage m) {
   if (destino != null) ir(destino);
 }
 
+/// Payload del aviso local que pintamos con la app abierta: los datos del push tal cual, en JSON.
+String? payloadDeAviso(Map<String, dynamic> datos) {
+  if (datos.isEmpty) return null;
+  try {
+    return jsonEncode(datos);
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Lo contrario de [payloadDeAviso]. null si el aviso no vino de un push (recordatorios) o no se entiende.
+Map<String, dynamic>? datosDeAviso(String? payload) {
+  if (payload == null || payload.isEmpty) return null;
+  try {
+    final d = jsonDecode(payload);
+    return d is Map ? {for (final e in d.entries) '${e.key}': e.value} : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Tocaron el aviso local de un push que llegó con la app abierta: lo mismo que tocar el push de fondo.
+void _alTocarLocal(String? payload) {
+  final datos = datosDeAviso(payload);
+  if (datos != null) _alTocar(RemoteMessage(data: datos));
+}
+
 AppLifecycleListener? _ciclo;
 DateTime? _ultimaApertura;
 
@@ -88,6 +116,7 @@ void registrarApertura() {
 
 Future<void> iniciarPush() async {
   _ciclo ??= AppLifecycleListener(onResume: registrarApertura);
+  alTocarAvisoLocal = _alTocarLocal;
   await Firebase.initializeApp();
   FirebaseMessaging.onBackgroundMessage(_alFondo);
   await notificaciones
@@ -97,9 +126,10 @@ Future<void> iniciarPush() async {
   FirebaseMessaging.onMessage.listen((m) {
     // Versión nueva con la app abierta: además del aviso, se ofrece ya (el toque al aviso local no abre nada).
     if (m.data['tipo'] == 'version') versionAnunciada.value++;
-    // Privado: prende el puntito; si esa conversación ya está abierta en pantalla, no hace falta el aviso.
+    // Privado: recarga la bandeja si está abierta y prende el puntito; si esa conversación ya está abierta
+    // en pantalla, no hace falta el aviso.
     if (m.data['tipo'] == 'dm') {
-      revisarPrivados();
+      privadoLlego();
       if (m.data['sala'] == privadoAbierto) return;
     }
     final n = m.notification;
@@ -108,6 +138,8 @@ Future<void> iniciarPush() async {
       id: m.hashCode,
       title: n.title,
       body: n.body,
+      // Los datos del push (tipo, sala, envio…) para que tocarlo abra lo mismo que con la app en fondo.
+      payload: payloadDeAviso(m.data),
       notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(_canal.id, _canal.name,
             channelDescription: _canal.description, importance: Importance.high, priority: Priority.high),
@@ -117,6 +149,11 @@ Future<void> iniciarPush() async {
   FirebaseMessaging.onMessageOpenedApp.listen(_alTocar);
   final inicial = await FirebaseMessaging.instance.getInitialMessage();
   if (inicial != null) _alTocar(inicial);
+  // El aviso local quedó en la bandeja del teléfono, la app se cerró y la abrieron tocándolo.
+  try {
+    final lanzo = await notificaciones.getNotificationAppLaunchDetails();
+    if (lanzo?.didNotificationLaunchApp ?? false) _alTocarLocal(lanzo!.notificationResponse?.payload);
+  } catch (_) {}
   registrarApertura();
   // getToken/onTokenRefresh están deprecados a favor de register()/FID, pero la Edge Function
   // manda por `message.token` de FCM HTTP v1, que sigue siendo el token clásico.

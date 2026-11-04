@@ -553,11 +553,13 @@ String _hora(String iso) {
 
 /// Una sala de mensajes en tiempo real: la global, o un hilo de soporte.
 class Sala extends StatefulWidget {
-  const Sala({super.key, required this.sala, this.hilo, this.abrirBug = false});
+  const Sala({super.key, required this.sala, this.hilo, this.abrirBug = false, this.soloLeer = false});
 
   final String sala;
   final String? hilo;
   final bool abrirBug;
+  // Sin caja para escribir: el admin mirando un privado reportado (lib/privados.dart), donde no puede escribir.
+  final bool soloLeer;
 
   @override
   State<Sala> createState() => _SalaState();
@@ -1713,6 +1715,18 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
               ],
             ),
           ),
+        if (widget.soloLeer)
+          SafeArea(
+            top: false,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+              decoration: BoxDecoration(color: p.suave, border: Border(top: BorderSide(color: p.borde))),
+              child: Text(tr('Solo ves los mensajes reportados. Mantén apretado uno para ocultarlo.', 'You only see reported messages. Press and hold one to hide it.'),
+                  style: TextStyle(color: p.textoSuave)),
+            ),
+          )
+        else
         SafeArea(
           top: false,
           child: conPanelEmojis(context, _texto, Container(
