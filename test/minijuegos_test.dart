@@ -5,7 +5,6 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rey_cagon/imperio/catalogo.dart';
 import 'package:rey_cagon/imperio/control.dart';
 import 'package:rey_cagon/imperio/minijuegos/datos.dart';
 import 'package:rey_cagon/imperio/minijuegos/destapa_logica.dart';
