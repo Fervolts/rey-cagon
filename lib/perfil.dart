@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -13,6 +15,7 @@ import 'cagadon.dart';
 import 'calendario.dart';
 import 'chat.dart' show abrirReporteDeError;
 import 'comunidad.dart';
+import 'icono_app_pantalla.dart';
 import 'idioma.dart';
 import 'imperio/formato.dart' show formatoCantidad, formatoMj;
 import 'imperio/logros.dart' show cargarLogrosImperio;
@@ -524,6 +527,14 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaAjustesAvisos())),
                 ),
                 const FilaAvisosPoceta(),
+                if (Platform.isAndroid)
+                  ListTile(
+                    leading: const Emoji('🎨', tamano: 32),
+                    title: Text(tr('ÍCONO DE LA APP', 'APP ICON')),
+                    subtitle: Text(tr('Se ganan con logros', 'Earned with achievements')),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaIconoApp())),
+                  ),
                 ListTile(
                   leading: const Emoji('💡', tamano: 32),
                   title: Text(tr('Novedades', "What's new")),

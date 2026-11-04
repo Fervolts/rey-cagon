@@ -455,6 +455,11 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                 '${off.atascos.length} clogs in total (${off.atascosTapados} still clogged).'),
         ]);
       }
+      if (_c.alquileresCortadosPendientes.isNotEmpty && mounted) {
+        final aviso = avisoAlquilerCortado(List.of(_c.alquileresCortadosPendientes));
+        _c.alquileresCortadosPendientes.clear();
+        await _dialogo('⏹️', aviso.titulo, aviso.lineas);
+      }
       final d = _c.descargaPendiente;
       if (d != null && mounted) {
         _c.descargaPendiente = null;
@@ -475,7 +480,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
     } finally {
       _dialogoAbierto = false;
     }
-    if (mounted && (_c.offlinePendiente != null || _c.descargaPendiente != null || _c.bienvenidaPendiente || _c.rachaPendiente)) _mostrarDialogos();
+    if (mounted && (_c.offlinePendiente != null || _c.descargaPendiente != null || _c.bienvenidaPendiente || _c.rachaPendiente || _c.alquileresCortadosPendientes.isNotEmpty)) _mostrarDialogos();
   }
 
   /// Línea del Atasco offline en "Mientras no estabas": qué se atascó, a qué hora y cuánto se dejó de ganar.

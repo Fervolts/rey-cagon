@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import '../emoji.dart';
 import '../idioma.dart';
 import '../tema.dart';
+import 'formato.dart';
 import 'motor.dart';
 
 /// Toques que se ven por segundo de cada primo: todos sus pujos.
@@ -121,4 +122,39 @@ class TiraAlquiler extends StatelessWidget {
       ],
     );
   }
+}
+
+
+/// El aviso cuando se cortan alquileres Indefinidos: título y líneas para el diálogo. [cortados]: (id, precio del
+/// periodo, saldo que había). Dice qué se cortó, por qué (no alcanzaban los MJ, o ya no se puede alquilar) y cómo volver
+/// a prenderlo. Vacío da un aviso sin cuerpo; la pantalla no lo llama así.
+({String titulo, List<String> lineas}) avisoAlquilerCortado(List<(String, double, double)> cortados, {bool ingles = false}) {
+  String nombre(String id) {
+    final o = objetoPorId(id);
+    return o == null ? id : '${o.emoji} ${tr(o.nombreEs, o.nombreEn)}';
+  }
+
+  final lineas = <String>[];
+  if (cortados.length == 1) {
+    final (id, precio, saldo) = cortados.first;
+    lineas.add(tr('${nombre(id)} se apagó.', '${nombre(id)} turned off.'));
+    lineas.add(saldo < precio
+        ? tr('Se iba a renovar por ${formatoMj(precio, ingles: ingles)} MJ y tenías ${formatoMj(saldo, ingles: ingles)} MJ.',
+            'It was due to renew for ${formatoMj(precio, ingles: ingles)} MJ and you had ${formatoMj(saldo, ingles: ingles)} MJ.')
+        : tr('Ya no se puede renovar.', 'It can\'t be renewed any more.'));
+  } else {
+    lineas.add(tr('${cortados.length} alquileres se apagaron.', '${cortados.length} rentals turned off.'));
+    for (final (id, precio, saldo) in cortados) {
+      lineas.add(saldo < precio
+          ? tr('${nombre(id)}: costaba ${formatoMj(precio, ingles: ingles)} MJ y tenías ${formatoMj(saldo, ingles: ingles)} MJ.',
+              '${nombre(id)}: it cost ${formatoMj(precio, ingles: ingles)} MJ and you had ${formatoMj(saldo, ingles: ingles)} MJ.')
+          : tr('${nombre(id)}: ya no se puede renovar.', '${nombre(id)}: can\'t be renewed any more.'));
+    }
+  }
+  lineas.add(tr('Para prenderlo otra vez: abre la tienda, elige el alquiler y marca ∞ Indefinido.',
+      'To turn it back on: open the shop, pick the rental and choose ∞ Indefinite.'));
+  return (
+    titulo: tr('SE CORTÓ UN ALQUILER', 'A RENTAL WAS CUT OFF'),
+    lineas: lineas,
+  );
 }
