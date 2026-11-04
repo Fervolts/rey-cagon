@@ -18,6 +18,7 @@ import 'datos.dart';
 import 'destapa_vista.dart';
 import 'memoria_vista.dart';
 import 'ranking_vista.dart';
+import 'sonido.dart';
 import 'tuberia_vista.dart';
 
 /// Lo que llama cada juego al acabar: puntos y milisegundos reales jugados.
@@ -71,10 +72,10 @@ class DatosJuego {
 
 const juegosAbiertosDatos = <String, DatosJuego>{
   'tuberia': DatosJuego('tuberia', '🚰', 'Tubería Express', 'Pipe Express',
-      'Toca para cambiar de carril y esquiva los codos. Agarra rollos seguidos para subir el multiplicador.',
-      'Tap to switch lanes and dodge the bends. Grab rolls in a row to raise the multiplier.'),
-  'destapa': DatosJuego('destapa', '🪠', 'Destapa', 'Unclog', 'Toca cuando el cuadro se cierra. Si es doble, mantén hasta el fino. Vencer un atasco gordo te devuelve una vida.', 'Tap when the square closes. If it is double, hold until the thin one. Beating a big clog gives you a life back.'),
-  'memoria': DatosJuego('memoria', '🃏', 'Memoria del rollo', 'Roll Memory', 'Memoriza al empezar. Parejas seguidas suben el multiplicador (hasta x4). El papel se acaba: rápido da bonus.', 'Memorize at the start. Pairs in a row raise the multiplier (up to x4). The paper runs out: fast gives a bonus.'),
+      'Mantén para pujar y bajar rápido, suelta para volar. Que no te alcance el Atasco.',
+      "Hold to push and go down fast, release to fly. Don't let the Clog catch you."),
+  'destapa': DatosJuego('destapa', '🪠', 'Destapa', 'Unclog', 'Toca los inodoros tapados hasta destaparlos. Patito: desliza arriba. Celular: mantén. Que no se desborden.', "Tap clogged toilets until they unclog. Duck: swipe up. Phone: hold. Don't let them overflow."),
+  'memoria': DatosJuego('memoria', '👑', 'Fusión real', 'Royal Merge', 'Arrastra para apuntar y suelta. Junta dos iguales para crecer hasta el Rey; no pases la línea roja.', "Drag to aim and release. Merge two of a kind up to the King; don't cross the red line."),
 };
 
 /// Una partida completa: instrucción, juego y fin.
@@ -100,6 +101,18 @@ class _PantallaMinijuegoState extends State<PantallaMinijuego> {
   ControlImperio? get _c => widget.control ?? ControlImperio.vivo;
   DatosJuego get _d => juegosAbiertosDatos[widget.juego]!;
 
+  @override
+  void initState() {
+    super.initState();
+    unawaited(Sonido.leerPreferencia());
+  }
+
+  @override
+  void dispose() {
+    unawaited(Sonido.pararMusica());
+    super.dispose();
+  }
+
   void _jugar() {
     Telemetria.instancia.registrar('minijuego_inicia', {'juego': widget.juego});
     setState(() {
@@ -112,6 +125,7 @@ class _PantallaMinijuegoState extends State<PantallaMinijuego> {
 
   Future<void> _fin(int puntos, int ms) async {
     if (_fase == _Fase.fin) return;
+    unawaited(Sonido.pararMusica());
     setState(() {
       _fase = _Fase.fin;
       _puntos = puntos;
@@ -152,6 +166,15 @@ class _PantallaMinijuegoState extends State<PantallaMinijuego> {
       appBar: AppBar(
         title: Text(tr(_d.es, _d.en)),
         actions: [
+          ValueListenableBuilder<bool>(
+            valueListenable: Sonido.silencio,
+            builder: (context, mudo, _) => IconButton(
+              key: const Key('minijuego_sonido'),
+              tooltip: mudo ? tr('Activar sonido', 'Sound on') : tr('Silenciar', 'Mute'),
+              icon: Icon(mudo ? Icons.volume_off_outlined : Icons.volume_up_outlined),
+              onPressed: Sonido.alternarSilencio,
+            ),
+          ),
           IconButton(
             key: const Key('minijuego_ranking'),
             tooltip: tr('Ranking de la semana', 'Weekly ranking'),

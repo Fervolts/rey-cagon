@@ -1,3 +1,5 @@
+// Destapa (baño del estadio): lógica pura con bots tontos y buenos, contrato del servidor, fin de partida, determinismo y
+// la vista montada en los tres niveles de movimiento.
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -5,345 +7,341 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rey_cagon/animaciones.dart';
 import 'package:rey_cagon/imperio/minijuegos/destapa_logica.dart';
 import 'package:rey_cagon/imperio/minijuegos/destapa_vista.dart';
-import 'package:rey_cagon/tema.dart';
 
-/// Topes del servidor para destapa (migración de minijuegos).
+// Contrato del servidor (flags en vivo).
 const topePuntos = 8000;
 const topeMs = 1200000;
 const puntosPorSegundo = 14;
+const dt = 1 / 60;
 
-// Avanza en cuadros de 60 fps hasta [t].
-void hasta(JuegoDestapa j, double t) {
-  while (!j.terminado && j.tiempo < t - 1e-9) {
-    j.avanzar(min(1 / 60, t - j.tiempo));
-  }
-}
+/// Bot de jugador: ve un atasco tras [reaccion] s, da [toques] golpes por segundo, tarda [cambio] s en pasar de un
+/// inodoro a otro. Si no [entiende], le da golpes al patito y toquecitos al celular (como un novato).
+class Bot {
+  Bot({required this.toques, required this.reaccion, required this.cambio, required this.entiende, this.despiste = 0, int semilla = 0}) : _r = Random(semilla);
+  final double toques, reaccion, cambio;
+  final bool entiende;
 
-/// Juega una nota: espera su hora (más la compensación de pantalla) con un error de [error] s y toca.
-/// Si es de mantener, mantiene hasta su fin (o suelta antes si [soltarAntes]).
-Golpe jugarNota(JuegoDestapa j, {double error = 0, bool soltarAntes = false}) {
-  final n = esperarNota(j);
-  hasta(j, n.t + JuegoDestapa.compensacion + error);
-  final g = j.toque();
-  if (n.mantener && g != Golpe.fallo) {
-    if (soltarAntes) {
-      j.avanzar(0.05);
-      j.suelta();
-    } else {
-      hasta(j, n.fin! + JuegoDestapa.compensacion + 0.02);
-      j.suelta();
+  /// Probabilidad de quedarse mirando 0.7 s al cambiar de inodoro.
+  final double despiste;
+  final Random _r;
+  int? _foco;
+  double _ocupado = 0;
+  bool _sosteniendo = false;
+
+  void jugar(JuegoDestapa j) {
+    _ocupado -= dt;
+    if (_sosteniendo) {
+      final i = j.inodoros[_foco!];
+      if (i.atasco != TipoAtasco.celular) {
+        j.soltar(_foco!);
+        _sosteniendo = false;
+      }
+      return;
+    }
+    if (_ocupado > 0) return;
+    // Elige el más urgente que ya vio.
+    Inodoro? mejor;
+    double urgencia(Inodoro i) => i.atasco == TipoAtasco.cucaracha ? 0.5 + i.cucaracha : i.agua;
+    for (final i in j.inodoros) {
+      if (!i.tapado || i.edad < reaccion) continue;
+      if (mejor == null || urgencia(i) > urgencia(mejor)) mejor = i;
+    }
+    if (mejor == null) return;
+    if (_foco != null && _foco != mejor.indice) {
+      final actual = j.inodoros[_foco!];
+      // Se queda en el que estaba si no hay otro mucho peor.
+      if (actual.tapado && urgencia(mejor) < urgencia(actual) + 0.2) mejor = actual;
+    }
+    if (_foco != mejor.indice) {
+      _foco = mejor.indice;
+      _ocupado = cambio + (_r.nextDouble() < despiste ? 0.7 : 0);
+      return;
+    }
+    final paso = 1 / toques * (0.8 + _r.nextDouble() * 0.4);
+    switch (mejor.atasco!) {
+      case TipoAtasco.patito when entiende:
+        j.deslizar(mejor.indice);
+        _ocupado = 0.3;
+      case TipoAtasco.celular when entiende:
+        j.bajar(mejor.indice);
+        _sosteniendo = true;
+      default:
+        j.bajar(mejor.indice);
+        j.soltar(mejor.indice);
+        _ocupado = paso;
     }
   }
-  return g;
 }
 
-/// En los respiros no hay nota a la vista: espera a que salga la siguiente.
-Nota esperarNota(JuegoDestapa j) {
-  while (j.proxima == null) {
-    j.avanzar(1 / 60);
-  }
-  return j.proxima!;
-}
+Bot malo([int s = 0]) => Bot(toques: 3, reaccion: 0.8, cambio: 0.5, entiende: false, despiste: 0.4, semilla: s);
+Bot normal([int s = 0]) => Bot(toques: 5, reaccion: 0.5, cambio: 0.3, entiende: true, despiste: 0.3, semilla: s);
+Bot bueno([int s = 0]) => Bot(toques: 9, reaccion: 0.2, cambio: 0.12, entiende: true, despiste: 0.05, semilla: s);
 
-/// Partida perfecta entera: hasta que el turno se acaba solo.
-JuegoDestapa partidaPerfecta(int semilla) {
+JuegoDestapa partida(Bot bot, int semilla, {void Function(JuegoDestapa)? cadaPaso}) {
   final j = JuegoDestapa(semilla: semilla);
   while (!j.terminado) {
-    jugarNota(j);
+    bot.jugar(j);
+    j.avanzar(dt);
+    cadaPaso?.call(j);
+    j.tomarEventos();
   }
   return j;
 }
 
-/// Un jugador de carne y hueso: error de tiempo normal con desviación [sd] y un despiste cada tanto.
-JuegoDestapa partidaHumana(int semilla, {double sd = 0.07, double despiste = 0.03}) {
-  final r = Random(semilla);
-  final j = JuegoDestapa(semilla: semilla);
-  while (!j.terminado) {
-    final n = esperarNota(j);
-    if (r.nextDouble() < despiste) {
-      hasta(j, n.t + 0.5);
-      continue;
-    }
-    // Box-Muller.
-    final e = sqrt(-2 * log(1 - r.nextDouble())) * cos(2 * pi * r.nextDouble()) * sd;
-    jugarNota(j, error: e, soltarAntes: r.nextDouble() < despiste);
+/// Techo de puntos del servidor para [t] segundos jugados.
+int techo(double t) => min(topePuntos, (t.floor() + 1) * puntosPorSegundo);
+
+/// Avanza [s] segundos en pasos de [dt] y devuelve los eventos que salieron.
+List<Evento> correr(JuegoDestapa j, double s) {
+  final ev = <Evento>[];
+  for (var k = 0; k < (s / dt).round() && !j.terminado; k++) {
+    j.avanzar(dt);
+    ev.addAll(j.tomarEventos());
   }
-  return j;
+  return ev;
 }
+
+int mediana(List<int> l) => (List.of(l)..sort())[l.length ~/ 2];
 
 void main() {
-  group('Destapa: frases', () {
-    test('la primera nota es un toque en la entrada y las frases se generan solas', () {
-      final j = JuegoDestapa(semilla: 1);
-      expect(j.proxima!.t, JuegoDestapa.entrada);
-      expect(j.proxima!.mantener, isFalse);
-      for (var i = 0; i < 40; i++) {
-        expect(jugarNota(j), Golpe.perfecto);
-      }
-      expect(j.fallos, 0);
-      expect(j.notas.where((n) => n.estado == EstadoNota.pendiente), isNotEmpty);
-    });
-
-    test('salen patrones variados: medio tiempo y notas de mantener', () {
-      final j = JuegoDestapa(semilla: 7);
-      var medios = false, mantener = false;
-      final vistas = <double>{};
-      while (j.tiempo < 200 && !j.terminado) {
-        final n = esperarNota(j);
-        if (vistas.add(n.t)) {
-          if (n.mantener) mantener = true;
-          final enTiempo = (n.t - JuegoDestapa.entrada) / j.compas;
-          if ((enTiempo - enTiempo.round()).abs() > 0.2) medios = true;
+  group('contrato del servidor', () {
+    for (final (nombre, hacer) in [('malo', malo), ('normal', normal), ('bueno', bueno)]) {
+      test('bot $nombre: puntos dentro del techo en cada paso y la partida termina', () {
+        for (var s = 0; s < 20; s++) {
+          final j = partida(hacer(s), s, cadaPaso: (j) => expect(j.puntos, lessThanOrEqualTo(techo(j.tiempo))));
+          expect(j.terminado, isTrue);
+          expect(j.tiempo, inInclusiveRange(1.5, topeMs / 1000));
+          expect(j.puntos, lessThanOrEqualTo(topePuntos));
         }
-        jugarNota(j);
-      }
-      expect(mantener, isTrue);
-      expect(medios, isTrue);
-    });
+      });
+    }
 
-    test('mantener hasta el final suma; soltar antes es fallo', () {
+    test('sin jugar: nada se desborda en el calentamiento y luego se inunda con 0 puntos', () {
       final j = JuegoDestapa(semilla: 3);
-      // Juega perfecto hasta que toque una de mantener.
-      while (!esperarNota(j).mantener) {
-        jugarNota(j);
-      }
-      final antes = j.puntos;
-      expect(jugarNota(j), isNot(Golpe.fallo));
-      expect(j.puntos, greaterThan(antes + 1));
-      expect(j.fallos, 0);
-      while (!esperarNota(j).mantener) {
-        jugarNota(j);
-      }
-      final f = j.fallos;
-      jugarNota(j, soltarAntes: true);
-      expect(j.fallos, f + 1);
-      expect(j.racha, 0);
+      final ev = correr(j, JuegoDestapa.calentamiento);
+      expect(j.desbordes, 0);
+      expect(ev.where((e) => e.suceso == Suceso.desborde), isEmpty);
+      correr(j, 600);
+      expect(j.terminado, isTrue);
+      expect(j.pitazoFinal, isFalse);
+      expect(j.desbordes, JuegoDestapa.vidas);
+      expect(j.puntos, 0);
     });
 
-    test('compensación: tocar en la hora exacta de pantalla es perfecto, muy tarde es fallo', () {
-      final j = JuegoDestapa(semilla: 2, calentamiento: false);
-      hasta(j, JuegoDestapa.entrada);
-      expect(j.toque(desfase: JuegoDestapa.compensacion), Golpe.perfecto);
-      final n = esperarNota(j);
-      hasta(j, n.t + JuegoDestapa.compensacion + JuegoDestapa.ventanaPerfecta + 0.02);
-      expect(j.toque(), Golpe.bueno);
-      final n2 = esperarNota(j);
-      hasta(j, n2.t + JuegoDestapa.compensacion + JuegoDestapa.ventanaBuena + 0.01);
-      expect(j.fallos, 1);
-    });
-  });
-
-  group('Destapa: calentamiento', () {
-    test('sin tocar, la primera frase no suma fallos pero se ve el fallo', () {
+    test('el pitazo final corta la partida aunque nadie pierda', () {
       final j = JuegoDestapa(semilla: 1);
-      expect(j.calentando, isTrue);
-      final primera = j.notas.where((n) => n.calentamiento).toList();
-      expect(primera, hasLength(patronesDestapa.first.notas.length));
-      // Hasta que pasa la ventana de la última nota de la frase.
-      hasta(j, primera.last.t + JuegoDestapa.compensacion + JuegoDestapa.ventanaBuena + 0.05);
-      expect(j.fallos, 0);
-      expect(j.calentando, isFalse);
-      final fallosVistos = j.tomarEventos().where((e) => e.suceso == Suceso.fallo).length;
-      expect(fallosVistos, primera.length);
-      expect(primera.every((n) => n.estado == EstadoNota.fallada), isTrue);
-      // Después sí cuenta: la siguiente nota que pasa sube el agua.
-      final n = esperarNota(j);
-      expect(n.calentamiento, isFalse);
-      hasta(j, n.t + JuegoDestapa.compensacion + JuegoDestapa.ventanaBuena + 0.02);
-      expect(j.fallos, 1);
-    });
-
-    test('dura más sin tocar que sin calentamiento', () {
-      double sinTocar(bool calentamiento) {
-        final j = JuegoDestapa(semilla: 3, calentamiento: calentamiento);
-        hasta(j, 60);
-        expect(j.terminado, isTrue);
-        return j.tiempo;
-      }
-
-      final con = sinTocar(true), sin = sinTocar(false);
-      expect(con, greaterThan(sin + 1));
-      expect(sin, lessThan(5));
-    });
-
-    test('toque suelto o tarde en el calentamiento: corta la racha y no suma; después sí', () {
-      final j = JuegoDestapa(semilla: 4);
-      expect(j.toque(), Golpe.fallo);
-      expect(j.fallos, 0);
-      expect(j.ultimo, Golpe.fallo);
-      expect(jugarNota(j), Golpe.perfecto);
-      expect(j.racha, 1);
-      expect(jugarNota(j, error: JuegoDestapa.ventanaBuena + 0.03), Golpe.fallo);
-      expect(j.fallos, 0);
-      expect(j.racha, 0);
-      while (j.calentando) {
-        j.avanzar(1 / 60);
-      }
-      expect(j.toque(), Golpe.fallo);
-      expect(j.fallos, 1);
-    });
-
-    test('una sola vez por partida: ninguna otra frase calienta', () {
-      final j = JuegoDestapa(semilla: 8);
-      var notasCalientes = 0;
-      final vistas = <Nota>{};
-      var volvio = false;
-      var salio = false;
-      while (j.tiempo < 120 && !j.terminado) {
-        for (final n in j.notas) {
-          if (vistas.add(n) && n.calentamiento) notasCalientes++;
-        }
-        if (!j.calentando) salio = true;
-        if (salio && j.calentando) volvio = true;
-        jugarNota(j);
-      }
-      expect(notasCalientes, patronesDestapa.first.notas.length);
-      expect(volvio, isFalse);
-    });
-
-    test('no cambia los puntos máximos: la partida perfecta da lo mismo con y sin calentamiento', () {
-      for (final s in [1, 2, 3]) {
-        final con = partidaPerfecta(s);
-        final sin = JuegoDestapa(semilla: s, calentamiento: false);
-        while (!sin.terminado) {
-          jugarNota(sin);
-        }
-        expect(con.puntos, sin.puntos);
-        expect(con.puntos, lessThan(topePuntos));
-      }
-    });
-
-    testWidgets('la vista avisa que está calentando y lo quita al terminar la frase', (tester) async {
-      final j = JuegoDestapa(semilla: 1);
-      await tester.pumpWidget(MaterialApp(
-        theme: tema(Brightness.light),
-        home: Scaffold(body: VistaDestapa(alTerminar: (_, _) {}, mov: Movimiento.nada, juego: j)),
-      ));
-      await tester.pump(const Duration(milliseconds: 16));
-      expect(find.byKey(const Key('destapa_calentando')), findsOneWidget);
-      // Sin tocar, pasa la primera frase entera: el agua no sube.
-      for (var i = 0; i < 300 && j.calentando; i++) {
-        await tester.pump(const Duration(milliseconds: 16));
-      }
-      await tester.pump(const Duration(milliseconds: 16));
-      expect(j.calentando, isFalse);
-      expect(j.fallos, 0);
-      expect(find.byKey(const Key('destapa_calentando')), findsNothing);
-      // Desmonta para que el reloj se pare.
-      await tester.pumpWidget(const SizedBox());
-      expect(tester.takeException(), isNull);
-    });
-  });
-
-  group('Destapa: racha y atasco gordo', () {
-    test('la racha sube el multiplicador hasta x3 y un fallo lo baja', () {
-      final j = JuegoDestapa(semilla: 4);
-      expect(j.multiplicador, 1);
-      while (j.racha < JuegoDestapa.rachaX2) {
-        jugarNota(j);
-      }
-      expect(j.multiplicador, 2);
-      while (j.racha < JuegoDestapa.rachaX3) {
-        jugarNota(j);
-      }
-      expect(j.multiplicador, 3);
-      expect(j.tomarEventos().where((e) => e.suceso == Suceso.multiplicador).length, 2);
-      j.toque();
-      expect(j.multiplicador, 1);
-    });
-
-    test('cada 4 inodoros viene un atasco gordo; vencerlo baja el agua', () {
-      final j = JuegoDestapa(semilla: 5, calentamiento: false);
-      // Un fallo a propósito al principio.
-      j.toque();
-      expect(j.fallos, 1);
-      while (!j.esJefe) {
-        jugarNota(j);
-      }
-      expect(j.inodoros, JuegoDestapa.cadaJefe - 1);
-      expect(j.tomarEventos().any((e) => e.suceso == Suceso.jefe), isTrue);
-      expect(j.requiere, greaterThan(6 + 2 * j.inodoros));
-      while (j.inodoros < JuegoDestapa.cadaJefe) {
-        jugarNota(j);
-      }
-      expect(j.jefesVencidos, 1);
-      expect(j.fallos, 0);
-      expect(j.tomarEventos().any((e) => e.suceso == Suceso.jefeVencido), isTrue);
-    });
-
-    test('el tiempo se acelera por inodoro sin bajar del mínimo', () {
-      final j = JuegoDestapa(semilla: 6);
-      final c0 = j.compas;
-      while (j.inodoros < 3) {
-        jugarNota(j);
-      }
-      expect(j.compas, lessThan(c0));
-      while (j.inodoros < 20 && !j.terminado) {
-        jugarNota(j);
-      }
-      expect(j.compas, greaterThanOrEqualTo(JuegoDestapa.compasMinimo));
-    });
-  });
-
-  group('Destapa: topes del servidor', () {
-    test('partida perfecta larga: se acaba sola y queda muy por debajo de los topes', () {
-      for (final s in [1, 2, 3]) {
-        final j = partidaPerfecta(s);
-        final ms = (j.tiempo * 1000).round();
-        // ignore: avoid_print
-        print('perfecta semilla $s: ${j.puntos} puntos en ${j.tiempo.round()} s, inodoros ${j.inodoros}, '
-            '${(j.puntos / j.tiempo).toStringAsFixed(1)} pts/s, perfectos ${j.perfectos}');
-        expect(j.turnoCompleto, isTrue);
-        expect(j.fallos, 0);
-        expect(ms, lessThan(topeMs));
-        expect(j.puntos, lessThan(topePuntos * 0.7));
-        expect(j.puntos, lessThan((ms / 1000 + 1) * puntosPorSegundo * 0.75));
-      }
-    });
-
-    test('en ningún momento una partida perfecta pasa del tope de puntos por segundo', () {
-      final j = JuegoDestapa(semilla: 9);
+      // Un jugador imposible que destapa todo al instante.
       while (!j.terminado) {
-        jugarNota(j);
-        expect(j.puntos, lessThan((j.tiempo + 1) * puntosPorSegundo), reason: 't=${j.tiempo}');
+        for (final i in j.inodoros) {
+          if (!i.tapado) continue;
+          switch (i.atasco!) {
+            case TipoAtasco.patito:
+              j.deslizar(i.indice);
+            case TipoAtasco.celular:
+              i.sostenido = JuegoDestapa.sostenerCelular;
+              j.bajar(i.indice);
+            default:
+              j.bajar(i.indice);
+              j.soltar(i.indice);
+          }
+        }
+        j.avanzar(dt);
+        j.tomarEventos();
+        expect(j.puntos, lessThanOrEqualTo(techo(j.tiempo)));
       }
-    });
-
-    test('un jugador normal queda cerca de la meta de 60', () {
-      final puntos = [for (var s = 0; s < 200; s++) partidaHumana(s).puntos]..sort();
-      final media = puntos.reduce((a, b) => a + b) / puntos.length;
-      // ignore: avoid_print
-      print('humano: media ${media.round()}, mediana ${puntos[100]}, p90 ${puntos[180]}, max ${puntos.last}');
-      expect(media, inInclusiveRange(30, 160));
+      expect(j.pitazoFinal, isTrue);
+      expect(j.tiempo, closeTo(JuegoDestapa.duracionMaxima, 0.05));
     });
   });
 
-  group('Destapa: vista', () {
+  test('calibración: malo ~15–25, normal ~50–70 al minuto y medio, bueno 150+, destapa_60 alcanzable', () {
+    final malos = [for (var s = 0; s < 20; s++) partida(malo(s), s).puntos];
+    final a90 = <int>[];
+    for (var s = 0; s < 20; s++) {
+      var p = -1;
+      final j = partida(normal(s), s, cadaPaso: (j) {
+        if (p < 0 && j.tiempo >= 90) p = j.puntos;
+      });
+      a90.add(p < 0 ? j.puntos : p);
+    }
+    final buenos = [for (var s = 0; s < 20; s++) partida(bueno(s), s)];
+    expect(mediana(malos), inInclusiveRange(8, 30));
+    expect(mediana(a90), inInclusiveRange(40, 90));
+    expect(mediana([for (final j in buenos) j.puntos]), greaterThanOrEqualTo(150));
+    expect(buenos.every((j) => j.puntos >= 60), isTrue);
+  });
+
+  test('misma semilla, misma partida', () {
+    final a = partida(normal(7), 42), b = partida(normal(7), 42);
+    expect(a.puntos, b.puntos);
+    expect(a.tiempo, b.tiempo);
+    expect(a.destapados, b.destapados);
+    expect(a.desbordes, b.desbordes);
+  });
+
+  test('inodoros: 2 al inicio, 3 a los 20 s, 4 a los 50 s; dorado a los 30 s; prórroga a los 90 s', () {
+    final j = JuegoDestapa(semilla: 5);
+    expect(j.inodoros.length, 2);
+    final bot = bueno(5);
+    final ev = <(double, Evento)>[];
+    while (!j.terminado && j.tiempo < 95) {
+      bot.jugar(j);
+      j.avanzar(dt);
+      for (final e in j.tomarEventos()) {
+        ev.add((j.tiempo, e));
+      }
+      if (j.tiempo > 19.9 && j.tiempo < 20.1) expect(j.inodoros.length, anyOf(2, 3));
+      if (j.tiempo > 20.1 && j.tiempo < 49.9) expect(j.inodoros.length, 3);
+      if (j.tiempo > 50.1) expect(j.inodoros.length, 4);
+    }
+    expect(ev.where((e) => e.$2.suceso == Suceso.nuevoInodoro).map((e) => e.$1.round()), [20, 50]);
+    expect(ev.any((e) => e.$2.suceso == Suceso.atasco && e.$2.dorado && e.$1 >= 30 && e.$1 < 40), isTrue);
+    expect(ev.where((e) => e.$2.suceso == Suceso.prorroga).map((e) => e.$1.round()), [90]);
+    expect(j.prorroga, isTrue);
+  });
+
+  group('atascos', () {
+    test('normal: 5 golpes lo destapan y vale 1', () {
+      final j = JuegoDestapa(semilla: 1, calentar: false)..tapar(0, TipoAtasco.normal);
+      j.avanzar(1.0);
+      for (var k = 0; k < JuegoDestapa.golpesNormal; k++) {
+        expect(j.inodoros[0].tapado, isTrue);
+        j.bajar(0);
+        j.soltar(0);
+      }
+      expect(j.inodoros[0].tapado, isFalse);
+      expect(j.puntos, 1);
+      expect(j.racha, 1);
+    });
+
+    test('gordo: se recupera si lo sueltas; 12 golpes seguidos lo destapan y vale 3', () {
+      final j = JuegoDestapa(semilla: 1, calentar: false)..tapar(0, TipoAtasco.gordo);
+      j.avanzar(1.0);
+      for (var k = 0; k < 6; k++) {
+        j.bajar(0);
+        j.soltar(0);
+      }
+      expect(j.inodoros[0].golpes, 6);
+      final ev = correr(j, 2.0);
+      expect(ev.any((e) => e.suceso == Suceso.recupera), isTrue);
+      expect(j.inodoros[0].golpes, lessThan(6));
+      while (j.inodoros[0].tapado) {
+        j.bajar(0);
+        j.soltar(0);
+      }
+      expect(j.puntos, 3);
+    });
+
+    test('patito: golpearlo no sirve, deslizar hacia arriba sí', () {
+      final j = JuegoDestapa(semilla: 1, calentar: false)..tapar(0, TipoAtasco.patito);
+      for (var k = 0; k < 10; k++) {
+        j.bajar(0);
+        j.soltar(0);
+      }
+      expect(j.inodoros[0].atasco, TipoAtasco.patito);
+      j.deslizar(0);
+      expect(j.inodoros[0].tapado, isFalse);
+      expect(j.puntos, 2);
+      // Deslizar sobre otro atasco no hace nada.
+      j.tapar(1, TipoAtasco.normal);
+      j.deslizar(1);
+      expect(j.inodoros[1].tapado, isTrue);
+    });
+
+    test('celular: mantener 0.8 s lo saca; toques a lo loco lo hunden y sube el agua', () {
+      final j = JuegoDestapa(semilla: 1, calentar: false)..tapar(0, TipoAtasco.celular);
+      final agua = j.inodoros[0].agua;
+      j.bajar(0);
+      j.soltar(0);
+      final ev = j.tomarEventos();
+      expect(ev.any((e) => e.suceso == Suceso.hundido), isTrue);
+      expect(j.inodoros[0].agua, greaterThan(agua));
+      j.bajar(0);
+      correr(j, JuegoDestapa.sostenerCelular + 0.05);
+      expect(j.inodoros[0].tapado, isFalse);
+      expect(j.puntos, 2);
+    });
+
+    test('cucaracha: se aplasta con un toque; si escapa rompe el combo pero no quita vida', () {
+      final j = JuegoDestapa(semilla: 1, calentar: false)..tapar(0, TipoAtasco.cucaracha);
+      j.bajar(0);
+      expect(j.inodoros[0].tapado, isFalse);
+      expect(j.puntos, 2);
+      j.racha = JuegoDestapa.rachaX2;
+      expect(j.multiplicador, 2);
+      j.tapar(1, TipoAtasco.cucaracha);
+      final ev = correr(j, j.inodoros[1].vidaCucaracha + 0.1);
+      expect(ev.any((e) => e.suceso == Suceso.escapa), isTrue);
+      expect(ev.any((e) => e.suceso == Suceso.comboRoto), isTrue);
+      expect(j.racha, 0);
+      expect(j.desbordes, 0);
+    });
+
+    test('desborde: rompe el combo, guarda la causa y a los 3 se acaba', () {
+      final j = JuegoDestapa(semilla: 1, calentar: false)..tapar(0, TipoAtasco.gordo);
+      j.racha = 20;
+      while (j.desbordes == 0) {
+        correr(j, 0.1);
+      }
+      expect(j.tipoUltimoDesborde, isNotNull);
+      expect(j.racha, 0);
+      correr(j, 600);
+      expect(j.terminado, isTrue);
+      expect(j.desbordes, JuegoDestapa.vidas);
+      j.bajar(0);
+      expect(j.puntos, 0);
+    });
+
+    test('combo: x2 desde 15 seguidos, x3 desde 35; el dorado vale 5 por el multiplicador', () {
+      final j = JuegoDestapa(semilla: 1, calentar: false);
+      j.avanzar(30); // sube el techo del servidor
+      j.tomarEventos();
+      j.racha = JuegoDestapa.rachaX2 - 1;
+      j.tapar(0, TipoAtasco.cucaracha);
+      j.bajar(0);
+      expect(j.multiplicador, 2);
+      expect(j.tomarEventos().any((e) => e.suceso == Suceso.combo && e.valor == 2), isTrue);
+      j.racha = JuegoDestapa.rachaX3;
+      final antes = j.puntos;
+      j.tapar(0, TipoAtasco.normal, dorado: true);
+      for (var k = 0; k < JuegoDestapa.golpesNormal; k++) {
+        j.bajar(0);
+        j.soltar(0);
+      }
+      expect(j.puntos - antes, JuegoDestapa.puntosDorado * 3);
+    });
+  });
+
+  group('vista', () {
     for (final mov in Movimiento.values) {
-      testWidgets('se juega con movimiento $mov: toca, acierta y termina al desbordarse', (tester) async {
-        int? fin;
-        final j = JuegoDestapa(semilla: 1, calentamiento: false);
-        await tester.pumpWidget(MaterialApp(
-          theme: tema(Brightness.dark),
-          home: Scaffold(body: VistaDestapa(alTerminar: (p, _) => fin = p, mov: mov, juego: j)),
-        ));
-        // Hasta la primera nota, y toca a su hora.
-        for (var i = 0; i < 86; i++) {
-          await tester.pump(const Duration(milliseconds: 16));
+      testWidgets('se monta, se juega y termina una sola vez ($mov)', (tester) async {
+        final fines = <(int, int)>[];
+        final juego = JuegoDestapa(semilla: 2, calentar: false);
+        await tester.binding.setSurfaceSize(const Size(393, 873));
+        await tester.pumpWidget(MaterialApp(home: Scaffold(body: VistaDestapa(alTerminar: (p, ms) => fines.add((p, ms)), mov: mov, juego: juego))));
+        expect(find.byKey(const Key('destapa_puntos')), findsOneWidget);
+        expect(find.byKey(const Key('destapa_reloj')), findsOneWidget);
+        // Unos golpes en el primer inodoro y en el segundo.
+        for (var k = 0; k < 40; k++) {
+          await tester.tapAt(Offset(k.isEven ? 90 : 290, 650));
+          await tester.pump(const Duration(milliseconds: 50));
         }
-        await tester.tap(find.byKey(const Key('destapa_toque')));
-        await tester.pump(const Duration(milliseconds: 16));
-        expect(j.puntos, greaterThan(0));
-        expect(find.byKey(const Key('destapa_golpe')), findsOneWidget);
-        // Toques sueltos hasta desbordar.
-        for (var i = 0; i < JuegoDestapa.fallosMaximos + 2 && !j.terminado; i++) {
-          await tester.pump(const Duration(milliseconds: 200));
-          await tester.tap(find.byKey(const Key('destapa_toque')));
+        await tester.dragFrom(const Offset(90, 700), const Offset(0, -120));
+        var vueltas = 0;
+        while (!juego.terminado && vueltas++ < 4000) {
+          await tester.pump(const Duration(milliseconds: 50));
         }
-        await tester.pump(const Duration(milliseconds: 700));
-        expect(j.terminado, isTrue);
-        expect(fin, j.puntos);
-        expect(tester.takeException(), isNull);
+        expect(juego.terminado, isTrue);
+        await tester.pump(const Duration(milliseconds: 1100));
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(fines.length, 1);
+        final (p, ms) = fines.single;
+        expect(ms, inInclusiveRange(1500, topeMs));
+        expect(p, lessThanOrEqualTo(min(topePuntos, (ms ~/ 1000 + 1) * puntosPorSegundo)));
+        expect(p, juego.puntos);
+        await tester.pump(const Duration(seconds: 2));
+        expect(fines.length, 1);
+        await tester.pumpWidget(const SizedBox());
       });
     }
   });

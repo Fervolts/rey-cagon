@@ -96,95 +96,89 @@ void main() {
   });
 
   group('Tubería', () {
-    test('sin tocar acaba chocando y los puntos son metros', () {
+    test('sin tocar el Atasco lo alcanza y los puntos son metros', () {
       final j = JuegoTuberia(azar: Random(1));
-      for (var i = 0; i < 6000 && !j.terminado; i++) {
-        j.avanzar(0.016);
+      for (var i = 0; i < 60 * 600 && !j.terminado; i++) {
+        j.avanzar(1 / 60);
       }
       expect(j.terminado, isTrue);
       expect(j.puntos, greaterThan(10));
+      expect(j.puntos, greaterThanOrEqualTo(j.distancia.floor()));
     });
-    test('toque cambia de carril y termina sin efecto', () {
+    test('mantener pesa, soltar aligera', () {
       final j = JuegoTuberia(azar: Random(2));
-      expect(j.carril, 0);
-      j.toque();
-      expect(j.carril, 1);
-      j.toque();
-      expect(j.carril, 0);
-      expect(j.toques, 2);
+      j.presionado = true;
+      expect(j.pesado, isTrue);
+      j.presionado = false;
+      expect(j.pesado, isFalse);
     });
-    test('la velocidad sube y no pasa del máximo', () {
+    test('cortar termina por tiempo', () {
       final j = JuegoTuberia(azar: Random(3));
-      final v0 = j.velocidad;
       j.avanzar(2);
-      expect(j.velocidad, greaterThanOrEqualTo(v0));
-      expect(j.velocidad, lessThanOrEqualTo(JuegoTuberia.velocidadMaxima));
+      j.cortar();
+      expect(j.terminado, isTrue);
+      expect(j.tomarSucesos().where((s) => s.tipo == TipoSuceso.atrapado).single.valor, 1);
     });
-    test('un bot que esquiva los codos llega lejos', () {
+    test('pesado en bajada y liviano en subida respeta el tope de puntos por segundo', () {
       final j = JuegoTuberia(azar: Random(4));
-      for (var i = 0; i < 3000 && !j.terminado; i++) {
-        // Se pone en el carril contrario al del próximo codo cercano.
-        final prox = j.codos.where((c) => c.distancia > j.distancia - 1).toList()..sort((a, b) => a.distancia.compareTo(b.distancia));
-        if (prox.isNotEmpty && prox.first.carril == j.carril && prox.first.distancia - j.distancia < 6) j.toque();
-        j.avanzar(0.016);
+      for (var i = 0; i < 60 * 300 && !j.terminado; i++) {
+        j.presionado = j.enSuelo ? j.pendiente(j.x) < 0 : j.vy < 0;
+        j.avanzar(1 / 60);
+        expect(j.velocidad, lessThanOrEqualTo(JuegoTuberia.velocidadMaxima + 1e-6));
+        expect(j.puntos, lessThanOrEqualTo(((j.tiempo + 1) * JuegoTuberia.pps).floor()));
       }
-      expect(j.puntos, greaterThan(100));
+      expect(j.distancia, greaterThan(100));
     });
   });
 
   group('Destapa', () {
-    test('toque justo en el pulso es perfecto y suma', () {
-      final j = JuegoDestapa();
-      j.avanzar(JuegoDestapa.entrada);
-      expect(j.toque(), Golpe.perfecto);
-      expect(j.puntos, JuegoDestapa.puntosPerfecto);
-    });
-    test('toque suelto es fallo; 3 fallos terminan', () {
-      final j = JuegoDestapa(calentamiento: false);
-      for (var i = 0; i < JuegoDestapa.fallosMaximos; i++) {
-        expect(j.terminado, isFalse);
-        expect(j.toque(), Golpe.fallo);
-      }
-      expect(j.terminado, isTrue);
-      expect(j.toque(), Golpe.fallo);
-      expect(j.fallos, JuegoDestapa.fallosMaximos);
-    });
-    test('dejar pasar los pulsos cuenta como fallo', () {
-      final j = JuegoDestapa();
-      for (var i = 0; i < 2000 && !j.terminado; i++) {
-        j.avanzar(0.05);
-      }
-      expect(j.terminado, isTrue);
+    int techo(double t) => min(JuegoDestapa.topePuntos, (t.floor() + 1) * JuegoDestapa.puntosPorSegundo);
+    void golpe(JuegoDestapa j, int i) {
+      j.bajar(i);
+      j.soltar(i);
+    }
+
+    test('tocar un inodoro limpio no suma', () {
+      final j = JuegoDestapa(semilla: 1, calentar: false);
+      expect(j.inodoros[0].tapado, isFalse);
+      golpe(j, 0);
       expect(j.puntos, 0);
+      expect(j.tomarEventos().any((e) => e.suceso == Suceso.golpeVacio), isTrue);
     });
-    test('jugador perfecto destapa inodoros y el compás se acelera', () {
-      final j = JuegoDestapa();
-      j.avanzar(JuegoDestapa.entrada);
-      final c0 = j.compas;
-      // Los patrones cambian (dobles, pausas, mantener): se toca en la hora de cada nota y se aguanta hasta su fin.
-      void hasta(double t) {
-        while (j.tiempo < t) {
-          j.avanzar(0.01);
-        }
+    test('un atasco normal sale con 5 golpes y suma dentro del techo', () {
+      final j = JuegoDestapa(semilla: 1, calentar: false);
+      j.tapar(0, TipoAtasco.normal);
+      for (var k = 0; k < JuegoDestapa.golpesNormal - 1; k++) {
+        golpe(j, 0);
       }
-      for (var i = 0; i < 30; i++) {
-        while (j.proxima == null) {
-          j.avanzar(0.01);
-        }
-        final n = j.proxima!;
-        hasta(n.t + JuegoDestapa.compensacion);
-        expect(j.toque(), Golpe.perfecto);
-        if (n.mantener) hasta(n.fin! + JuegoDestapa.compensacion);
-      }
-      expect(j.inodoros, greaterThan(0));
-      expect(j.compas, lessThan(c0));
-      expect(j.fallos, 0);
+      expect(j.inodoros[0].tapado, isTrue);
+      golpe(j, 0);
+      expect(j.inodoros[0].tapado, isFalse);
+      expect(j.puntos, JuegoDestapa.puntosBase(TipoAtasco.normal));
+      expect(j.puntos, lessThanOrEqualTo(techo(j.tiempo)));
     });
-    test('segundo toque sobre el mismo pulso es fallo', () {
-      final j = JuegoDestapa();
-      j.avanzar(JuegoDestapa.entrada);
-      j.toque();
-      expect(j.toque(), Golpe.fallo);
+    test('sin jugar se desborda 3 veces y termina con 0 puntos', () {
+      final j = JuegoDestapa(semilla: 3);
+      for (var k = 0; k < 60 * 600 && !j.terminado; k++) {
+        j.avanzar(1 / 60);
+      }
+      expect(j.terminado, isTrue);
+      expect(j.pitazoFinal, isFalse);
+      expect(j.desbordes, JuegoDestapa.vidas);
+      expect(j.puntos, 0);
+      expect(j.tiempo, greaterThan(JuegoDestapa.calentamiento));
+    });
+    test('al terminar ya no acepta golpes', () {
+      final j = JuegoDestapa(semilla: 4, calentar: false);
+      for (var k = 0; k < 60 * 600 && !j.terminado; k++) {
+        j.avanzar(1 / 60);
+      }
+      final p = j.puntos;
+      j.tapar(0, TipoAtasco.normal);
+      for (var k = 0; k < 20; k++) {
+        golpe(j, 0);
+      }
+      expect(j.puntos, p);
     });
   });
 

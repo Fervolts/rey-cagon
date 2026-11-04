@@ -1,8 +1,8 @@
-// Tubería Express: el mojón baja por el desagüe; un toque cambia de carril. Lógica en tuberia_logica.dart, dibujo en
-// tuberia_pintor.dart y efectos en tuberia_efectos.dart. Nada se reconstruye por cuadro salvo el mojón (un Emoji con
-// Transform): el tubo lo repinta el Ticker y el marcador solo cambia cuando cambian los puntos, la racha o un letrero.
-// Si la app se va al fondo, la partida se pausa (y el cronómetro también). El PNG del rollo se carga una sola vez
-// para toda la app y se le pasa al pintor; mientras tanto el pintor dibuja su rollo de respaldo.
+// Tubería Express: surf de una mano por la cloaca. Mantener el dedo = pesado (baja rápido), soltar = liviano (vuela en
+// la cresta). Lógica en tuberia_logica.dart, dibujo en tuberia_pintor.dart (un solo CustomPainter) y efectos, animación
+// del mojón y cámara en tuberia_efectos.dart. El mundo lo repinta el Ticker; el marcador solo se reconstruye cuando
+// cambia algo que muestra. Si la app se va al fondo, la partida se pausa (y el cronómetro también). Los PNG se cargan
+// una sola vez para toda la app; mientras tanto el pintor dibuja formas de respaldo.
 
 import 'dart:async';
 import 'dart:math';
@@ -12,14 +12,40 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../animaciones.dart';
-import '../../emoji.dart';
 import '../../idioma.dart';
 import '../../tema.dart';
 import 'estadisticas.dart';
 import 'marco.dart';
+import 'sonido.dart';
 import 'tuberia_efectos.dart';
 import 'tuberia_logica.dart';
 import 'tuberia_pintor.dart';
+
+/// Nombre de cada zona, en el orden en que aparecen (cada [JuegoTuberia.metrosZona] metros, la última se repite).
+String nombreZonaTuberia(int z) => switch (z % JuegoTuberia.zonas) {
+      0 => tr('Baño', 'Bathroom'),
+      1 => tr('Desagüe', 'Drain'),
+      2 => tr('Cloaca', 'Sewer'),
+      3 => tr('Río de la ciudad', 'City river'),
+      _ => tr('Planta de tratamiento', 'Treatment plant'),
+    };
+
+const _sonidos = [
+  'viento', 'chapuzon', 'pujo', 'pujo_largo', 'rollo', 'dorado', 'combo', 'cucaracha', 'fallo', 'perdiste', 'plop', //
+  'descarga', 'alerta', 'glug', 'gana', 'burbuja',
+];
+
+// PNG que usa el pintor: se cargan una vez para toda la app; si uno falla se puede volver a pedir.
+final _cargas = <String, Future<ui.Image>>{};
+Future<ui.Image> _imagen(String nombre) => _cargas[nombre] ??= () async {
+      try {
+        final datos = await rootBundle.load('assets/emoji/$nombre.png');
+        return await decodeImageFromList(datos.buffer.asUint8List());
+      } catch (_) {
+        _cargas.remove(nombre);
+        rethrow;
+      }
+    }();
 
 class VistaTuberia extends StatefulWidget {
   const VistaTuberia({super.key, required this.alTerminar, this.mov = Movimiento.completo, this.juego});
@@ -33,208 +59,324 @@ class VistaTuberia extends StatefulWidget {
   State<VistaTuberia> createState() => _VistaTuberiaState();
 }
 
-// El PNG del 🧻, decodificado una vez. Si falla se olvida para reintentar en la próxima partida.
-Future<ui.Image>? _cargaRollo;
-Future<ui.Image> _imagenRollo() => _cargaRollo ??= () async {
-      try {
-        final datos = await rootBundle.load('assets/emoji/roll_of_paper.png');
-        return await decodeImageFromList(datos.buffer.asUint8List());
-      } catch (_) {
-        _cargaRollo = null;
-        rethrow;
-      }
-    }();
-
-List<String> _nombresZona() => [
-      tr('Desagüe', 'Drain'),
-      tr('Cloaca', 'Sewer'),
-      tr('Colector', 'Main line'),
-      tr('Túnel profundo', 'Deep tunnel'),
-      tr('Recta final', 'Final stretch'),
-    ];
-
 class _VistaTuberiaState extends State<VistaTuberia> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final JuegoTuberia _j = widget.juego ?? JuegoTuberia(record: recordMinijuego('tuberia'));
-  late final RelojJuego _reloj;
-  late final EfectosTuberia _ef = EfectosTuberia(widget.mov);
+  late final EfectosTuberia _ef = EfectosTuberia(mov: widget.mov);
+  late final AnimMojon _anim = AnimMojon(mov: widget.mov);
+  final _cam = CamaraTuberia();
+  var _img = ImagenesTuberia();
   final _tic = _Aviso();
   final _hud = _Aviso();
+  late final RelojJuego _reloj = RelojJuego(this, _paso);
   final _sw = Stopwatch();
-  Timer? _cierre;
+  final _azar = Random(5);
+
+  int _dedos = 0;
   bool _fin = false;
+  bool _porTiempo = false;
   bool _pausado = false;
+  Timer? _cierre;
 
-  // Lo que muestra el marcador (para avisar solo cuando cambia).
-  int _puntos = -1, _mult = 1, _racha = 0;
-  PistaTuberia? _pista = PistaTuberia.toca;
-  String? _banner, _bannerSub;
-  bool _bannerFuerte = false;
-  double _bannerHasta = 0;
+  // Lo que muestra el marcador (se compara para no reconstruir de más).
+  int _metros = 0, _puntos = 0, _combo = 0, _fiebre = 0;
+  int _zonaLetrero = 0;
+  double _tLetrero = 2.4; // arranca mostrando la zona donde va
+  String? _banner;
   int _bannerVez = 0;
-  double _gota = 0;
+  double _tBanner = 0;
 
-  // Geometría del último layout (para poner chispas donde está el mojón).
-  double _x0 = 0, _tubo = 200, _yJ = 100, _pxPorM = 20;
-  Paleta? _p;
-  ui.Image? _rollo;
+  // Sonido: último toque de cada tipo (reloj real) para no saturar.
+  final _ultimo = <String, double>{};
+  double _tPresion = 0, _ultimoPujo = -9, _ultimoPujoLargo = -9, _ultimoViento = -9, _proxBurbuja = 3;
 
-  Offset get _mojon => Offset(_x0 + _tubo * (0.25 + 0.5 * _j.posicion), _yJ);
+  static const _imagenes = ['pile_of_poo', 'roll_of_paper', 'cockroach', 'rat', 'toilet', 'bathtub', 'sparkles'];
 
   @override
   void initState() {
     super.initState();
+    _zonaLetrero = _j.zona;
     WidgetsBinding.instance.addObserver(this);
-    _reloj = RelojJuego(this, _paso);
+    unawaited(Sonido.precargar(_sonidos));
+    unawaited(Sonido.musica('musica_tuberia', volumen: 0.45));
+    for (final n in _imagenes) {
+      _imagen(n).then((i) {
+        if (mounted) setState(() => _img = _con(n, i));
+      }, onError: (_) {});
+    }
     _sw.start();
     _reloj.arrancar();
-    _imagenRollo().then((img) {
-      if (mounted) setState(() => _rollo = img);
-    }, onError: (_) {});
+  }
+
+  ImagenesTuberia _con(String n, ui.Image i) {
+    final a = _img;
+    return ImagenesTuberia()
+      ..mojon = n == 'pile_of_poo' ? i : a.mojon
+      ..rollo = n == 'roll_of_paper' ? i : a.rollo
+      ..cucaracha = n == 'cockroach' ? i : a.cucaracha
+      ..rata = n == 'rat' ? i : a.rata
+      ..inodoro = n == 'toilet' ? i : a.inodoro
+      ..banera = n == 'bathtub' ? i : a.banera
+      ..chispas = n == 'sparkles' ? i : a.chispas;
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed && !_fin && !_pausado) {
+  void didChangeAppLifecycleState(AppLifecycleState estado) {
+    if (estado != AppLifecycleState.resumed && !_fin && !_pausado) {
       _pausado = true;
       _reloj.parar();
       _sw.stop();
+      _j.presionado = false;
+      _dedos = 0;
       _hud.avisar();
     }
   }
 
   void _seguir() {
+    if (!_pausado) return;
     _pausado = false;
     _sw.start();
     _reloj.arrancar();
     _hud.avisar();
   }
 
+  // ---------------------------------------------------------------- entrada
+
+  void _baja(PointerDownEvent _) {
+    if (_pausado) {
+      _seguir();
+      return;
+    }
+    _dedos++;
+    if (_dedos == 1 && !_fin) {
+      _j.presionado = true;
+      _tPresion = 0;
+      if (_ef.fase - _ultimoPujo > 0.9) {
+        _ultimoPujo = _ef.fase;
+        _suena('pujo', 0.35);
+      }
+    }
+  }
+
+  void _sube(PointerEvent _) {
+    _dedos = max(0, _dedos - 1);
+    if (_dedos == 0) _j.presionado = false;
+  }
+
+  // ---------------------------------------------------------------- cuadro
+
   void _paso(double dt) {
-    final p = _p;
-    if (!_fin) {
-      _j.avanzar(dt);
-      if (p != null) {
+    final dtJ = _ef.avanzar(dt);
+    if (!_ef.congelado && !_j.terminado) _j.avanzar(dtJ);
+    final cercania = _j.terminado ? 0.0 : cercaniaAtasco(_j.separacion);
+    _anim.avanzar(dt, _j, cercania);
+    _cam.avanzar(dt, _j, cercania, suave: widget.mov != Movimiento.nada);
+    for (final s in _j.tomarSucesos()) {
+      _suceso(s);
+    }
+    if (!_j.terminado) {
+      if (cercania > 0.6) _ef.sacudir((cercania - 0.6) * 6);
+      _ambiente(dt);
+      if (_sw.elapsedMilliseconds >= JuegoTuberia.tiempoMaximo * 1000) {
+        _j.cortar();
         for (final s in _j.tomarSucesos()) {
-          _suceso(s, p);
-        }
-        // Estela: gotas que se quedan atrás, más seguidas cuanto más rápido.
-        _gota += dt * _j.velocidad;
-        if (_gota > 0.9) {
-          _gota = 0;
-          _ef.gota(_mojon + const Offset(0, -12), colorAguas.withValues(alpha: 0.7), _j.velocidad * _pxPorM * 0.35);
+          _suceso(s);
         }
       }
-      if (_j.puntos != _puntos || _j.multiplicador != _mult || _j.racha != _racha || _j.pista != _pista) {
-        _puntos = _j.puntos;
-        _mult = _j.multiplicador;
-        _racha = _j.racha;
-        _pista = _j.pista;
+    }
+    if (_tLetrero > 0) _tLetrero = max(0, _tLetrero - dt);
+    if (_tBanner > 0) {
+      _tBanner = max(0, _tBanner - dt);
+      if (_tBanner == 0) {
+        _banner = null;
         _hud.avisar();
       }
-      if (_j.terminado) _terminar();
     }
-    _ef.avanzar(dt);
-    if (_banner != null && _ef.fase >= _bannerHasta) {
-      _banner = _bannerSub = null;
-      _hud.avisar();
-    }
+    _refrescarHud();
     _tic.avisar();
   }
 
-  void _letrero(String titulo, String? sub, double segundos, {bool fuerte = false}) {
-    _banner = titulo;
-    _bannerSub = sub;
-    _bannerFuerte = fuerte;
-    _bannerHasta = _ef.fase + segundos;
-    _bannerVez++;
-    _hud.avisar();
-  }
-
-  void _suceso(SucesoTuberia s, Paleta p) {
-    final aqui = _mojon;
-    switch (s.tipo) {
-      case TipoSuceso.rollo:
-        // sonido: plop del rollo, más agudo con la racha
-        final dorado = s.valor == 1;
-        _ef.agarro();
-        _ef.chispas(aqui, dorado ? p.acento : const Color(0xFFF7F3EA), dorado ? 12 : 7, fuerza: 120);
-        _ef.letrero('+${s.puntos}', aqui + const Offset(26, -18), dorado ? p.acento : p.texto, tam: dorado ? 18 : 14);
-      case TipoSuceso.casi:
-        // sonido: roce metálico
-        vibracionSuave();
-        final lado = Offset(_x0 + _tubo * (0.25 + 0.5 * s.carril), _yJ);
-        _ef.chispas(Offset((lado.dx + aqui.dx) / 2, _yJ), p.acento, 10, fuerza: 170);
-        _ef.letrero(tr('¡CASI! +${s.puntos}', 'CLOSE! +${s.puntos}'), aqui + const Offset(0, -34), p.acento, tam: 17);
-        _ef.destello(p.acento, 0.22);
-        _ef.sacudir(3);
-      case TipoSuceso.multiplicador:
-        // sonido: subida de multiplicador (arpegio corto)
-        vibracionSuave();
-        _ef.chispas(aqui, p.acento, 22, fuerza: 220);
-        _ef.letrero('x${s.valor}', aqui + const Offset(0, 54), p.acento, tam: 34);
-        _ef.destello(p.acento, 0.4);
-        _ef.sacudir(4);
-      case TipoSuceso.perdido:
-        if (s.valor >= 3) _ef.letrero(tr('racha rota', 'streak lost'), aqui + const Offset(0, -30), p.textoSuave, tam: 13);
-      case TipoSuceso.avisoDescarga:
-        // sonido: alguien jala la cadena a lo lejos
-        _letrero(tr('¡VIENE UNA DESCARGA!', 'FLUSH INCOMING!'), tr('Alguien jaló la cadena', 'Someone pulled the chain'), 2.2);
-      case TipoSuceso.descarga:
-        // sonido: descarga del inodoro (ruido blanco que sube)
-        vibracionSuave();
-        _ef.sacudir(8);
-        _ef.destello(colorAguas, 0.6);
-        _ef.chispas(aqui, colorAguas, 18, fuerza: 200);
-        _letrero(tr('¡DESCARGA!', 'FLUSH!'), tr('Más rápido · rollos dorados x2', 'Faster · golden rolls x2'), 2.4, fuerte: true);
-      case TipoSuceso.finDescarga:
-        break;
-      case TipoSuceso.zona:
-        // sonido: campanita de zona
-        final nombres = _nombresZona();
-        _letrero(nombres[s.valor.clamp(0, nombres.length - 1)].toUpperCase(),
-            tr('Zona ${s.valor + 1} de ${nombres.length} · más rápido', 'Zone ${s.valor + 1} of ${nombres.length} · faster'), 2.0);
-      case TipoSuceso.record:
-        // sonido: fanfarria de récord
-        vibracionSuave();
-        _ef.destello(p.acento, 0.5);
-        _ef.chispas(aqui, p.acento, 24, fuerza: 240);
-        _letrero(tr('¡NUEVO RÉCORD!', 'NEW RECORD!'), tr('Todo lo que sigue es gloria', 'Everything from here is glory'), 2.0, fuerte: true);
-      case TipoSuceso.choque:
-        // sonido: splash grave contra el codo
-        vibracionSuave();
-        _ef.sacudir(14);
-        _ef.destello(colorAguas, 0.75);
-        _ef.chispas(aqui, colorAguas, 30, fuerza: 260, tam: 5);
-      case TipoSuceso.meta:
-        // sonido: llegada a la planta
-        vibracionSuave();
-        _ef.destello(p.acento, 0.8);
-        _ef.chispas(aqui, p.acento, 40, fuerza: 300, tam: 4);
+  void _ambiente(double dt) {
+    if (_j.pesado) {
+      _tPresion += dt;
+      if (_tPresion > 1.2 && _ef.fase - _ultimoPujoLargo > 3) {
+        _ultimoPujoLargo = _ef.fase;
+        _suena('pujo_largo', 0.3);
+      }
+    }
+    if (!_j.enSuelo && _j.alturaSobreSuelo > 3 && _ef.fase - _ultimoViento > 1.5) {
+      _ultimoViento = _ef.fase;
+      _suena('viento', (0.15 + _j.alturaSobreSuelo / 30).clamp(0.15, 0.5));
+    }
+    if (_j.zona % JuegoTuberia.zonas == 4) {
+      _proxBurbuja -= dt;
+      if (_proxBurbuja <= 0) {
+        _proxBurbuja = 2.5 + _azar.nextDouble() * 2;
+        _suena('burbuja', 0.15 + _azar.nextDouble() * 0.15);
+      }
     }
   }
 
-  void _terminar() {
-    _fin = true;
-    _sw.stop();
-    _hud.avisar();
-    // Un instante para ver el choque y el letrero (los efectos siguen corriendo); después se para todo y se entrega.
-    final ms = switch (widget.mov) {
-      Movimiento.completo => 1000,
-      Movimiento.simple => 700,
-      Movimiento.nada => 450,
-    };
-    _cierre = Timer(Duration(milliseconds: ms), () {
-      _reloj.parar();
-      if (mounted) widget.alTerminar(_j.puntos, _sw.elapsedMilliseconds);
-    });
+  void _refrescarHud() {
+    final metros = _j.distancia.floor();
+    final puntos = _j.puntos;
+    final combo = _j.combo;
+    final fiebre = (_j.fiebre / JuegoTuberia.duracionFiebre * 40).ceil();
+    final letrero = _tLetrero > 0;
+    if (metros != _metros || puntos != _puntos || combo != _combo || fiebre != _fiebre || letrero != (_zonaLetrero >= 0)) {
+      _metros = metros;
+      _puntos = puntos;
+      _combo = combo;
+      _fiebre = fiebre;
+      if (!letrero) _zonaLetrero = -1;
+      _hud.avisar();
+    }
   }
 
-  void _toque() {
-    if (_pausado) return _seguir();
+  void _suena(String n, double volumen) {
+    final antes = _ultimo[n];
+    if (antes != null && _ef.fase - antes < 0.06) return;
+    _ultimo[n] = _ef.fase;
+    Sonido.tocar(n, volumen: (volumen * (0.88 + 0.24 * _azar.nextDouble())).clamp(0.0, 1.0));
+  }
+
+  void _mostrarBanner(String s, double segundos) {
+    _banner = s;
+    _bannerVez++;
+    _tBanner = segundos;
+    _hud.avisar();
+  }
+
+  static const _barro = Color(0xFF6B4A2E);
+  static const _amarillo = Color(0xFFFFD60A);
+  static const _rojo = Color(0xFFE5484D);
+
+  void _suceso(SucesoTuberia s) {
+    switch (s.tipo) {
+      case TipoSuceso.despegue:
+        _ultimoViento = _ef.fase;
+        _suena('viento', 0.18 + 0.25 * s.fuerza);
+        _anim.golpe(-1.2);
+      case TipoSuceso.aterrizaje:
+        _suena('chapuzon', 0.25 + 0.5 * s.fuerza);
+        _anim.golpe(1.2 + 2 * s.fuerza);
+        _ef.salpicar(s.x, s.y, 6 + (8 * s.fuerza).round(), color: _barro, fuerza: 2.5 + 3 * s.fuerza, forma: FormaParticula.gota);
+      case TipoSuceso.limpio:
+        _suena('chapuzon', 0.35 + 0.5 * s.fuerza);
+        _anim.golpe(1.5 + 2 * s.fuerza);
+        _anim.alegria = 0.8;
+        _ef.salpicar(s.x, s.y, 8, color: _barro, fuerza: 3 + 3 * s.fuerza, forma: FormaParticula.gota, haciaX: 2);
+        _ef.salpicar(s.x, s.y + 0.3, 10, color: _amarillo, fuerza: 6, forma: FormaParticula.chispa, tam: 0.1, gravedad: -4, vida: 0.5);
+        _ef.texto(s.x, s.y + 1.4, s.valor >= 2 ? '+${s.puntos}  x${s.valor}' : '+${s.puntos}', tam: s.valor >= 3 ? 24 : 20);
+        _ef.destellar(_amarillo, 0.12 + 0.03 * min(s.valor, 6));
+        if (s.valor >= 3) {
+          _ef.hitstop(0.045);
+          _ef.sacudir(3);
+        }
+      case TipoSuceso.combo:
+        _suena('combo', 0.5 + 0.05 * s.valor);
+        if (s.valor >= 3) vibracionSuave();
+      case TipoSuceso.plaf:
+        _suena('fallo', 0.55);
+        _suena('chapuzon', 0.7);
+        _anim
+          ..mareo = 1.2
+          ..giroExtra = 1
+          ..golpe(4);
+        _ef.salpicar(s.x, s.y, 18, color: _barro, fuerza: 6, forma: FormaParticula.gota);
+        _ef.texto(s.x, s.y + 1.4, tr('¡PLAF!', 'SPLAT!'), color: const Color(0xFFF4E3CF), tam: 26);
+        if (s.valor >= 2) _ef.texto(s.x + 1.5, s.y + 2.4, tr('combo perdido', 'combo lost'), color: _rojo, tam: 14, vida: 1.1);
+        _ef.hitstop(0.06);
+        _ef.sacudir(7);
+        _ef.destellar(_barro, 0.3);
+        vibracionSuave();
+      case TipoSuceso.rollo:
+        _suena('rollo', 0.45 + 0.04 * min(s.valor, 8));
+        _ef.salpicar(s.x, s.y, 12, color: Colors.white, fuerza: 4, forma: FormaParticula.papel, tam: 0.16, gravedad: -3, vida: 1.1);
+        _ef.texto(s.x, s.y + 1, '+${s.puntos}', color: Colors.white, tam: 18);
+      case TipoSuceso.dorado:
+        _suena('dorado', 0.8);
+        _ef.salpicar(s.x, s.y, 24, color: _amarillo, fuerza: 7, forma: FormaParticula.chispa, tam: 0.12, gravedad: -3, vida: 0.9);
+        _ef.salpicar(s.x, s.y, 12, color: const Color(0xFFFFB800), fuerza: 4, forma: FormaParticula.papel, tam: 0.18, gravedad: -3, vida: 1.2);
+        _ef.texto(s.x, s.y + 1.2, '+${s.puntos}', tam: 22);
+        _ef.hitstop(0.07);
+        _ef.sacudir(4);
+        _ef.destellar(_amarillo, 0.5);
+        _anim.alegria = 1.5;
+        vibracionSuave();
+      case TipoSuceso.fiebre:
+        _suena('descarga', 0.5);
+        _mostrarBanner(tr('¡FIEBRE DORADA!', 'GOLDEN FEVER!'), 1.6);
+      case TipoSuceso.finFiebre:
+        break;
+      case TipoSuceso.aplasta:
+        _suena('cucaracha', 0.7);
+        _suena('chapuzon', 0.4);
+        _anim
+          ..alegria = 0.8
+          ..golpe(2.5);
+        _ef.salpicar(s.x, s.y + 0.1, 14, color: const Color(0xFF3B2414), fuerza: 4, tam: 0.1);
+        _ef.texto(s.x, s.y + 1.2, '${tr('¡CRAC!', 'CRUNCH!')} +${s.puntos}', color: const Color(0xFF9BE15D), tam: 20);
+        _ef.hitstop(0.05);
+        _ef.sacudir(4);
+        vibracionSuave();
+      case TipoSuceso.choqueCucaracha:
+        _suena('plop', 0.6);
+        _suena('cucaracha', 0.45);
+        _anim
+          ..mareo = 0.8
+          ..golpe(2.5);
+        _ef.salpicar(s.x, s.y + 0.3, 8, color: const Color(0xFF7A3E1D), fuerza: 3, tam: 0.08);
+        _ef.texto(s.x, s.y + 1.4, tr('¡AY! más lento', 'OUCH! slower'), color: _rojo, tam: 16);
+        _ef.sacudir(3);
+      case TipoSuceso.zona:
+        _suena('descarga', 0.6);
+        _zonaLetrero = s.valor;
+        _tLetrero = 2.4;
+        _ef.destellar(Colors.white, 0.35);
+        _hud.avisar();
+      case TipoSuceso.atascoCerca:
+        _suena('alerta', 0.5);
+        _ef.destellar(_rojo, 0.25);
+      case TipoSuceso.atascoAcelera:
+        _suena('glug', 0.6);
+        _mostrarBanner(tr('¡El Atasco acelera!', 'The Clog speeds up!'), 1.8);
+      case TipoSuceso.record:
+        _suena('gana', 0.6);
+        _ef.salpicar(s.x, s.y + 1, 16, color: _amarillo, fuerza: 6, forma: FormaParticula.papel, tam: 0.15, gravedad: -3, vida: 1.2);
+        _mostrarBanner(tr('¡NUEVO RÉCORD!', 'NEW RECORD!'), 1.8);
+      case TipoSuceso.atrapado:
+        _terminar(porTiempo: s.valor == 1);
+    }
+  }
+
+  void _terminar({required bool porTiempo}) {
     if (_fin) return;
-    _j.toque();
-    // sonido: cambio de carril (swish corto)
-    _ef.chispas(_mojon, (_p?.textoSuave ?? Colors.grey).withValues(alpha: 0.6), 3, fuerza: 60);
+    _fin = true;
+    _porTiempo = porTiempo;
+    _sw.stop();
+    _j.presionado = false;
+    if (!porTiempo) {
+      _suena('chapuzon', 0.9);
+      _ef.salpicar(_j.x, _j.y, 26, color: _barro, fuerza: 7, forma: FormaParticula.gota);
+      _ef.hitstop(0.08);
+      _ef.sacudir(10);
+      _ef.destellar(_rojo, 0.5);
+      _anim
+        ..mareo = 3
+        ..golpe(4);
+    }
+    Sonido.tocar('perdiste', volumen: 0.7);
+    unawaited(Sonido.pararMusica());
+    vibracionSuave();
+    _hud.avisar();
+    final espera = switch (widget.mov) { Movimiento.completo => 1000, Movimiento.simple => 700, Movimiento.nada => 450 };
+    // Los ms nunca bajan del tiempo de juego (el contrato de puntos se cumple sobre ese tiempo) ni pasan del máximo.
+    final ms = max(_sw.elapsedMilliseconds, (_j.tiempo * 1000).ceil()).clamp(0, 1190000);
+    final puntos = _j.puntos;
+    _cierre = Timer(Duration(milliseconds: espera), () {
+      _reloj.parar();
+      if (mounted) widget.alTerminar(puntos, ms);
+    });
   }
 
   @override
@@ -244,254 +386,263 @@ class _VistaTuberiaState extends State<VistaTuberia> with SingleTickerProviderSt
     _reloj.dispose();
     _tic.dispose();
     _hud.dispose();
+    unawaited(Sonido.pararMusica());
     super.dispose();
   }
 
+  // ---------------------------------------------------------------- pantalla
+
   @override
   Widget build(BuildContext context) {
-    final p = _p = paleta(context);
-    return GestureDetector(
-      key: const Key('tuberia_toque'),
-      behavior: HitTestBehavior.opaque,
-      onTapDown: (_) => _toque(),
-      child: LayoutBuilder(builder: (context, c) {
-        final ancho = c.maxWidth, alto = c.maxHeight;
-        final tubo = _tubo = (ancho * 0.8).clamp(160.0, 420.0);
-        final x0 = _x0 = (ancho - tubo) / 2;
-        final yJugador = _yJ = alto * 0.28;
-        final pxPorM = _pxPorM = (alto * 0.72) / 18;
-        return Stack(clipBehavior: Clip.hardEdge, children: [
-          Positioned.fill(
-            child: RepaintBoundary(
-              child: CustomPaint(
-                painter: PintorTuberia(
-                    j: _j, ef: _ef, p: p, x0: x0, tubo: tubo, yJugador: yJugador, pxPorM: pxPorM, mov: widget.mov, rollo: _rollo, repintar: _tic),
+    final oscuro = Theme.of(context).brightness == Brightness.dark;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Listener(
+          key: const Key('tuberia_toque'),
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: _baja,
+          onPointerUp: _sube,
+          onPointerCancel: _sube,
+          child: RepaintBoundary(
+            child: CustomPaint(
+              size: Size.infinite,
+              painter: PintorTuberia(
+                juego: _j,
+                efectos: _ef,
+                anim: _anim,
+                camara: _cam,
+                imagenes: _img,
+                oscuro: oscuro,
+                mov: widget.mov,
+                repaint: _tic,
               ),
             ),
           ),
-          AnimatedBuilder(animation: _tic, builder: (context, _) => _mojonWidget()),
-          Positioned(top: 8, left: 8, right: 8, child: AnimatedBuilder(animation: _hud, builder: (context, _) => _marcador(p))),
-          Positioned(
-            top: 66,
-            left: 16,
-            right: 16,
-            child: AnimatedBuilder(animation: _hud, builder: (context, _) => _bannerWidget(p)),
-          ),
-          Positioned(left: 16, right: 16, bottom: 22, child: AnimatedBuilder(animation: _hud, builder: (context, _) => _pistaWidget(p))),
-          Positioned.fill(child: AnimatedBuilder(animation: _hud, builder: (context, _) => _capa(p))),
-        ]);
-      }),
-    );
-  }
-
-  // El mojón: se inclina y se estira al cambiar de carril, crece al agarrar y se aplasta al chocar.
-  Widget _mojonWidget() {
-    const tam = 34.0;
-    final pos = _mojon + _ef.sacudida;
-    final completo = widget.mov == Movimiento.completo;
-    final falta = _j.carril - _j.posicion; // con signo: hacia dónde va
-    var sx = 1.0, sy = 1.0, ang = 0.0, op = 1.0;
-    if (completo) {
-      sx += 0.22 * falta.abs();
-      sy -= 0.14 * falta.abs();
-      ang = falta * 0.5 + sin(_ef.fase * 7) * 0.05;
-    }
-    final b = _ef.brinco;
-    sx += 0.28 * b;
-    sy += 0.28 * b;
-    if (_fin && !_j.llego) {
-      op = widget.mov == Movimiento.nada ? 0.4 : 0.75;
-      if (widget.mov != Movimiento.nada) {
-        sx = 1.55;
-        sy = 0.5;
-        ang = 0;
-      }
-    }
-    return Positioned(
-      left: pos.dx - tam / 2,
-      top: pos.dy - tam / 2,
-      child: Opacity(
-        opacity: op,
-        child: Transform(
-          alignment: Alignment.center,
-          transform: Matrix4.diagonal3Values(sx, sy, 1)..rotateZ(ang),
-          child: const Emoji('💩', tamano: tam),
         ),
-      ),
+        IgnorePointer(child: AnimatedBuilder(animation: _hud, builder: (context, _) => _marcador(context))),
+        AnimatedBuilder(animation: _hud, builder: (context, _) => _capa(context)),
+      ],
     );
   }
 
-  Widget _caja(Paleta p, {required Widget child, bool fuerte = false}) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+  Widget _caja(Paleta p, Widget hijo, {bool fuerte = false, Color? fondo}) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: fuerte ? p.acento : p.tarjeta,
-          border: Border.all(color: fuerte ? p.acento : p.borde),
+          color: fondo ?? p.tarjeta,
           borderRadius: BorderRadius.circular(radio),
+          border: Border.all(color: fuerte ? p.bordeFuerte : p.borde, width: fuerte ? 2 : 1),
         ),
-        child: child,
+        child: hijo,
       );
 
-  Widget _marcador(Paleta p) {
+  Widget _marcador(BuildContext context) {
+    final p = paleta(context);
     final record = _j.record;
-    final mult = _j.multiplicador;
-    final fuerte = mult > 1;
-    final hecho = mult >= JuegoTuberia.multiplicadorMaximo ? JuegoTuberia.rachaPorNivel : _j.racha % JuegoTuberia.rachaPorNivel;
-    final colorMult = fuerte ? p.acentoTexto : p.texto;
-    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      SizedBox(
-        width: 92,
-        child: record <= 0
-            ? null
-            : Align(
-                alignment: Alignment.centerLeft,
-                child: _caja(
-                  p,
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                    Text(tr('RÉCORD', 'BEST'), style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 1, color: p.textoSuave)),
-                    Text('$record', style: numeros(context, tamano: 13, weight: FontWeight.w800, color: _puntos > record ? p.acento : p.texto)),
-                  ]),
+    final fiebre = _j.fiebre / JuegoTuberia.duracionFiebre;
+    return Stack(
+      children: [
+        Positioned(
+          top: 8,
+          left: 12,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _caja(
+                p,
+                fuerte: true,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text('$_metros', key: const Key('tuberia_metros'), style: numeros(context, tamano: 28, weight: FontWeight.w900, color: p.texto)),
+                        const SizedBox(width: 3),
+                        Text('m', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: p.textoSuave)),
+                      ],
+                    ),
+                    Text('${tr('PUNTOS', 'POINTS')} $_puntos',
+                        style: numeros(context, tamano: 12, weight: FontWeight.w800, color: p.textoSuave)),
+                  ],
                 ),
               ),
-      ),
-      Expanded(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('${max(0, _puntos)}', key: const Key('tuberia_metros'), style: numeros(context, tamano: 28, weight: FontWeight.w900, color: p.texto)),
-          Text('${_j.distancia.floor()} m', style: numeros(context, tamano: 11, weight: FontWeight.w700, color: p.textoSuave)),
-        ]),
-      ),
-      SizedBox(
-        width: 92,
-        child: Align(
-          alignment: Alignment.centerRight,
+              if (_combo >= 2) ...[
+                const SizedBox(height: 6),
+                _caja(
+                  p,
+                  fondo: p.acento,
+                  fuerte: true,
+                  Text('COMBO x$_combo', style: numeros(context, tamano: 15, weight: FontWeight.w900, color: p.acentoTexto)),
+                ),
+              ],
+              if (fiebre > 0) ...[
+                const SizedBox(height: 6),
+                // Fiebre con nombre: el banner puede quedar tapado por el letrero de zona.
+                _caja(
+                  p,
+                  fondo: const Color(0xFF201008),
+                  fuerte: true,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(tr('FIEBRE x2', 'FEVER x2'),
+                          style: numeros(context, tamano: 13, weight: FontWeight.w900, color: const Color(0xFFFFD60A))),
+                      const SizedBox(height: 4),
+                      Container(
+                        width: 96,
+                        height: 6,
+                        color: const Color(0x40FFD60A),
+                        alignment: Alignment.centerLeft,
+                        child: FractionallySizedBox(widthFactor: fiebre.clamp(0.0, 1.0), child: Container(color: const Color(0xFFFFD60A))),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (record > 0)
+          Positioned(
+            top: 8,
+            right: 12,
+            child: _caja(
+              p,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(tr('RÉCORD', 'RECORD'), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: p.textoSuave, letterSpacing: 1)),
+                  Text('$record', style: numeros(context, tamano: 16, weight: FontWeight.w900, color: p.texto)),
+                ],
+              ),
+            ),
+          ),
+        // Debajo de la columna de marcador (puntos, combo, fiebre) para no taparla.
+        Positioned(top: 196, left: 0, right: 0, child: Center(child: _letrero(context))),
+      ],
+    );
+  }
+
+  // Letrero grande de zona y banners cortos (Atasco, fiebre, récord). Un solo hueco: la zona manda.
+  Widget _letrero(BuildContext context) {
+    final p = paleta(context);
+    Widget hijo = const SizedBox.shrink(key: ValueKey('nada'));
+    if (_fin) {
+      hijo = const SizedBox.shrink(key: ValueKey('fin'));
+    } else if (_tLetrero > 0 && _zonaLetrero >= 0) {
+      hijo = Container(
+        key: ValueKey('zona$_zonaLetrero'),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        decoration: BoxDecoration(
+          color: p.acento,
+          borderRadius: BorderRadius.circular(radio),
+          border: Border.all(color: const Color(0xFF201008), width: 2),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('${tr('ZONA', 'ZONE')} ${_zonaLetrero + 1}',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 2, color: p.acentoTexto)),
+            Text(nombreZonaTuberia(_zonaLetrero).toUpperCase(),
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, height: 1.1, color: p.acentoTexto)),
+          ],
+        ),
+      );
+    } else if (_banner != null) {
+      hijo = KeyedSubtree(
+        key: ValueKey(_bannerVez),
+        child: _caja(p, fuerte: true, Text(_banner!, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: p.texto))),
+      );
+    }
+    return switch (widget.mov) {
+      Movimiento.nada => hijo,
+      Movimiento.simple => AnimatedSwitcher(duration: const Duration(milliseconds: 180), child: hijo),
+      Movimiento.completo => AnimatedSwitcher(
+          duration: const Duration(milliseconds: 220),
+          transitionBuilder: (c, a) => FadeTransition(
+            opacity: a,
+            child: ScaleTransition(scale: Tween(begin: 0.7, end: 1.0).animate(CurvedAnimation(parent: a, curve: Curves.easeOutBack)), child: c),
+          ),
+          child: hijo,
+        ),
+    };
+  }
+
+  Widget _capa(BuildContext context) {
+    final p = paleta(context);
+    if (_pausado) {
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _seguir,
+        child: Container(
+          color: p.fondo.withValues(alpha: 0.82),
+          alignment: Alignment.center,
           child: _caja(
             p,
-            fuerte: fuerte,
-            child: Column(crossAxisAlignment: CrossAxisAlignment.end, mainAxisSize: MainAxisSize.min, children: [
-              Row(mainAxisSize: MainAxisSize.min, children: [
-                const Emoji('🧻', tamano: 14),
-                const SizedBox(width: 4),
-                Text('x$mult', style: numeros(context, tamano: 16, weight: FontWeight.w900, color: colorMult)),
-              ]),
-              const SizedBox(height: 3),
-              Row(mainAxisSize: MainAxisSize.min, children: [
-                for (var i = 0; i < JuegoTuberia.rachaPorNivel; i++)
-                  Container(
-                    width: 8,
-                    height: 4,
-                    margin: const EdgeInsets.only(left: 2),
-                    decoration: BoxDecoration(
-                      color: i < hecho ? colorMult : Colors.transparent,
-                      border: Border.all(color: colorMult.withValues(alpha: 0.6)),
-                    ),
-                  ),
-              ]),
-            ]),
+            fuerte: true,
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(tr('PAUSA', 'PAUSED'), style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: p.texto)),
+                const SizedBox(height: 4),
+                Text(tr('Toca para seguir', 'Tap to continue'), style: TextStyle(fontSize: 14, color: p.textoSuave)),
+              ],
+            ),
           ),
-        ),
-      ),
-    ]);
-  }
-
-  Widget _bannerWidget(Paleta p) {
-    final t = _banner;
-    Widget hijo = const SizedBox.shrink(key: ValueKey('nada'));
-    if (t != null) {
-      hijo = Center(
-        key: ValueKey(_bannerVez),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: _bannerFuerte ? p.acento : p.fondo,
-            border: Border.all(color: _bannerFuerte ? p.acento : p.bordeFuerte),
-            borderRadius: BorderRadius.circular(radio),
-          ),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text(t,
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 1, color: _bannerFuerte ? p.acentoTexto : p.texto)),
-            if (_bannerSub != null)
-              Text(_bannerSub!,
-                  textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: _bannerFuerte ? p.acentoTexto : p.textoSuave)),
-          ]),
         ),
       );
     }
-    if (widget.mov == Movimiento.nada) return hijo;
-    return AnimatedSwitcher(
-      duration: Duration(milliseconds: widget.mov == Movimiento.completo ? 180 : 120),
-      transitionBuilder: (child, a) => widget.mov == Movimiento.completo
-          ? FadeTransition(opacity: a, child: ScaleTransition(scale: Tween(begin: 0.85, end: 1.0).animate(a), child: child))
-          : FadeTransition(opacity: a, child: child),
-      child: hijo,
-    );
-  }
-
-  Widget _pistaWidget(Paleta p) {
-    final texto = switch (_fin ? null : _pista) {
-      PistaTuberia.toca => tr('Toca para cambiar de carril · agarra los rollos', 'Tap to switch lanes · grab the rolls'),
-      PistaTuberia.esquiva => tr('¡Un codo en tu carril! Toca para esquivarlo', 'A bend in your lane! Tap to dodge it'),
-      PistaTuberia.racha => tr('Rollos seguidos suben el multiplicador', 'Rolls in a row raise the multiplier'),
-      null => null,
-    };
-    if (texto == null) return const SizedBox.shrink();
-    return Center(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(color: p.fondo, border: Border.all(color: p.acento), borderRadius: BorderRadius.circular(radio)),
-        child: Text(texto, textAlign: TextAlign.center, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: p.texto)),
-      ),
-    );
-  }
-
-  // Pausa o final: un cartel encima de todo.
-  Widget _capa(Paleta p) {
-    if (_pausado) {
-      return ColoredBox(
-        color: p.fondo.withValues(alpha: 0.8),
-        child: Center(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text(tr('PAUSA', 'PAUSED'), style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: 2, color: p.texto)),
-            const SizedBox(height: 6),
-            Text(tr('Toca para seguir', 'Tap to continue'), style: TextStyle(fontSize: 14, color: p.textoSuave)),
-          ]),
-        ),
-      );
-    }
-    if (!_fin) return const IgnorePointer(child: SizedBox.expand());
-    final record = _j.record, puntos = _j.puntos;
-    final String titulo;
-    String? sub;
-    var fuerte = true;
-    if (_j.llego) {
-      titulo = tr('¡LLEGASTE A LA PLANTA!', 'YOU REACHED THE PLANT!');
-      sub = tr('${JuegoTuberia.meta.round()} m sin atascarte', '${JuegoTuberia.meta.round()} m without a clog');
-    } else if (record > 0 && puntos > record) {
-      titulo = tr('¡NUEVO RÉCORD!', 'NEW RECORD!');
+    if (!_fin) return const SizedBox.shrink();
+    final puntos = _j.puntos;
+    final record = _j.record;
+    String? sobre;
+    String? debajo;
+    if (record > 0 && puntos > record) {
+      sobre = tr('¡NUEVO RÉCORD!', 'NEW RECORD!');
     } else if (record > 0 && puntos == record) {
-      titulo = tr('¡EMPATASTE EL RÉCORD!', 'RECORD TIED!');
-    } else if (record > 0 && puntos >= record * 0.8) {
-      titulo = tr('¡A ${record - puntos} DEL RÉCORD!', '${record - puntos} SHORT OF THE RECORD!');
-      sub = tr('Casi, casi', 'So close');
-    } else {
-      titulo = tr('¡ATASCADO!', 'CLOGGED!');
-      sub = tr('${_j.distancia.floor()} m · ${_nombresZona()[_j.zona]}', '${_j.distancia.floor()} m · ${_nombresZona()[_j.zona]}');
-      fuerte = false;
+      sobre = tr('¡EMPATASTE EL RÉCORD!', 'RECORD TIED!');
+    } else if (record > 0 && record - puntos <= max(20, record ~/ 10)) {
+      sobre = tr('¡A ${record - puntos} DEL RÉCORD!', '${record - puntos} SHORT OF THE RECORD!');
+      debajo = tr('Casi, casi', 'So close');
     }
+    final titulo = _porTiempo ? tr('¡Se acabó el tiempo!', "Time's up!") : tr('¡TE ALCANZÓ EL ATASCO!', 'THE CLOG CAUGHT YOU!');
+    final pista = _porTiempo ? null : tr('Baja pesado y suelta en el valle para volar', 'Go down heavy and release in the valley to fly');
     return IgnorePointer(
-      child: Center(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: fuerte ? p.acento : p.fondo,
-            border: Border.all(color: fuerte ? p.acento : p.bordeFuerte),
-            borderRadius: BorderRadius.circular(radio),
+      child: Align(
+        alignment: const Alignment(0, -0.2),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: _caja(
+            p,
+            fuerte: true,
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (sobre != null)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    color: p.acento,
+                    child: Text(sobre, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: p.acentoTexto)),
+                  ),
+                Text(titulo, textAlign: TextAlign.center, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: p.texto)),
+                const SizedBox(height: 4),
+                Text('$_metros m · $puntos ${tr('puntos', 'points')}',
+                    style: numeros(context, tamano: 16, weight: FontWeight.w800, color: p.texto)),
+                if (debajo != null) Text(debajo, style: TextStyle(fontSize: 13, color: p.textoSuave)),
+                if (pista != null) ...[
+                  const SizedBox(height: 6),
+                  Text(pista, textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: p.textoSuave)),
+                ],
+              ],
+            ),
           ),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text(titulo,
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: 1, color: fuerte ? p.acentoTexto : p.texto)),
-            if (sub != null) Text(sub, style: TextStyle(fontSize: 12, color: fuerte ? p.acentoTexto : p.textoSuave)),
-          ]),
         ),
       ),
     );

@@ -1,420 +1,563 @@
-// Tubería Express, lógica pura (sin widgets): el mojón baja por un desagüe de dos carriles y cada toque lo pasa al otro
-// carril. Vienen subiendo codos (chocar acaba la partida) y rollos de papel (agarrarlos seguidos sube el multiplicador).
-// Pasar rozando un codo es un CASI y también suma. El desagüe va por tramos: normal, zigzag de codos, serpentina de rollos
-// y DESCARGA (alguien jaló la cadena: más rápido y con rollos dorados). Todo en metros y segundos; la velocidad depende
-// de los metros recorridos para que el generador sepa cuánto hueco dejar. Al llegar a la planta ([meta]) se gana.
-// Los puntos son metros más los bonos, con un techo de [ppsSeguro] por segundo para no pasar nunca el anti-trampa del
-// servidor (16 por segundo y 16000 por partida). El reloj lo mueve quien llama con [JuegoTuberia.avanzar].
+// Tubería Express: surf de una mano por la cloaca. Lógica pura (sin Flutter), se prueba con dt fijo.
+//
+// Vista lateral. El mojón se desliza a la derecha por una ladera de lodo con lomas y valles (nudos alternos pico/valle
+// unidos con coseno, como una ola). Un solo control: mantener el dedo = pesado (más gravedad, se pega a la ladera);
+// soltar = liviano. Bajar pesado acelera; soltar en el fondo del valle deja subir liviano y la cresta lo lanza al aire
+// (despega cuando la curva de la loma se le escapa más rápido que la gravedad). Aterrizar alineado con una bajada es
+// limpio (+velocidad, sube el combo); aterrizar contra la loma es un plaf (pierde velocidad, combo a cero).
+// Detrás viene el Atasco, una pared de lodo que acelera por tramos. Si te alcanza, fin.
+//
+// Puntos = metros + bonus. El servidor exige puntos <= (segundos + 1) * 16: la velocidad máxima es 12.8 m/s y además
+// los puntos se recortan a un techo por tiempo (con margen), así que el contrato se cumple por construcción.
 
 import 'dart:math';
 
-/// Un codo que tapa un carril a [distancia] metros desde la salida.
-class Codo {
-  Codo(this.carril, this.distancia);
-  final int carril;
-  final double distancia;
-
-  /// Lo más cerca (de 0 a 1, en carriles) que pasó el mojón mientras lo tenía al lado. Menos de [JuegoTuberia.casiRoce] = CASI.
-  double roce = 1;
-  bool pasado = false;
+enum TipoSuceso {
+  despegue,
+  limpio,
+  aterrizaje,
+  plaf,
+  combo,
+  rollo,
+  dorado,
+  fiebre,
+  finFiebre,
+  aplasta,
+  choqueCucaracha,
+  zona,
+  atascoCerca,
+  atascoAcelera,
+  record,
+  atrapado,
 }
 
-/// Un rollo de papel en un carril. Los dorados (de las descargas) valen el doble.
-class Rollo {
-  Rollo(this.carril, this.distancia, {this.dorado = false});
-  final int carril;
-  final double distancia;
-  final bool dorado;
-  bool agarrado = false;
-  bool resuelto = false;
-}
-
-enum TipoSuceso { rollo, casi, multiplicador, perdido, avisoDescarga, descarga, finDescarga, zona, record, choque, meta }
-
-/// Algo que pasó en el último [JuegoTuberia.avanzar], para que la vista lo celebre (partículas, letreros, vibración).
+/// Algo que pasó en el último paso. [x], [y] en metros del mundo; [fuerza] de 0 a ~1.
 class SucesoTuberia {
-  const SucesoTuberia(this.tipo, {this.carril = 0, this.puntos = 0, this.valor = 0});
+  const SucesoTuberia(this.tipo, {this.x = 0, this.y = 0, this.puntos = 0, this.valor = 0, this.fuerza = 0});
   final TipoSuceso tipo;
-  final int carril, puntos, valor;
+  final double x, y, fuerza;
+  final int puntos, valor;
 }
 
-/// Lo que la vista enseña al empezar: tocar, esquivar y la racha de rollos.
-enum PistaTuberia { toca, esquiva, racha }
+class RolloTuberia {
+  RolloTuberia(this.x, this.y, this.arco);
+  final double x, y;
+  final int arco;
+  bool dorado = false;
+  bool agarrado = false;
+}
 
-enum _Tramo { normal, zigzag, rollos, descarga }
+class CucarachaTuberia {
+  CucarachaTuberia(this.x, this.fase);
+  double x;
+  final double fase;
+  bool viva = true;
 
-class _Zona {
-  const _Zona(this.desde, this.hasta);
-  final double desde, hasta;
-  bool tiene(double d) => d >= desde && d < hasta;
+  /// Si murió: true = aplastada (pesado), false = pateada (liviano).
+  bool aplastada = false;
+  double muerte = 0;
+}
+
+class _Nudo {
+  const _Nudo(this.x, this.y, this.pico);
+  final double x, y;
+  final bool pico;
 }
 
 class JuegoTuberia {
-  JuegoTuberia({Random? azar, this.record = 0}) : _azar = azar ?? Random() {
-    _intro();
-    _generarHasta(horizonte);
+  JuegoTuberia({Random? azar, int? semilla, this.record = 0, double separacion = separacionInicial})
+      : _azar = azar ?? Random(semilla ?? DateTime.now().microsecondsSinceEpoch),
+        _xa = -separacion {
+    _nudos.add(const _Nudo(-120, 1.2, true));
+    _nudos.add(const _Nudo(0, 1.2, true));
+    _generarHasta(_x + adelante);
   }
 
-  /// Velocidad al arrancar, a los 300 m y de crucero (desde 1800 m), en m/s. La descarga empuja [empujeDescarga] veces.
-  static const double velocidadInicial = 5;
-  static const double velocidadTramo1 = 9.5;
-  static const double velocidadCrucero = 10;
-  static const double empujeDescarga = 1.25;
-  static const double velocidadMaxima = velocidadCrucero * empujeDescarga;
+  // Contrato del servidor.
+  static const pps = 16;
+  static const tope = 16000;
+  static const _margen = 0.97;
 
-  /// Lo que tarda el mojón en pasar de un carril al otro.
-  static const double cambio = 0.14;
+  // Física (metros, segundos).
+  static const gravedad = 7.0;
+  static const factorPesado = 3.2;
+  static const velocidadMaxima = 12.8;
+  static const velocidadMinima = 2.6;
+  static const velocidadInicial = 5.0;
+  static const _rozSuelo = 0.25;
+  static const _arrastreSuelo = 0.004;
+  static const _arrastreAire = 0.004;
+  static const _subPaso = 1 / 240;
 
-  /// Mitad de la zona donde un codo pega y donde se agarra un rollo, en metros.
-  static const double radioCodo = 0.55;
-  static const double radioRollo = 0.7;
+  // Aterrizajes.
+  static const anguloLimpio = 0.40; // rad entre la velocidad y la ladera
+  static const anguloPlaf = 0.80;
+  static const _aireMinimoLimpio = 0.30;
 
-  /// Un codo cuenta como CASI si el mojón seguía a menos de esto (en carriles) de su carril teniéndolo a [casiMetros] o menos.
-  static const double casiRoce = 0.9;
-  static const double casiMetros = 2.0;
+  // Atasco.
+  static const separacionInicial = 26.0;
+  static const separacionMaxima = 38.0;
+  static const tramoAtasco = 50.0; // s entre acelerones
+  static const metrosZona = 400.0;
+  static const zonas = 5;
+  static const comboMaximo = 10;
+  static const duracionFiebre = 5.0;
+  static const cadaDorado = 25.0;
+  static const adelante = 120.0;
+  static const tiempoMaximo = 1150.0; // s; el servidor acepta hasta 1200
 
-  /// La planta de tratamiento: llegar ahí gana la partida.
-  static const double meta = 4000;
-
-  /// Dónde empieza cada zona (para el letrero y el color del tubo).
-  static const List<double> zonas = [0, 300, 1000, 2000, 3000];
-
-  /// Cuánto se genera por delante.
-  static const double horizonte = 45;
-
-  /// Techo de puntos por segundo de juego (el servidor rechaza más de 16 por segundo).
-  static const double ppsSeguro = 14;
-
-  static const int puntosRollo = 1;
-  static const int puntosCasi = 2;
-  static const int multiplicadorMaximo = 4;
-
-  /// Rollos seguidos para subir un punto de multiplicador.
-  static const int rachaPorNivel = 5;
-
-  /// Récord de quien juega (para avisar al pasarlo). 0 = sin récord.
-  final int record;
+  // Radios de choque.
+  static const radioRollo = 1.15;
+  static const centroMojon = 0.55;
+  static const radioCucaracha = 0.75;
 
   final Random _azar;
-  final List<Codo> _codos = [];
-  final List<Rollo> _rollos = [];
-  final List<_Zona> _descargas = [];
-  List<SucesoTuberia> _sucesos = [];
-  double _distancia = 0;
-  double _tiempo = 0;
-  // Carril al que va (0 o 1) y dónde está ahora entre los dos (0..1).
-  int _carril = 0;
-  double _pos = 0;
-  bool _vivo = true;
-  bool _llego = false;
-  int _toques = 0;
+  final int record;
+  final _nudos = <_Nudo>[];
+  final rollos = <RolloTuberia>[];
+  final cucarachas = <CucarachaTuberia>[];
+  final _sucesos = <SucesoTuberia>[];
+
+  double _x = 0, _y = 1.2, _vx = velocidadInicial, _vy = 0, _s = velocidadInicial;
+  bool _suelo = true;
+  double _xa;
+  double _t = 0;
+  double _aire = 0; // segundos en el aire del vuelo actual
+  double _alturaMax = 0; // del vuelo actual, sobre el suelo
+  double _sinLimpio = 0;
+  int _combo = 0;
   int _bonus = 0;
-  int _racha = 0;
-  int _rachaMaxima = 0;
-  int _rollosAgarrados = 0;
-  int _casis = 0;
-  int _codosPasados = 0;
+  double _fiebre = 0;
+  double _proxDorado = cadaDorado;
+  RolloTuberia? _doradoPuesto;
   int _zona = 0;
-  bool _enDescarga = false;
-  double _avisada = -1;
+  int _tramo = 0;
+  int _arcos = 0;
+  bool _cerca = false;
   bool _recordAvisado = false;
+  bool _terminado = false;
+  bool _pesado = false;
+  int _limpios = 0, _plafs = 0, _rollosAgarrados = 0, _aplastadas = 0;
 
-  bool get vivo => _vivo;
-  bool get terminado => !_vivo;
+  // ---------------------------------------------------------------- lo que se lee desde fuera
 
-  /// Llegó a la planta (ganó) en vez de chocar.
-  bool get llego => _llego;
-
-  /// Puntos: metros recorridos más bonos, con el techo de [ppsSeguro] por segundo.
-  int get puntos => min(_distancia.floor() + _bonus, (ppsSeguro * (_tiempo + 1)).floor());
-  double get distancia => _distancia;
-  double get tiempo => _tiempo;
-  int get toques => _toques;
-  int get carril => _carril;
-  int get racha => _racha;
-  int get rachaMaxima => _rachaMaxima;
-  int get rollosAgarrados => _rollosAgarrados;
-  int get casis => _casis;
+  double get x => _x;
+  double get y => _y;
+  double get vx => _suelo ? _s * _cos(_x) : _vx;
+  double get vy => _suelo ? _s * _sin(_x) : _vy;
+  double get velocidad => _suelo ? _s : sqrt(_vx * _vx + _vy * _vy);
+  bool get enSuelo => _suelo;
+  bool get pesado => _pesado;
+  double get tiempo => _t;
+  double get distancia => max(0, _x);
+  double get aire => _aire;
+  double get alturaSobreSuelo => _y - altura(_x);
+  int get combo => _combo;
+  int get bonus => _bonus;
+  double get fiebre => _fiebre;
+  bool get enFiebre => _fiebre > 0;
+  double get atascoX => _xa;
+  double get separacion => _x - _xa;
+  double get velocidadAtasco => velocidadAtascoEn(_t);
   int get zona => _zona;
-  bool get enDescarga => _enDescarga;
-  int get multiplicador => min(multiplicadorMaximo, 1 + _racha ~/ rachaPorNivel);
+  int get tramo => _tramo;
+  bool get terminado => _terminado;
+  bool get vivo => !_terminado;
+  int get limpios => _limpios;
+  int get plafs => _plafs;
+  int get rollosAgarrados => _rollosAgarrados;
+  int get aplastadas => _aplastadas;
 
-  /// Cuántos rollos faltan para el siguiente multiplicador (0 si ya está al máximo).
-  int get faltanParaSubir => multiplicador >= multiplicadorMaximo ? 0 : rachaPorNivel - _racha % rachaPorNivel;
+  /// Ángulo del mojón: la ladera en el suelo, la dirección del vuelo en el aire.
+  double get angulo => _suelo ? atan(pendiente(_x)) : atan2(_vy, max(0.1, _vx));
 
-  /// Posición horizontal del mojón: 0 es el carril izquierdo, 1 el derecho.
-  double get posicion => _pos;
-  double get velocidad => _velEn(_distancia);
-
-  /// De 0 (salida) a 1 (desde 2500 m): cuánto se aprieta el desagüe.
-  static double dureza(double d) => min(1, d / 2500);
-
-  /// Velocidad sin descarga a [d] metros.
-  static double velocidadBase(double d) {
-    if (d < 300) return velocidadInicial + (velocidadTramo1 - velocidadInicial) * d / 300;
-    return min(velocidadCrucero, velocidadTramo1 + (velocidadCrucero - velocidadTramo1) * (d - 300) / 1500);
+  /// Metros + bonus, con el techo del servidor por tiempo y el tope.
+  int get puntos {
+    final crudo = max(0, _x).floor() + _bonus;
+    final techo = ((_t + 1) * pps * _margen).floor();
+    return min(min(crudo, techo), tope);
   }
 
-  double _velEn(double d) => min(velocidadMaxima, velocidadBase(d) * (_descargas.any((z) => z.tiene(d)) ? empujeDescarga : 1));
+  /// Zona de un punto del mundo (sin el módulo: la 5 vuelve a verse como la 0).
+  static int zonaEn(double x) => max(0, (x / metrosZona).floor());
 
-  /// Metros hasta la próxima descarga (null si no hay una generada por delante).
-  double? get descargaEn {
-    for (final z in _descargas) {
-      if (z.desde > _distancia) return z.desde - _distancia;
-    }
-    return null;
+  /// El Atasco: arranca suave y acelera un poco más cada [tramoAtasco] s.
+  static double velocidadAtascoEn(double t) {
+    final n = (t / tramoAtasco).floor();
+    return 3.4 + 3.8 * (1 - exp(-t / 25)) + 0.005 * t + 0.2 * n;
   }
 
-  /// Codos y rollos de adelante y alrededor del mojón (para pintar y para chocar).
-  List<Codo> get codos => List.unmodifiable(_codos);
-  List<Rollo> get rollos => List.unmodifiable(_rollos);
-
-  PistaTuberia? get pista {
-    if (!_vivo) return null;
-    if (_toques == 0) return PistaTuberia.toca;
-    if (_codosPasados == 0 && _codos.any((c) => !c.pasado && c.carril == _carril && c.distancia - _distancia < 14)) return PistaTuberia.esquiva;
-    if (_rollosAgarrados > 0 && _rollosAgarrados < 4 && _distancia < 110) return PistaTuberia.racha;
-    return null;
-  }
-
-  /// Lo que pasó desde la última vez que se preguntó.
   List<SucesoTuberia> tomarSucesos() {
     if (_sucesos.isEmpty) return const [];
-    final s = _sucesos;
-    _sucesos = [];
-    return s;
+    final l = List<SucesoTuberia>.of(_sucesos);
+    _sucesos.clear();
+    return l;
   }
 
-  /// Un toque: pasa al otro carril. Después de terminar no hace nada.
-  void toque() {
-    if (!_vivo) return;
-    _carril = 1 - _carril;
-    _toques++;
+  /// Corta la partida desde afuera (la vista lo usa si el reloj real llega al tope). Suceso atrapado con valor 1.
+  void cortar() {
+    if (_terminado) return;
+    _terminado = true;
+    _sucesos.add(SucesoTuberia(TipoSuceso.atrapado, x: _x, y: _y, valor: 1));
   }
 
-  void avanzar(double dt) {
-    if (!_vivo || dt <= 0) return;
-    // Pasos cortos para que un cuadro largo no atraviese un codo.
-    var resto = dt;
-    while (resto > 0 && _vivo) {
-      final paso = min(resto, 0.016);
-      resto -= paso;
-      _paso(paso);
-    }
-  }
+  void apretar() => _pesado = true;
+  void soltar() => _pesado = false;
+  set presionado(bool v) => _pesado = v;
 
-  void _paso(double dt) {
-    _tiempo += dt;
-    _distancia += velocidad * dt;
-    final objetivo = _carril.toDouble();
-    final mover = dt / cambio;
-    if (_pos < objetivo) {
-      _pos = min(objetivo, _pos + mover);
-    } else if (_pos > objetivo) {
-      _pos = max(objetivo, _pos - mover);
-    }
-    if (_distancia >= meta) {
-      _distancia = meta;
-      _vivo = false;
-      _llego = true;
-      _sucesos.add(const SucesoTuberia(TipoSuceso.meta));
-      return; // sonido: llegada a la planta (fanfarria corta)
-    }
-    while (_zona + 1 < zonas.length && _distancia >= zonas[_zona + 1]) {
-      _zona++;
-      _sucesos.add(SucesoTuberia(TipoSuceso.zona, valor: _zona));
-    }
-    _descargaAlDia();
-    for (final c in _codos) {
-      final dd = c.distancia - _distancia;
-      if (dd.abs() <= radioCodo && (c.carril - _pos).abs() < 0.6) {
-        _vivo = false;
-        _sucesos.add(SucesoTuberia(TipoSuceso.choque, carril: c.carril));
-        return; // sonido: choque (splash grave)
-      }
-      if (c.pasado) continue;
-      // Solo cuenta acercándose: salir del carril tarde es CASI; volver a él después del codo, no.
-      if (dd > radioCodo && dd <= casiMetros) c.roce = min(c.roce, (c.carril - _pos).abs());
-      if (dd < -radioCodo) {
-        c.pasado = true;
-        _codosPasados++;
-        if (c.roce < casiRoce) _casi(c);
+  // ---------------------------------------------------------------- terreno
+
+  int _segmento(double x) {
+    var lo = 0, hi = _nudos.length - 2;
+    if (x <= _nudos[0].x) return 0;
+    while (lo < hi) {
+      final m = (lo + hi + 1) >> 1;
+      if (_nudos[m].x <= x) {
+        lo = m;
+      } else {
+        hi = m - 1;
       }
     }
-    for (final r in _rollos) {
-      if (r.resuelto) continue;
-      final dd = r.distancia - _distancia;
-      if (dd.abs() <= radioRollo && (r.carril - _pos).abs() < 0.5) {
-        _agarrar(r);
-      } else if (dd < -radioRollo) {
-        r.resuelto = true;
-        if (_racha > 0) _sucesos.add(SucesoTuberia(TipoSuceso.perdido, carril: r.carril, valor: _racha));
-        _racha = 0; // sonido: racha rota (pedo desinflado)
-      }
+    return lo;
+  }
+
+  void _asegurar(double x) {
+    if (x > _nudos.last.x - 1) _generarHasta(x + 40);
+  }
+
+  /// Altura del lodo en [x] (metros, arriba positivo).
+  double altura(double x) {
+    _asegurar(x);
+    if (x <= _nudos.first.x) return _nudos.first.y;
+    final i = _segmento(x);
+    final a = _nudos[i], b = _nudos[i + 1];
+    final t = ((x - a.x) / (b.x - a.x)).clamp(0.0, 1.0);
+    return a.y + (b.y - a.y) * (1 - cos(pi * t)) / 2;
+  }
+
+  /// dy/dx del lodo en [x].
+  double pendiente(double x) {
+    _asegurar(x);
+    if (x <= _nudos.first.x) return 0;
+    final i = _segmento(x);
+    final a = _nudos[i], b = _nudos[i + 1];
+    final dx = b.x - a.x;
+    final t = ((x - a.x) / dx).clamp(0.0, 1.0);
+    return (b.y - a.y) * pi / 2 * sin(pi * t) / dx;
+  }
+
+  double _segunda(double x) {
+    if (x <= _nudos.first.x) return 0;
+    final i = _segmento(x);
+    final a = _nudos[i], b = _nudos[i + 1];
+    final dx = b.x - a.x;
+    final t = ((x - a.x) / dx).clamp(0.0, 1.0);
+    return (b.y - a.y) * pi * pi / 2 * cos(pi * t) / (dx * dx);
+  }
+
+  double _cos(double x) {
+    final d = pendiente(x);
+    return 1 / sqrt(1 + d * d);
+  }
+
+  double _sin(double x) {
+    final d = pendiente(x);
+    return d / sqrt(1 + d * d);
+  }
+
+  /// Picos (true) y valles por delante de [desde] hasta [hasta]; para la vista y los bots.
+  Iterable<(double, double, bool)> nudosEntre(double desde, double hasta) sync* {
+    _asegurar(hasta);
+    for (final n in _nudos) {
+      if (n.x >= desde && n.x <= hasta) yield (n.x, n.y, n.pico);
     }
-    if (!_recordAvisado && record > 0 && puntos > record) {
-      _recordAvisado = true;
-      _sucesos.add(const SucesoTuberia(TipoSuceso.record));
-    }
-    _codos.removeWhere((c) => c.distancia < _distancia - 4);
-    _rollos.removeWhere((r) => r.resuelto && r.distancia < _distancia - 4);
-    _descargas.removeWhere((z) => z.hasta < _distancia - 50);
-    _generarHasta(_distancia + horizonte);
   }
 
-  void _descargaAlDia() {
-    final en = _descargas.any((z) => z.tiene(_distancia));
-    if (en != _enDescarga) {
-      _enDescarga = en;
-      _sucesos.add(SucesoTuberia(en ? TipoSuceso.descarga : TipoSuceso.finDescarga));
-    }
-    final prox = descargaEn;
-    if (prox != null && prox < 55 && _avisada < _distancia + prox - 1) {
-      _avisada = _distancia + prox;
-      _sucesos.add(const SucesoTuberia(TipoSuceso.avisoDescarga));
-    }
-  }
-
-  void _sumar(int n) => _bonus += n;
-
-  void _casi(Codo c) {
-    _casis++;
-    final antes = multiplicador;
-    _racha++;
-    _rachaMaxima = max(_rachaMaxima, _racha);
-    final pts = puntosCasi * multiplicador;
-    _sumar(pts);
-    _sucesos.add(SucesoTuberia(TipoSuceso.casi, carril: c.carril, puntos: pts));
-    if (multiplicador > antes) _sucesos.add(SucesoTuberia(TipoSuceso.multiplicador, valor: multiplicador));
-  }
-
-  void _agarrar(Rollo r) {
-    r.agarrado = r.resuelto = true;
-    _rollosAgarrados++;
-    final antes = multiplicador;
-    _racha++;
-    _rachaMaxima = max(_rachaMaxima, _racha);
-    final pts = puntosRollo * (r.dorado ? 2 : 1) * multiplicador;
-    _sumar(pts);
-    _sucesos.add(SucesoTuberia(TipoSuceso.rollo, carril: r.carril, puntos: pts, valor: r.dorado ? 1 : 0));
-    // sonido: rollo (plop que sube de tono con la racha)
-    if (multiplicador > antes) _sucesos.add(SucesoTuberia(TipoSuceso.multiplicador, valor: multiplicador));
-  }
-
-  // ---------------------------------------------------------------- generador
-  // Cada cosa pide estar en un carril a cierta distancia (codo: el otro carril; rollo: el suyo). Entre dos pedidos de
-  // carril distinto se deja tiempo de cambio + reacción a la velocidad de ese tramo, así siempre se puede pasar.
-
-  double _gen = 0;
-  double _ultD = 0;
-  int _ultNecesita = 0;
-  int _ultCodo = -1;
-  _Tramo _tramo = _Tramo.normal;
-  double _finTramo = 0;
-  int _quedan = 0;
-  int _serieCarril = 0;
-  double _finDescarga = 0;
-
-  void _intro() {
-    // Enseña jugando: dos rollos del otro lado (toca), un codo en ese carril (esquiva) y la racha.
-    _rollo(1, 12);
-    _rollo(1, 15);
-    _codo(1, 26);
-    _rollo(0, 30);
-    _rollo(0, 33);
-    _codo(0, 42);
-    _rollo(1, 46);
-    _rollo(1, 49);
-    _finTramo = 110;
-  }
-
-  void _codo(int carril, double d) {
-    _codos.add(Codo(carril, d));
-    _ultD = _gen = d;
-    _ultNecesita = 1 - carril;
-    _ultCodo = carril;
-  }
-
-  void _rollo(int carril, double d, {bool dorado = false}) {
-    _rollos.add(Rollo(carril, d, dorado: dorado));
-    _ultD = _gen = d;
-    _ultNecesita = carril;
-    _ultCodo = -1;
-  }
-
-  /// Metros desde el último pedido hasta uno nuevo que pide [carril].
-  double _hueco(int carril, {double extra = 0, double apriete = 1}) {
-    if (carril == _ultNecesita) return 2.6 + extra;
-    final h = dureza(_ultD);
-    final margen = (0.85 - 0.5 * h) * apriete;
-    return _velEn(_ultD) * (cambio + margen) + radioCodo + radioRollo + extra;
-  }
+  double _entre(double a, double b) => a + (b - a) * _azar.nextDouble();
 
   void _generarHasta(double hasta) {
-    while (_gen < hasta && _gen < meta - 20) {
-      if (_gen >= _finTramo && _quedan <= 0) _nuevoTramo();
-      switch (_tramo) {
-        case _Tramo.normal:
-          _normal();
-        case _Tramo.zigzag:
-          final c = _ultNecesita;
-          _codo(c, _ultD + _hueco(1 - c, apriete: 0.8));
-          if (--_quedan == 0) _rollo(_ultNecesita, _ultD + 2.6);
-        case _Tramo.rollos:
-          if (_quedan % 3 == 0) _serieCarril = 1 - _serieCarril;
-          _rollo(_serieCarril, _ultD + _hueco(_serieCarril, extra: 0.4));
-          _quedan--;
-        case _Tramo.descarga:
-          if (_azar.nextBool()) {
-            final c = _azar.nextInt(2);
-            _codo(c, _ultD + _hueco(1 - c, extra: 2 + _azar.nextDouble() * 3));
-          } else {
-            final c = _azar.nextInt(2);
-            _rollo(c, _ultD + _hueco(c, extra: 1), dorado: true);
-          }
-          if (_gen >= _finDescarga) _quedan = 0;
+    while (_nudos.last.x < hasta) {
+      final ult = _nudos.last;
+      final z = zonaEn(ult.x) % zonas;
+      final d = (ult.x / 2600).clamp(0.0, 1.0);
+      final (dx0, dx1, a0, a1) = switch (z) {
+        0 => (7.5, 9.5, 1.1, 1.6), // baño: lomas largas y bajitas
+        1 => (6.0, 7.5, 1.2, 1.9), // desagüe: cortas
+        2 => (6.5, 8.5, 1.6, 2.4), // cloaca: altas
+        3 => (8.5, 11.0, 2.0, 2.8), // río: olas grandes
+        _ => (5.5, 10.0, 1.4, 2.8), // planta: de todo
+      };
+      // Al empezar todo es más suave (los primeros ~150 m son para aprender).
+      final suave = (0.55 + ult.x / 330).clamp(0.55, 1.0);
+      final dx = _entre(dx0, dx1) * (1 - 0.15 * d);
+      final a = _entre(a0, a1) * (1 + 0.5 * d) * suave;
+      final pico = !ult.pico;
+      // Tope de inclinación: el desnivel no pasa de ~0.45 del ancho (unos 35°).
+      final yy = pico ? a : -a * _entre(0.75, 1.0);
+      final y = ult.y + (yy - ult.y).clamp(-0.45 * dx, 0.45 * dx);
+      final n = _Nudo(ult.x + dx, y, pico);
+      _nudos.add(n);
+      _decorar(ult, n);
+    }
+  }
+
+  // Cuando se cierra un tramo nuevo: rollos en arco sobre el valle que se acaba de completar y cucarachas en la ladera.
+  void _decorar(_Nudo a, _Nudo b) {
+    if (b.x < 12) return;
+    final k = _nudos.length;
+    // Arco de rollos: al cerrar el pico que sigue a un valle (pico - valle - pico).
+    if (b.pico && k >= 3) {
+      final p1 = _nudos[k - 3];
+      final ancho = b.x - p1.x;
+      final prob = p1.x < 25 ? 0.0 : 0.62;
+      if (_azar.nextDouble() < prob) {
+        final alto = _azar.nextDouble() < 0.3; // arco alto: solo con un buen salto
+        final cuantos = 3 + _azar.nextInt(3);
+        final x0 = p1.x + ancho * (alto ? 0.25 : 0.12);
+        final x1 = p1.x + ancho * (alto ? 0.75 : 0.55);
+        final base = p1.y + (alto ? 2.2 : 0.7);
+        final sube = alto ? 1.6 : 0.8;
+        final baja = alto ? 0.6 : 1.4;
+        final arco = _arcos++;
+        for (var i = 0; i < cuantos; i++) {
+          final u = cuantos == 1 ? 0.5 : i / (cuantos - 1);
+          final rx = x0 + (x1 - x0) * u;
+          final ry = max(base + sube * sin(pi * u) - baja * u, altura(rx) + 0.9);
+          rollos.add(RolloTuberia(rx, ry, arco));
+        }
+      }
+    }
+    // Cucarachas: desde los ~150 m, cada vez más.
+    if (a.x > 150) {
+      final p = ((a.x - 150) / 2500).clamp(0.0, 0.32) + 0.10;
+      if (_azar.nextDouble() < p) {
+        cucarachas.add(CucarachaTuberia(a.x + (b.x - a.x) * _entre(0.3, 0.7), _azar.nextDouble() * 6.28));
       }
     }
   }
 
-  void _normal() {
-    final h = dureza(_ultD);
-    if (_azar.nextDouble() < 0.3) {
-      // Rollo; a veces justo detrás del codo, en su carril: agarrarlo pide un CASI.
-      final trampa = _ultCodo >= 0 && _azar.nextDouble() < 0.45;
-      final c = trampa ? _ultCodo : _azar.nextInt(2);
-      _rollo(c, _ultD + _hueco(c, extra: trampa ? 0.2 : _azar.nextDouble() * 3));
-    } else {
-      final c = _azar.nextInt(2);
-      _codo(c, _ultD + _hueco(1 - c, extra: 1.5 + _azar.nextDouble() * (6 - 3.5 * h)));
+  void _podar() {
+    final corte = min(_x, _xa) - 90;
+    while (_nudos.length > 4 && _nudos[1].x < corte) {
+      _nudos.removeAt(0);
+    }
+    rollos.removeWhere((r) => r.x < _x - 30);
+    cucarachas.removeWhere((c) => c.x < _x - 30);
+  }
+
+  // ---------------------------------------------------------------- paso
+
+  void avanzar(double dt) {
+    if (_terminado || dt <= 0) return;
+    final n = max(1, (dt / _subPaso).ceil());
+    final h = dt / n;
+    for (var i = 0; i < n && !_terminado; i++) {
+      _paso(h);
     }
   }
 
-  void _nuevoTramo() {
-    final h = dureza(_gen);
-    final r = _azar.nextDouble();
-    if (h > 0.15 && _gen - _finDescarga > 650 - 250 * h) {
-      // Descarga: arranca 25 m más allá (para avisar) y dura 150 m.
-      final desde = _gen + 25;
-      _descargas.add(_Zona(desde, desde + 150));
-      _finDescarga = desde + 150;
-      _tramo = _Tramo.descarga;
-      _quedan = 1;
-      _ultD = _gen = desde - 6;
-      _finTramo = _finDescarga;
-    } else if (h > 0.06 && r < 0.4) {
-      _tramo = _Tramo.zigzag;
-      _quedan = 4 + _azar.nextInt(2 + (4 * h).round());
-      _finTramo = _gen;
-    } else if (r < 0.62) {
-      _tramo = _Tramo.rollos;
-      _quedan = 5 + _azar.nextInt(4);
-      _serieCarril = _ultNecesita;
-      _finTramo = _gen;
-    } else {
-      _tramo = _Tramo.normal;
-      _quedan = 0;
-      _finTramo = _gen + 50 + _azar.nextDouble() * 40 - 20 * h;
+  void _paso(double h) {
+    _t += h;
+    final g = gravedad * (_pesado ? factorPesado : 1);
+    final antes = _x;
+    if (_suelo) {
+      final d1 = pendiente(_x);
+      final c = 1 / sqrt(1 + d1 * d1), sn = d1 * c;
+      var s = _s;
+      s -= g * sn * h;
+      s -= (_rozSuelo + _arrastreSuelo * s * s) * h;
+      s = s.clamp(velocidadMinima, velocidadMaxima);
+      final k = _segunda(_x) * c * c * c; // curvatura
+      if (s > 4 && g * c + s * s * k < 0) {
+        _suelo = false;
+        _vx = s * c;
+        _vy = s * sn;
+        _aire = 0;
+        _alturaMax = 0;
+      } else {
+        _s = s;
+        _x += s * c * h;
+        _y = altura(_x);
+      }
     }
+    if (!_suelo) {
+      if (_aire < 0.15 && _aire + h >= 0.15) {
+        _sucesos.add(SucesoTuberia(TipoSuceso.despegue, x: _x, y: _y, fuerza: (velocidad / velocidadMaxima).clamp(0.0, 1.0)));
+      }
+      _aire += h;
+      _vy -= g * h;
+      final v = sqrt(_vx * _vx + _vy * _vy);
+      final f = 1 - _arrastreAire * v * h;
+      _vx *= f;
+      _vy *= f;
+      if (v > velocidadMaxima) {
+        final r = velocidadMaxima / v;
+        _vx *= r;
+        _vy *= r;
+      }
+      _vx = max(0.5, _vx);
+      _x += _vx * h;
+      _y += _vy * h;
+      final suelo = altura(_x);
+      _alturaMax = max(_alturaMax, _y - suelo);
+      if (_y <= suelo) {
+        _y = suelo;
+        _aterrizar();
+      }
+    }
+    if (_x > antes) _tocarCosas();
+    _reglas(h);
+  }
+
+  void _aterrizar() {
+    final d1 = pendiente(_x);
+    final c = 1 / sqrt(1 + d1 * d1), sn = d1 * c;
+    final vt = _vx * c + _vy * sn; // a lo largo de la ladera
+    final vn = -(-_vx * sn + _vy * c); // contra el suelo (positivo = hacia adentro)
+    final ang = atan2(vn.abs(), max(vt, 0.01));
+    final aire = _aire;
+    _suelo = true;
+    _aire = 0;
+    if (aire < 0.12) {
+      // Un saltito: sin evento.
+      _s = max(velocidadMinima, vt);
+      return;
+    }
+    final fuerza = (vn / 9).clamp(0.0, 1.0);
+    if (ang < anguloLimpio && d1 < -0.08 && aire >= _aireMinimoLimpio) {
+      _s = min(velocidadMaxima, vt * 1.06 + 1.2);
+      _limpios++;
+      _sinLimpio = 0;
+      final antes = _combo;
+      _combo = min(comboMaximo, _combo + 1);
+      final pts = (1 + _combo ~/ 2) * (enFiebre ? 2 : 1);
+      _bonus += pts;
+      _sucesos.add(SucesoTuberia(TipoSuceso.limpio, x: _x, y: _y, puntos: pts, valor: _combo, fuerza: fuerza));
+      if (_combo > antes && _combo >= 2) _sucesos.add(SucesoTuberia(TipoSuceso.combo, x: _x, y: _y, valor: _combo));
+    } else if (ang > anguloPlaf) {
+      _s = max(velocidadMinima, vt * 0.45);
+      _plafs++;
+      final perdio = _combo;
+      if (!enFiebre) _combo = 0;
+      _sucesos.add(SucesoTuberia(TipoSuceso.plaf, x: _x, y: _y, valor: perdio, fuerza: max(fuerza, 0.6)));
+    } else {
+      _s = max(velocidadMinima, vt);
+      _sucesos.add(SucesoTuberia(TipoSuceso.aterrizaje, x: _x, y: _y, fuerza: fuerza));
+    }
+  }
+
+  void _tocarCosas() {
+    final cy = _y + centroMojon;
+    for (final r in rollos) {
+      if (r.agarrado) continue;
+      final dx = r.x - _x;
+      if (dx > radioRollo) break; // van ordenados por x
+      if (dx < -radioRollo) continue;
+      final dy = r.y - cy;
+      if (dx * dx + dy * dy > radioRollo * radioRollo) continue;
+      r.agarrado = true;
+      _rollosAgarrados++;
+      if (r.dorado) {
+        _doradoPuesto = null;
+        _proxDorado = _t + cadaDorado;
+        _fiebre = duracionFiebre;
+        const pts = 20;
+        _bonus += pts;
+        _sucesos.add(SucesoTuberia(TipoSuceso.dorado, x: r.x, y: r.y, puntos: pts));
+        _sucesos.add(SucesoTuberia(TipoSuceso.fiebre, x: r.x, y: r.y));
+      } else {
+        final pts = (1 + _combo ~/ 4) * (enFiebre ? 2 : 1);
+        _bonus += pts;
+        _sucesos.add(SucesoTuberia(TipoSuceso.rollo, x: r.x, y: r.y, puntos: pts, valor: _combo));
+      }
+    }
+    for (final c in cucarachas) {
+      if (!c.viva) continue;
+      final dx = c.x - _x;
+      if (dx.abs() > radioCucaracha) continue;
+      if (_y - altura(c.x) > 0.9) continue;
+      c.viva = false;
+      c.muerte = _t;
+      if (_pesado) {
+        c.aplastada = true;
+        _aplastadas++;
+        final pts = 4 + _combo ~/ 2;
+        _bonus += pts;
+        _sucesos.add(SucesoTuberia(TipoSuceso.aplasta, x: c.x, y: altura(c.x), puntos: pts));
+      } else {
+        final perdio = _combo;
+        if (!enFiebre) _combo = 0;
+        if (_suelo) {
+          _s = max(velocidadMinima, _s * 0.72);
+        } else {
+          _vx *= 0.72;
+        }
+        _sucesos.add(SucesoTuberia(TipoSuceso.choqueCucaracha, x: c.x, y: altura(c.x), valor: perdio, fuerza: 0.7));
+      }
+    }
+  }
+
+  void _reglas(double h) {
+    // Fiebre.
+    if (_fiebre > 0) {
+      _fiebre -= h;
+      if (_fiebre <= 0) {
+        _fiebre = 0;
+        _sucesos.add(SucesoTuberia(TipoSuceso.finFiebre, x: _x, y: _y));
+      }
+    }
+    // El combo se enfría si pasa mucho sin un aterrizaje limpio.
+    _sinLimpio += h;
+    if (_sinLimpio > 6 && _combo > 0 && !enFiebre) {
+      _combo--;
+      _sinLimpio = 3;
+    }
+    // Rollo dorado cada ~25 s: se pone en el próximo arco que todavía no se ve.
+    final puesto = _doradoPuesto;
+    if (puesto != null && !puesto.agarrado && puesto.x < _x - 2) {
+      puesto.dorado = false;
+      _doradoPuesto = null;
+      _proxDorado = _t + 6;
+    }
+    if (_doradoPuesto == null && _t >= _proxDorado) {
+      final arcos = <int>{};
+      for (final r in rollos) {
+        if (r.x > _x + 26 && !r.agarrado) arcos.add(r.arco);
+      }
+      if (arcos.isNotEmpty) {
+        final arco = arcos.reduce(min);
+        final delArco = rollos.where((r) => r.arco == arco).toList();
+        final r = delArco[delArco.length ~/ 2];
+        r.dorado = true;
+        _doradoPuesto = r;
+      }
+    }
+    // Zonas.
+    final z = zonaEn(_x);
+    if (z > _zona) {
+      _zona = z;
+      _sucesos.add(SucesoTuberia(TipoSuceso.zona, x: _x, y: _y, valor: z));
+    }
+    // Atasco.
+    final n = (_t / tramoAtasco).floor();
+    if (n > _tramo) {
+      _tramo = n;
+      _sucesos.add(SucesoTuberia(TipoSuceso.atascoAcelera, x: _xa, valor: n));
+    }
+    _xa += velocidadAtascoEn(_t) * h;
+    if (_x - _xa > separacionMaxima) _xa = _x - separacionMaxima;
+    final cerca = _x - _xa < 9;
+    if (cerca && !_cerca) _sucesos.add(SucesoTuberia(TipoSuceso.atascoCerca, x: _xa));
+    _cerca = cerca;
+    // Récord.
+    if (!_recordAvisado && record > 0 && puntos > record) {
+      _recordAvisado = true;
+      _sucesos.add(SucesoTuberia(TipoSuceso.record, x: _x, y: _y));
+    }
+    if (_x - _xa <= 0.3 || _t >= tiempoMaximo) {
+      _terminado = true;
+      _sucesos.add(SucesoTuberia(TipoSuceso.atrapado, x: _x, y: _y, valor: _t >= tiempoMaximo ? 1 : 0));
+    }
+    if ((_t * 4).floor() != ((_t - h) * 4).floor()) _podar();
   }
 }

@@ -682,12 +682,12 @@ final List<Logro> logros = [
   Logro('regalo_mutuo', 'Hoy por ti, mañana por mí', 'You scratch my back', 'Abrir el Rollo de un amigo al que también le regalaste',
       'Open a Roll from a friend you also gifted', (p, _) => false, oculto: true),
   // Sala de juegos: salen de los récords y partidas que cuenta el servidor (minijuegos/estadisticas.dart, lo llena el control). Sin red no se ganan.
-  Logro('tuberia_300', 'Caño largo', 'Long pipe', 'Llegar a 300 m en Tubería Express', 'Reach 300 m in Pipe Express', (p, _) => recordMinijuego('tuberia') >= 300),
+  Logro('tuberia_300', 'Caño largo', 'Long pipe', 'Hacer 300 puntos en Tubería Express', 'Score 300 in Pipe Express', (p, _) => recordMinijuego('tuberia') >= 300),
   Logro('tuberia_25', 'Fontanero de guardia', 'Plumber on call', 'Jugar 25 partidas de Tubería Express', 'Play 25 games of Pipe Express', (p, _) => partidasMinijuego('tuberia') >= 25),
   Logro('destapa_60', 'Destapador de oro', 'Golden plunger', 'Hacer 60 puntos en Destapa', 'Score 60 in Unclog', (p, _) => recordMinijuego('destapa') >= 60),
   Logro('destapa_25', 'Sin una gota', 'Not a drop', 'Jugar 25 partidas de Destapa', 'Play 25 games of Unclog', (p, _) => partidasMinijuego('destapa') >= 25),
-  Logro('memoria_1800', 'Cabeza de papel', 'Paper memory', 'Hacer 1800 puntos en Memoria del rollo', 'Score 1800 in Roll Memory', (p, _) => recordMinijuego('memoria') >= 1800),
-  Logro('memoria_10', 'Jugador de cartas', 'Card player', 'Jugar 10 partidas de Memoria del rollo', 'Play 10 games of Roll Memory', (p, _) => partidasMinijuego('memoria') >= 10),
+  Logro('memoria_1800', 'Fontanero real', 'Royal plumber', 'Hacer 1800 puntos en Fusión real', 'Score 1800 in Royal Merge', (p, _) => recordMinijuego('memoria') >= 1800),
+  Logro('memoria_10', 'Fusionador', 'Merger', 'Jugar 10 partidas de Fusión real', 'Play 10 games of Royal Merge', (p, _) => partidasMinijuego('memoria') >= 10),
 ];
 
 /// Las cosas del baño que cuentan para [Partida.toques] (lo demás que llegue se ignora).

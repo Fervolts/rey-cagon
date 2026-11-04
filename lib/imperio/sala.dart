@@ -18,11 +18,11 @@ class _Minijuego {
 }
 
 const _juegos = [
-  _Minijuego('tuberia', '🚰', 'Tubería Express', 'Pipe Express', 'El mojón vuela por el desagüe esquivando codos.', 'The poop flies down the drain, dodging bends.'),
+  _Minijuego('tuberia', '🚰', 'Tubería Express', 'Pipe Express', 'Surfea el lodo con un dedo: pesado para bajar, liviano para volar.', 'Surf the mud with one finger: heavy to go down, light to fly.'),
   _Minijuego('blanco', '🎯', 'Al blanco', 'Bullseye', 'Lanza el mojón al inodoro con ángulo y fuerza.', 'Throw the poop into the toilet with angle and power.'),
   _Minijuego('corre', '🏃', 'Corre al baño', 'Run to the Bathroom', 'Llega antes de que se salga. Esquiva colas.', "Get there before it's too late. Dodge the lines."),
-  _Minijuego('destapa', '🪠', 'Destapa', 'Unclog', 'Toca al compás y destapa inodoros.', 'Tap to the beat and unclog toilets.'),
-  _Minijuego('memoria', '🃏', 'Memoria del rollo', 'Roll Memory', 'Parejas de cartas con los emojis de la app.', 'Match pairs of cards with the app emojis.'),
+  _Minijuego('destapa', '🪠', 'Destapa', 'Unclog', 'Medio tiempo en el estadio: destapa antes de que se desborden.', 'Stadium halftime: unclog before they overflow.'),
+  _Minijuego('memoria', '👑', 'Fusión real', 'Royal Merge', 'Junta mojones iguales en la poceta hasta hacer un Rey.', 'Merge matching poos in the bowl until you make a King.'),
   _Minijuego('simon', '🎹', 'Simón del pujo', 'Push Simon', 'Repite secuencias de pujos cortos, largos y épicos.', 'Repeat sequences of short, long and epic pushes.'),
   _Minijuego('trivia', '❓', 'Trivia de cagología', 'Poop Trivia', 'Datos reales y raros del baño. Ranking semanal.', 'Real and weird bathroom facts. Weekly ranking.'),
   _Minijuego('pesca', '🎣', 'Pesca en la cloaca', 'Sewer Fishing', 'Pesca cosas raras y arma tu colección.', 'Fish up weird stuff and build your collection.'),
@@ -40,7 +40,7 @@ String lineaTarjeta(ResumenMinijuegos? r) {
   return tr('Hoy: hasta $p min', 'Today: up to $p min');
 }
 
-/// Sala de juegos: tres juegos abiertos (Tubería Express, Destapa, Memoria del rollo) y el resto "PRÓXIMAMENTE".
+/// Sala de juegos: tres juegos abiertos (Tubería Express, Destapa, Fusión real) y el resto "PRÓXIMAMENTE".
 /// [control] es opcional: si no llega se usa el del Imperio abierto ([ControlImperio.vivo]).
 class PantallaSala extends StatelessWidget {
   const PantallaSala({super.key, this.control});

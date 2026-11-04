@@ -1,308 +1,691 @@
-// Memoria del rollo, lógica pura: parejas de cartas con emojis de la app. Una partida son tres niveles seguidos
-// (4x3, 4x4 y 5x4) que aprietan cada vez más: vista previa más corta, menos papel por pareja y cartas especiales.
+// Fusión real, lógica pura (sin Flutter): se sueltan mojones en la poceta y dos iguales que se tocan se fusionan en el
+// siguiente nivel, hasta el Rey. Física propia de círculos (Verlet con subpasos y restricciones), paso fijo de 1/60 s,
+// así una partida con la misma semilla y los mismos toques sale idéntica.
 //
-// Puntos de un nivel. Todo tiene tope, así la partida perfecta da justo maximoPartidaMemoria (3600, el tope del servidor):
-// - cada pareja da puntosPorPareja más puntosPorRacha por cada punto de multiplicador de la racha sobre x1 (x4 como mucho);
-// - un fallo de memoria quita penalPorFallo y corta la racha. Explorar (dos cartas que nunca habías volteado y sin
-//   saber dónde estaba la pareja de la primera) no es fallo: no quita puntos ni corta la racha, solo gasta papel;
-// - el papel es el reloj: se gasta un segundo por segundo y cada pareja devuelve un poco (más con racha). Lo que quede
-//   al cerrar da hasta bonusPapelPorPareja por pareja, y un nivel sin fallos da bonusLimpioPorPareja por pareja.
-// Cartas especiales: el destapador (nivel 2 y 3) enseña todas las cartas un momento al emparejarlo; la cucaracha
-// (nivel 3) cambia de sitio dos cartas tapadas cada vez que sale en una pareja equivocada.
+// Mundo: x a la derecha, y hacia abajo. El borde de la poceta está en y = 0, el interior va de x = -50 a 50. Paredes
+// rectas hasta y = 40 y luego media elipse (radios 50 y 80) que toca fondo en y = 120. Es convexa, así que cada tramo
+// es un semiplano y un círculo está dentro si cumple todos. Arriba no hay tapa.
+//
+// Puntos: crear un nivel da puntosPorNivel, que crece más rápido que el tamaño (los grandes valen mucho más). Fusiones
+// encadenadas (una fusión que provoca otra en menos de 0.5 s) multiplican hasta x4, y la presión del turno multiplica
+// todo: x2 desde el segundo 60 y x4 desde el 120, así que aguantar sin desbordar es lo que más paga. Dos Reyes juntos
+// hacen la descarga gigante. Al acabar el turno cada mojón que queda da un bonus. Nada pasa de topePuntosFusion y lo
+// que se reporta nunca pasa de (segundos + 1) * puntosPorSegundoFusion.
 
 import 'dart:math';
 
-/// Emojis de las cartas. Todos tienen su PNG en assets/emoji (lo comprueba un test), así se ven igual en todos los teléfonos.
-/// El 🧻 no está: es el reverso de las cartas.
-const List<String> emojisMemoria = ['💩', '🚽', '🪠', '🪳', '🚿', '🫧', '🔥', '🍑', '👑', '🐸', '🦆', '🏆', '💎', '🪣', '🧴', '🦨'];
+/// Niveles de mojón: 1 bolita, 2 frijolito, 3 mojoncito, 4 mojón, 5 lentes, 6 bigote, 7 gordo, 8 dorado, 9 Rey.
+const int nivelMaximo = 9;
 
-/// Al emparejarlo se ven todas las cartas [JuegoMemoria.tiempoDestapa] segundos.
-const String emojiDestapador = '🪠';
+/// Solo se sueltan estos niveles (los demás salen de fusiones).
+const int nivelMaximoSoltar = 4;
 
-/// Si sale en una pareja equivocada cambia de sitio dos cartas tapadas.
-const String emojiCucaracha = '🪳';
+/// Radio por nivel (índice = nivel - 1).
+const List<double> radiosNivel = [5.3, 7.0, 9.1, 11.3, 13.9, 16.7, 19.7, 23.0, 26.6];
 
-/// Los que salen como parejas normales. Los especiales solo entran en los niveles que los traen.
-final List<String> emojisNormales = [for (final e in emojisMemoria) if (e != emojiDestapador && e != emojiCucaracha) e];
+/// Puntos por crear cada nivel (índice = nivel). Ni el 0 ni el 1 se crean por fusión.
+const List<int> puntosPorNivel = [0, 0, 1, 1, 2, 3, 8, 19, 49, 124];
 
-class NivelMemoria {
-  final int columnas, filas;
+/// Bonus por cada mojón que queda en la poceta en la descarga final (índice = nivel).
+const List<int> bonusFinalNivel = [0, 2, 3, 4, 6, 10, 15, 22, 32, 50];
 
-  /// Segundos con todas las cartas a la vista al empezar.
-  final double previa;
+/// Dos Reyes juntos: se descarga todo y da esto.
+const int bonusDescargaReal = 140;
 
-  /// Segundos de papel por pareja al empezar.
-  final double papelPorPareja;
-  final bool destapador, cucaracha;
-  const NivelMemoria(this.columnas, this.filas, {this.previa = 0, this.papelPorPareja = 3, this.destapador = false, this.cucaracha = false});
-  int get cartas => columnas * filas;
-  int get pares => cartas ~/ 2;
-  double get papelInicial => pares * papelPorPareja;
+const int multiplicadorMaximoFusion = 4;
+const double ventanaCombo = 0.5;
+
+/// Contrato del servidor.
+const int topePuntosFusion = 3600;
+const int puntosPorSegundoFusion = 400;
+const int minMsFusion = 3000;
+const int maxMsFusion = 600000;
+
+/// Duración del turno en segundos.
+const double duracionTurno = 180;
+
+/// Paso fijo y subpasos de la física.
+const double pasoFijo = 1 / 60;
+const int subpasos = 4;
+const int iteraciones = 3;
+
+const double gravedad = 420;
+const double velocidadMaxima = 420;
+const double velocidadSubida = 160;
+
+const double mitadAncho = 50;
+const double yRecto = 40;
+const double radioElipseX = 50;
+const double radioElipseY = 80;
+const double yFondo = yRecto + radioElipseY;
+
+/// Si algo se queda por encima de esta línea más de [segundosDesborde], se acaba.
+const double lineaDesborde = 6;
+const double segundosDesborde = 2;
+
+/// Altura a la que cuelga la pieza de la pinza.
+const double yColgado = -26;
+
+/// Tiempo mínimo entre dos piezas soltadas.
+const double esperaSoltar = 0.45;
+
+/// Fusiones que llenan la palanca de descarga.
+const int cargaPalanca = 10;
+
+double radioDe(int nivel) => radiosNivel[nivel - 1];
+
+/// Puntos que de verdad se pueden reportar con [ms] jugados.
+int puntosReportables(int puntos, int ms) {
+  final porTiempo = ((ms / 1000 + 1) * puntosPorSegundoFusion).floor();
+  return min(min(puntos, topePuntosFusion), porTiempo).clamp(0, topePuntosFusion);
 }
 
-const List<NivelMemoria> nivelesMemoria = [
-  NivelMemoria(4, 3, previa: 2.2, papelPorPareja: 2.6),
-  NivelMemoria(4, 4, previa: 1.8, papelPorPareja: 2.3, destapador: true),
-  NivelMemoria(5, 4, previa: 1.5, papelPorPareja: 2.0, destapador: true, cucaracha: true),
+class Mojon {
+  Mojon(this.id, this.nivel, this.x, this.y) : px = x, py = y, r = radioDe(nivel), rObjetivo = radioDe(nivel);
+  final int id;
+  final int nivel;
+  double x, y, px, py;
+
+  /// Radio actual: al nacer de una fusión crece desde el de sus padres hasta [rObjetivo].
+  double r;
+  final double rObjetivo;
+  double edad = 0;
+
+  /// Aplastón de 0 a 1 (al caer o al nacer); se apaga solo.
+  double golpe = 0;
+
+  /// Peso que tiene encima, en "masas propias" (para aplastarlo un poco).
+  double carga = 0;
+
+  /// Ya tocó algo después de soltarlo.
+  bool tocado = false;
+  bool deFusion = false;
+  int cadena = 0;
+  bool vivo = true;
+
+  /// Velocidad aproximada en unidades por segundo.
+  double get vx => (x - px) / (pasoFijo / subpasos);
+  double get vy => (y - py) / (pasoFijo / subpasos);
+  double get masa => rObjetivo * rObjetivo;
+}
+
+enum TipoSuceso {
+  /// Un mojón cae sobre algo. [SucesoFusion.fuerza] de 0 a 1.
+  plop,
+  fusion,
+
+  /// Se creó un dorado (nivel 8).
+  dorado,
+
+  /// Se creó un Rey (nivel 9).
+  rey,
+
+  /// Dos Reyes: se va todo por el desagüe.
+  descargaReal,
+
+  /// Palanca: se tragó los chiquitos. Va seguido de un [tragado] por pieza.
+  palanca,
+  tragado,
+
+  /// La cuenta de desborde empezó.
+  alerta,
+  desborde,
+
+  /// Evento del turno (ver [SucesoFusion.clave]).
+  aviso,
+  finTurno,
+
+  /// Pieza que se va en la descarga final, con su bonus.
+  finalPieza,
+}
+
+class SucesoFusion {
+  const SucesoFusion(this.tipo, {this.x = 0, this.y = 0, this.nivel = 0, this.puntos = 0, this.cadena = 0, this.fuerza = 0, this.clave = ''});
+  final TipoSuceso tipo;
+  final double x, y;
+  final int nivel, puntos, cadena;
+  final double fuerza;
+  final String clave;
+}
+
+enum FaseFusion { jugando, descargaFinal, desbordado, terminado }
+
+/// Eventos del turno, uno cada ~15 s. Los primeros 12 s solo salen bolitas y frijolitos.
+class _Evento {
+  const _Evento(this.t, this.clave);
+  final double t;
+  final String clave;
+}
+
+const List<_Evento> _eventos = [
+  _Evento(12, 'nivel3'),
+  _Evento(25, 'nivel4'),
+  _Evento(40, 'temblor'),
+  _Evento(55, 'frijoles'),
+  _Evento(60, 'presion2'),
+  _Evento(75, 'lluvia'),
+  _Evento(95, 'temblor'),
+  _Evento(110, 'frijoles'),
+  _Evento(120, 'presion4'),
+  _Evento(135, 'lluvia'),
+  _Evento(150, 'temblor'),
+  _Evento(170, 'ultimos10'),
 ];
 
-const int puntosPorPareja = 50;
-const int puntosPorRacha = 20;
-const int multiplicadorMaximo = 4;
-const int penalPorFallo = 15;
-const int bonusPapelPorPareja = 40;
-const int bonusLimpioPorPareja = 15;
+const double duracionTemblor = 1.4;
 
-/// Segundos de papel que devuelve una pareja, por cada punto de multiplicador.
-const double papelPorAcierto = 0.3;
-
-/// Multiplicador con [racha] parejas seguidas sin fallar (la actual incluida).
-int multiplicadorDe(int racha) => racha.clamp(1, multiplicadorMaximo);
-
-/// Lo que da una pareja con multiplicador [mult].
-int puntosDePareja(int mult) => puntosPorPareja + puntosPorRacha * (mult - 1);
-
-/// Lo más que puede dar un nivel: todas las parejas seguidas, papel lleno y sin fallos.
-int maximoNivelMemoria(NivelMemoria n) {
-  var parejas = 0;
-  for (var k = 1; k <= n.pares; k++) {
-    parejas += puntosDePareja(multiplicadorDe(k));
-  }
-  return parejas + (bonusPapelPorPareja + bonusLimpioPorPareja) * n.pares;
+class _Lado {
+  const _Lado(this.ax, this.ay, this.nx, this.ny);
+  final double ax, ay, nx, ny;
 }
 
-/// Lo más que puede dar una partida (los tres niveles perfectos). No pasa de 3600, el tope del servidor.
-int get maximoPartidaMemoria => nivelesMemoria.fold(0, (s, n) => s + maximoNivelMemoria(n));
+/// Semiplanos de la poceta (normales hacia dentro).
+final List<_Lado> _lados = () {
+  final l = <_Lado>[
+    const _Lado(-mitadAncho, 0, 1, 0),
+    const _Lado(mitadAncho, 0, -1, 0),
+  ];
+  const n = 18;
+  for (var i = 0; i < n; i++) {
+    final a0 = pi * i / n, a1 = pi * (i + 1) / n;
+    final x0 = radioElipseX * cos(a0), y0 = yRecto + radioElipseY * sin(a0);
+    final x1 = radioElipseX * cos(a1), y1 = yRecto + radioElipseY * sin(a1);
+    // Recorrido de derecha a izquierda por abajo: la normal hacia dentro es (-dy, dx).
+    final dx = x1 - x0, dy = y1 - y0;
+    final len = sqrt(dx * dx + dy * dy);
+    l.add(_Lado(x0, y0, -dy / len, dx / len));
+  }
+  return l;
+}();
 
-enum EstadoCarta { oculta, visible, hecha }
+/// Puntos del contorno interior de la poceta, de arriba a la izquierda a arriba a la derecha, para dibujarla.
+List<(double, double)> contornoPoceta({int tramos = 36}) => [
+      (-mitadAncho, 0.0),
+      for (var i = tramos; i >= 0; i--) (radioElipseX * cos(pi * i / tramos), yRecto + radioElipseY * sin(pi * i / tramos)),
+      (mitadAncho, 0.0),
+    ];
 
-class Carta {
-  final String emoji;
-  EstadoCarta estado = EstadoCarta.oculta;
-  Carta(this.emoji);
-}
-
-enum TipoJugada { primera, acierto, exploracion, fallo }
-
-/// Lo que pasó con el último toque, para que la vista lo celebre o lo sacuda.
-class Jugada {
-  const Jugada(this.tipo, this.a, {this.b = -1, this.puntos = 0, this.multiplicador = 1, this.destapa = false, this.cambio});
-  final TipoJugada tipo;
-
-  /// Cartas: [a] la primera, [b] la segunda (-1 si es la primera del turno).
-  final int a, b;
-  final int puntos, multiplicador;
-
-  /// Se emparejó el destapador: se ven todas un momento.
-  final bool destapa;
-
-  /// La cucaracha cambió de sitio estas dos cartas tapadas.
-  final (int, int)? cambio;
-}
-
-/// Un nivel suelto.
-class JuegoMemoria {
-  JuegoMemoria(this.nivel, {Random? azar, bool conPrevia = true}) : _azar = azar ?? Random() {
-    final especiales = [if (nivel.destapador) emojiDestapador, if (nivel.cucaracha) emojiCucaracha];
-    final normales = [...emojisNormales]..shuffle(_azar);
-    final elegidos = [...especiales, ...normales.take(nivel.pares - especiales.length)];
-    final mazo = [for (final e in elegidos) ...[e, e]]..shuffle(_azar);
-    cartas = [for (final e in mazo) Carta(e)];
-    _previa = conPrevia ? nivel.previa : 0;
-    _papel = nivel.papelInicial;
+class JuegoFusion {
+  JuegoFusion({int semilla = 7}) : _rng = Random(semilla) {
+    actual = _sorteo();
+    siguiente = _sorteo();
   }
 
-  final NivelMemoria nivel;
-  final Random _azar;
-  late final List<Carta> cartas;
+  final Random _rng;
+  final List<Mojon> mojones = [];
+  final List<SucesoFusion> _sucesos = [];
+  int _ids = 0;
 
-  /// Tiempo que se ve una pareja equivocada antes de taparse sola. Tocar otra carta la tapa antes.
-  static const double esperaFallo = 0.7;
+  FaseFusion fase = FaseFusion.jugando;
 
-  /// Tiempo que se ve todo al emparejar el destapador.
-  static const double tiempoDestapa = 1.0;
+  /// Segundos de juego (solo corre en pasos fijos).
+  double t = 0;
+  double _acumulado = 0;
 
-  final List<int> _abiertas = [];
-  final Set<int> _vistas = {};
-  double _espera = 0, _previa = 0, _destapa = 0, _segundos = 0, _papel = 0;
-  bool _corre = false;
-  int _errores = 0, _exploraciones = 0, _parejas = 0, _racha = 0, _mejorRacha = 0, _puntosParejas = 0;
-  Jugada? _jugada;
+  /// Puntos sin tope (lo que se muestra y reporta pasa por [puntosVisibles] y [puntosReportables]).
+  int puntosCrudos = 0;
+  int fusiones = 0;
+  int nivelMasAlto = 1;
+  int reyes = 0;
 
-  /// Fallos de memoria (no cuenta explorar).
-  int get errores => _errores;
-  int get exploraciones => _exploraciones;
-  int get parejas => _parejas;
-  int get racha => _racha;
-  int get mejorRacha => _mejorRacha;
-  double get segundos => _segundos;
-  double get papel => _papel;
-  double get papelFraccion => nivel.papelInicial <= 0 ? 0 : _papel / nivel.papelInicial;
+  /// Pieza en la pinza y la que viene.
+  late int actual;
+  late int siguiente;
 
-  /// Multiplicador que tendrá la próxima pareja.
-  int get multiplicadorSiguiente => multiplicadorDe(_racha + 1);
-  bool get terminado => _parejas == nivel.pares;
-  Jugada? get jugada => _jugada;
+  /// Dónde apunta la pinza (centro de la pieza).
+  double apunte = 0;
+  double _espera = 0;
 
-  /// Todas las cartas a la vista al empezar; no se puede tocar y el papel no corre.
-  bool get enPrevia => _previa > 0;
-  double get previaRestante => _previa;
+  /// La última que se soltó, mientras no toque nada (para que los ojos la sigan).
+  Mojon? cayendo;
 
-  /// Se emparejó el destapador: todas a la vista, no se puede tocar.
-  bool get destapando => _destapa > 0;
+  int carga = 0;
+  bool get palancaLista => carga >= cargaPalanca;
+  double get cargaPalancaFraccion => (carga / cargaPalanca).clamp(0.0, 1.0);
 
-  /// La carta [i] se ve (volteada, hecha, vista previa o destapador).
-  bool seVe(int i) => enPrevia || destapando || cartas[i].estado != EstadoCarta.oculta;
+  /// Segundos desde que se jaló la palanca (para el remolino); grande si nunca.
+  double desdePalanca = 99;
 
-  int get puntosParejas => _puntosParejas;
-  int get descuentoFallos => _errores * penalPorFallo;
-  int get bonusPapel => terminado ? (bonusPapelPorPareja * nivel.pares * papelFraccion.clamp(0.0, 1.0)).round() : 0;
-  int get bonusLimpio => terminado && _errores == 0 ? bonusLimpioPorPareja * nivel.pares : 0;
+  /// Segundos desde la descarga real.
+  double desdeDescargaReal = 99;
 
-  /// Puntos del nivel. Los bonus solo cuentan al cerrarlo. Nunca baja de 0.
-  int get puntos => max(0, _puntosParejas - descuentoFallos + bonusPapel + bonusLimpio);
+  /// Segundos que lleva algo por encima de la línea.
+  double cuentaDesborde = 0;
+  bool _alertado = false;
+  double _tFase = 0;
+  double _tFinalPieza = 0;
+  int bonusFinal = 0;
+  int piezasFinal = 0;
 
-  /// No se puede tocar ahora mismo (vista previa o destapador).
-  bool get bloqueado => enPrevia || destapando;
+  int _proximoEvento = 0;
+  double temblorHasta = -1;
+  int _frijoles = 0;
+  final List<(double, double, int)> _lluvia = [];
 
-  /// Hay una pareja equivocada a la vista esperando taparse.
-  bool get esperando => _espera > 0;
+  bool get terminado => fase == FaseFusion.terminado;
+  bool get desbordo => motivoDesborde;
+  bool motivoDesborde = false;
+  /// La poceta se calienta: desde el segundo 60 todo vale x2 y desde el 120 x4.
+  int get presion => t >= 120 ? 4 : (t >= 60 ? 2 : 1);
+  bool get temblando => t < temblorHasta;
+  double get restante => max(0, duracionTurno - t);
+  bool get puedeSoltar => fase == FaseFusion.jugando && _espera <= 0;
+  double get esperaFraccion => (_espera / esperaSoltar).clamp(0.0, 1.0);
+  int get puntosVisibles => min(puntosCrudos, topePuntosFusion);
 
-  int _pareja(int i) {
-    for (var k = 0; k < cartas.length; k++) {
-      if (k != i && cartas[k].emoji == cartas[i].emoji) return k;
+  /// Peligro de 0 a 1: cuánto falta para que la pila pase la línea (1 = ya pasó).
+  double get peligro {
+    var tope = double.infinity;
+    for (final m in mojones) {
+      if (m.edad > 1.0 && m != cayendo) tope = min(tope, m.y - m.r);
     }
-    return -1;
+    if (tope == double.infinity) return 0;
+    return (1 - (tope - lineaDesborde) / 30).clamp(0.0, 1.0);
   }
 
-  void _tapar() {
-    for (final i in _abiertas) {
-      if (cartas[i].estado == EstadoCarta.visible) cartas[i].estado = EstadoCarta.oculta;
-    }
-    _abiertas.clear();
-    _espera = 0;
+  List<SucesoFusion> tomarSucesos() {
+    final l = List<SucesoFusion>.of(_sucesos);
+    _sucesos.clear();
+    return l;
   }
 
-  /// Voltea la carta [i]. Devuelve false si no se pudo (ya a la vista, hecha, bloqueado o fuera de rango).
-  /// Con una pareja equivocada a la vista, tocar otra carta tapada la tapa de una y voltea la nueva.
-  bool toca(int i) {
-    if (i < 0 || i >= cartas.length || bloqueado || terminado) return false;
-    final c = cartas[i];
-    if (c.estado != EstadoCarta.oculta) return false;
-    if (_espera > 0) _tapar();
-    _corre = true;
-    c.estado = EstadoCarta.visible;
-    _abiertas.add(i);
-    if (_abiertas.length == 1) {
-      _jugada = Jugada(TipoJugada.primera, i);
-      return true;
+  int _sorteo() {
+    if (_frijoles > 0) {
+      _frijoles--;
+      return 1;
     }
-    final a = _abiertas[0];
-    final ca = cartas[a];
-    if (ca.emoji == c.emoji) {
-      ca.estado = c.estado = EstadoCarta.hecha;
-      _parejas++;
-      _racha++;
-      _mejorRacha = max(_mejorRacha, _racha);
-      final mult = multiplicadorDe(_racha);
-      final pts = puntosDePareja(mult);
-      _puntosParejas += pts;
-      _papel = min(nivel.papelInicial, _papel + papelPorAcierto * mult);
-      final destapa = c.emoji == emojiDestapador && !terminado;
-      if (destapa) _destapa = tiempoDestapa;
-      _abiertas.clear();
-      _vistas.addAll([a, i]);
-      _jugada = Jugada(TipoJugada.acierto, a, b: i, puntos: pts, multiplicador: mult, destapa: destapa);
-      return true;
+    final tope = t < 12 ? 2 : (t < 25 ? 3 : nivelMaximoSoltar);
+    const pesos = [4, 4, 3, 2];
+    var total = 0;
+    for (var i = 0; i < tope; i++) {
+      total += pesos[i];
     }
-    // Fallo de memoria: ya sabías dónde estaba la pareja de la primera, o la segunda ya la habías volteado.
-    final fallo = _vistas.contains(_pareja(a)) || _vistas.contains(i);
-    _vistas.addAll([a, i]);
-    if (fallo) {
-      _errores++;
-      _racha = 0;
-    } else {
-      _exploraciones++;
+    var r = _rng.nextInt(total);
+    for (var i = 0; i < tope; i++) {
+      if (r < pesos[i]) return i + 1;
+      r -= pesos[i];
     }
-    _espera = esperaFallo;
-    final cambio = (ca.emoji == emojiCucaracha || c.emoji == emojiCucaracha) ? _cucaracha(a, i) : null;
-    _jugada = Jugada(fallo ? TipoJugada.fallo : TipoJugada.exploracion, a, b: i, cambio: cambio);
+    return 1;
+  }
+
+  void apuntar(double x) => apunte = x.clamp(-mitadAncho + radioDe(actual), mitadAncho - radioDe(actual));
+
+  /// Suelta la pieza de la pinza en [apunte]. Devuelve si se pudo.
+  bool soltar() {
+    if (!puedeSoltar) return false;
+    apuntar(apunte);
+    final m = _crear(actual, apunte, yColgado);
+    cayendo = m;
+    actual = siguiente;
+    siguiente = _sorteo();
+    _espera = esperaSoltar;
+    apuntar(apunte);
     return true;
   }
 
-  /// La cucaracha cambia de sitio dos cartas tapadas (no las que están a la vista). Las dos quedan como no vistas.
-  (int, int)? _cucaracha(int a, int b) {
-    final tapadas = [for (var k = 0; k < cartas.length; k++) if (k != a && k != b && cartas[k].estado == EstadoCarta.oculta) k];
-    if (tapadas.length < 2) return null;
-    tapadas.shuffle(_azar);
-    final x = tapadas[0], y = tapadas[1];
-    final t = cartas[x];
-    cartas[x] = cartas[y];
-    cartas[y] = t;
-    _vistas.removeAll([x, y]);
-    return (x, y);
+  Mojon _crear(int nivel, double x, double y) {
+    final m = Mojon(_ids++, nivel, x, y);
+    mojones.add(m);
+    return m;
   }
 
+  /// Jala la palanca si está llena: se traga todos los niveles 1 y 2 (sin puntos).
+  bool jalarPalanca() {
+    if (!palancaLista || fase != FaseFusion.jugando) return false;
+    carga = 0;
+    desdePalanca = 0;
+    _sucesos.add(const SucesoFusion(TipoSuceso.palanca, y: yFondo));
+    for (final m in mojones) {
+      if (m.nivel <= 2) {
+        m.vivo = false;
+        _sucesos.add(SucesoFusion(TipoSuceso.tragado, x: m.x, y: m.y, nivel: m.nivel));
+      }
+    }
+    mojones.removeWhere((m) => !m.vivo);
+    if (cayendo != null && !cayendo!.vivo) cayendo = null;
+    return true;
+  }
+
+  /// Avanza [dt] segundos de reloj real en pasos fijos.
   void avanzar(double dt) {
-    if (dt <= 0 || terminado) return;
-    if (_previa > 0) {
-      _previa -= dt;
-      if (_previa <= 0) {
-        _previa = 0;
-        _corre = true; // el papel empieza a gastarse al taparse las cartas
+    _acumulado += dt;
+    var n = 0;
+    while (_acumulado >= pasoFijo && n < 6) {
+      _acumulado -= pasoFijo;
+      _paso();
+      n++;
+    }
+    if (n == 6) _acumulado = 0;
+  }
+
+  void _paso() {
+    if (fase == FaseFusion.terminado) return;
+    const dt = pasoFijo;
+    if (fase == FaseFusion.jugando) t += dt;
+    _tFase += dt;
+    desdePalanca += dt;
+    desdeDescargaReal += dt;
+    if (_espera > 0) _espera -= dt;
+
+    if (fase == FaseFusion.jugando) {
+      _eventosDelTurno();
+      _llover();
+    }
+    if (temblando) _sacudir();
+
+    final h = dt / subpasos;
+    for (var s = 0; s < subpasos; s++) {
+      _integrar(h);
+      for (var it = 0; it < iteraciones; it++) {
+        _restricciones(it == iteraciones - 1, h);
+      }
+      _fusionar();
+    }
+    for (final m in mojones) {
+      m.edad += dt;
+      if (m.golpe > 0) m.golpe = max(0, m.golpe - dt * 3.5);
+    }
+    if (cayendo != null && (cayendo!.tocado || !cayendo!.vivo)) cayendo = null;
+
+    switch (fase) {
+      case FaseFusion.jugando:
+        _vigilarDesborde(dt);
+        if (fase == FaseFusion.jugando && t >= duracionTurno) {
+          fase = FaseFusion.descargaFinal;
+          _tFase = 0;
+          _tFinalPieza = 0.5;
+          cayendo = null;
+          _sucesos.add(const SucesoFusion(TipoSuceso.finTurno));
+        }
+      case FaseFusion.descargaFinal:
+        _descargaFinal(dt);
+      case FaseFusion.desbordado:
+        if (_tFase >= 1.8) fase = FaseFusion.terminado;
+      case FaseFusion.terminado:
+        break;
+    }
+  }
+
+  void _eventosDelTurno() {
+    while (_proximoEvento < _eventos.length && t >= _eventos[_proximoEvento].t) {
+      final e = _eventos[_proximoEvento++];
+      switch (e.clave) {
+        case 'temblor':
+          temblorHasta = t + duracionTemblor;
+        case 'frijoles':
+          _frijoles = 6;
+          // La pieza que viene ya es frijol.
+          siguiente = _sorteo();
+        case 'lluvia':
+          for (var i = 0; i < 5; i++) {
+            _lluvia.add((t + 0.6 + i * 0.35, -40 + _rng.nextDouble() * 80, 1 + _rng.nextInt(2)));
+          }
+      }
+      _sucesos.add(SucesoFusion(TipoSuceso.aviso, clave: e.clave));
+    }
+  }
+
+  void _llover() {
+    while (_lluvia.isNotEmpty && t >= _lluvia.first.$1) {
+      final (_, x, nivel) = _lluvia.removeAt(0);
+      final r = radioDe(nivel);
+      _crear(nivel, x.clamp(-mitadAncho + r, mitadAncho - r), yColgado - 14);
+    }
+  }
+
+  void _sacudir() {
+    // El vecino jala la cadena: cada 0.2 s un empujón pequeño a todos.
+    final antes = t - pasoFijo;
+    if ((t / 0.2).floor() == (antes / 0.2).floor()) return;
+    final h = pasoFijo / subpasos;
+    for (final m in mojones) {
+      m.px -= (_rng.nextDouble() - 0.5) * 50 * h;
+      m.py += _rng.nextDouble() * 18 * h;
+    }
+  }
+
+  void _integrar(double h) {
+    final vmax = velocidadMaxima * h;
+    final vsubir = velocidadSubida * h;
+    final g = gravedad * h * h;
+    for (final m in mojones) {
+      var vx = m.x - m.px, vy = m.y - m.py;
+      final v2 = vx * vx + vy * vy;
+      if (v2 > vmax * vmax) {
+        final k = vmax / sqrt(v2);
+        vx *= k;
+        vy *= k;
+      }
+      // Una fusión que crece puede apretar a un vecino contra la pared: que no salga disparado hacia arriba.
+      if (vy < -vsubir) vy = -vsubir;
+      vx *= 0.999;
+      vy *= 0.999;
+      m.px = m.x;
+      m.py = m.y;
+      m.x += vx;
+      m.y += vy + g;
+      if (m.r < m.rObjetivo) m.r = min(m.rObjetivo, m.r + (m.rObjetivo - m.r) * 0.08 + 0.02);
+      m.carga = 0;
+    }
+  }
+
+  void _contacto(Mojon m, double fuerza) {
+    if (m.tocado) return;
+    m.tocado = true;
+    final f = (fuerza / 260).clamp(0.0, 1.0);
+    if (f > 0.08) {
+      m.golpe = max(m.golpe, 0.15 + 0.45 * f);
+      _sucesos.add(SucesoFusion(TipoSuceso.plop, x: m.x, y: m.y + m.r, nivel: m.nivel, fuerza: f));
+    }
+  }
+
+  void _restricciones(bool ultima, double h) {
+    final n = mojones.length;
+    for (var i = 0; i < n; i++) {
+      final a = mojones[i];
+      for (var j = i + 1; j < n; j++) {
+        final b = mojones[j];
+        final dx = b.x - a.x, dy = b.y - a.y;
+        final minD = a.r + b.r;
+        final d2 = dx * dx + dy * dy;
+        if (d2 >= minD * minD) continue;
+        final d = sqrt(d2);
+        final nx = d > 1e-6 ? dx / d : 0.0, ny = d > 1e-6 ? dy / d : 1.0;
+        final solape = minD - d;
+        final ma = a.masa, mb = b.masa;
+        final wa = mb / (ma + mb), wb = ma / (ma + mb);
+        if (ultima) {
+          if (!a.tocado || !b.tocado) {
+            final rv = ((b.x - b.px) - (a.x - a.px)) * nx + ((b.y - b.py) - (a.y - a.py)) * ny;
+            final f = rv.abs() / h;
+            _contacto(a, f);
+            _contacto(b, f);
+          }
+          // Peso de encima: el de arriba carga sobre el de abajo.
+          if (ny > 0.3) {
+            b.carga += ma / mb * ny;
+          } else if (ny < -0.3) {
+            a.carga += mb / ma * -ny;
+          }
+        }
+        a.x -= nx * solape * wa;
+        a.y -= ny * solape * wa;
+        b.x += nx * solape * wb;
+        b.y += ny * solape * wb;
+        if (ultima) {
+          // Fricción tangencial entre los dos.
+          final tx = -ny, ty = nx;
+          // Coulomb: cuanto más se aprietan, más se frenan de lado.
+          final rvt = ((b.x - b.px) - (a.x - a.px)) * tx + ((b.y - b.py) - (a.y - a.py)) * ty;
+          final c = rvt.clamp(-solape * 0.5, solape * 0.5) * 0.5;
+          a.px += tx * c * wa;
+          a.py += ty * c * wa;
+          b.px -= tx * c * wb;
+          b.py -= ty * c * wb;
+        }
+      }
+    }
+    for (final m in mojones) {
+      for (final l in _lados) {
+        final s = (m.x - l.ax) * l.nx + (m.y - l.ay) * l.ny - m.r;
+        if (s >= 0) continue;
+        m.x -= s * l.nx;
+        m.y -= s * l.ny;
+        if (ultima) {
+          if (!m.tocado) {
+            final vn = ((m.x - m.px) * l.nx + (m.y - m.py) * l.ny).abs() / h;
+            _contacto(m, vn);
+          }
+          final tx = -l.ny, ty = l.nx;
+          final vt = (m.x - m.px) * tx + (m.y - m.py) * ty;
+          final c = vt.clamp(s * 0.4, -s * 0.4);
+          m.px += tx * c;
+          m.py += ty * c;
+        }
+      }
+    }
+  }
+
+  void _fusionar() {
+    final n = mojones.length;
+    var hubo = false;
+    for (var i = 0; i < n; i++) {
+      final a = mojones[i];
+      if (!a.vivo) continue;
+      for (var j = i + 1; j < n; j++) {
+        final b = mojones[j];
+        if (!b.vivo || b.nivel != a.nivel) continue;
+        final dx = b.x - a.x, dy = b.y - a.y;
+        final lim = a.r + b.r + 0.4;
+        if (dx * dx + dy * dy > lim * lim) continue;
+        a.vivo = false;
+        b.vivo = false;
+        hubo = true;
+        _unir(a, b);
+        break;
+      }
+    }
+    if (hubo) mojones.removeWhere((m) => !m.vivo);
+    if (cayendo != null && !cayendo!.vivo) cayendo = null;
+  }
+
+  int _cadenaDe(Mojon m) => m.deFusion && m.edad < ventanaCombo ? m.cadena : 0;
+
+  void _unir(Mojon a, Mojon b) {
+    final x = (a.x + b.x) / 2, y = (a.y + b.y) / 2;
+    final cadena = max(_cadenaDe(a), _cadenaDe(b)) + 1;
+    final mult = min<int>(cadena, multiplicadorMaximoFusion) * presion;
+    fusiones++;
+    if (fase == FaseFusion.jugando && carga < cargaPalanca) carga++;
+
+    if (a.nivel == nivelMaximo) {
+      // Dos Reyes: descarga real, se va todo.
+      final pts = bonusDescargaReal * min<int>(cadena, multiplicadorMaximoFusion) * presion;
+      _sumar(pts);
+      desdeDescargaReal = 0;
+      _sucesos.add(SucesoFusion(TipoSuceso.descargaReal, x: x, y: y, nivel: nivelMaximo, puntos: pts, cadena: cadena));
+      for (final m in mojones) {
+        if (m.vivo) {
+          m.vivo = false;
+          _sucesos.add(SucesoFusion(TipoSuceso.tragado, x: m.x, y: m.y, nivel: m.nivel));
+        }
+      }
+      cayendo = null;
+      return;
+    }
+
+    final nivel = a.nivel + 1;
+    final m = Mojon(_ids++, nivel, x, y)
+      ..r = a.r * 1.02
+      ..px = x - ((a.x - a.px) + (b.x - b.px)) / 2
+      ..py = y - ((a.y - a.py) + (b.y - b.py)) / 2
+      ..deFusion = true
+      ..cadena = cadena
+      ..tocado = true
+      ..golpe = 0.7;
+    mojones.add(m);
+    final pts = puntosPorNivel[nivel] * mult;
+    _sumar(pts);
+    if (nivel > nivelMasAlto) nivelMasAlto = nivel;
+    if (nivel == nivelMaximo) reyes++;
+    _sucesos.add(SucesoFusion(TipoSuceso.fusion, x: x, y: y, nivel: nivel, puntos: pts, cadena: cadena));
+    if (nivel == 8) _sucesos.add(SucesoFusion(TipoSuceso.dorado, x: x, y: y, nivel: nivel));
+    if (nivel == nivelMaximo) _sucesos.add(SucesoFusion(TipoSuceso.rey, x: x, y: y, nivel: nivel));
+  }
+
+  void _sumar(int p) => puntosCrudos = min(puntosCrudos + p, topePuntosFusion);
+
+  void _vigilarDesborde(double dt) {
+    var arriba = false;
+    for (final m in mojones) {
+      if (m.edad > 1.0 && m != cayendo && m.y - m.r < lineaDesborde && m.vy.abs() < 60) {
+        arriba = true;
+        break;
+      }
+    }
+    if (arriba) {
+      cuentaDesborde += dt;
+      if (!_alertado) {
+        _alertado = true;
+        _sucesos.add(const SucesoFusion(TipoSuceso.alerta));
+      }
+    } else {
+      cuentaDesborde = max(0, cuentaDesborde - dt * 2);
+      if (cuentaDesborde == 0) _alertado = false;
+    }
+    // Antes de los 3.5 s no se puede perder (el servidor pide partidas de al menos 3 s).
+    if (cuentaDesborde >= segundosDesborde && t > 3.5) {
+      fase = FaseFusion.desbordado;
+      motivoDesborde = true;
+      _tFase = 0;
+      cayendo = null;
+      _sucesos.add(const SucesoFusion(TipoSuceso.desborde));
+    }
+  }
+
+  void _descargaFinal(double dt) {
+    if (mojones.isEmpty) {
+      if (_tFinalPieza > -0.9) {
+        _tFinalPieza -= dt;
+      } else {
+        fase = FaseFusion.terminado;
       }
       return;
     }
-    if (_destapa > 0) {
-      _destapa = max(0, _destapa - dt); // premio: el papel no se gasta mientras se ve todo
-      return;
+    _tFinalPieza -= dt;
+    if (_tFinalPieza > 0) return;
+    // Más rápido si quedan muchos.
+    _tFinalPieza = mojones.length > 20 ? 0.06 : 0.09;
+    var k = 0;
+    for (var i = 1; i < mojones.length; i++) {
+      final a = mojones[i], b = mojones[k];
+      if (a.nivel < b.nivel || (a.nivel == b.nivel && a.id < b.id)) k = i;
     }
-    if (_corre) {
-      _segundos += dt;
-      _papel = max(0, _papel - dt);
-    }
-    if (_espera > 0) {
-      _espera -= dt;
-      if (_espera <= 0) _tapar();
-    }
-  }
-}
-
-/// Los tres niveles seguidos.
-class PartidaMemoria {
-  // ignore: prefer_initializing_formals
-  PartidaMemoria({Random? azar, this.conPrevia = true}) : _azar = azar {
-    juego = JuegoMemoria(nivelesMemoria[0], azar: _azar, conPrevia: conPrevia);
+    final m = mojones.removeAt(k);
+    final pts = bonusFinalNivel[m.nivel];
+    _sumar(pts);
+    bonusFinal += pts;
+    piezasFinal++;
+    _sucesos.add(SucesoFusion(TipoSuceso.finalPieza, x: m.x, y: m.y, nivel: m.nivel, puntos: pts));
+    if (mojones.isEmpty) _tFinalPieza = 0;
   }
 
-  final Random? _azar;
-  final bool conPrevia;
-  late JuegoMemoria juego;
-  int _nivel = 0;
-  int _acumulado = 0;
-  int _erroresTotal = 0;
-
-  int get nivel => _nivel;
-  int get erroresTotal => _erroresTotal + juego.errores;
-
-  /// Puntos de los niveles ya cerrados más el actual si ya acabó.
-  int get puntos => _acumulado + (juego.terminado ? juego.puntos : 0);
-
-  /// Puntos de los niveles cerrados más lo que va del actual sin bonus (para el marcador en vivo).
-  int get puntosEnVivo => _acumulado + (juego.terminado ? juego.puntos : max(0, juego.puntosParejas - juego.descuentoFallos));
-  bool get nivelTerminado => juego.terminado;
-  bool get terminada => _nivel == nivelesMemoria.length - 1 && juego.terminado;
-
-  /// El nivel que viene después del actual, o null si es el último.
-  NivelMemoria? get proximo => _nivel + 1 < nivelesMemoria.length ? nivelesMemoria[_nivel + 1] : null;
-
-  /// Cierra el nivel que acabó y arma el siguiente. No hace nada si no ha acabado o ya era el último.
-  bool siguiente() {
-    if (!juego.terminado || terminada) return false;
-    _acumulado += juego.puntos;
-    _erroresTotal += juego.errores;
-    _nivel++;
-    juego = JuegoMemoria(nivelesMemoria[_nivel], azar: _azar, conPrevia: conPrevia);
-    return true;
+  /// Y del centro donde quedaría una pieza de radio [r] soltada en [x] (primer choque al bajar). Para la guía.
+  double alturaDeCaida(double x, double r) {
+    var y = double.infinity;
+    for (final l in _lados) {
+      if (l.ny >= -1e-6) continue;
+      // (x - ax) nx + (y - ay) ny >= r  ->  y <= ay + (r - (x - ax) nx) / ny
+      final lim = l.ay + (r - (x - l.ax) * l.nx) / l.ny;
+      if (lim < y) y = lim;
+    }
+    for (final m in mojones) {
+      if (m == cayendo) continue;
+      final dx = (m.x - x).abs(), s = m.r + r;
+      if (dx >= s) continue;
+      final yc = m.y - sqrt(s * s - dx * dx);
+      if (yc < y && yc > yColgado) y = yc;
+    }
+    return y;
   }
 }

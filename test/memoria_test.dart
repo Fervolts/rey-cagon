@@ -1,314 +1,257 @@
-// Memoria del rollo: puntaje y tope del servidor, mazo, vista previa, flujo rápido, exploración contra fallo, racha,
-// destapador, cucaracha, PNG de los emojis y una partida entera en la vista.
-import 'dart:io';
+// Fusión real: contrato del servidor con bots, determinismo, desborde, descarga final, palanca, descarga real
+// y la vista montada de punta a punta.
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rey_cagon/animaciones.dart';
-import 'package:rey_cagon/imperio/minijuegos/memoria_carta.dart';
 import 'package:rey_cagon/imperio/minijuegos/memoria_logica.dart';
 import 'package:rey_cagon/imperio/minijuegos/memoria_vista.dart';
 import 'package:rey_cagon/tema.dart';
 
-/// Índice de la otra carta con el mismo emoji.
-int pareja(JuegoMemoria j, int i) => [for (var k = 0; k < j.cartas.length; k++) k].firstWhere((k) => k != i && j.cartas[k].emoji == j.cartas[i].emoji);
+import 'memoria_bots.dart';
 
-/// Una carta tapada cuyo emoji no es el de [i] (ni la cucaracha, para no mover nada).
-int otra(JuegoMemoria j, int i) => [for (var k = 0; k < j.cartas.length; k++) k].firstWhere(
-    (k) => k != i && j.cartas[k].emoji != j.cartas[i].emoji && j.cartas[k].emoji != emojiCucaracha && j.cartas[k].estado == EstadoCarta.oculta);
+/// Pone una pieza quieta en la poceta (para armar situaciones).
+Mojon poner(JuegoFusion j, int nivel, double x, double y, {int id = 0}) {
+  final m = Mojon(5000 + id, nivel, x, y)
+    ..edad = 2
+    ..tocado = true;
+  j.mojones.add(m);
+  return m;
+}
 
-int primeraDe(JuegoMemoria j, String emoji) => j.cartas.indexWhere((c) => c.emoji == emoji);
-
-/// Todas las parejas seguidas, sin perder tiempo (salvo esperar al destapador, que no gasta papel).
-void jugarPerfecto(JuegoMemoria j) {
-  while (!j.terminado) {
-    if (j.bloqueado) {
-      j.avanzar(0.05);
-      continue;
-    }
-    final i = j.cartas.indexWhere((c) => c.estado == EstadoCarta.oculta);
-    expect(j.toca(i), isTrue);
-    expect(j.toca(pareja(j, i)), isTrue);
+void correr(JuegoFusion j, double segundos) {
+  for (var t = 0.0; t < segundos && !j.terminado; t += pasoFijo) {
+    j.avanzar(pasoFijo);
   }
 }
 
 void main() {
-  group('Memoria: puntaje', () {
-    test('el máximo teórico es exactamente el tope del servidor (3600)', () {
-      expect(maximoPartidaMemoria, lessThanOrEqualTo(3600));
-      expect(maximoPartidaMemoria, 3600);
-      expect([for (final n in nivelesMemoria) maximoNivelMemoria(n)], [870, 1200, 1530]);
+  group('Fusión real: contrato', () {
+    test('las constantes son las del servidor', () {
+      expect(topePuntosFusion, 3600);
+      expect(puntosPorSegundoFusion, 400);
+      expect(minMsFusion, 3000);
+      expect(maxMsFusion, 600000);
+      expect(puntosReportables(99999, 1000), 800);
+      expect(puntosReportables(99999, 500000), 3600);
+      expect(puntosReportables(-5, 4000), 0);
     });
 
-    test('multiplicador de 1 a 4 y puntos por pareja', () {
-      expect([for (var r = 0; r <= 6; r++) multiplicadorDe(r)], [1, 1, 2, 3, 4, 4, 4]);
-      expect(puntosDePareja(1), 50);
-      expect(puntosDePareja(4), 110);
-    });
-
-    test('partida perfecta da el máximo, con y sin vista previa', () {
-      for (final previa in [false, true]) {
-        final p = PartidaMemoria(azar: Random(7), conPrevia: previa);
-        for (var n = 0; n < nivelesMemoria.length; n++) {
-          if (previa) {
-            expect(p.juego.toca(0), isFalse);
-            p.juego.avanzar(nivelesMemoria[n].previa + 0.01);
-          }
-          jugarPerfecto(p.juego);
-          expect(p.juego.puntos, maximoNivelMemoria(nivelesMemoria[n]));
-          expect(p.terminada, n == nivelesMemoria.length - 1);
-          if (!p.terminada) expect(p.siguiente(), isTrue);
+    for (final tipo in TipoBot.values) {
+      test('bot ${tipo.name}: puntos y duración dentro del contrato', () {
+        for (var s = 1; s <= 6; s++) {
+          final r = jugarBot(tipo, s);
+          expect(r.puntos, inInclusiveRange(0, topePuntosFusion));
+          expect(r.puntos, lessThanOrEqualTo(((r.ms / 1000 + 1) * puntosPorSegundoFusion).floor()));
+          expect(r.ms, inInclusiveRange(minMsFusion, maxMsFusion));
+          expect(r.soltadas, greaterThan(0));
         }
-        expect(p.puntos, maximoPartidaMemoria);
-        expect(p.erroresTotal, 0);
-        expect(p.siguiente(), isFalse);
-      }
+      });
+    }
+
+    test('el bot bueno llega a 1800 (logro alcanzable) y el malo queda por debajo', () {
+      final buenos = [for (var s = 1; s <= 4; s++) jugarBot(TipoBot.bueno, s).puntos];
+      final malos = [for (var s = 1; s <= 4; s++) jugarBot(TipoBot.malo, s).puntos];
+      expect(buenos.where((p) => p >= 1800), isNotEmpty);
+      expect(malos.reduce((a, b) => a + b) / malos.length, lessThan(buenos.reduce((a, b) => a + b) / buenos.length));
     });
 
-    test('partidas al azar nunca pasan del máximo ni bajan de 0', () {
-      for (var semilla = 0; semilla < 150; semilla++) {
-        final r = Random(semilla);
-        final p = PartidaMemoria(azar: Random(semilla + 1000), conPrevia: r.nextBool());
-        var pasos = 0;
-        while (pasos++ < 20000) {
-          final j = p.juego;
-          if (j.terminado) {
-            if (!p.siguiente()) break;
-            continue;
-          }
-          if (r.nextDouble() < 0.3) j.avanzar(r.nextDouble() * 0.6);
-          j.toca(r.nextInt(j.cartas.length));
-          expect(p.puntosEnVivo, inInclusiveRange(0, maximoPartidaMemoria));
-        }
-        expect(p.terminada, isTrue, reason: 'semilla $semilla');
-        expect(p.puntos, inInclusiveRange(0, maximoPartidaMemoria));
-      }
-    });
-
-    test('lento gasta el papel y baja el bonus; con fallos no hay bonus limpio', () {
-      final j = JuegoMemoria(nivelesMemoria[0], azar: Random(3), conPrevia: false);
-      final a = 0;
-      j.toca(a);
-      j.avanzar(1);
-      expect(j.papel, closeTo(nivelesMemoria[0].papelInicial - 1, 1e-9));
-      j.toca(pareja(j, a));
-      j.avanzar(100);
-      expect(j.papel, 0);
-      // Fallo: volver a tocar una carta ya vista con otra que no es su pareja.
-      final b = otra(j, a);
-      final c = otra(j, b);
-      j.toca(b);
-      j.toca(c);
-      j.avanzar(1);
-      j.toca(c);
-      j.toca(b);
-      expect(j.errores, 1);
-      jugarPerfecto(j);
-      expect(j.bonusPapel, lessThan(bonusPapelPorPareja * j.nivel.pares));
-      expect(j.bonusLimpio, 0);
+    test('con dt irregular tampoco se sale', () {
+      final r = jugarBot(TipoBot.normal, 3, dt: 1 / 23);
+      expect(r.puntos, lessThanOrEqualTo(((r.ms / 1000 + 1) * puntosPorSegundoFusion).floor()));
+      expect(r.ms, inInclusiveRange(minMsFusion, maxMsFusion));
     });
   });
 
-  group('Memoria: mazo', () {
-    test('cada emoji dos veces, especiales solo en su nivel, el rollo no sale de cara', () {
-      for (var s = 0; s < 20; s++) {
-        for (final n in nivelesMemoria) {
-          final j = JuegoMemoria(n, azar: Random(s));
-          expect(j.cartas.length, n.cartas);
-          final cuenta = <String, int>{};
-          for (final c in j.cartas) {
-            cuenta[c.emoji] = (cuenta[c.emoji] ?? 0) + 1;
-          }
-          expect(cuenta.values.every((v) => v == 2), isTrue);
-          expect(cuenta.length, n.pares);
-          expect(cuenta.containsKey(emojiDestapador), n.destapador);
-          expect(cuenta.containsKey(emojiCucaracha), n.cucaracha);
-          expect(cuenta.containsKey(emojiReverso), isFalse);
+  group('Fusión real: reglas', () {
+    test('misma semilla y mismos toques: misma partida', () {
+      final a = jugarBot(TipoBot.normal, 9), b = jugarBot(TipoBot.normal, 9);
+      expect((a.puntos, a.ms, a.desbordo, a.nivelMasAlto, a.soltadas), (b.puntos, b.ms, b.desbordo, b.nivelMasAlto, b.soltadas));
+    });
+
+    test('al principio solo caen bolitas y frijolitos; nunca más que nivel 4', () {
+      final j = JuegoFusion(semilla: 3);
+      final vistos = <int>{};
+      for (var k = 0; k < 200; k++) {
+        vistos.add(j.actual);
+        j.avanzar(pasoFijo);
+        if (j.t < 12) expect(j.actual, lessThanOrEqualTo(2));
+      }
+      final b = JuegoFusion(semilla: 4);
+      correr(b, 30);
+      for (var k = 0; k < 400; k++) {
+        if (b.puedeSoltar) {
+          expect(b.siguiente, inInclusiveRange(1, nivelMaximoSoltar));
+          b.apuntar(-40 + (k * 13 % 80).toDouble());
+          b.soltar();
+        }
+        b.avanzar(pasoFijo);
+        b.tomarSucesos();
+      }
+    });
+
+    test('dos iguales que se tocan se funden en el siguiente nivel', () {
+      final j = JuegoFusion(semilla: 1);
+      poner(j, 3, -radioDe(3) - 0.5, yFondo - radioDe(3) - 30, id: 1);
+      poner(j, 3, radioDe(3) + 0.5, yFondo - radioDe(3) - 30, id: 2);
+      correr(j, 1.5);
+      final s = j.tomarSucesos();
+      expect(s.where((e) => e.tipo == TipoSuceso.fusion && e.nivel == 4), isNotEmpty);
+      expect(j.mojones.where((m) => m.nivel == 4).length, 1);
+      expect(j.mojones.where((m) => m.nivel == 3), isEmpty);
+      expect(j.puntosCrudos, greaterThan(0));
+      expect(j.fusiones, 1);
+    });
+
+    test('dos Reyes: descarga real que limpia todo y da bonus', () {
+      final j = JuegoFusion(semilla: 1);
+      final r = radioDe(nivelMaximo);
+      poner(j, nivelMaximo, -r - 0.5, yFondo - r - 20, id: 1);
+      poner(j, nivelMaximo, r + 0.5, yFondo - r - 20, id: 2);
+      poner(j, 2, 0, 0, id: 3);
+      correr(j, 1.5);
+      final s = j.tomarSucesos();
+      final real = s.where((e) => e.tipo == TipoSuceso.descargaReal).toList();
+      expect(real, hasLength(1));
+      expect(real.first.puntos, greaterThanOrEqualTo(bonusDescargaReal));
+      expect(j.mojones, isEmpty);
+      expect(j.fase, FaseFusion.jugando);
+    });
+
+    test('la palanca se carga con fusiones y se traga solo los nivel 1 y 2', () {
+      final j = JuegoFusion(semilla: 1);
+      expect(j.jalarPalanca(), isFalse);
+      poner(j, 1, -30, 80, id: 1);
+      poner(j, 2, 20, 80, id: 2);
+      poner(j, 5, 0, 60, id: 3);
+      j.carga = cargaPalanca;
+      expect(j.palancaLista, isTrue);
+      final antes = j.puntosCrudos;
+      expect(j.jalarPalanca(), isTrue);
+      expect(j.mojones.map((m) => m.nivel), [5]);
+      expect(j.puntosCrudos, antes);
+      expect(j.carga, 0);
+      final s = j.tomarSucesos();
+      expect(s.first.tipo, TipoSuceso.palanca);
+      expect(s.where((e) => e.tipo == TipoSuceso.tragado), hasLength(2));
+    });
+
+    test('tirar al azar sin pensar desborda la poceta y termina antes del turno', () {
+      var alguno = false;
+      for (var s = 1; s <= 4; s++) {
+        final r = jugarBot(TipoBot.malo, s);
+        if (r.desbordo) {
+          alguno = true;
+          expect(r.ms, lessThan(duracionTurno * 1000));
+          expect(r.ms, greaterThanOrEqualTo(minMsFusion));
         }
       }
+      expect(alguno, isTrue);
     });
 
-    test('los PNG de los emojis (y del reverso) existen y están en emoji.dart', () {
-      final src = File('lib/emoji.dart').readAsStringSync();
-      final mapa = {for (final m in RegExp(r"'([^']+)':\s*'([a-z0-9_\-]+)'").allMatches(src)) m.group(1)!: m.group(2)!};
-      for (final e in [...emojisMemoria, emojiReverso]) {
-        final f = mapa[e];
-        expect(f, isNotNull, reason: 'falta $e en emoji.dart');
-        expect(File('assets/emoji/$f.png').existsSync(), isTrue, reason: 'falta PNG de $e');
+    test('desborde: algo encima de la línea más de 2 s acaba la partida, con alerta antes', () {
+      final j = JuegoFusion(semilla: 2);
+      correr(j, 4);
+      j.tomarSucesos();
+      // Una columna alta de piezas grandes que no se funden entre sí.
+      var y = yFondo - 10.0;
+      for (var k = 0; k < 14; k++) {
+        final nivel = 5 + k % 3;
+        poner(j, nivel, (k.isEven ? -1 : 1) * 12.0, y, id: k);
+        y -= radioDe(nivel) * 1.4;
       }
-      expect(emojisMemoria.toSet().length, emojisMemoria.length);
-      expect(emojisMemoria.length, greaterThanOrEqualTo(nivelesMemoria.map((n) => n.pares).reduce(max)));
+      final tipos = <TipoSuceso>[];
+      for (var k = 0; k < 60 * 8 && !j.terminado; k++) {
+        j.avanzar(pasoFijo);
+        tipos.addAll(j.tomarSucesos().map((e) => e.tipo));
+      }
+      expect(j.terminado, isTrue);
+      expect(j.desbordo, isTrue);
+      expect(tipos, contains(TipoSuceso.alerta));
+      expect(tipos, contains(TipoSuceso.desborde));
+      expect(tipos.indexOf(TipoSuceso.alerta), lessThan(tipos.indexOf(TipoSuceso.desborde)));
+    });
+
+    test('fin del turno: descarga final suma bonus por cada pieza que queda', () {
+      final j = JuegoFusion(semilla: 5);
+      correr(j, 1);
+      final xs = [-38.0, -14.0, 14.0, 38.0];
+      for (final x in xs) {
+        while (!j.puedeSoltar) {
+          j.avanzar(pasoFijo);
+        }
+        j.apuntar(x);
+        j.soltar();
+      }
+      final tipos = <TipoSuceso>[];
+      var bonus = 0;
+      while (!j.terminado) {
+        j.avanzar(pasoFijo);
+        for (final s in j.tomarSucesos()) {
+          tipos.add(s.tipo);
+          if (s.tipo == TipoSuceso.finalPieza) bonus += s.puntos;
+        }
+        expect(j.t, lessThan(duracionTurno + 10));
+      }
+      expect(j.desbordo, isFalse);
+      expect(tipos.where((t) => t == TipoSuceso.finTurno), hasLength(1));
+      expect(j.piezasFinal, greaterThan(0));
+      expect(j.bonusFinal, bonus);
+      expect(bonus, greaterThan(0));
+      expect(j.mojones, isEmpty);
+      expect(j.t, greaterThanOrEqualTo(duracionTurno));
+    });
+
+    test('la presión sube a x2 y x4 con el tiempo', () {
+      final j = JuegoFusion(semilla: 1);
+      expect(j.presion, 1);
+      j.t = 61;
+      expect(j.presion, 2);
+      j.t = 121;
+      expect(j.presion, 4);
     });
   });
 
-  group('Memoria: jugadas', () {
-    test('la vista previa muestra todo, bloquea y no gasta papel', () {
-      final j = JuegoMemoria(nivelesMemoria[0], azar: Random(1));
-      expect(j.enPrevia, isTrue);
-      expect([for (var i = 0; i < j.cartas.length; i++) j.seVe(i)].every((v) => v), isTrue);
-      expect(j.toca(0), isFalse);
-      j.avanzar(1);
-      expect(j.papel, j.nivel.papelInicial);
-      j.avanzar(j.nivel.previa);
-      expect(j.enPrevia, isFalse);
-      expect(j.seVe(0), isFalse);
-      expect(j.papel, j.nivel.papelInicial);
-      expect(j.toca(0), isTrue);
-    });
-
-    test('exploración no castiga; repetir una carta vista sí es fallo y corta la racha', () {
-      final j = JuegoMemoria(nivelesMemoria[0], azar: Random(2), conPrevia: false);
-      j.toca(0);
-      j.toca(pareja(j, 0));
-      expect(j.racha, 1);
-      expect(j.multiplicadorSiguiente, 2);
-      final a = otra(j, 0);
-      final b = otra(j, a);
-      j.toca(a);
-      j.toca(b);
-      expect(j.jugada!.tipo, TipoJugada.exploracion);
-      expect(j.errores, 0);
-      expect(j.racha, 1, reason: 'explorar no corta la racha');
-      j.avanzar(JuegoMemoria.esperaFallo + 0.01);
-      j.toca(b);
-      j.toca(a);
-      expect(j.jugada!.tipo, TipoJugada.fallo);
-      expect(j.errores, 1);
-      expect(j.racha, 0);
-      expect(j.multiplicadorSiguiente, 1);
-      expect(j.toca(-1), isFalse);
-      expect(j.toca(999), isFalse);
-    });
-
-    test('flujo rápido: tocar otra carta tapa la pareja equivocada al instante', () {
-      final j = JuegoMemoria(nivelesMemoria[0], azar: Random(4), conPrevia: false);
-      final a = 0;
-      final b = otra(j, a);
-      j.toca(a);
-      expect(j.toca(a), isFalse);
-      j.toca(b);
-      expect(j.esperando, isTrue);
-      final c = otra(j, b);
-      expect(j.toca(c), isTrue);
-      expect(j.esperando, isFalse);
-      expect(j.cartas[a].estado, EstadoCarta.oculta);
-      expect(j.cartas[b].estado, EstadoCarta.oculta);
-      expect(j.cartas[c].estado, EstadoCarta.visible);
-      // Sin tocar nada, la pareja equivocada se tapa sola.
-      final d = otra(j, c);
-      j.toca(d);
-      j.avanzar(JuegoMemoria.esperaFallo + 0.01);
-      expect(j.cartas[c].estado, EstadoCarta.oculta);
-      expect(j.cartas[d].estado, EstadoCarta.oculta);
-    });
-
-    test('la racha sube el multiplicador hasta x4', () {
-      final j = JuegoMemoria(nivelesMemoria[2], azar: Random(5), conPrevia: false);
-      final mults = <int>[];
-      for (var k = 0; k < 6; k++) {
-        if (j.bloqueado) j.avanzar(JuegoMemoria.tiempoDestapa + 0.01);
-        final i = j.cartas.indexWhere((c) => c.estado == EstadoCarta.oculta);
-        j.toca(i);
-        j.toca(pareja(j, i));
-        mults.add(j.jugada!.multiplicador);
-      }
-      expect(mults, [1, 2, 3, 4, 4, 4]);
-      expect(j.mejorRacha, 6);
-    });
-
-    test('destapador: deja ver todo un momento, bloquea y congela el papel', () {
-      final j = JuegoMemoria(nivelesMemoria[1], azar: Random(6), conPrevia: false);
-      final i = primeraDe(j, emojiDestapador);
-      j.toca(i);
-      j.avanzar(0.5);
-      final papel = j.papel;
-      j.toca(pareja(j, i));
-      expect(j.jugada!.destapa, isTrue);
-      expect(j.destapando, isTrue);
-      expect(j.bloqueado, isTrue);
-      expect([for (var k = 0; k < j.cartas.length; k++) j.seVe(k)].every((v) => v), isTrue);
-      final libre = j.cartas.indexWhere((c) => c.estado == EstadoCarta.oculta);
-      expect(j.toca(libre), isFalse);
-      j.avanzar(JuegoMemoria.tiempoDestapa / 2);
-      expect(j.papel, greaterThanOrEqualTo(papel), reason: 'no se gasta mientras se ve todo');
-      j.avanzar(JuegoMemoria.tiempoDestapa);
-      expect(j.destapando, isFalse);
-      expect(j.seVe(libre), isFalse);
-      expect(j.toca(libre), isTrue);
-    });
-
-    test('cucaracha: en una pareja equivocada cambia de sitio dos cartas tapadas', () {
-      final j = JuegoMemoria(nivelesMemoria[2], azar: Random(8), conPrevia: false);
-      final antes = [...j.cartas];
-      final a = primeraDe(j, emojiCucaracha);
-      final b = otra(j, a);
-      j.toca(a);
-      j.toca(b);
-      final cambio = j.jugada!.cambio;
-      expect(cambio, isNotNull);
-      final (x, y) = cambio!;
-      expect({x, y}.intersection({a, b}), isEmpty);
-      expect(identical(j.cartas[x], antes[y]), isTrue);
-      expect(identical(j.cartas[y], antes[x]), isTrue);
-      expect(j.cartas[x].estado, EstadoCarta.oculta);
-      expect(j.cartas[y].estado, EstadoCarta.oculta);
-      // Sin cucaracha no se mueve nada.
-      j.avanzar(JuegoMemoria.esperaFallo + 0.01);
-      final c = otra(j, a);
-      j.toca(c);
-      j.toca(otra(j, c));
-      expect(j.jugada!.cambio, isNull);
-    });
-
-    test('en el nivel sin cucaracha nunca se mueven cartas', () {
-      final j = JuegoMemoria(nivelesMemoria[0], azar: Random(9), conPrevia: false);
-      final r = Random(9);
-      for (var k = 0; k < 200 && !j.terminado; k++) {
-        if (j.toca(r.nextInt(j.cartas.length))) expect(j.jugada!.cambio, isNull);
-      }
-    });
-  });
-
-  group('Memoria: vista', () {
-    for (final (mov, tam) in [(Movimiento.completo, const Size(420, 820)), (Movimiento.simple, const Size(320, 560)), (Movimiento.nada, const Size(360, 640))]) {
-      testWidgets('partida entera en la vista termina y avisa al marco (${mov.name}, ${tam.width.round()}x${tam.height.round()})', (tester) async {
-        int? puntos, ms;
-        final p = PartidaMemoria(azar: Random(11), conPrevia: false);
+  group('Fusión real: vista', () {
+    for (final (mov, tam) in [(Movimiento.completo, const Size(393, 817)), (Movimiento.simple, const Size(320, 560)), (Movimiento.nada, const Size(420, 900))]) {
+      testWidgets('se juega con el dedo y avisa al marco una sola vez (${mov.name}, ${tam.width.round()}x${tam.height.round()})', (tester) async {
+        final llamadas = <(int, int)>[];
+        final j = JuegoFusion(semilla: 21);
         await tester.binding.setSurfaceSize(tam);
         addTearDown(() => tester.binding.setSurfaceSize(null));
         await tester.pumpWidget(MaterialApp(
-          theme: tema(Brightness.light),
-          home: Scaffold(body: VistaMemoria(partida: p, mov: mov, alTerminar: (a, b) => (puntos, ms) = (a, b))),
+          theme: tema(Brightness.dark),
+          home: Scaffold(body: VistaMemoria(juego: j, mov: mov, alTerminar: (a, b) => llamadas.add((a, b)))),
         ));
-        Future<void> esperar(double segundos) async {
-          for (var t = 0.0; t < segundos; t += 0.05) {
-            await tester.pump(const Duration(milliseconds: 50));
+        final zona = find.byKey(const Key('memoria_toque'));
+        expect(zona, findsOneWidget);
+        expect(find.byKey(const Key('memoria_puntos')), findsOneWidget);
+        final caja = tester.getRect(zona);
+        final rng = Random(4);
+        for (var k = 0; k < 12; k++) {
+          final g = await tester.startGesture(Offset(caja.center.dx, caja.top + caja.height * 0.6));
+          await g.moveTo(Offset(caja.left + caja.width * (0.25 + rng.nextDouble() * 0.5), caja.top + caja.height * 0.6));
+          await g.up();
+          for (var f = 0; f < 20; f++) {
+            await tester.pump(const Duration(milliseconds: 33));
           }
         }
-
-        for (var n = 0; n < nivelesMemoria.length; n++) {
-          final j = p.juego;
-          while (!j.terminado) {
-            if (j.bloqueado) {
-              await esperar(0.1);
-              continue;
-            }
-            final i = j.cartas.indexWhere((c) => c.estado == EstadoCarta.oculta);
-            await tester.tap(find.byKey(Key('carta_$i')));
-            await tester.tap(find.byKey(Key('carta_${pareja(j, i)}')));
-            await tester.pump();
-          }
-          await esperar(1.2);
-          if (n < nivelesMemoria.length - 1) {
-            expect(find.byKey(const Key('memoria_siguiente')), findsOneWidget);
-            await tester.ensureVisible(find.byKey(const Key('memoria_siguiente')));
-            await tester.tap(find.byKey(const Key('memoria_siguiente')));
-            await tester.pump();
-          }
+        expect(j.mojones.length + j.fusiones, greaterThan(4));
+        expect(llamadas, isEmpty);
+        // Que termine solo: se adelanta el reloj del juego.
+        j.t = duracionTurno - 0.5;
+        for (var f = 0; f < 400 && llamadas.isEmpty; f++) {
+          await tester.pump(const Duration(milliseconds: 50));
         }
-        expect(puntos, maximoPartidaMemoria);
-        expect(ms, isNotNull);
+        for (var f = 0; f < 40; f++) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        expect(llamadas, hasLength(1));
+        final (puntos, ms) = llamadas.single;
+        expect(ms, inInclusiveRange(minMsFusion, maxMsFusion));
+        expect(puntos, lessThanOrEqualTo(((ms / 1000 + 1) * puntosPorSegundoFusion).floor()));
+        expect(puntos, j.puntosVisibles);
         await tester.pumpWidget(const SizedBox());
       });
     }
