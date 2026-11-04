@@ -46,7 +46,10 @@ Future<int> _enviarPorRpc(List<Map<String, Object?>> lote) async {
 /// - `bienvenida` {cagadas, fichas, fundador}
 /// - `ficha_usa` {}: ya no se emite (la Cagada fresca sale sola con cada cagada real; las Fichas son para minijuegos)
 /// - `sala_abre` {}
-/// - `minijuego_toca` {id} (los "próximamente")
+/// - `minijuego_toca` {id}: tocó una tarjeta de la Sala (abierta o "próximamente")
+/// - `minijuego_inicia` {juego}: empezó una partida de la Sala
+/// - `minijuego_fin` {juego, puntos, ms, minutos, mj, record}: el servidor guardó la partida (minutos = lo que pagó; mj = lo que sumó la app)
+/// - `minijuego_rechazo` {juego, puntos, motivo}: el servidor no aceptó la partida (apagado, juego, invalida)
 /// - `pestana_abre` {}
 /// - `mejoras_abre` {edificio}: desplegó las mejoras de un edificio (`poceta` = las de TU POCETA)
 /// - `cadena_abre` {puede}: tocó JALAR (`puede` = estaba encendido)

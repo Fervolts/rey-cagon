@@ -4,6 +4,7 @@
 import 'dart:math';
 
 import 'estado.dart';
+import 'minijuegos/estadisticas.dart';
 import 'temporadas.dart';
 
 export 'temporadas.dart';
@@ -570,8 +571,8 @@ int _toques(Partida p, String id) => p.toques[id] ?? 0;
 /// Niveles de Plomería que tienes (sin la Cadena de reserva, que se gasta).
 int nivelesPlomeria(Partida p) => p.objetosRollos.entries.where((e) => e.key != 'cadena_reserva').fold(0, (a, e) => a + e.value);
 
-/// Los 68 logros: 20 de la fase 1, 4 de la cadena, el de la racha, 15 de la fase 2, 8 escondidos del baño, 1 de temporada,
-/// 3 del Cagadón con apuesta, 3 de regalos, 7 de la mudanza (1 escondido) y 6 de abdicar (1 escondido).
+/// Los 74 logros: 20 de la fase 1, 4 de la cadena, el de la racha, 15 de la fase 2, 8 escondidos del baño, 1 de temporada,
+/// 3 del Cagadón con apuesta, 3 de regalos, 7 de la mudanza (1 escondido), 6 de abdicar (1 escondido) y 6 de la Sala de juegos.
 final List<Logro> logros = [
   Logro('primer_pujo', 'Primer pujo', 'First push', '1 pujo', '1 push', (p, _) => p.pujos >= 1),
   Logro('calentando', 'Calentando', 'Warming up', '100 pujos', '100 pushes', (p, _) => p.pujos >= 100),
@@ -680,6 +681,13 @@ final List<Logro> logros = [
   Logro('regalo_diez', 'Santa del papel', 'Paper Santa', 'Regalar 10 Rollos', 'Gift 10 Rolls', (p, _) => false),
   Logro('regalo_mutuo', 'Hoy por ti, mañana por mí', 'You scratch my back', 'Abrir el Rollo de un amigo al que también le regalaste',
       'Open a Roll from a friend you also gifted', (p, _) => false, oculto: true),
+  // Sala de juegos: salen de los récords y partidas que cuenta el servidor (minijuegos/estadisticas.dart, lo llena el control). Sin red no se ganan.
+  Logro('tuberia_300', 'Caño largo', 'Long pipe', 'Llegar a 300 m en Tubería Express', 'Reach 300 m in Pipe Express', (p, _) => recordMinijuego('tuberia') >= 300),
+  Logro('tuberia_25', 'Fontanero de guardia', 'Plumber on call', 'Jugar 25 partidas de Tubería Express', 'Play 25 games of Pipe Express', (p, _) => partidasMinijuego('tuberia') >= 25),
+  Logro('destapa_60', 'Destapador de oro', 'Golden plunger', 'Hacer 60 puntos en Destapa', 'Score 60 in Unclog', (p, _) => recordMinijuego('destapa') >= 60),
+  Logro('destapa_25', 'Sin una gota', 'Not a drop', 'Jugar 25 partidas de Destapa', 'Play 25 games of Unclog', (p, _) => partidasMinijuego('destapa') >= 25),
+  Logro('memoria_1800', 'Cabeza de papel', 'Paper memory', 'Hacer 1800 puntos en Memoria del rollo', 'Score 1800 in Roll Memory', (p, _) => recordMinijuego('memoria') >= 1800),
+  Logro('memoria_10', 'Jugador de cartas', 'Card player', 'Jugar 10 partidas de Memoria del rollo', 'Play 10 games of Roll Memory', (p, _) => partidasMinijuego('memoria') >= 10),
 ];
 
 /// Las cosas del baño que cuentan para [Partida.toques] (lo demás que llegue se ignora).

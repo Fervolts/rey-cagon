@@ -22,6 +22,14 @@ Repo público: nada de refs de proyecto, keys, correos ni usernames reales en c�
 |---|---|
 | `main.dart` | `main()` (init de Supabase, push, widget, idioma, tema), `db`, `esDeRed`, `conReintento`, `escucharCagadas` (Realtime), `PantallaEntrar`, `PantallaInicio` (barra de 5 pestañas TRONO/RANKING/IMPERIO/BAÑO/YO), `PantallaRanking` (`trono: true` = pestaña TRONO con tarjeta HOY y CAGUÉ; `trono: false` = RANKING con podio; también el PageView al lado secreto) |
 | `imperio/` | Modo clicker Imperio: motor puro en `motor.dart`/`catalogo.dart`/`estado.dart`, nube en `nube.dart`, pantalla en `pantalla.dart`, eventos en `telemetria.dart` (RPC `imperio_registrar`, catálogo de eventos en su dartdoc), flags remotos y A/B en `flags.dart` (RPC `imperio_flags_mias`); consultas a mano en `supabase/consultas/imperio_analisis.sql` |
+| `imperio/sala.dart` | Sala de juegos: tarjetas de los 11 juegos; abiertos Tubería Express, Destapa y Memoria del rollo, el resto "PRÓXIMAMENTE". `PantallaSala({control})` cae a `ControlImperio.vivo` |
+| `imperio/minijuegos/estadisticas.dart` | Récords y partidas por juego en memoria (sin imports) que leen los logros de la Sala; los llena `ControlImperio` desde el servidor |
+| `imperio/minijuegos/datos.dart` | Lo que contestan las RPC `imperio_minijuego`, `imperio_minijuegos_resumen` y `imperio_minijuego_ranking`, la cuenta del premio (`minutosDePartida`, igual que el servidor) y `NubeMinijuegos` |
+| `imperio/minijuegos/marco.dart` | Marco común: instrucción + JUGAR, el juego, pantalla de fin (puntos, récord, MJ, lo que queda hoy); `RelojJuego` (Ticker con tope de dt) y `vibracionSuave` |
+| `imperio/minijuegos/tuberia_logica.dart`, `tuberia_vista.dart` | Tubería Express: lógica pura (2 carriles, codos, velocidad que sube) y vista con CustomPainter |
+| `imperio/minijuegos/destapa_logica.dart`, `destapa_vista.dart` | Destapa: ritmo visual (perfecto/bueno/fallo, 3 fallos), háptica suave; puntos de enganche `// sonido:` |
+| `imperio/minijuegos/memoria_logica.dart`, `memoria_vista.dart` | Memoria del rollo: parejas con emojis de `lib/emoji.dart` que tienen PNG, 3 niveles seguidos (4x3, 4x4, 5x4) |
+| `imperio/minijuegos/ranking_vista.dart` | Ranking semanal de un minijuego, amigos o global |
 | `chat.dart` | Baño: `PantallaChat` (pestañas), sala general y DMs sobre la tabla `mensajes`, reportar/bloquear/ocultar/fijar, `ofrecerPresumir`, hitos |
 | `amigos.dart` | `PantallaAmigos` (listas sigues/te siguen) y `PantallaBuscarAmigos` |
 | `perfil.dart` | `PantallaPerfil` (YO y perfil de otros), `_EditarPerfil`, `PantallaBuscar`, ajustes en la tuerca |
