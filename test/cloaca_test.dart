@@ -64,8 +64,8 @@ Map<String, dynamic> _mia() => {
         ],
       },
       'premios': [
-        {'id': 3, 'semana': '2026-10-26', 'rollos': 2},
-        {'id': 4, 'semana': '2026-10-19', 'rollos': 2},
+        {'id': '5b0c1e2a-0000-4000-8000-000000000003', 'semana': '2026-10-26', 'rollos': 2},
+        {'id': '5b0c1e2a-0000-4000-8000-000000000004', 'semana': '2026-10-19', 'rollos': 2},
       ],
       'semana': '2026-11-02',
       'cierra': '2026-11-09T04:00:00+00:00',
@@ -102,7 +102,7 @@ void main() {
       expect((ana.cagadas, ana.ptsCagadas, ana.ptsImperio, ana.puntos), (4, 40, 7, 47));
       expect(ana.cagoHoy, isTrue);
       expect(c.miembros.last.avatar, isNull);
-      expect(e.premios.map((p) => p.id), [3, 4]);
+      expect(e.premios.map((p) => p.id), ['5b0c1e2a-0000-4000-8000-000000000003', '5b0c1e2a-0000-4000-8000-000000000004']);
       expect(e.rollosPorCobrar, 4);
       expect(e.semana, '2026-11-02');
       expect(e.cierra, DateTime.utc(2026, 11, 9, 4));

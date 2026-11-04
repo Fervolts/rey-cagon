@@ -758,6 +758,8 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
     final viejo = _canalEscribiendo;
     _canalEscribiendo = null;
     if (viejo != null) db.removeChannel(viejo);
+    // En la Cloaca no hay "escribiendo": el canal de Realtime no tiene RLS y cualquiera con el id lo oiría.
+    if (widget.sala.startsWith('cloaca:')) return;
     _canalEscribiendo = db.channel(_temaEscribiendo).onBroadcast(event: 'escribiendo', callback: _recibirEscribiendo).subscribe();
   }
 

@@ -26,7 +26,13 @@ insert into public.imperio_flags (clave, valor, nota) values
   ('minijuego_pps_memoria', '400', 'Puntos por segundo máximos creíbles en Memoria del rollo'),
   ('minijuego_min_ms_tuberia', '2000', 'Duración mínima creíble de una partida de Tubería Express (ms)'),
   ('minijuego_min_ms_destapa', '1500', 'Duración mínima creíble de una partida de Destapa (ms)'),
-  ('minijuego_min_ms_memoria', '3000', 'Duración mínima creíble de una partida de Memoria del rollo (ms)')
+  ('minijuego_min_ms_memoria', '3000', 'Duración mínima creíble de una partida de Memoria del rollo (ms)'),
+  ('minijuego_max_ms_tuberia', '1200000', 'Duración máxima creíble de una partida de Tubería Express (ms)'),
+  ('minijuego_max_ms_destapa', '1200000', 'Duración máxima creíble de una partida de Destapa (ms)'),
+  ('minijuego_max_ms_memoria', '600000', 'Duración máxima creíble de una partida de Memoria del rollo (ms)'),
+  ('minijuego_tope_tuberia', '16000', 'Puntos máximos creíbles de una partida de Tubería Express'),
+  ('minijuego_tope_destapa', '8000', 'Puntos máximos creíbles de una partida de Destapa'),
+  ('minijuego_tope_memoria', '3600', 'Puntos máximos de Memoria del rollo (los 3 niveles perfectos)')
 on conflict (clave) do nothing;
 
 -- ---------------------------------------------------------------- tabla
@@ -67,6 +73,8 @@ declare
   meta numeric;
   pps numeric;
   min_ms numeric;
+  max_ms numeric;
+  tope_pts numeric;
   ganados int;
   total_hoy int;
   record_ant int;
@@ -86,8 +94,10 @@ begin
   meta := public.imperio_regalos_flag('minijuego_meta_' || p_juego, 600, 1, 100000);
   pps := public.imperio_regalos_flag('minijuego_pps_' || p_juego, 16, 1, 100000);
   min_ms := public.imperio_regalos_flag('minijuego_min_ms_' || p_juego, 3000, 0, 600000);
+  max_ms := public.imperio_regalos_flag('minijuego_max_ms_' || p_juego, 1200000, 10000, 3600000);
+  tope_pts := public.imperio_regalos_flag('minijuego_tope_' || p_juego, 16000, 1, 1000000);
   -- Imposible: muy corta, o con más puntos por segundo de los que el juego deja. Un segundo de margen.
-  if p_duracion_ms < min_ms or p_duracion_ms > 3600000 or p_puntos > 1000000
+  if p_duracion_ms < min_ms or p_duracion_ms > max_ms or p_puntos > tope_pts
      or p_puntos > (p_duracion_ms / 1000.0 + 1) * pps then
     return jsonb_build_object('ok', false, 'motivo', 'invalida');
   end if;

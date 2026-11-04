@@ -138,9 +138,9 @@ class PremioCloaca {
   const PremioCloaca({required this.id, required this.semana, required this.rollos});
 
   factory PremioCloaca.desdeJson(Map<String, dynamic> j) =>
-      PremioCloaca(id: _ent(j['id']), semana: '${j['semana'] ?? ''}', rollos: _ent(j['rollos']));
+      PremioCloaca(id: '${j['id'] ?? ''}', semana: '${j['semana'] ?? ''}', rollos: _ent(j['rollos']));
 
-  final int id;
+  final String id;
   final String semana;
   final int rollos;
 }
@@ -338,7 +338,7 @@ class NubeCloacas {
   Future<ResultadoCloaca> expulsar(String userId) async =>
       _avisar(ResultadoCloaca.desdeJson(await db.rpc('cloaca_expulsar', params: {'p_user': userId})));
 
-  Future<ResultadoCloaca> cobrar(int id) async => ResultadoCloaca.desdeJson(await db.rpc('cloaca_premio_cobrar', params: {'p_id': id}));
+  Future<ResultadoCloaca> cobrar(String id) async => ResultadoCloaca.desdeJson(await db.rpc('cloaca_premio_cobrar', params: {'p_id': id}));
 
   ResultadoCloaca _avisar(ResultadoCloaca r) {
     if (r.ok) cloacaCambio.value++;

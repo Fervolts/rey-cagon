@@ -366,6 +366,8 @@ declare
   mia uuid;
 begin
   if yo is null then return jsonb_build_object('ok', false, 'motivo', 'sin_sesion'); end if;
+  -- El lock del expulsado va primero: si sale y entra a otra Cloaca a la vez, la comprobación de abajo ya lo ve.
+  if p_user is not null then perform pg_advisory_xact_lock(hashtext('cloaca_yo' || p_user::text)); end if;
   select c.id into mia from public.cloacas c where c.dueno = yo
      and c.id = (select x.cloaca_id from public.cloaca_miembros x where x.user_id = yo);
   if mia is null then return jsonb_build_object('ok', false, 'motivo', 'no_dueno'); end if;
@@ -373,7 +375,6 @@ begin
      or not exists (select 1 from public.cloaca_miembros x where x.user_id = p_user and x.cloaca_id = mia) then
     return jsonb_build_object('ok', false, 'motivo', 'no_miembro');
   end if;
-  perform pg_advisory_xact_lock(hashtext('cloaca_yo' || p_user::text));
   perform public.cloaca_sacar(p_user, true);
   return jsonb_build_object('ok', true);
 end;
@@ -410,7 +411,9 @@ begin
     select q.cloaca_id, sum(q.puntos)::int as puntos from public.cloaca_puntos(sem) q
     join public.cloacas y on y.id = q.cloaca_id group by 1
   ), r as (
-    select t.cloaca_id, t.puntos, rank() over (order by t.puntos desc) as puesto from t
+    -- El mismo orden que cloaca_ranking y el cierre, así un empate no sale #1 aquí y #2 allá.
+    select t.cloaca_id, t.puntos, row_number() over (order by t.puntos desc, y.creado, y.id) as puesto
+    from t join public.cloacas y on y.id = t.cloaca_id
   )
   select coalesce((select r.puntos from r where r.cloaca_id = c.id), 0),
          (select r.puesto from r where r.cloaca_id = c.id)
@@ -818,6 +821,13 @@ end;
 $function$;
 
 
+
+
+-- Reportes: solo de mensajes que puedes ver. Sin esto, alguien de fuera podía reportar (y con 3 reportes ocultar)
+-- mensajes de una Cloaca adivinando ids. La consulta de adentro pasa por la RLS de mensajes.
+drop policy if exists mensaje_reportes_insert on public.mensaje_reportes;
+create policy mensaje_reportes_insert on public.mensaje_reportes for insert to authenticated
+  with check (reportador = (select auth.uid()) and exists (select 1 from public.mensajes m where m.id = mensaje_reportes.mensaje_id));
 
 commit;
 
