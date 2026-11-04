@@ -1575,7 +1575,7 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
       alAbdicar: () => abrirAbdicar(context, _c, _avisar),
       alSala: () {
         _c.anotar('sala_abre');
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaSala()));
+        Navigator.push(context, MaterialPageRoute(builder: (_) => PantallaSala(control: _c)));
       },
     );
   }

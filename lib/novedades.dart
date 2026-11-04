@@ -21,6 +21,18 @@ class VersionNovedades {
 
 /// El historial público, de la más nueva a la más vieja. Al sacar una versión nueva se agrega arriba.
 const historialNovedades = <VersionNovedades>[
+  VersionNovedades('2.18.0', '2026-11-04', [
+    ('🚽', 'CLOACAS: arma tu Cloaca de hasta 25 cagones o únete con un código. Cada semana compiten en una liga: cada cagada de verdad suma 10 puntos (hasta 3 al día) y el Imperio suma hasta 10 más. La Cloaca ganadora se lleva Rollos de Oro y un ícono nuevo para la app.',
+        'SEWERS: build your Sewer of up to 25 poopers or join with a code. Every week they compete in a league: every real poop adds 10 points (up to 3 a day) and the Empire adds up to 10 more. The winning Sewer gets Golden Rolls and a new app icon.'),
+    ('💪', 'Tu Cloaca te ayuda en el Imperio: produces 5% más por cada compañero que cagó hoy, hasta 50% más. Y tiene su propio chat en el Baño.',
+        'Your Sewer helps you in the Empire: you produce 5% more for every teammate who pooped today, up to 50% more. And it has its own chat in the Bathroom.'),
+    ('🎮', 'SALA DE JUEGOS: ya se puede jugar Tubería Express, Destapa y Memoria del rollo. Cada partida te da minutos de producción, hasta un tope por día, y hay ranking semanal con tus amigos.',
+        'GAME ROOM: you can now play Pipe Express, Unclog and Roll Memory. Every game gives you minutes of production, up to a daily limit, and there is a weekly leaderboard with your friends.'),
+    ('🎨', 'Cambia el ícono de la app en Ajustes: Dorado con 100 cagadas, Corona al abdicar, Noche con 7 días seguidos y Cloaca al ganar la liga.',
+        'Change the app icon in Settings: Golden at 100 poops, Crown when you abdicate, Night with 7 days in a row and Sewer when you win the league.'),
+    ('🔔', 'Si un alquiler Indefinido se corta porque no te alcanzaron los MJ, ahora te avisamos y te decimos cómo volver a prenderlo.',
+        'If an Indefinite rental stops because you ran out of MJ, we now tell you and explain how to turn it back on.'),
+  ]),
   VersionNovedades('2.17.0', '2026-11-03', [
     ('👑', 'ABDICAR: cuando ni el Palacio te alcanza, abdica. Vuelves al Rancho, pero ganas Coronas y empiezas una dinastía nueva. Cada Corona sin gastar te da +50% de producción.',
         'ABDICATE: when not even the Palace is enough, abdicate. You go back to the Shack, but you earn Crowns and start a new dynasty. Every unspent Crown gives you +50% production.'),
