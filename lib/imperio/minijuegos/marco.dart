@@ -71,8 +71,8 @@ class DatosJuego {
 
 const juegosAbiertosDatos = <String, DatosJuego>{
   'tuberia': DatosJuego('tuberia', '🚰', 'Tubería Express', 'Pipe Express', 'Toca para cambiar de lado. Esquiva los codos.', 'Tap to switch sides. Dodge the bends.'),
-  'destapa': DatosJuego('destapa', '🪠', 'Destapa', 'Unclog', 'Toca justo cuando el anillo se cierra. 3 fallos y se acaba.', 'Tap right when the ring closes. 3 misses and it is over.'),
-  'memoria': DatosJuego('memoria', '🃏', 'Memoria del rollo', 'Roll Memory', 'Encuentra las parejas. Pocos errores y rápido da más.', 'Find the pairs. Few mistakes and fast earns more.'),
+  'destapa': DatosJuego('destapa', '🪠', 'Destapa', 'Unclog', 'Toca cuando el cuadro se cierra. Si es doble, mantén hasta el fino. Vencer un atasco gordo te devuelve una vida.', 'Tap when the square closes. If it is double, hold until the thin one. Beating a big clog gives you a life back.'),
+  'memoria': DatosJuego('memoria', '🃏', 'Memoria del rollo', 'Roll Memory', 'Memoriza al empezar. Parejas seguidas suben el multiplicador (hasta x4). El papel se acaba: rápido da bonus.', 'Memorize at the start. Pairs in a row raise the multiplier (up to x4). The paper runs out: fast gives a bonus.'),
 };
 
 /// Una partida completa: instrucción, juego y fin.
@@ -139,7 +139,7 @@ class _PantallaMinijuegoState extends State<PantallaMinijuego> {
     return switch (widget.juego) {
       'tuberia' => VistaTuberia(key: ValueKey('t$_vuelta'), alTerminar: _fin, mov: mov),
       'destapa' => VistaDestapa(key: ValueKey('d$_vuelta'), alTerminar: _fin, mov: mov),
-      _ => VistaMemoria(key: ValueKey('m$_vuelta'), alTerminar: _fin),
+      _ => VistaMemoria(key: ValueKey('m$_vuelta'), alTerminar: _fin, mov: mov),
     };
   }
 

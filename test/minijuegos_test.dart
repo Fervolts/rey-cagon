@@ -1,6 +1,5 @@
-// Sala de juegos: lógica pura de los 3 minijuegos, cuenta del premio, JSON del servidor, control con nube falsa,
-// logros de la Sala, PNG de los emojis de Memoria y la Sala (3 abiertos, 8 PRÓXIMAMENTE).
-import 'dart:io';
+// Sala de juegos: lógica pura de Tubería y Destapa (Memoria va en memoria_test.dart), cuenta del premio, JSON del servidor,
+// control con nube falsa, logros de la Sala y la Sala (3 abiertos, 8 PRÓXIMAMENTE).
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -9,7 +8,6 @@ import 'package:rey_cagon/imperio/control.dart';
 import 'package:rey_cagon/imperio/minijuegos/datos.dart';
 import 'package:rey_cagon/imperio/minijuegos/destapa_logica.dart';
 import 'package:rey_cagon/imperio/minijuegos/estadisticas.dart';
-import 'package:rey_cagon/imperio/minijuegos/memoria_logica.dart';
 import 'package:rey_cagon/imperio/minijuegos/tuberia_logica.dart';
 import 'package:rey_cagon/imperio/motor.dart';
 import 'package:rey_cagon/imperio/nube.dart';
@@ -163,9 +161,20 @@ void main() {
       final j = JuegoDestapa();
       j.avanzar(JuegoDestapa.entrada);
       final c0 = j.compas;
+      // Los patrones cambian (dobles, pausas, mantener): se toca en la hora de cada nota y se aguanta hasta su fin.
+      void hasta(double t) {
+        while (j.tiempo < t) {
+          j.avanzar(0.01);
+        }
+      }
       for (var i = 0; i < 30; i++) {
+        while (j.proxima == null) {
+          j.avanzar(0.01);
+        }
+        final n = j.proxima!;
+        hasta(n.t + JuegoDestapa.compensacion);
         expect(j.toque(), Golpe.perfecto);
-        j.avanzar(j.compas);
+        if (n.mantener) hasta(n.fin! + JuegoDestapa.compensacion);
       }
       expect(j.inodoros, greaterThan(0));
       expect(j.compas, lessThan(c0));
@@ -176,75 +185,6 @@ void main() {
       j.avanzar(JuegoDestapa.entrada);
       j.toque();
       expect(j.toque(), Golpe.fallo);
-    });
-  });
-
-  group('Memoria', () {
-    test('puntaje: parejas, rapidez, errores, nunca negativo', () {
-      expect(puntajeNivel(pares: 6, segundos: 0, errores: 0), 6 * 100 + 6 * 50);
-      expect(puntajeNivel(pares: 6, segundos: 999, errores: 0), 600);
-      expect(puntajeNivel(pares: 6, segundos: 999, errores: 2), 550);
-      expect(puntajeNivel(pares: 6, segundos: 999, errores: 100), 0);
-    });
-    test('mazo: cada emoji dos veces y sin repetir parejas distintas', () {
-      for (final n in nivelesMemoria) {
-        final j = JuegoMemoria(n, azar: Random(5));
-        expect(j.cartas.length, n.cartas);
-        final cuenta = <String, int>{};
-        for (final c in j.cartas) {
-          cuenta[c.emoji] = (cuenta[c.emoji] ?? 0) + 1;
-        }
-        expect(cuenta.values.every((v) => v == 2), isTrue);
-      }
-    });
-    test('error bloquea y voltea de nuevo; acierto deja hecha la pareja', () {
-      final j = JuegoMemoria(nivelesMemoria[0], azar: Random(6));
-      final a = 0;
-      final b = List.generate(j.cartas.length, (i) => i).firstWhere((i) => i != a && j.cartas[i].emoji != j.cartas[a].emoji);
-      final par = List.generate(j.cartas.length, (i) => i).firstWhere((i) => i != a && j.cartas[i].emoji == j.cartas[a].emoji);
-      expect(j.toca(a), isTrue);
-      expect(j.toca(a), isFalse);
-      expect(j.toca(b), isTrue);
-      expect(j.errores, 1);
-      expect(j.bloqueado, isTrue);
-      expect(j.toca(par), isFalse);
-      j.avanzar(JuegoMemoria.esperaFallo + 0.1);
-      expect(j.bloqueado, isFalse);
-      expect(j.cartas[a].estado, EstadoCarta.oculta);
-      expect(j.toca(a), isTrue);
-      expect(j.toca(par), isTrue);
-      expect(j.parejas, 1);
-      expect(j.cartas[a].estado, EstadoCarta.hecha);
-      expect(j.toca(-1), isFalse);
-      expect(j.toca(999), isFalse);
-    });
-    test('partida de tres niveles perfecta suma los tres', () {
-      final p = PartidaMemoria(azar: Random(7));
-      for (var n = 0; n < 3; n++) {
-        expect(p.nivel, n);
-        final j = p.juego;
-        for (final e in {...j.cartas.map((c) => c.emoji)}) {
-          final ids = [for (var i = 0; i < j.cartas.length; i++) if (j.cartas[i].emoji == e) i];
-          j.toca(ids[0]);
-          j.toca(ids[1]);
-        }
-        expect(j.terminado, isTrue);
-        expect(p.terminada, n == 2);
-        if (n < 2) expect(p.siguiente(), isTrue);
-      }
-      expect(p.puntos, greaterThan(0));
-      expect(p.siguiente(), isFalse);
-      expect(p.erroresTotal, 0);
-    });
-    test('los PNG de los emojis existen y están en emoji.dart', () {
-      final src = File('lib/emoji.dart').readAsStringSync();
-      final mapa = {for (final m in RegExp(r"'([^']+)':\s*'([a-z0-9_\-]+)'").allMatches(src)) m.group(1)!: m.group(2)!};
-      for (final e in emojisMemoria) {
-        final f = mapa[e];
-        expect(f, isNotNull, reason: 'falta $e en emoji.dart');
-        expect(File('assets/emoji/$f.png').existsSync(), isTrue, reason: 'falta PNG de $e');
-      }
-      expect(emojisMemoria.toSet().length, emojisMemoria.length);
     });
   });
 
