@@ -32,6 +32,8 @@ const historialNovedades = <VersionNovedades>[
         'Change the app icon in Settings: Golden at 100 poops, Crown when you abdicate, Night with 7 days in a row and Sewer when you win the league.'),
     ('🔔', 'Si un alquiler Indefinido se corta porque no te alcanzaron los MJ, ahora te avisamos y te decimos cómo volver a prenderlo.',
         'If an Indefinite rental stops because you ran out of MJ, we now tell you and explain how to turn it back on.'),
+    ('⏳', 'El Primo pujador, la Cuadrilla del barrio y el Plomero por horas solo trabajan con la app abierta, pero su tiempo corre aunque la cierres. Ahora los puedes pausar antes de salir y seguirlos al volver, sin perder nada: toca su ficha junto a la poceta o el botón en la tienda.',
+        'The Pushing cousin, the Neighborhood crew and the Hourly plumber only work with the app open, but their time runs even when you close it. Now you can pause them before leaving and resume them when you are back, losing nothing: tap their chip by the toilet or the button in the shop.'),
   ]),
   VersionNovedades('2.17.0', '2026-11-03', [
     ('👑', 'ABDICAR: cuando ni el Palacio te alcanza, abdica. Vuelves al Rancho, pero ganas Coronas y empiezas una dinastía nueva. Cada Corona sin gastar te da +50% de producción.',
