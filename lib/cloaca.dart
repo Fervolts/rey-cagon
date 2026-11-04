@@ -346,7 +346,8 @@ class NubeCloacas {
   }
 }
 
-const nubeCloacas = NubeCloacas();
+/// Las llamadas de las pantallas de la Cloaca (en pruebas y demos se cambia por una falsa).
+NubeCloacas nubeCloacas = const NubeCloacas();
 
 /// La liga de Cloacas dentro de la lista de la pestaña RANKING: mi Cloaca, la tabla de la semana y cómo funciona.
 /// [vuelta] sube al tirar para refrescar.

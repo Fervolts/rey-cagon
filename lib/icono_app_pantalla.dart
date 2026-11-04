@@ -26,7 +26,7 @@ class _EstadoPantallaIconoApp extends State<PantallaIconoApp> {
 
   Future<void> _cargar() async {
     final puesto = await iconoPuesto();
-    final datos = await cargarDatosIcono();
+    final datos = await cargadorDatosIcono();
     if (!mounted) return;
     setState(() {
       _puesto = puesto;

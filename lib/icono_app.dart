@@ -85,6 +85,9 @@ Future<String> iconoPuesto() async {
   }
 }
 
+/// De dónde salen los datos de los íconos (en pruebas y demos se cambia por una falsa).
+Future<DatosIcono> Function() cargadorDatosIcono = cargarDatosIcono;
+
 /// Carga del servidor lo que desbloquea los íconos. Si algo falla, esa parte queda en cero.
 Future<DatosIcono> cargarDatosIcono() async {
   final uid = db.auth.currentUser?.id;
