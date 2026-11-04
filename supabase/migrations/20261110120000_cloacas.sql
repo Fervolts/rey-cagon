@@ -67,8 +67,8 @@ create table public.cloaca_historial (
   primary key (semana, cloaca_id)
 );
 
--- Rollos de Oro ganados en la liga que falta cobrar. Se cobran desde la app (cloaca_premio_cobrar) hasta el tope de
--- Rollos de la casa; lo que no cabe se queda pendiente para cuando haya espacio.
+-- Rollos de Oro ganados en la liga. Se cobran desde la app (cloaca_premio_cobrar). Lo cobrado sube en lo mismo el
+-- tope de Rollos de la casa (imperio_rollos_tope), así el premio no le quita espacio a las jaladas.
 create table public.cloaca_premios (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,

@@ -16,6 +16,8 @@
 //   - cron push_ganadores: { tipo: "ganadores", periodo, lista } → quién ganó la semana/mes/año entre tus amigos.
 //   - cron push_cierres: { tipo: "cierre", periodo, lista } → la semana/mes/año se acaba: tu puesto y a quién pasar.
 //   - imperio_regalar: { tipo: "regalo", id } → un amigo te mandó un Rollo de papel de regalo (categoría imperio).
+//   - cron cloaca_semana (cloaca_cerrar_semana, si el flag cloaca_push está prendido): { tipo: "cloaca", semana }
+//     → a los premiados de la Cloaca que ganó la liga de esa semana (categoría ganadores).
 // Cada quien apaga categorías en push_ajustes (cagadas, rachas, ganadores, cierres, chat, retos,
 // seguidores, imperio). Apagar solo quita el push: lo que se guardaba en el centro de avisos se sigue guardando.
 // Anuncio, versión y soporte no se apagan.
@@ -476,6 +478,20 @@ async function avisarRegalo(id: string) {
   ), { tipo: "regalo", id: String(id) }, "imperio");
 }
 
+// Liga de Cloacas: la Cloaca ganadora de la semana. Solo a los que ganaron premio (miembros con puntos).
+async function avisarCloaca(semana: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(semana ?? "")) return Response.json({ enviados: 0 });
+  const { data: h } = await db.from("cloaca_historial").select("nombre, emoji").eq("semana", semana).eq("puesto", 1).maybeSingle();
+  if (!h) return Response.json({ enviados: 0 });
+  const { data: premios } = await db.from("cloaca_premios").select("user_id, rollos").eq("semana", semana);
+  const usuarios = (premios ?? []).map((p) => p.user_id as string);
+  const rollos = premios?.[0]?.rollos ?? 0;
+  return avisarA(usuarios, aviso(
+    `🏆 ${h.emoji} ${h.nombre} ganó la liga de Cloacas`, `Entra a Cloacas y cobra tus ${rollos} Rollos de Oro 🧻`,
+    `🏆 ${h.emoji} ${h.nombre} won the Sewer league`, `Open Sewers and claim your ${rollos} Golden Rolls 🧻`,
+  ), { tipo: "cloaca", semana }, "ganadores");
+}
+
 // Anuncio de un admin: a todos los teléfonos (o solo a los de un idioma), de Play y de la APK
 // directa. No se guarda por usuario: la app lee public.anuncios directo.
 async function avisarAnuncio(id: number) {
@@ -875,6 +891,7 @@ Deno.serve(async (req) => {
   if (cuerpo.tipo === "ganadores") return avisarGanadores(cuerpo.periodo, cuerpo.lista ?? []);
   if (cuerpo.tipo === "cierre") return avisarCierre(cuerpo.periodo, cuerpo.lista ?? []);
   if (cuerpo.tipo === "regalo") return avisarRegalo(String(cuerpo.id));
+  if (cuerpo.tipo === "cloaca") return avisarCloaca(String(cuerpo.semana));
   const { user_id } = cuerpo;
 
   const { data: seguidores } = await db.from("follows").select("follower").eq("followed", user_id);
