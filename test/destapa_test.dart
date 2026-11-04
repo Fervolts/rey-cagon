@@ -121,7 +121,7 @@ void main() {
     });
 
     test('compensación: tocar en la hora exacta de pantalla es perfecto, muy tarde es fallo', () {
-      final j = JuegoDestapa(semilla: 2);
+      final j = JuegoDestapa(semilla: 2, calentamiento: false);
       hasta(j, JuegoDestapa.entrada);
       expect(j.toque(desfase: JuegoDestapa.compensacion), Golpe.perfecto);
       final n = esperarNota(j);
@@ -130,6 +130,108 @@ void main() {
       final n2 = esperarNota(j);
       hasta(j, n2.t + JuegoDestapa.compensacion + JuegoDestapa.ventanaBuena + 0.01);
       expect(j.fallos, 1);
+    });
+  });
+
+  group('Destapa: calentamiento', () {
+    test('sin tocar, la primera frase no suma fallos pero se ve el fallo', () {
+      final j = JuegoDestapa(semilla: 1);
+      expect(j.calentando, isTrue);
+      final primera = j.notas.where((n) => n.calentamiento).toList();
+      expect(primera, hasLength(patronesDestapa.first.notas.length));
+      // Hasta que pasa la ventana de la última nota de la frase.
+      hasta(j, primera.last.t + JuegoDestapa.compensacion + JuegoDestapa.ventanaBuena + 0.05);
+      expect(j.fallos, 0);
+      expect(j.calentando, isFalse);
+      final fallosVistos = j.tomarEventos().where((e) => e.suceso == Suceso.fallo).length;
+      expect(fallosVistos, primera.length);
+      expect(primera.every((n) => n.estado == EstadoNota.fallada), isTrue);
+      // Después sí cuenta: la siguiente nota que pasa sube el agua.
+      final n = esperarNota(j);
+      expect(n.calentamiento, isFalse);
+      hasta(j, n.t + JuegoDestapa.compensacion + JuegoDestapa.ventanaBuena + 0.02);
+      expect(j.fallos, 1);
+    });
+
+    test('dura más sin tocar que sin calentamiento', () {
+      double sinTocar(bool calentamiento) {
+        final j = JuegoDestapa(semilla: 3, calentamiento: calentamiento);
+        hasta(j, 60);
+        expect(j.terminado, isTrue);
+        return j.tiempo;
+      }
+
+      final con = sinTocar(true), sin = sinTocar(false);
+      expect(con, greaterThan(sin + 1));
+      expect(sin, lessThan(5));
+    });
+
+    test('toque suelto o tarde en el calentamiento: corta la racha y no suma; después sí', () {
+      final j = JuegoDestapa(semilla: 4);
+      expect(j.toque(), Golpe.fallo);
+      expect(j.fallos, 0);
+      expect(j.ultimo, Golpe.fallo);
+      expect(jugarNota(j), Golpe.perfecto);
+      expect(j.racha, 1);
+      expect(jugarNota(j, error: JuegoDestapa.ventanaBuena + 0.03), Golpe.fallo);
+      expect(j.fallos, 0);
+      expect(j.racha, 0);
+      while (j.calentando) {
+        j.avanzar(1 / 60);
+      }
+      expect(j.toque(), Golpe.fallo);
+      expect(j.fallos, 1);
+    });
+
+    test('una sola vez por partida: ninguna otra frase calienta', () {
+      final j = JuegoDestapa(semilla: 8);
+      var notasCalientes = 0;
+      final vistas = <Nota>{};
+      var volvio = false;
+      var salio = false;
+      while (j.tiempo < 120 && !j.terminado) {
+        for (final n in j.notas) {
+          if (vistas.add(n) && n.calentamiento) notasCalientes++;
+        }
+        if (!j.calentando) salio = true;
+        if (salio && j.calentando) volvio = true;
+        jugarNota(j);
+      }
+      expect(notasCalientes, patronesDestapa.first.notas.length);
+      expect(volvio, isFalse);
+    });
+
+    test('no cambia los puntos máximos: la partida perfecta da lo mismo con y sin calentamiento', () {
+      for (final s in [1, 2, 3]) {
+        final con = partidaPerfecta(s);
+        final sin = JuegoDestapa(semilla: s, calentamiento: false);
+        while (!sin.terminado) {
+          jugarNota(sin);
+        }
+        expect(con.puntos, sin.puntos);
+        expect(con.puntos, lessThan(topePuntos));
+      }
+    });
+
+    testWidgets('la vista avisa que está calentando y lo quita al terminar la frase', (tester) async {
+      final j = JuegoDestapa(semilla: 1);
+      await tester.pumpWidget(MaterialApp(
+        theme: tema(Brightness.light),
+        home: Scaffold(body: VistaDestapa(alTerminar: (_, _) {}, mov: Movimiento.nada, juego: j)),
+      ));
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(find.byKey(const Key('destapa_calentando')), findsOneWidget);
+      // Sin tocar, pasa la primera frase entera: el agua no sube.
+      for (var i = 0; i < 300 && j.calentando; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(j.calentando, isFalse);
+      expect(j.fallos, 0);
+      expect(find.byKey(const Key('destapa_calentando')), findsNothing);
+      // Desmonta para que el reloj se pare.
+      await tester.pumpWidget(const SizedBox());
+      expect(tester.takeException(), isNull);
     });
   });
 
@@ -151,7 +253,7 @@ void main() {
     });
 
     test('cada 4 inodoros viene un atasco gordo; vencerlo baja el agua', () {
-      final j = JuegoDestapa(semilla: 5);
+      final j = JuegoDestapa(semilla: 5, calentamiento: false);
       // Un fallo a propósito al principio.
       j.toque();
       expect(j.fallos, 1);
@@ -220,7 +322,7 @@ void main() {
     for (final mov in Movimiento.values) {
       testWidgets('se juega con movimiento $mov: toca, acierta y termina al desbordarse', (tester) async {
         int? fin;
-        final j = JuegoDestapa(semilla: 1);
+        final j = JuegoDestapa(semilla: 1, calentamiento: false);
         await tester.pumpWidget(MaterialApp(
           theme: tema(Brightness.dark),
           home: Scaffold(body: VistaDestapa(alTerminar: (p, _) => fin = p, mov: mov, juego: j)),

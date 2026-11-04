@@ -238,6 +238,16 @@ class _VistaDestapaState extends State<VistaDestapa> with SingleTickerProviderSt
               _j.esJefe ? tr('ATASCO GORDO', 'MEGA CLOG') : tr('INODORO ${_j.inodoros + 1}', 'TOILET ${_j.inodoros + 1}'),
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1, color: _j.esJefe ? p.acento : p.textoSuave),
             ),
+            // Primera frase: los fallos no suben el agua.
+            if (_j.calentando)
+              Container(
+                key: const Key('destapa_calentando'),
+                margin: const EdgeInsets.only(left: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(color: p.acento, border: Border.all(color: p.acento), borderRadius: BorderRadius.circular(radio)),
+                child: Text(tr('CALENTANDO…', 'WARM-UP…'),
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1, color: p.acentoTexto)),
+              ),
             const Spacer(),
             if (_j.racha >= 3)
               Text(

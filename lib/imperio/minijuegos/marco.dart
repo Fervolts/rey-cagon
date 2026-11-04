@@ -70,7 +70,9 @@ class DatosJuego {
 }
 
 const juegosAbiertosDatos = <String, DatosJuego>{
-  'tuberia': DatosJuego('tuberia', '🚰', 'Tubería Express', 'Pipe Express', 'Toca para cambiar de lado. Esquiva los codos.', 'Tap to switch sides. Dodge the bends.'),
+  'tuberia': DatosJuego('tuberia', '🚰', 'Tubería Express', 'Pipe Express',
+      'Toca para cambiar de carril y esquiva los codos. Agarra rollos seguidos para subir el multiplicador.',
+      'Tap to switch lanes and dodge the bends. Grab rolls in a row to raise the multiplier.'),
   'destapa': DatosJuego('destapa', '🪠', 'Destapa', 'Unclog', 'Toca cuando el cuadro se cierra. Si es doble, mantén hasta el fino. Vencer un atasco gordo te devuelve una vida.', 'Tap when the square closes. If it is double, hold until the thin one. Beating a big clog gives you a life back.'),
   'memoria': DatosJuego('memoria', '🃏', 'Memoria del rollo', 'Roll Memory', 'Memoriza al empezar. Parejas seguidas suben el multiplicador (hasta x4). El papel se acaba: rápido da bonus.', 'Memorize at the start. Pairs in a row raise the multiplier (up to x4). The paper runs out: fast gives a bonus.'),
 };

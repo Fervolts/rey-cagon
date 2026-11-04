@@ -1,12 +1,15 @@
 // Tubería Express: el mojón baja por el desagüe; un toque cambia de carril. Lógica en tuberia_logica.dart, dibujo en
 // tuberia_pintor.dart y efectos en tuberia_efectos.dart. Nada se reconstruye por cuadro salvo el mojón (un Emoji con
 // Transform): el tubo lo repinta el Ticker y el marcador solo cambia cuando cambian los puntos, la racha o un letrero.
-// Si la app se va al fondo, la partida se pausa (y el cronómetro también).
+// Si la app se va al fondo, la partida se pausa (y el cronómetro también). El PNG del rollo se carga una sola vez
+// para toda la app y se le pasa al pintor; mientras tanto el pintor dibuja su rollo de respaldo.
 
 import 'dart:async';
 import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../animaciones.dart';
 import '../../emoji.dart';
@@ -29,6 +32,18 @@ class VistaTuberia extends StatefulWidget {
   @override
   State<VistaTuberia> createState() => _VistaTuberiaState();
 }
+
+// El PNG del 🧻, decodificado una vez. Si falla se olvida para reintentar en la próxima partida.
+Future<ui.Image>? _cargaRollo;
+Future<ui.Image> _imagenRollo() => _cargaRollo ??= () async {
+      try {
+        final datos = await rootBundle.load('assets/emoji/roll_of_paper.png');
+        return await decodeImageFromList(datos.buffer.asUint8List());
+      } catch (_) {
+        _cargaRollo = null;
+        rethrow;
+      }
+    }();
 
 List<String> _nombresZona() => [
       tr('Desagüe', 'Drain'),
@@ -61,6 +76,7 @@ class _VistaTuberiaState extends State<VistaTuberia> with SingleTickerProviderSt
   // Geometría del último layout (para poner chispas donde está el mojón).
   double _x0 = 0, _tubo = 200, _yJ = 100, _pxPorM = 20;
   Paleta? _p;
+  ui.Image? _rollo;
 
   Offset get _mojon => Offset(_x0 + _tubo * (0.25 + 0.5 * _j.posicion), _yJ);
 
@@ -71,6 +87,9 @@ class _VistaTuberiaState extends State<VistaTuberia> with SingleTickerProviderSt
     _reloj = RelojJuego(this, _paso);
     _sw.start();
     _reloj.arrancar();
+    _imagenRollo().then((img) {
+      if (mounted) setState(() => _rollo = img);
+    }, onError: (_) {});
   }
 
   @override
@@ -246,7 +265,7 @@ class _VistaTuberiaState extends State<VistaTuberia> with SingleTickerProviderSt
             child: RepaintBoundary(
               child: CustomPaint(
                 painter: PintorTuberia(
-                    j: _j, ef: _ef, p: p, x0: x0, tubo: tubo, yJugador: yJugador, pxPorM: pxPorM, mov: widget.mov, repintar: _tic),
+                    j: _j, ef: _ef, p: p, x0: x0, tubo: tubo, yJugador: yJugador, pxPorM: pxPorM, mov: widget.mov, rollo: _rollo, repintar: _tic),
               ),
             ),
           ),

@@ -140,7 +140,7 @@ void main() {
       expect(j.puntos, JuegoDestapa.puntosPerfecto);
     });
     test('toque suelto es fallo; 3 fallos terminan', () {
-      final j = JuegoDestapa();
+      final j = JuegoDestapa(calentamiento: false);
       for (var i = 0; i < JuegoDestapa.fallosMaximos; i++) {
         expect(j.terminado, isFalse);
         expect(j.toque(), Golpe.fallo);

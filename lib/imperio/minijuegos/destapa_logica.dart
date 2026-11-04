@@ -5,6 +5,8 @@
 // inodoros viene un atasco gordo: pide más, trae los patrones pesados y al vencerlo baja el agua (devuelve un fallo).
 // El tiempo se acelera por inodoro. El turno se acaba solo a los [tiempoMaximo] s: ni una partida perfecta pasa del
 // tope del servidor (8000 puntos, 14 puntos por segundo, 20 min). El reloj lo mueve [avanzar].
+// Calentamiento: la primera frase de la partida (una sola vez) no suma fallos. Se ve el fallo y corta la racha, pero el
+// agua no sube; los aciertos valen lo mismo, así que el máximo posible no cambia.
 
 import 'dart:math';
 
@@ -14,9 +16,12 @@ enum EstadoNota { pendiente, manteniendo, hecha, fallada }
 
 /// Una nota: un toque en [t], o mantener de [t] a [fin].
 class Nota {
-  Nota(this.t, {this.fin});
+  Nota(this.t, {this.fin, this.calentamiento = false});
   final double t;
   final double? fin;
+
+  /// Es de la frase de calentamiento: fallarla no suma.
+  final bool calentamiento;
   EstadoNota estado = EstadoNota.pendiente;
   Golpe? golpe;
   bool get mantener => fin != null;
@@ -56,7 +61,10 @@ class EventoDestapa {
 }
 
 class JuegoDestapa {
-  JuegoDestapa({int? semilla}) : _azar = Random(semilla) {
+  /// [calentamiento] en false arranca sin calentamiento (para las pruebas de los fallos).
+  JuegoDestapa({int? semilla, bool calentamiento = true})
+      : _azar = Random(semilla),
+        _conCalentamiento = calentamiento {
     _generar();
   }
 
@@ -90,6 +98,10 @@ class JuegoDestapa {
   static const int cadaJefe = 4;
 
   final Random _azar;
+  final bool _conCalentamiento;
+
+  /// Hora de juicio hasta la que dura el calentamiento (última nota de la primera frase + ventana buena).
+  double _finCalentamiento = -1;
   final _notas = <Nota>[];
   final _eventos = <EventoDestapa>[];
   final _vistos = <String>{};
@@ -115,6 +127,9 @@ class JuegoDestapa {
   int get puntos => _puntos;
   int get fallos => _fallos;
   bool get terminado => _fallos >= fallosMaximos || _tiempo >= tiempoMaximo;
+
+  /// Sigue la frase de calentamiento: los fallos de ahora no suben el agua.
+  bool get calentando => !terminado && _tiempo - compensacion <= _finCalentamiento;
 
   /// Acabó por tiempo sin desbordarse.
   bool get turnoCompleto => _finTurno && _fallos < fallosMaximos;
@@ -179,7 +194,7 @@ class JuegoDestapa {
       if (terminado || n.t > tj) break;
       if (n.estado == EstadoNota.pendiente && tj - n.t > ventanaBuena) {
         n.estado = EstadoNota.fallada;
-        _fallar();
+        _fallar(gratis: n.calentamiento);
       }
     }
     _notas.removeWhere((n) => (n.estado == EstadoNota.hecha || n.estado == EstadoNota.fallada) && (n.fin ?? n.t) < _tiempo - 0.6);
@@ -204,7 +219,7 @@ class JuegoDestapa {
     }
     // Toque suelto entre notas, o de más: fallo.
     if (n == null) {
-      _fallar();
+      _fallar(gratis: tj <= _finCalentamiento);
       return Golpe.fallo;
     }
     final g = (n.t - tj).abs() <= ventanaPerfecta ? Golpe.perfecto : Golpe.bueno;
@@ -229,7 +244,7 @@ class JuegoDestapa {
     } else {
       h.estado = EstadoNota.fallada;
       _mantenida = null;
-      _fallar();
+      _fallar(gratis: h.calentamiento);
     }
   }
 
@@ -279,9 +294,10 @@ class JuegoDestapa {
     if (esJefe) _evento(const EventoDestapa(Suceso.jefe));
   }
 
-  void _fallar() {
+  /// [gratis]: fallo del calentamiento; se ve y corta la racha, pero no suma.
+  void _fallar({bool gratis = false}) {
     if (_fallos >= fallosMaximos) return;
-    _fallos++;
+    if (!gratis) _fallos++;
     _racha = 0;
     _ultimo = Golpe.fallo;
     _evento(EventoDestapa(Suceso.fallo, valor: _fallos));
@@ -305,8 +321,11 @@ class JuegoDestapa {
         continue;
       }
       final p = _elegir();
+      final calienta = _frases == 0 && _conCalentamiento;
       for (final (o, d) in p.notas) {
-        _notas.add(Nota(_proxima + o * b, fin: d > 0 ? _proxima + (o + d) * b : null));
+        final n = Nota(_proxima + o * b, fin: d > 0 ? _proxima + (o + d) * b : null, calentamiento: calienta);
+        _notas.add(n);
+        if (calienta) _finCalentamiento = max(_finCalentamiento, (n.fin ?? n.t) + ventanaBuena);
       }
       _proxima += 4 * b;
       _frases++;
