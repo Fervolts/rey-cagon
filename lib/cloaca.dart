@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import 'accesorios.dart' show Avatar, columnasAvatar;
 import 'avisos.dart' show ir;
 import 'chat.dart' show Sala;
+import 'chat_rapido.dart';
 import 'emoji.dart';
 import 'idioma.dart';
 import 'imperio/ranking_amigos.dart' show faltaFuncion;
@@ -354,10 +355,12 @@ NubeCloacas nubeCloacas = const NubeCloacas();
 /// [vuelta] sube al tirar para refrescar.
 /// Una vista de la zona: mi Cloaca (o cómo entrar a una) con su explicación, o la liga de la semana.
 class RankingCloacasVista extends StatefulWidget {
-  const RankingCloacasVista({super.key, this.vuelta = 0, this.liga = false});
+  const RankingCloacasVista({super.key, this.vuelta = 0, this.liga = false, this.alVerChat});
 
   final int vuelta;
   final bool liga;
+  // Abre la vista CHAT de la zona; sin esto el chat rápido no muestra VER TODO.
+  final VoidCallback? alVerChat;
 
   @override
   State<RankingCloacasVista> createState() => _RankingCloacasVistaState();
@@ -625,6 +628,8 @@ class _RankingCloacasVistaState extends State<RankingCloacasVista> {
           const SizedBox(height: 12),
           _premioPendiente(mia),
         ],
+        const SizedBox(height: 12),
+        ChatRapido(key: ValueKey(c.sala), sala: c.sala, alVerTodo: widget.alVerChat),
         const SizedBox(height: 20),
         Rotulo(tr('Código para invitar', 'Invite code')),
         const SizedBox(height: 8),
@@ -1155,7 +1160,7 @@ class _PantallaZonaCloacaState extends State<PantallaZonaCloaca> {
         onRefresh: () async => setState(() => _vuelta++),
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-          children: [RankingCloacasVista(vuelta: _vuelta, liga: liga)],
+          children: [RankingCloacasVista(vuelta: _vuelta, liga: liga, alVerChat: () => _cambiar(vistaChat))],
         ),
       );
 
