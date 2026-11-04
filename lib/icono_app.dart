@@ -96,9 +96,8 @@ Future<DatosIcono> cargarDatosIcono() async {
     cagadas = (p?['cagadas'] as num?)?.toInt() ?? 0;
   } catch (_) {}
   try {
-    final f = await conReintento(() => db.from('imperio').select('estado').eq('user_id', uid).maybeSingle());
-    final e = f?['estado'];
-    if (e is Map) abdicaciones = (e['abdicaciones'] as num?)?.toInt() ?? 0;
+    final f = await conReintento(() => db.from('imperio').select('abdicaciones').eq('user_id', uid).maybeSingle());
+    abdicaciones = (f?['abdicaciones'] as num?)?.toInt() ?? 0;
   } catch (_) {}
   try {
     racha = mejorRachaDias((await cagadasPropias(uid)).map((c) => c.cuando));
