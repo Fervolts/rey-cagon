@@ -295,6 +295,56 @@ CLAVE = [0, 1.5, 3, 5, 6.5]
 GUITARRA = [0, 1.5, 3, 4, 5, 6.5]
 
 
+def conga(f, abierto=True, sr=s.SRM):
+    t = s.tiempo(0.35, sr)
+    cuerpo = s.seno_f(f * (1 + 0.35 * np.exp(-t / 0.008)), sr) * np.exp(-t / (0.14 if abierto else 0.035))
+    palmada = s.filtro_fft(s.ruido(len(t)), sr, 900, 6000) * np.exp(-t / (0.004 if abierto else 0.012))
+    return (cuerpo + (0.15 if abierto else 0.5) * s.norm(palmada)) * (1 - np.exp(-t / 0.0005))
+
+
+def surdo(f=58, apagado=False, sr=s.SRM):
+    t = s.tiempo(0.9, sr)
+    y = s.seno_f(f * (1 + 0.25 * np.exp(-t / 0.02)), sr) * np.exp(-t / (0.08 if apagado else 0.4))
+    golpe = s.filtro_fft(s.ruido(len(t)), sr, 150, 1500) * np.exp(-t / 0.01)
+    return np.tanh(1.3 * (y + 0.15 * s.norm(golpe))) * (1 - np.exp(-t / 0.002))
+
+
+def agogo(f, sr=s.SRM):
+    t = s.tiempo(0.5, sr)
+    y = np.sin(s.TAU * f * t + 0.8 * np.exp(-t / 0.01) * np.sin(s.TAU * f * 1.4 * t)) * np.exp(-t / 0.18)
+    y += 0.35 * np.sin(s.TAU * f * 2.73 * t) * np.exp(-t / 0.06)
+    return y * (1 - np.exp(-t / 0.0004))
+
+
+def triangulo(abierto=False, sr=s.SRM):
+    t = s.tiempo(0.9 if abierto else 0.08, sr)
+    y = sum(a * np.sin(s.TAU * f * t) for f, a in ((3150, 1), (4420, 0.6), (6230, 0.4), (8100, 0.25)))
+    return y * np.exp(-t / (0.35 if abierto else 0.025)) * (1 - np.exp(-t / 0.0003))
+
+
+def pandeiro(sr=s.SRM, fuerte=False):
+    t = s.tiempo(0.12, sr)
+    sonajas = s.filtro_fft(s.ruido(len(t)), sr, 5500, 12000)
+    env = np.exp(-t / 0.035) * (1 + 0.6 * np.exp(-((t - 0.006) / 0.002) ** 2) + 0.4 * np.exp(-((t - 0.013) / 0.002) ** 2))
+    y = s.norm(sonajas) * env
+    if fuerte:
+        y += 0.6 * np.sin(s.TAU * 170 * t) * np.exp(-t / 0.03)
+    return y * (1 - np.exp(-t / 0.0005))
+
+
+def cuica(f0=520, sube=1.7, dur=0.28, sr=s.SRM):
+    # Cuíca: el tono sube y baja como un gemido.
+    t = s.tiempo(dur, sr)
+    curva = np.sin(np.pi * np.clip(t / dur, 0, 1)) ** 0.7
+    fase = s.TAU * np.cumsum(f0 * (1 + (sube - 1) * curva)) / sr
+    y = np.sin(fase) + 0.35 * np.sin(2 * fase) + 0.1 * np.sin(3 * fase)
+    return y * curva * (1 - np.exp(-t / 0.01))
+
+
+# Notas sueltas para adornos (pentatónica de fa, suena sobre todos los acordes).
+PENTA = ['F5', 'G5', 'A5', 'C6', 'D6', 'F6', 'G6', 'A6']
+
+
 def musica_fusion_bossa():
     s.semilla('musica_fusion_bossa')
     p = s.Pista(120, 16)
@@ -334,32 +384,92 @@ def musica_fusion_bossa():
                 nombre = acorde_en(bb + 0.5)  # la anticipación ya toca el acorde que viene
                 for i, m in enumerate(VOICING_BOSSA[nombre]):
                     p.poner('guitarra', bb + i * 0.012, nylon(s.hz(s.midi(m)), 0.55 * p.spb), 0.95 - 0.1 * i, humano=0.003)
+        # Cuerdas desde la segunda mitad: el acorde una octava arriba, entra lento.
+        if f >= 2:
+            for b, nombre, largo in [x for x in linea if b0 <= x[0] < b0 + 16]:
+                p.poner('cuerdas', b, s.pad([s.midi(m) + 12 for m in VOICING_BOSSA[nombre]], largo * p.spb + 0.2), 1.0)
+
+    # Bajo: 1 y 3 con anticipación; antes de volver al principio sube caminando a fa.
     for b, nombre, largo in linea:
         r = s.midi(RAIZ[nombre])
         if largo == 4:
             sig = s.midi(RAIZ[acorde_en(b + 4)])
             pasos = [(0, r, 1.4), (1.5, r + 7, 0.45), (2, r + 7, 1.4), (3.5, sig, 0.45)]
+        elif b == 62:
+            pasos = [(0, r, 0.45), (0.5, r + 2, 0.45), (1, r + 4, 0.45), (1.5, s.midi('F2') - 1, 0.45)]
         else:
             pasos = [(0, r, 1.4), (1.5, r + 7, 0.45)]
         for bb, m, d in pasos:
             p.poner('bajo', b + bb, s.bajo_pluck(s.hz(m), d * p.spb), 1.0 if bb % 2 == 0 else 0.8, humano=0.003)
+
     for c in range(16):
-        bc = c * 4
+        bc, f = c * 4, c // 4
         for bb, g in [(0, 1.0), (1.5, 0.45), (2, 0.85), (3.5, 0.45)]:
             p.poner('bombo', bc + bb, s.kick(suave_=True), g)
         for k in range(16):
             p.poner('shaker', bc + k * 0.25, s.shaker(), [0.9, 0.35, 0.6, 0.45][k % 4], humano=0.002)
+        # Triángulo en los contratiempos, abierto en el 4y.
+        for k in range(8):
+            if k % 2:
+                p.poner('triangulo', bc + k * 0.5, triangulo(abierto=(k == 7 and c % 2 == 1)), 0.8, humano=0.002)
+        if f >= 1:
+            # Surdo: apagado en el 1, abierto en el 3 (el pulso del samba).
+            p.poner('surdo', bc, surdo(apagado=True), 0.6)
+            p.poner('surdo', bc + 2, surdo(), 1.0)
+            # Tumbao de conga: tapado en el 2, abiertos en el 4 y el 4y.
+            if c % 4 != 3:
+                for bb, fq, ab, g in [(1, 330, False, 0.8), (2.5, 250, True, 0.6), (3, 220, True, 1.0), (3.5, 220, True, 0.85)]:
+                    p.poner('conga', bc + bb, conga(fq, ab), g, humano=0.004)
+        if f >= 2:
+            # Agogô de dos campanas (do y sol): alto-bajo sincopado sobre dos compases.
+            if c % 2 == 0:
+                for bb, nota in [(0, 'C6'), (0.5, 'C6'), (1, 'G5'), (1.75, 'C6'), (2.5, 'G5'), (3, 'G5'),
+                                 (4.5, 'C6'), (5, 'G5'), (5.75, 'G5'), (6.5, 'C6'), (7, 'G5')]:
+                    p.poner('agogo', bc + bb, agogo(s.hz(s.midi(nota))), 0.85 if nota == 'C6' else 0.7, humano=0.003)
+            for k in range(16):
+                p.poner('pandeiro', bc + k * 0.25, pandeiro(fuerte=(k % 8 == 4)), [1.0, 0.35, 0.55, 0.45][k % 4], humano=0.002)
         if c >= 8:
             for k in range(8):
                 p.poner('hat', bc + k * 0.5, s.hat(), 0.5 if k % 2 else 0.3, humano=0.002)
-    for f in range(4):
-        if f % 2:
-            for k, g in enumerate([0.3, 0.45, 0.6]):
-                p.poner('caja', f * 16 + 15.25 + k * 0.25, s.snare(seco=False, oscuro=True), g)
+
+    # Remates al final de cada frase.
+    for k, (fq, g) in enumerate([(220, 0.6), (250, 0.7), (330, 0.8), (380, 0.9)]):
+        p.poner('rim', 15 + k * 0.25, s.madera(1050 + 150 * k), g)
+    for k, fq in enumerate([380, 330, 330, 250, 220, 220]):
+        p.poner('conga', 16 + 14.5 + k * 0.25, conga(fq, k % 3 != 0), 0.9)
+    for k, g in enumerate([0.3, 0.45, 0.6]):
+        p.poner('caja', 16 + 15.25 + k * 0.25, s.snare(seco=False, oscuro=True), g)
+    for k, fq in enumerate([380, 380, 330, 250, 220]):
+        p.poner('conga', 48 + 14.75 + k * 0.25, conga(fq), 0.95)
+    for k in range(4):
+        p.poner('surdo', 48 + 15 + k * 0.25, surdo(64 - 4 * k), 0.8 + 0.05 * k)
+    for k, g in enumerate([0.3, 0.45, 0.6, 0.8]):
+        p.poner('caja', 48 + 15 + k * 0.25, s.snare(seco=False, oscuro=True), g)
+
+    # Arpa (nylon brillante) que sube antes de la 2a y la 4a frase.
+    for b0, nombre in [(15, 'C7'), (47, 'C7')]:
+        notas = [s.midi(m) for m in VOICING_BOSSA[nombre]]
+        escala = sorted({n + 12 * o for n in notas for o in (0, 1, 2)})[:8]
+        for k, m in enumerate(escala):
+            p.poner('arpa', b0 + k * 0.125, s.karplus(s.hz(m), 1.2, s.SRM, 0.65, 1.0), 0.6 + 0.05 * k)
+    # Campanitas de viento que bajan al empezar la primera y la tercera frase.
+    for b0 in (0, 32):
+        for k, n in enumerate(reversed(PENTA)):
+            p.poner('campanitas', b0 + k * 0.09, s.campana(s.hz(s.midi(n)), 1.4), 0.7 - 0.05 * k, humano=0.004)
+    p.poner('campanitas', 0, s.platillo(), 0.35)
+    # Cuíca en la última frase, en los huecos del motivo.
+    for b, f0, sube in [(48 + 13.5, 520, 1.7), (48 + 7.75, 600, 1.5), (16 + 13.5, 480, 1.8)]:
+        p.poner('cuica', b, cuica(f0, sube), 1.0)
+    # Guitarra que contesta suelta en el compás 4 de la frase 3.
+    for k, m in enumerate(['D5', 'C5', 'Bb4', 'G4']):
+        p.poner('arpa', 32 + 4.75 + k * 0.25, nylon(s.hz(s.midi(m)), 0.4), 0.7)
+
     return p.mezcla({
         'lead': (-14, 0.22, 0.12), 'resp': (-19, 0.3, 0.2), 'doble': (-26, 0.3, 0.1), 'guitarra': (-20, 0.15, 0),
-        'bajo': (-18, 0.04, 0), 'bombo': (-23, 0.02, 0), 'rim': (-26, 0.12, 0), 'shaker': (-31, 0.05, 0),
-        'hat': (-36, 0.05, 0), 'caja': (-28, 0.2, 0),
+        'cuerdas': (-28, 0.4, 0), 'bajo': (-18, 0.04, 0), 'bombo': (-24, 0.02, 0), 'rim': (-31, 0.12, 0),
+        'shaker': (-32, 0.05, 0), 'hat': (-37, 0.05, 0), 'caja': (-42, 0.2, 0), 'triangulo': (-35, 0.15, 0),
+        'surdo': (-26, 0.08, 0), 'conga': (-25, 0.12, 0), 'agogo': (-29, 0.2, 0.1), 'pandeiro': (-39, 0.08, 0),
+        'arpa': (-36, 0.35, 0.2), 'campanitas': (-36, 0.4, 0.2), 'cuica': (-40, 0.25, 0.1),
     }, reverb_tau=0.28, eco_beats=1.0, eco_fb=0.2)
 
 
