@@ -154,6 +154,43 @@ void main() {
       expect(j.pesado, isTrue);
     });
 
+    test('toque corto = salto: despega, sube más de 1.2 m y no se encadena en el aire', () {
+      final j = JuegoTuberia(azar: Random(3));
+      for (var i = 0; i < 90 && !j.enSuelo; i++) {
+        j.avanzar(1 / 60);
+      }
+      expect(j.enSuelo, isTrue);
+      j.tomarSucesos();
+      j.saltar();
+      expect(j.enSuelo, isFalse);
+      expect(j.tomarSucesos().where((s) => s.tipo == TipoSuceso.salto), hasLength(1));
+      j.saltar(); // en el aire no hace doble salto
+      j.avanzar(1 / 60);
+      expect(j.tomarSucesos().where((s) => s.tipo == TipoSuceso.salto), isEmpty);
+      var alto = 0.0;
+      for (var i = 0; i < 120 && !j.enSuelo; i++) {
+        j.avanzar(1 / 60);
+        alto = max(alto, j.alturaSobreSuelo);
+      }
+      expect(alto, greaterThan(1.2));
+    });
+
+    test('saltar justo antes de aterrizar salta al tocar el lodo', () {
+      final j = JuegoTuberia(azar: Random(3));
+      for (var i = 0; i < 90 && !j.enSuelo; i++) {
+        j.avanzar(1 / 60);
+      }
+      j.saltar();
+      j.tomarSucesos();
+      var saltos = 0;
+      for (var i = 0; i < 240 && saltos == 0; i++) {
+        if (!j.enSuelo && j.alturaSobreSuelo < 0.15 && j.vy < 0) j.saltar();
+        j.avanzar(1 / 60);
+        saltos += j.tomarSucesos().where((s) => s.tipo == TipoSuceso.salto).length;
+      }
+      expect(saltos, 1);
+    });
+
     test('la velocidad nunca pasa del máximo y el terreno es continuo', () {
       final j = JuegoTuberia(azar: Random(4));
       final r = Random(4);

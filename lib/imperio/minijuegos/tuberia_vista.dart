@@ -1,5 +1,5 @@
-// Tubería Express: surf de una mano por la cloaca. Mantener el dedo = pesado (baja rápido), soltar = liviano (vuela en
-// la cresta). Lógica en tuberia_logica.dart, dibujo en tuberia_pintor.dart (un solo CustomPainter) y efectos, animación
+// Tubería Express: surf de una mano por la cloaca. Toque corto = salto. Mantener el dedo = pesado (baja rápido),
+// soltar = liviano (vuela en la cresta). Lógica en tuberia_logica.dart, dibujo en tuberia_pintor.dart (un solo CustomPainter) y efectos, animación
 // del mojón y cámara en tuberia_efectos.dart. El mundo lo repinta el Ticker; el marcador solo se reconstruye cuando
 // cambia algo que muestra. Si la app se va al fondo, la partida se pausa (y el cronómetro también). Los PNG se cargan
 // una sola vez para toda la app; mientras tanto el pintor dibuja formas de respaldo.
@@ -157,9 +157,13 @@ class _VistaTuberiaState extends State<VistaTuberia> with SingleTickerProviderSt
     }
   }
 
-  void _sube(PointerEvent _) {
+  void _sube(PointerEvent e) {
     _dedos = max(0, _dedos - 1);
-    if (_dedos == 0) _j.presionado = false;
+    if (_dedos == 0) {
+      _j.presionado = false;
+      // Toque corto = salto; mantener sigue siendo bajar pesado.
+      if (e is PointerUpEvent && _tPresion < 0.2 && !_fin && !_pausado) _j.saltar();
+    }
   }
 
   // ---------------------------------------------------------------- cuadro
@@ -252,6 +256,11 @@ class _VistaTuberiaState extends State<VistaTuberia> with SingleTickerProviderSt
 
   void _suceso(SucesoTuberia s) {
     switch (s.tipo) {
+      case TipoSuceso.salto:
+        _suena('plop', 0.5 + 0.2 * s.fuerza);
+        _suena('viento', 0.2);
+        _anim.golpe(-2.2);
+        _ef.salpicar(s.x, s.y, 8, color: _barro, fuerza: 3, forma: FormaParticula.gota);
       case TipoSuceso.despegue:
         _ultimoViento = _ef.fase;
         _suena('viento', 0.18 + 0.25 * s.fuerza);

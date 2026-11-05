@@ -18,7 +18,7 @@ class _Minijuego {
 }
 
 const _juegos = [
-  _Minijuego('tuberia', '🚰', 'Tubería Express', 'Pipe Express', 'Surfea el lodo con un dedo: pesado para bajar, liviano para volar.', 'Surf the mud with one finger: heavy to go down, light to fly.'),
+  _Minijuego('tuberia', '🚰', 'Tubería Express', 'Pipe Express', 'Surfea el lodo con un dedo: toca para saltar, mantén para bajar.', 'Surf the mud with one finger: tap to jump, hold to go down.'),
   _Minijuego('blanco', '🎯', 'Al blanco', 'Bullseye', 'Lanza el mojón al inodoro con ángulo y fuerza.', 'Throw the poop into the toilet with angle and power.'),
   _Minijuego('corre', '🏃', 'Corre al baño', 'Run to the Bathroom', 'Llega antes de que se salga. Esquiva colas.', "Get there before it's too late. Dodge the lines."),
   _Minijuego('destapa', '🪠', 'Destapa', 'Unclog', 'Medio tiempo en el estadio: destapa antes de que se desborden.', 'Stadium halftime: unclog before they overflow.'),

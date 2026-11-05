@@ -5,6 +5,7 @@
 // soltar = liviano. Bajar pesado acelera; soltar en el fondo del valle deja subir liviano y la cresta lo lanza al aire
 // (despega cuando la curva de la loma se le escapa más rápido que la gravedad). Aterrizar alineado con una bajada es
 // limpio (+velocidad, sube el combo); aterrizar contra la loma es un plaf (pierde velocidad, combo a cero).
+// Un toque corto = salto (impulso hacia afuera de la ladera); si se toca justo antes de aterrizar, salta al tocar el lodo.
 // Detrás viene el Atasco, una pared de lodo que acelera por tramos. Si te alcanza, fin.
 //
 // Puntos = metros + bonus. El servidor exige puntos <= (segundos + 1) * 16: la velocidad máxima es 12.8 m/s y además
@@ -29,6 +30,7 @@ enum TipoSuceso {
   atascoAcelera,
   record,
   atrapado,
+  salto,
 }
 
 /// Algo que pasó en el último paso. [x], [y] en metros del mundo; [fuerza] de 0 a ~1.
@@ -104,6 +106,9 @@ class JuegoTuberia {
   static const duracionFiebre = 5.0;
   static const cadaDorado = 25.0;
   static const adelante = 120.0;
+  static const impulsoSalto = 5.4; // m/s hacia afuera de la ladera
+  static const _recargaSalto = 0.3;
+  static const _bufferSalto = 0.15;
   static const tiempoMaximo = 1150.0; // s; el servidor acepta hasta 1200
 
   // Radios de choque.
@@ -137,6 +142,7 @@ class JuegoTuberia {
   bool _recordAvisado = false;
   bool _terminado = false;
   bool _pesado = false;
+  double _ultimoSalto = -9, _saltoPedido = -9;
   int _limpios = 0, _plafs = 0, _rollosAgarrados = 0, _aplastadas = 0;
 
   // ---------------------------------------------------------------- lo que se lee desde fuera
@@ -199,6 +205,26 @@ class JuegoTuberia {
     if (_terminado) return;
     _terminado = true;
     _sucesos.add(SucesoTuberia(TipoSuceso.atrapado, x: _x, y: _y, valor: 1));
+  }
+
+  /// Toque corto. En el suelo salta ya; en el aire queda pedido un instante y salta al aterrizar.
+  void saltar() {
+    if (_terminado) return;
+    if (!_suelo) {
+      _saltoPedido = _t;
+      return;
+    }
+    if (_t - _ultimoSalto < _recargaSalto) return;
+    _ultimoSalto = _t;
+    _saltoPedido = -9;
+    final d1 = pendiente(_x);
+    final c = 1 / sqrt(1 + d1 * d1), sn = d1 * c;
+    _suelo = false;
+    _vx = _s * c - impulsoSalto * sn;
+    _vy = _s * sn + impulsoSalto * c;
+    _aire = 0;
+    _alturaMax = 0;
+    _sucesos.add(SucesoTuberia(TipoSuceso.salto, x: _x, y: _y, fuerza: (_s / velocidadMaxima).clamp(0.0, 1.0)));
   }
 
   void apretar() => _pesado = true;
@@ -405,6 +431,7 @@ class JuegoTuberia {
         _aterrizar();
       }
     }
+    if (_suelo && _t - _saltoPedido < _bufferSalto) saltar();
     if (_x > antes) _tocarCosas();
     _reglas(h);
   }

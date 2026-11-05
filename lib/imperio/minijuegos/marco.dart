@@ -72,8 +72,8 @@ class DatosJuego {
 
 const juegosAbiertosDatos = <String, DatosJuego>{
   'tuberia': DatosJuego('tuberia', '🚰', 'Tubería Express', 'Pipe Express',
-      'Mantén para pujar y bajar rápido, suelta para volar. Que no te alcance el Atasco.',
-      "Hold to push and go down fast, release to fly. Don't let the Clog catch you."),
+      'Toca para saltar. Mantén para pujar y bajar rápido, suelta para volar. Que no te alcance el Atasco.',
+      "Tap to jump. Hold to push and go down fast, release to fly. Don't let the Clog catch you."),
   'destapa': DatosJuego('destapa', '🪠', 'Destapa', 'Unclog', 'Toca los inodoros tapados hasta destaparlos. Patito: desliza arriba. Celular: mantén. Que no se desborden.', "Tap clogged toilets until they unclog. Duck: swipe up. Phone: hold. Don't let them overflow."),
   'memoria': DatosJuego('memoria', '👑', 'Fusión real', 'Royal Merge', 'Arrastra para apuntar y suelta. Junta dos iguales para crecer hasta el Rey; no pases la línea roja.', "Drag to aim and release. Merge two of a kind up to the King; don't cross the red line."),
 };

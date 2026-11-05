@@ -179,7 +179,7 @@ void main() {
     expect(a.desbordes, b.desbordes);
   });
 
-  test('inodoros: 2 al inicio, 3 a los 20 s, 4 a los 50 s; dorado a los 30 s; prórroga a los 90 s', () {
+  test('inodoros: 2 al inicio, 3 a los 15 s, 4 a los 38 s; dorado a los 30 s; prórroga a los 90 s', () {
     final j = JuegoDestapa(semilla: 5);
     expect(j.inodoros.length, 2);
     final bot = bueno(5);
@@ -190,11 +190,11 @@ void main() {
       for (final e in j.tomarEventos()) {
         ev.add((j.tiempo, e));
       }
-      if (j.tiempo > 19.9 && j.tiempo < 20.1) expect(j.inodoros.length, anyOf(2, 3));
-      if (j.tiempo > 20.1 && j.tiempo < 49.9) expect(j.inodoros.length, 3);
-      if (j.tiempo > 50.1) expect(j.inodoros.length, 4);
+      if (j.tiempo > 14.9 && j.tiempo < 15.1) expect(j.inodoros.length, anyOf(2, 3));
+      if (j.tiempo > 15.1 && j.tiempo < 37.9) expect(j.inodoros.length, 3);
+      if (j.tiempo > 38.1) expect(j.inodoros.length, 4);
     }
-    expect(ev.where((e) => e.$2.suceso == Suceso.nuevoInodoro).map((e) => e.$1.round()), [20, 50]);
+    expect(ev.where((e) => e.$2.suceso == Suceso.nuevoInodoro).map((e) => e.$1.round()), [15, 38]);
     expect(ev.any((e) => e.$2.suceso == Suceso.atasco && e.$2.dorado && e.$1 >= 30 && e.$1 < 40), isTrue);
     expect(ev.where((e) => e.$2.suceso == Suceso.prorroga).map((e) => e.$1.round()), [90]);
     expect(j.prorroga, isTrue);

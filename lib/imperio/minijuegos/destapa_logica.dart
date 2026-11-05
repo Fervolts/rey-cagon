@@ -172,8 +172,8 @@ class JuegoDestapa {
   static const toqueLoco = 0.18;
 
   /// Cuándo se suma cada inodoro y cuándo aparece cada atasco nuevo (la primera vez sale seguro).
-  static const tercerInodoro = 20.0, cuartoInodoro = 50.0;
-  static const desdeGordo = 14.0, desdePatito = 28.0, desdeCelular = 40.0, desdeCucaracha = 60.0;
+  static const tercerInodoro = 15.0, cuartoInodoro = 38.0;
+  static const desdeGordo = 10.0, desdePatito = 20.0, desdeCelular = 30.0, desdeCucaracha = 45.0;
   static const cadaDorado = 30.0;
 
   /// Puntos base de cada destape (el dorado vale [puntosDorado] sea lo que sea).
@@ -230,17 +230,14 @@ class JuegoDestapa {
   void _evento(Suceso s, {int inodoro = -1, int valor = 0, TipoAtasco? tipo, bool dorado = false}) =>
       _eventos.add(Evento(s, inodoro: inodoro, valor: valor, tipo: tipo, dorado: dorado));
 
-  // Segundos que tarda el agua en ir del inicio al borde: 6.8 → 3.0 en el medio tiempo; en la prórroga baja hasta 1.4.
-  double _llenado() {
-    if (tiempo < medioTiempo) return 6.8 - 3.8 * (tiempo / medioTiempo);
-    return m.max(1.4, 3.0 - (tiempo - medioTiempo) * 0.06);
-  }
+  // Ritmo que se aprieta solo, en curva: 1 al empezar, ~0.74 a los 30 s, ~0.55 a los 60 s, ~0.4 al medio tiempo.
+  double _ritmo() => m.pow(0.99, tiempo).toDouble();
 
-  // Cuánto tarda un inodoro limpio en volver a taparse.
-  double _espera() {
-    final f = tiempo < medioTiempo ? 1.0 - 0.35 * (tiempo / medioTiempo) : m.max(0.2, 0.6 - (tiempo - medioTiempo) * 0.015);
-    return (5.0 + _r.nextDouble() * 5.5) * f;
-  }
+  // Segundos que tarda el agua en ir del inicio al borde: 6.4 al empezar, ~2.6 al medio tiempo, ~1.9 a los 2 min, tope 1.2.
+  double _llenado() => m.max(1.2, 6.4 * _ritmo());
+
+  // Cuánto tarda un inodoro limpio en volver a taparse: 1.5 a 4 s al empezar, ~1 s en la prórroga.
+  double _espera() => (1.8 + _r.nextDouble() * 2.7) * m.max(0.25, _ritmo());
 
   List<TipoAtasco> _disponibles() => [
         TipoAtasco.normal,
