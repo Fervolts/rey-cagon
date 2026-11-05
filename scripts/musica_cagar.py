@@ -297,14 +297,17 @@ GUITARRA = [0, 1.5, 3, 4, 5, 6.5]
 
 def conga(f, abierto=True, sr=s.SRM):
     t = s.tiempo(0.35, sr)
-    cuerpo = s.seno_f(f * (1 + 0.35 * np.exp(-t / 0.008)), sr) * np.exp(-t / (0.14 if abierto else 0.035))
+    # Afinada a una nota: la caída de tono es mínima y no hay modos inarmónicos.
+    tono = f * (1 + 0.04 * np.exp(-t / 0.006))
+    cuerpo = (s.seno_f(tono, sr) + 0.12 * s.seno_f(2 * tono, sr)) * np.exp(-t / (0.16 if abierto else 0.035))
     palmada = s.filtro_fft(s.ruido(len(t)), sr, 900, 6000) * np.exp(-t / (0.004 if abierto else 0.012))
     return (cuerpo + (0.15 if abierto else 0.5) * s.norm(palmada)) * (1 - np.exp(-t / 0.0005))
 
 
-def surdo(f=58, apagado=False, sr=s.SRM):
-    t = s.tiempo(0.9, sr)
-    y = s.seno_f(f * (1 + 0.25 * np.exp(-t / 0.02)), sr) * np.exp(-t / (0.08 if apagado else 0.4))
+def surdo(f=65.41, apagado=False, sr=s.SRM):
+    # Afinado en do (la quinta de fa): cae poco de tono y se apaga antes de chocar con el bajo.
+    t = s.tiempo(0.6, sr)
+    y = s.seno_f(f * (1 + 0.05 * np.exp(-t / 0.015)), sr) * np.exp(-t / (0.07 if apagado else 0.22))
     golpe = s.filtro_fft(s.ruido(len(t)), sr, 150, 1500) * np.exp(-t / 0.01)
     return np.tanh(1.3 * (y + 0.15 * s.norm(golpe))) * (1 - np.exp(-t / 0.002))
 
@@ -322,16 +325,6 @@ def triangulo(abierto=False, sr=s.SRM):
     return y * np.exp(-t / (0.35 if abierto else 0.025)) * (1 - np.exp(-t / 0.0003))
 
 
-def pandeiro(sr=s.SRM, fuerte=False):
-    t = s.tiempo(0.12, sr)
-    sonajas = s.filtro_fft(s.ruido(len(t)), sr, 5500, 12000)
-    env = np.exp(-t / 0.035) * (1 + 0.6 * np.exp(-((t - 0.006) / 0.002) ** 2) + 0.4 * np.exp(-((t - 0.013) / 0.002) ** 2))
-    y = s.norm(sonajas) * env
-    if fuerte:
-        y += 0.6 * np.sin(s.TAU * 170 * t) * np.exp(-t / 0.03)
-    return y * (1 - np.exp(-t / 0.0005))
-
-
 def cuica(f0=520, sube=1.7, dur=0.28, sr=s.SRM):
     # Cuíca: el tono sube y baja como un gemido.
     t = s.tiempo(dur, sr)
@@ -339,6 +332,22 @@ def cuica(f0=520, sube=1.7, dur=0.28, sr=s.SRM):
     fase = s.TAU * np.cumsum(f0 * (1 + (sube - 1) * curva)) / sr
     y = np.sin(fase) + 0.35 * np.sin(2 * fase) + 0.1 * np.sin(3 * fase)
     return y * curva * (1 - np.exp(-t / 0.01))
+
+
+def pad_calido(ms, dur, sr=s.SRM):
+    # Colchón redondo: senos con un poco de tercer armónico, coro lento, entra y sale suave.
+    cola = 0.35
+    n = s.muestras(dur + cola, sr)
+    t = np.arange(n) / sr
+    y = np.zeros(n)
+    for m in ms:
+        f = s.hz(m)
+        for c in (-4, 4):
+            fase = s.TAU * f * 2 ** (c / 1200) * t + 0.002 * f * np.sin(s.TAU * 0.4 * t + c)
+            y += np.sin(fase) + 0.12 * np.sin(3 * fase)
+    sube = np.clip(t / 0.35, 0, 1) ** 2
+    baja = np.clip((dur + cola - t) / cola, 0, 1)
+    return y * sube * baja / len(ms)
 
 
 # Notas sueltas para adornos (pentatónica de fa, suena sobre todos los acordes).
@@ -384,10 +393,12 @@ def musica_fusion_bossa():
                 nombre = acorde_en(bb + 0.5)  # la anticipación ya toca el acorde que viene
                 for i, m in enumerate(VOICING_BOSSA[nombre]):
                     p.poner('guitarra', bb + i * 0.012, nylon(s.hz(s.midi(m)), 0.55 * p.spb), 0.95 - 0.1 * i, humano=0.003)
-        # Cuerdas desde la segunda mitad: el acorde una octava arriba, entra lento.
-        if f >= 2:
-            for b, nombre, largo in [x for x in linea if b0 <= x[0] < b0 + 16]:
-                p.poner('cuerdas', b, s.pad([s.midi(m) + 12 for m in VOICING_BOSSA[nombre]], largo * p.spb + 0.2), 1.0)
+        # Pad de fondo en todo el loop; en la segunda mitad se le suman cuerdas una octava arriba.
+        for b, nombre, largo in [x for x in linea if b0 <= x[0] < b0 + 16]:
+            ms = [s.midi(m) for m in VOICING_BOSSA[nombre]]
+            p.poner('pad', b, pad_calido(ms, largo * p.spb), 1.0)
+            if f >= 2:
+                p.poner('cuerdas', b, s.pad([m + 12 for m in ms], largo * p.spb + 0.2), 1.0)
 
     # Bajo: 1 y 3 con anticipación; antes de volver al principio sube caminando a fa.
     for b, nombre, largo in linea:
@@ -418,16 +429,14 @@ def musica_fusion_bossa():
             p.poner('surdo', bc + 2, surdo(), 1.0)
             # Tumbao de conga: tapado en el 2, abiertos en el 4 y el 4y.
             if c % 4 != 3:
-                for bb, fq, ab, g in [(1, 330, False, 0.8), (2.5, 250, True, 0.6), (3, 220, True, 1.0), (3.5, 220, True, 0.85)]:
-                    p.poner('conga', bc + bb, conga(fq, ab), g, humano=0.004)
+                for bb, nota, ab, g in [(1, 'C4', False, 0.8), (2.5, 'C4', True, 0.6), (3, 'G3', True, 1.0), (3.5, 'G3', True, 0.85)]:
+                    p.poner('conga', bc + bb, conga(s.hz(s.midi(nota)), ab), g, humano=0.004)
         if f >= 2:
             # Agogô de dos campanas (do y sol): alto-bajo sincopado sobre dos compases.
             if c % 2 == 0:
                 for bb, nota in [(0, 'C6'), (0.5, 'C6'), (1, 'G5'), (1.75, 'C6'), (2.5, 'G5'), (3, 'G5'),
                                  (4.5, 'C6'), (5, 'G5'), (5.75, 'G5'), (6.5, 'C6'), (7, 'G5')]:
                     p.poner('agogo', bc + bb, agogo(s.hz(s.midi(nota))), 0.85 if nota == 'C6' else 0.7, humano=0.003)
-            for k in range(16):
-                p.poner('pandeiro', bc + k * 0.25, pandeiro(fuerte=(k % 8 == 4)), [1.0, 0.35, 0.55, 0.45][k % 4], humano=0.002)
         if c >= 8:
             for k in range(8):
                 p.poner('hat', bc + k * 0.5, s.hat(), 0.5 if k % 2 else 0.3, humano=0.002)
@@ -435,14 +444,14 @@ def musica_fusion_bossa():
     # Remates al final de cada frase.
     for k, (fq, g) in enumerate([(220, 0.6), (250, 0.7), (330, 0.8), (380, 0.9)]):
         p.poner('rim', 15 + k * 0.25, s.madera(1050 + 150 * k), g)
-    for k, fq in enumerate([380, 330, 330, 250, 220, 220]):
-        p.poner('conga', 16 + 14.5 + k * 0.25, conga(fq, k % 3 != 0), 0.9)
+    for k, nota in enumerate(['D4', 'C4', 'C4', 'A3', 'G3', 'G3']):
+        p.poner('conga', 16 + 14.5 + k * 0.25, conga(s.hz(s.midi(nota)), k % 3 != 0), 0.9)
     for k, g in enumerate([0.3, 0.45, 0.6]):
         p.poner('caja', 16 + 15.25 + k * 0.25, s.snare(seco=False, oscuro=True), g)
-    for k, fq in enumerate([380, 380, 330, 250, 220]):
-        p.poner('conga', 48 + 14.75 + k * 0.25, conga(fq), 0.95)
-    for k in range(4):
-        p.poner('surdo', 48 + 15 + k * 0.25, surdo(64 - 4 * k), 0.8 + 0.05 * k)
+    for k, nota in enumerate(['D4', 'D4', 'C4', 'A3', 'G3']):
+        p.poner('conga', 48 + 14.75 + k * 0.25, conga(s.hz(s.midi(nota))), 0.95)
+    for k, nota in enumerate(['G2', 'F2', 'D2', 'C2']):
+        p.poner('surdo', 48 + 15 + k * 0.25, surdo(s.hz(s.midi(nota))), 0.8 + 0.05 * k)
     for k, g in enumerate([0.3, 0.45, 0.6, 0.8]):
         p.poner('caja', 48 + 15 + k * 0.25, s.snare(seco=False, oscuro=True), g)
 
@@ -466,9 +475,9 @@ def musica_fusion_bossa():
 
     return p.mezcla({
         'lead': (-14, 0.22, 0.12), 'resp': (-19, 0.3, 0.2), 'doble': (-26, 0.3, 0.1), 'guitarra': (-20, 0.15, 0),
-        'cuerdas': (-28, 0.4, 0), 'bajo': (-18, 0.04, 0), 'bombo': (-24, 0.02, 0), 'rim': (-31, 0.12, 0),
+        'pad': (-27, 0.45, 0), 'cuerdas': (-31, 0.4, 0), 'bajo': (-18, 0.04, 0), 'bombo': (-24, 0.02, 0), 'rim': (-31, 0.12, 0),
         'shaker': (-32, 0.05, 0), 'hat': (-37, 0.05, 0), 'caja': (-42, 0.2, 0), 'triangulo': (-35, 0.15, 0),
-        'surdo': (-26, 0.08, 0), 'conga': (-25, 0.12, 0), 'agogo': (-29, 0.2, 0.1), 'pandeiro': (-39, 0.08, 0),
+        'surdo': (-26, 0.08, 0), 'conga': (-25, 0.12, 0), 'agogo': (-29, 0.2, 0.1),
         'arpa': (-36, 0.35, 0.2), 'campanitas': (-36, 0.4, 0.2), 'cuica': (-40, 0.25, 0.1),
     }, reverb_tau=0.28, eco_beats=1.0, eco_fb=0.2)
 
