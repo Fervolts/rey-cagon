@@ -206,7 +206,21 @@ class MojonDelMomento extends StatefulWidget {
 }
 
 class _MojonDelMomentoState extends State<MojonDelMomento> with SingleTickerProviderStateMixin {
-  late final _reloj = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
+  late final _reloj = AnimationController(vsync: this, duration: const Duration(seconds: 2));
+
+  // Solo se mueve con animaciones completas; si no, se queda en su primer cuadro.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final animar = movimiento(context) == Movimiento.completo;
+    if (animar && !_reloj.isAnimating) {
+      _reloj.repeat();
+    } else if (!animar && _reloj.isAnimating) {
+      _reloj
+        ..stop()
+        ..value = 0;
+    }
+  }
 
   @override
   void dispose() {

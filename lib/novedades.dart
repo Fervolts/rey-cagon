@@ -21,6 +21,16 @@ class VersionNovedades {
 
 /// El historial público, de la más nueva a la más vieja. Al sacar una versión nueva se agrega arriba.
 const historialNovedades = <VersionNovedades>[
+  VersionNovedades('2.19.1', '2026-11-05', [
+    ('🧩', 'Fusión real ya no tiene reloj: juegas hasta que la poceta se desborda. Cada partida arranca con algunos mojones al azar y el fondo se queda quieto.',
+        'Royal Fusion has no timer anymore: you play until the toilet overflows. Every game starts with a few random poops and the background stays still.'),
+    ('🪳', 'En Tubería Express, si vas embalado las cucarachas se aplastan solas, sin tener que apretar.',
+        'In Pipe Express, if you go fast enough the cockroaches get squashed on their own, no need to hold.'),
+    ('📣', 'En el chat de tu Cloaca solo puedes mencionar con @ a los de tu Cloaca, y ellos reciben el aviso.',
+        'In your Sewer chat you can only @mention people in your Sewer, and they get notified.'),
+    ('⚡', 'La app va más fluida en teléfonos lentos: las animaciones de las pestañas que no ves se paran y los emojis gastan menos memoria.',
+        'The app runs smoother on slow phones: animations on tabs you are not looking at stop and emojis use less memory.'),
+  ]),
   VersionNovedades('2.19.0', '2026-11-05', [
     ('🎮', 'SALA DE JUEGOS nueva: Tubería Express ahora es surf de barro con el Atasco persiguiéndote, Destapa pasa al baño del estadio con hasta 4 inodoros y Fusión real junta mojones en la poceta hasta llegar al Rey.',
         'New GAME ROOM: Pipe Express is now mud surfing with the Clog chasing you, Unclog moves to the stadium bathroom with up to 4 toilets and Royal Fusion merges poops in the toilet until you reach the King.'),

@@ -725,7 +725,8 @@ class _PantallaImperioState extends State<PantallaImperio> with TickerProviderSt
                 child: FractionalTranslation(translation: Offset(_cajon.value - 1, 0), child: hijo),
               ),
             ),
-            child: _panelCajon(context, ahora),
+            // Cerrado no se construye: el panel con su lista costaba en cada tick.
+            child: _cajon.value > 0 || _cajon.isAnimating ? _panelCajon(context, ahora) : const SizedBox.shrink(),
           ),
         ],
       );

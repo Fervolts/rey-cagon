@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'animaciones.dart';
 import 'emoji.dart';
 import 'idioma.dart';
 import 'movimientos_avatar.dart' show ConMovimiento;
@@ -199,8 +200,8 @@ class _AvatarState extends State<Avatar> with SingleTickerProviderStateMixin {
   int get _nivel => efectosAvatar.where((e) => _cagadas >= e.minimo).length;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
     _ajustarReloj();
   }
 
@@ -210,8 +211,11 @@ class _AvatarState extends State<Avatar> with SingleTickerProviderStateMixin {
     _ajustarReloj();
   }
 
+  // Solo con movimiento completo: en teléfonos lentos el brillo y el paseo se quedan quietos.
+  bool get _animado => (_pasea || _nivel > 0) && movimiento(context) == Movimiento.completo;
+
   void _ajustarReloj() {
-    final animado = _pasea || _nivel > 0;
+    final animado = _animado;
     if (animado && !_reloj.isAnimating) {
       // Cada usuario arranca en otro punto para que el ranking no se mueva sincronizado.
       _reloj.value = ((widget.perfil['username'] ?? '').hashCode % 600) / 600;
@@ -244,7 +248,7 @@ class _AvatarState extends State<Avatar> with SingleTickerProviderStateMixin {
       child: SizedBox(
         width: t,
         height: t,
-        child: AnimatedBuilder(
+        child: _conCapa(AnimatedBuilder(
           animation: _reloj,
           builder: (context, _) {
             final segundos = _reloj.value * 60;
@@ -262,10 +266,13 @@ class _AvatarState extends State<Avatar> with SingleTickerProviderStateMixin {
               ],
             );
           },
-        ),
+        )),
       ),
     );
   }
+
+  // Capa propia solo si se anima: así el brillo no repinta la lista entera.
+  Widget _conCapa(Widget hijo) => _animado ? RepaintBoundary(child: hijo) : hijo;
 }
 
 Widget _ponerLentes(String lentes, _Punto p, ({double x, double y}) en, double escala, double t) {

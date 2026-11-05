@@ -447,12 +447,16 @@ class _PantallaInicioState extends State<PantallaInicio> {
     return Scaffold(
       body: IndexedStack(
         index: _tab,
+        // TickerMode: las animaciones de las pestañas que no se ven se paran (IndexedStack no lo hace solo).
         children: [
-          PantallaRanking(trono: true, onVerRanking: () => setState(() => _tab = 1)),
-          const PantallaRanking(),
-          PantallaImperio(activo: _tab == 2),
-          const PantallaChat(),
-          PantallaPerfil(usuarioId: yo),
+          for (final (i, hijo) in [
+            PantallaRanking(trono: true, onVerRanking: () => setState(() => _tab = 1)),
+            const PantallaRanking(),
+            PantallaImperio(activo: _tab == 2),
+            const PantallaChat(),
+            PantallaPerfil(usuarioId: yo),
+          ].indexed)
+            TickerMode(enabled: _tab == i, child: hijo),
         ],
       ),
       // Con el panel de emojis abierto la barra se va, igual que la tapa el teclado.

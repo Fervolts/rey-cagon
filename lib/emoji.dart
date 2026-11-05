@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -200,10 +202,15 @@ class Emoji extends StatelessWidget {
         child: FittedBox(child: Text(emoji)),
       );
     }
+    // Se decodifica al tamaño de pantalla (en escalones para compartir caché), no siempre a 256 px.
+    // Mínimo 3x: las imágenes para compartir se capturan a 3x y deben salir nítidas.
+    final px = tamano * math.max(MediaQuery.maybeDevicePixelRatioOf(context) ?? 3, 3);
+    final ancho = px <= 64 ? 64 : px <= 128 ? 128 : null;
     return Image.asset(
       'assets/emoji/$archivo.png',
       width: tamano,
       height: tamano,
+      cacheWidth: ancho,
       filterQuality: FilterQuality.medium,
       semanticLabel: emoji,
     );
