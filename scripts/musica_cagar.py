@@ -197,7 +197,7 @@ VOICING = {
     'Fmaj7': ['A3', 'C4', 'E4', 'G4'], 'Am7': ['G3', 'C4', 'E4'], 'Dm7': ['F3', 'A3', 'C4', 'E4'],
     'Gm7': ['Bb3', 'D4', 'F4', 'A4'], 'C7': ['Bb3', 'E4', 'G4'], 'Bbmaj7': ['A3', 'D4', 'F4'],
 }
-RAIZ = {'Fmaj7': 'F2', 'Am7': 'A2', 'Dm7': 'D2', 'Gm7': 'G2', 'C7': 'C2', 'Bbmaj7': 'Bb1'}
+RAIZ = {'Fmaj7': 'F2', 'Am7': 'A2', 'Dm7': 'D2', 'Gm7': 'G2', 'C7': 'C2', 'Bbmaj7': 'Bb1', 'A7sus4': 'A2', 'A7': 'A2', 'C7sus4': 'C2'}
 
 
 def musica_fusion():
@@ -289,6 +289,7 @@ def nylon(f, dur, sr=s.SRM):
 VOICING_BOSSA = {
     'Fmaj7': ['A3', 'E4', 'G4'], 'Am7': ['G3', 'C4', 'E4'], 'Dm7': ['F3', 'C4', 'E4'],
     'Gm7': ['Bb3', 'F4', 'A4'], 'C7': ['Bb3', 'E4', 'A4'], 'Bbmaj7': ['A3', 'D4', 'F4'],
+    'A7sus4': ['G3', 'D4', 'E4'], 'A7': ['G3', 'C#4', 'F#4'], 'C7sus4': ['Bb3', 'F4', 'G4'],
 }
 # Clave de la bossa en corcheas sobre dos compases: 1, 2y, 4 | 2y, 4y. La guitarra suma el 1 del segundo compás.
 CLAVE = [0, 1.5, 3, 5, 6.5]
@@ -393,133 +394,184 @@ PENTA = ['F5', 'G5', 'A5', 'C6', 'D6', 'F6', 'G6', 'A6']
 
 
 def musica_fusion_bossa():
+    # Canción completa de 12 frases (96 s): tema A A B A, solos de vibráfono y guitarra, puente en re menor,
+    # break de percusión con CAGAR en el agogô y vuelta al tema. El bajo sube a fa para cerrar el loop.
     s.semilla('musica_fusion_bossa')
-    p = s.Pista(120, 16)
+    p = s.Pista(120, 48)
     a = ['Fmaj7', 'Am7', 'Dm7', 'Gm7 C7']
+    b = ['Bbmaj7', 'Dm7', 'Gm7', 'C7']
+    r0, r1 = 'A4/1 Bb4/1 C5/1 E5/1 G5/1 E5/1', 'D5/1 E5/1 G5/1 Bb5/1 A5/1 G5/1'
+    r2, r3 = 'E5/1 G5/1 Bb5/1 D6/1 C6/1 Bb5/1', 'G5/1 E5/1 D5/1 C5/1 Bb4/1 G4/1'
     frases = [
-        (a, 0, 'A4/1 Bb4/1 C5/1 E5/1 G5/1 E5/1'),
-        (a, 0, 'D5/1 E5/1 G5/1 Bb5/1 A5/1 G5/1'),
-        (['Bbmaj7', 'Dm7', 'Gm7', 'C7'], 5, 'E5/1 G5/1 Bb5/1 D6/1 C6/1 Bb5/1'),
-        (a, 0, 'G5/1 E5/1 D5/1 C5/1 Bb4/1 G4/1'),
+        (a, 0, r0, 'tema'), (a, 0, r1, 'tema'), (b, 5, r2, 'tema'), (a, 0, r3, 'doble'),
+        (a, 0, None, 'solo_vib'), (a, 0, None, 'solo_gtr'),
+        (['Dm7', 'Bbmaj7', 'Gm7', 'A7sus4 A7'], 0, 'E5/1 D5/1 C#5/1 E5/1 G5/1 A5/1', 'tema'),
+        (['Dm7', 'Bbmaj7', 'Gm7', 'C7sus4 C7'], 0, 'D5/1 F5/1 G5/1 Bb4/1 C5/1 E5/1', 'doble'),
+        (['Fmaj7', 'Dm7', 'Gm7', 'C7'], 0, None, 'break'),
+        (a, 0, r1, 'tema'), (b, 5, r2, 'tema'), (a, 0, r3, 'doble'),
     ]
+    solos = {
+        'solo_vib': 'r/1 A5/1 C6/2 E6/1 D6/1 C6/1 A5/1 | r/1 G5/1 A5/1 C6/1 E6/3 D6/1 | '
+                    'C6/2 A5/1 F5/1 A5/1 C6/1 D6/2 | Bb5/1 A5/1 G5/1 F5/1 E5/1 G5/1 Bb5/1 C6/1',
+        'solo_gtr': 'C5/1 A4/1 r/1 E5/1 r/1 C5/1 A4/1 G4/1 | A4/2 C5/1 E5/1 G5/2 E5/1 C5/1 | '
+                    'D5/1 F5/1 A5/1 C6/3 A5/1 F5/1 | G5/1 F5/1 D5/1 Bb4/1 C5/1 E5/1 G5/1 Bb5/1',
+    }
+    tipo = [x[3] for x in frases]
     # Acordes en línea: (beat, nombre, largo).
     linea = []
-    for f, (acordes, _, _) in enumerate(frases):
+    for f, (acordes, _, _, _) in enumerate(frases):
         for c, compas in enumerate(acordes):
             partes = compas.split()
             for k, nombre in enumerate(partes):
                 linea.append((f * 16 + c * 4 + k * 4 / len(partes), nombre, 4 / len(partes)))
-    total = 64
+    total = 16 * len(frases)
 
-    def acorde_en(b):
-        b %= total
-        return [x for x in linea if x[0] <= b + 1e-9][-1][1]
+    def acorde_en(bt):
+        bt %= total
+        return [x for x in linea if x[0] <= bt + 1e-9][-1][1]
 
     vib = lambda hz, d: vibrafono(hz, min(d, 0.6))  # noqa: E731
-    for f, (_, tr, resp) in enumerate(frases):
+    for f, (_, tr, resp, t) in enumerate(frases):
         b0 = f * 16
         notas = [n + tr for n in CAGAR]
-        motivo(p, 'lead', b0, notas, flauta, humano=0.004)
-        respuesta(p, 'resp', b0, resp, vib, 0.95, legato=0.6)
-        if f == 3:
+        if t in ('tema', 'doble'):
+            motivo(p, 'lead', b0, notas, flauta, humano=0.004)
+            respuesta(p, 'resp', b0, resp, vib, 0.95, legato=0.6)
+        if t == 'doble':
             motivo(p, 'doble', b0, notas, lambda hz, d: vibrafono(hz, min(d, 0.5)), octava=1, humano=0.003)
+        if t == 'solo_vib':
+            s.tocar_melodia(p, 'solo_vib', solos[t], vib, b0, 0.9, 0.7, humano=0.004)
+        if t == 'solo_gtr':
+            s.tocar_melodia(p, 'solo_gtr', solos[t], nylon, b0, 0.9, 0.9, humano=0.004)
         for dos in (0, 8):
-            for b in CLAVE:
-                p.poner('rim', b0 + dos + b, s.madera(1050), 0.9, humano=0.003)
-            for b in GUITARRA:
-                bb = b0 + dos + b
-                nombre = acorde_en(bb + 0.5)  # la anticipación ya toca el acorde que viene
+            for bb in CLAVE:
+                p.poner('rim', b0 + dos + bb, s.madera(1050), 0.9, humano=0.003)
+            if t == 'break':
+                continue
+            for bb in GUITARRA:
+                x = b0 + dos + bb
+                nombre = acorde_en(x + 0.5)  # la anticipación ya toca el acorde que viene
                 for i, m in enumerate(VOICING_BOSSA[nombre]):
-                    p.poner('guitarra', bb + i * 0.012, nylon(s.hz(s.midi(m)), 0.55 * p.spb), 0.95 - 0.1 * i, humano=0.003)
-        # Pad de fondo en todo el loop; en la segunda mitad se le suman cuerdas una octava arriba.
-        for b, nombre, largo in [x for x in linea if b0 <= x[0] < b0 + 16]:
+                    p.poner('guitarra', x + i * 0.012, nylon(s.hz(s.midi(m)), 0.55 * p.spb), (0.95 - 0.1 * i) * (0.8 if t.startswith('solo') else 1), humano=0.003)
+        # Pad de fondo (se calla en el break); cuerdas una octava arriba en el B, el A con vibráfono doble y el puente.
+        if t == 'break':
+            continue
+        for x, nombre, largo in [y for y in linea if b0 <= y[0] < b0 + 16]:
             ms = [s.midi(m) for m in VOICING_BOSSA[nombre]]
-            p.poner('pad', b, pad_calido(ms, largo * p.spb), 1.0)
-            if f >= 2:
-                p.poner('cuerdas', b, s.pad([m + 12 for m in ms], largo * p.spb + 0.2), 1.0)
+            p.poner('pad', x, pad_calido(ms, largo * p.spb), 1.0)
+            if f in (2, 3, 6, 7, 10, 11):
+                p.poner('cuerdas', x, s.pad([m + 12 for m in ms], largo * p.spb + 0.2), 1.0)
 
     # Bajo: 1 y 3 con anticipación; antes de volver al principio sube caminando a fa.
-    for b, nombre, largo in linea:
+    for x, nombre, largo in linea:
         r = s.midi(RAIZ[nombre])
         if largo == 4:
-            sig = s.midi(RAIZ[acorde_en(b + 4)])
+            sig = s.midi(RAIZ[acorde_en(x + 4)])
             pasos = [(0, r, 1.4), (1.5, r + 7, 0.45), (2, r + 7, 1.4), (3.5, sig, 0.45)]
-        elif b == 62:
+        elif x == total - 2:
             pasos = [(0, r, 0.45), (0.5, r + 2, 0.45), (1, r + 4, 0.45), (1.5, s.midi('F2') - 1, 0.45)]
         else:
             pasos = [(0, r, 1.4), (1.5, r + 7, 0.45)]
         for bb, m, d in pasos:
-            p.poner('bajo', b + bb, s.bajo_pluck(s.hz(m), d * p.spb), 1.0 if bb % 2 == 0 else 0.8, humano=0.003)
+            p.poner('bajo', x + bb, s.bajo_pluck(s.hz(m), d * p.spb), 1.0 if bb % 2 == 0 else 0.8, humano=0.003)
 
-    for c in range(16):
+    for c in range(total // 4):
         bc, f = c * 4, c // 4
+        t = tipo[f]
         for bb, g in [(0, 1.0), (1.5, 0.45), (2, 0.85), (3.5, 0.45)]:
             p.poner('bombo', bc + bb, s.kick(suave_=True), g)
         # Pandeiro desde la segunda frase: un patrón de dos compases, no un colchón de semicorcheas.
         if f >= 1:
-            patron = PANDEIRO[c % 2]
-            for k, golpe in enumerate(patron):
+            for k, golpe in enumerate(PANDEIRO[c % 2]):
                 if golpe != '.':
-                    p.poner('pandeiro', bc + k * 0.25, pandeiro(golpe), 1.0, humano=0.003)
+                    p.poner('pandeiro', bc + k * 0.25, pandeiro(golpe), 1.1 if t == 'break' else 1.0, humano=0.003)
         # Triángulo en los contratiempos, abierto en el 4y.
-        for k in range(8):
-            if k % 2:
-                p.poner('triangulo', bc + k * 0.5, triangulo(abierto=(k == 7 and c % 2 == 1)), 0.8, humano=0.002)
+        for k in range(1, 8, 2):
+            p.poner('triangulo', bc + k * 0.5, triangulo(abierto=(k == 7 and c % 2 == 1)), 0.8, humano=0.002)
         if f >= 1:
-            # Surdo: apagado en el 1, abierto en el 3 (el pulso del samba).
+            # Surdo: apagado en el 1, abierto en el 3 (el pulso del samba); en el break repica en el 4a.
             p.poner('surdo', bc, surdo(apagado=True), 0.6)
             p.poner('surdo', bc + 2, surdo(), 1.0)
+            if t == 'break':
+                p.poner('surdo', bc + 3.75, surdo(apagado=True), 0.5)
             # Tumbao de conga: tapado en el 2, abiertos en el 4 y el 4y.
-            if c % 4 != 3:
+            if c % 4 != 3 or t == 'break':
                 for bb, nota, ab, g in [(1, 'C4', False, 0.8), (2.5, 'C4', True, 0.6), (3, 'G3', True, 1.0), (3.5, 'G3', True, 0.85)]:
                     p.poner('conga', bc + bb, conga(s.hz(s.midi(nota)), ab), g, humano=0.004)
-        if f >= 2:
+        if f in (2, 3, 9, 10, 11) and c % 2 == 0:
             # Agogô de dos campanas (do y sol): alto-bajo sincopado sobre dos compases.
-            if c % 2 == 0:
-                for bb, nota in [(0, 'C6'), (0.5, 'C6'), (1, 'G5'), (1.75, 'C6'), (2.5, 'G5'), (3, 'G5'),
-                                 (4.5, 'C6'), (5, 'G5'), (5.75, 'G5'), (6.5, 'C6'), (7, 'G5')]:
-                    p.poner('agogo', bc + bb, agogo(s.hz(s.midi(nota))), 0.85 if nota == 'C6' else 0.7, humano=0.003)
-        if c >= 8:
+            for bb, nota in [(0, 'C6'), (0.5, 'C6'), (1, 'G5'), (1.75, 'C6'), (2.5, 'G5'), (3, 'G5'),
+                             (4.5, 'C6'), (5, 'G5'), (5.75, 'G5'), (6.5, 'C6'), (7, 'G5')]:
+                p.poner('agogo', bc + bb, agogo(s.hz(s.midi(nota))), 0.85 if nota == 'C6' else 0.7, humano=0.003)
+        if t in ('tema', 'doble', 'solo_vib', 'solo_gtr') and f >= 2 and f not in (6, 7):
             for k in range(8):
                 p.poner('hat', bc + k * 0.5, s.hat(), 0.5 if k % 2 else 0.3, humano=0.002)
 
-    # Remates al final de cada frase.
-    for k, (fq, g) in enumerate([(220, 0.6), (250, 0.7), (330, 0.8), (380, 0.9)]):
-        p.poner('rim', 15 + k * 0.25, s.madera(1050 + 150 * k), g)
-    for k, nota in enumerate(['D4', 'C4', 'C4', 'A3', 'G3', 'G3']):
-        p.poner('conga', 16 + 14.5 + k * 0.25, conga(s.hz(s.midi(nota)), k % 3 != 0), 0.9)
-    for k, g in enumerate([0.3, 0.45, 0.6]):
-        p.poner('caja', 16 + 15.25 + k * 0.25, s.snare(seco=False, oscuro=True), g)
-    for k, nota in enumerate(['D4', 'D4', 'C4', 'A3', 'G3']):
-        p.poner('conga', 48 + 14.75 + k * 0.25, conga(s.hz(s.midi(nota))), 0.95)
+    # Break: el agogô dice CAGAR en Morse (raya = campana grave, punto = aguda) dos veces y la cuíca contesta.
+    for b0 in (128, 136):
+        for ini, d, _, raya in morse():
+            if ini * 0.25 < 8:
+                p.poner('agogo', b0 + ini * 0.25, agogo(s.hz(s.midi('G5' if raya else 'C6'))), 1.0 if raya else 0.7)
+    for x, f0, sube in [(128 + 7.5, 520, 1.7), (128 + 13.5, 600, 1.5), (128 + 14.5, 480, 1.9)]:
+        p.poner('cuica', x, cuica(f0, sube), 1.0)
+    # Subida del break a la vuelta del tema: caja en semicorcheas que crece y surdo que cae.
+    for k in range(16):
+        p.poner('caja', 140 + k * 0.25, s.snare(seco=False, oscuro=True), 0.15 + 0.6 * (k / 15) ** 1.6)
     for k, nota in enumerate(['G2', 'F2', 'D2', 'C2']):
-        p.poner('surdo', 48 + 15 + k * 0.25, surdo(s.hz(s.midi(nota))), 0.8 + 0.05 * k)
-    for k, g in enumerate([0.3, 0.45, 0.6, 0.8]):
-        p.poner('caja', 48 + 15 + k * 0.25, s.snare(seco=False, oscuro=True), g)
+        p.poner('surdo', 143 + k * 0.25, surdo(s.hz(s.midi(nota))), 0.8 + 0.05 * k)
 
+    # Remates al final de las frases.
+    def rim_sube(x):
+        for k, g in enumerate([0.6, 0.7, 0.8, 0.9]):
+            p.poner('rim', x + k * 0.25, s.madera(1050 + 150 * k), g)
+
+    def congas_bajan(x):
+        for k, nota in enumerate(['D4', 'C4', 'C4', 'A3', 'G3', 'G3']):
+            p.poner('conga', x + 14.5 + k * 0.25, conga(s.hz(s.midi(nota)), k % 3 != 0), 0.9)
+        for k, g in enumerate([0.3, 0.45, 0.6]):
+            p.poner('caja', x + 15.25 + k * 0.25, s.snare(seco=False, oscuro=True), g)
+
+    def remate_grande(x):
+        for k, nota in enumerate(['D4', 'D4', 'C4', 'A3', 'G3']):
+            p.poner('conga', x + 14.75 + k * 0.25, conga(s.hz(s.midi(nota))), 0.95)
+        for k, nota in enumerate(['G2', 'F2', 'D2', 'C2']):
+            p.poner('surdo', x + 15 + k * 0.25, surdo(s.hz(s.midi(nota))), 0.8 + 0.05 * k)
+        for k, g in enumerate([0.3, 0.45, 0.6, 0.8]):
+            p.poner('caja', x + 15 + k * 0.25, s.snare(seco=False, oscuro=True), g)
+
+    rim_sube(15)
+    rim_sube(64 + 15)
+    for f in (1, 5, 9):
+        congas_bajan(f * 16)
+    for f in (3, 7, 11):
+        remate_grande(f * 16)
     # Rulos de sonajas que empujan a la frase siguiente.
-    for b0, largo in [(15, 1.0), (47, 1.0), (31.5, 0.5)]:
+    for b0, largo in [(15, 1.0), (47, 1.0), (31.5, 0.5), (79, 1.0), (111, 1.0), (143, 1.0), (159.5, 0.5), (175, 1.0)]:
         p.poner('pandeiro', b0, rulo(largo * p.spb), 1.0)
-    # Arpa (nylon brillante) que sube antes de la 2a y la 4a frase.
-    for b0, nombre in [(15, 'C7'), (47, 'C7')]:
-        notas = [s.midi(m) for m in VOICING_BOSSA[nombre]]
+    # Arpa (nylon brillante) que sube antes de entrar a una frase nueva.
+    for b0 in (15, 47, 111, 143, 175):
+        notas = [s.midi(m) for m in VOICING_BOSSA[acorde_en(b0)]]
         escala = sorted({n + 12 * o for n in notas for o in (0, 1, 2)})[:8]
         for k, m in enumerate(escala):
             p.poner('arpa', b0 + k * 0.125, s.karplus(s.hz(m), 1.2, s.SRM, 0.65, 1.0), 0.6 + 0.05 * k)
-    # Campanitas de viento que bajan al empezar la primera y la tercera frase.
-    for b0 in (0, 32):
+    # Campanitas de viento que bajan al empezar el tema, el B, el puente y la vuelta.
+    for b0 in (0, 32, 96, 144):
         for k, n in enumerate(reversed(PENTA)):
             p.poner('campanitas', b0 + k * 0.09, s.campana(s.hz(s.midi(n)), 1.4), 0.7 - 0.05 * k, humano=0.004)
-    p.poner('campanitas', 0, s.platillo(), 0.35)
-    # Cuíca en la última frase, en los huecos del motivo.
-    for b, f0, sube in [(48 + 13.5, 520, 1.7), (48 + 7.75, 600, 1.5), (16 + 13.5, 480, 1.8)]:
-        p.poner('cuica', b, cuica(f0, sube), 1.0)
-    # Guitarra que contesta suelta en el compás 4 de la frase 3.
-    for k, m in enumerate(['D5', 'C5', 'Bb4', 'G4']):
-        p.poner('arpa', 32 + 4.75 + k * 0.25, nylon(s.hz(s.midi(m)), 0.4), 0.7)
+    for b0 in (0, 144):
+        p.poner('campanitas', b0, s.platillo(), 0.35)
+    # Cuíca en los huecos del motivo.
+    for f in (1, 3, 9, 11):
+        for x, f0, sube in [(13.5, 520, 1.7), (7.75, 600, 1.5)][: 2 if f in (3, 11) else 1]:
+            p.poner('cuica', f * 16 + x, cuica(f0 - 40 * (f == 1), sube), 1.0)
+    # Guitarra que contesta suelta en el segundo compás del B.
+    for b0 in (32, 160):
+        for k, m in enumerate(['D5', 'C5', 'Bb4', 'G4']):
+            p.poner('arpa', b0 + 4.75 + k * 0.25, nylon(s.hz(s.midi(m)), 0.4), 0.7)
 
     return p.mezcla({
         'lead': (-14, 0.22, 0.12), 'resp': (-19, 0.3, 0.2), 'doble': (-26, 0.3, 0.1), 'guitarra': (-20, 0.15, 0),
+        'solo_vib': (-22, 0.3, 0.15), 'solo_gtr': (-25, 0.2, 0.1),
         'pad': (-27, 0.45, 0), 'cuerdas': (-31, 0.4, 0), 'bajo': (-18, 0.04, 0), 'bombo': (-24, 0.02, 0), 'rim': (-31, 0.12, 0),
         'pandeiro': (-29, 0.1, 0), 'hat': (-37, 0.05, 0), 'caja': (-42, 0.2, 0), 'triangulo': (-35, 0.15, 0),
         'surdo': (-26, 0.08, 0), 'conga': (-25, 0.12, 0), 'agogo': (-29, 0.2, 0.1),
