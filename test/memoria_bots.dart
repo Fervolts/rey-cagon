@@ -100,8 +100,8 @@ double elegirXMirando(JuegoFusion j, Random rng) {
   return mejor;
 }
 
-ResultadoBot jugarBot(TipoBot tipo, int semilla, {double dt = 1 / 60}) {
-  final j = JuegoFusion(semilla: semilla);
+ResultadoBot jugarBot(TipoBot tipo, int semilla, {double dt = 1 / 60, int piezasInicio = 0}) {
+  final j = JuegoFusion(semilla: semilla, piezasInicio: piezasInicio);
   final rng = Random(semilla * 31 + tipo.index);
   var proximo = 0.3;
   var ms = 0.0;
@@ -127,5 +127,7 @@ ResultadoBot jugarBot(TipoBot tipo, int semilla, {double dt = 1 / 60}) {
       if (j.soltar()) soltadas++;
     }
   }
-  return ResultadoBot(puntosReportables(j.puntosCrudos, ms.round()), ms.round(), j.motivoDesborde, j.nivelMasAlto, j.reyes, soltadas);
+  // Igual que la vista: sin reloj una partida puede pasar del máximo del servidor, y se reporta justo debajo.
+  final reportado = ms.round().clamp(minMsFusion, maxMsFusion - 1);
+  return ResultadoBot(puntosReportables(j.puntosCrudos, reportado), reportado, j.motivoDesborde, j.nivelMasAlto, j.reyes, soltadas);
 }

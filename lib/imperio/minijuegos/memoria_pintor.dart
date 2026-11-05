@@ -444,9 +444,9 @@ class PintorFusion extends CustomPainter {
       ..color = const Color(0xFF000000);
     c.drawRect(Rect.fromLTWH(0, 0, w, yRiel), _sombreado);
 
-    // Azulejos con parallax según hacia dónde apuntas.
+    // Azulejos fijos (el parallax mareaba).
     final lado = 13 * s;
-    final dx = mov == Movimiento.completo ? (-j.apunte * 0.10 * s + sin(t * 0.35) * 2) : 0.0;
+    const dx = 0.0;
     _relleno.color = oscuro ? const Color(0x14FFFFFF) : const Color(0x1C0E5A55);
     var fila = 0;
     for (var y = yRiel - lado; y > -lado; y -= lado, fila++) {

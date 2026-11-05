@@ -7,10 +7,11 @@
 // es un semiplano y un círculo está dentro si cumple todos. Arriba no hay tapa.
 //
 // Puntos: crear un nivel da puntosPorNivel, que crece más rápido que el tamaño (los grandes valen mucho más). Fusiones
-// encadenadas (una fusión que provoca otra en menos de 0.5 s) multiplican hasta x4, y la presión del turno multiplica
-// todo: x2 desde el segundo 60 y x4 desde el 120, así que aguantar sin desbordar es lo que más paga. Dos Reyes juntos
-// hacen la descarga gigante. Al acabar el turno cada mojón que queda da un bonus. Nada pasa de topePuntosFusion y lo
-// que se reporta nunca pasa de (segundos + 1) * puntosPorSegundoFusion.
+// encadenadas (una fusión que provoca otra en menos de 0.5 s) multiplican hasta x4, y la presión multiplica todo: x2
+// desde el segundo 60 y x4 desde el 120, así que aguantar sin desbordar es lo que más paga. Dos Reyes juntos hacen la
+// descarga gigante. No hay reloj: se juega hasta que la poceta se desborda (o hasta llegar a topePuntosFusion). La
+// partida puede arrancar con unos mojones ya adentro (niveles distintos al azar): esa es la perilla de dificultad. Nada
+// pasa de topePuntosFusion y lo que se reporta nunca pasa de (segundos + 1) * puntosPorSegundoFusion.
 
 import 'dart:math';
 
@@ -26,9 +27,6 @@ const List<double> radiosNivel = [5.3, 7.0, 9.1, 11.3, 13.9, 16.7, 19.7, 23.0, 2
 /// Puntos por crear cada nivel (índice = nivel). Ni el 0 ni el 1 se crean por fusión.
 const List<int> puntosPorNivel = [0, 0, 1, 1, 2, 3, 8, 19, 49, 124];
 
-/// Bonus por cada mojón que queda en la poceta en la descarga final (índice = nivel).
-const List<int> bonusFinalNivel = [0, 2, 3, 4, 6, 10, 15, 22, 32, 50];
-
 /// Dos Reyes juntos: se descarga todo y da esto.
 const int bonusDescargaReal = 140;
 
@@ -41,8 +39,16 @@ const int puntosPorSegundoFusion = 400;
 const int minMsFusion = 3000;
 const int maxMsFusion = 600000;
 
-/// Duración del turno en segundos.
-const double duracionTurno = 180;
+/// Mojones que ya están en la poceta al empezar (flag `fusion_piezas_inicio`), cada uno de un nivel distinto.
+const int piezasInicioDefecto = 4;
+const int piezasInicioMaximo = 6;
+
+/// Niveles que pueden salir en el arranque (del 1 a este).
+const int nivelMaximoInicio = 6;
+
+/// Después de los eventos fijos, uno cada tantos segundos en rueda.
+const double cadaEventoRueda = 25;
+const List<String> _rueda = ['temblor', 'frijoles', 'lluvia'];
 
 /// Paso fijo y subpasos de la física.
 const double pasoFijo = 1 / 60;
@@ -131,12 +137,11 @@ enum TipoSuceso {
   alerta,
   desborde,
 
-  /// Evento del turno (ver [SucesoFusion.clave]).
+  /// Evento de la partida (ver [SucesoFusion.clave]).
   aviso,
-  finTurno,
 
-  /// Pieza que se va en la descarga final, con su bonus.
-  finalPieza,
+  /// Llegó a topePuntosFusion: se acaba ganando.
+  maximo,
 }
 
 class SucesoFusion {
@@ -148,9 +153,9 @@ class SucesoFusion {
   final String clave;
 }
 
-enum FaseFusion { jugando, descargaFinal, desbordado, terminado }
+enum FaseFusion { jugando, desbordado, maximo, terminado }
 
-/// Eventos del turno, uno cada ~15 s. Los primeros 12 s solo salen bolitas y frijolitos.
+/// Eventos de la partida, uno cada ~15 s. Los primeros 12 s solo salen bolitas y frijolitos.
 class _Evento {
   const _Evento(this.t, this.clave);
   final double t;
@@ -169,7 +174,6 @@ const List<_Evento> _eventos = [
   _Evento(120, 'presion4'),
   _Evento(135, 'lluvia'),
   _Evento(150, 'temblor'),
-  _Evento(170, 'ultimos10'),
 ];
 
 const double duracionTemblor = 1.4;
@@ -209,7 +213,8 @@ List<(double, double)> contornoPoceta({int tramos = 36}) => [
     ];
 
 class JuegoFusion {
-  JuegoFusion({int semilla = 7}) : _rng = Random(semilla) {
+  JuegoFusion({int semilla = 7, int piezasInicio = 0}) : _rng = Random(semilla) {
+    _sembrar(piezasInicio.clamp(0, piezasInicioMaximo));
     actual = _sorteo();
     siguiente = _sorteo();
   }
@@ -256,9 +261,9 @@ class JuegoFusion {
   double cuentaDesborde = 0;
   bool _alertado = false;
   double _tFase = 0;
-  double _tFinalPieza = 0;
-  int bonusFinal = 0;
-  int piezasFinal = 0;
+
+  /// Niveles con los que arrancó la poceta.
+  final List<int> inicio = [];
 
   int _proximoEvento = 0;
   double temblorHasta = -1;
@@ -271,7 +276,7 @@ class JuegoFusion {
   /// La poceta se calienta: desde el segundo 60 todo vale x2 y desde el 120 x4.
   int get presion => t >= 120 ? 4 : (t >= 60 ? 2 : 1);
   bool get temblando => t < temblorHasta;
-  double get restante => max(0, duracionTurno - t);
+  bool get llegoAlMaximo => fase == FaseFusion.maximo || (fase == FaseFusion.terminado && !motivoDesborde);
   bool get puedeSoltar => fase == FaseFusion.jugando && _espera <= 0;
   double get esperaFraccion => (_espera / esperaSoltar).clamp(0.0, 1.0);
   int get puntosVisibles => min(puntosCrudos, topePuntosFusion);
@@ -324,6 +329,37 @@ class JuegoFusion {
     _espera = esperaSoltar;
     apuntar(apunte);
     return true;
+  }
+
+  /// Mete [n] mojones de niveles distintos al azar, cada uno donde caería, y deja que la pila se asiente sin puntos.
+  void _sembrar(int n) {
+    if (n <= 0) return;
+    final niveles = [for (var i = 1; i <= nivelMaximoInicio; i++) i]..shuffle(_rng);
+    for (final nivel in niveles.take(n)) {
+      final r = radioDe(nivel);
+      final x = -mitadAncho + r + _rng.nextDouble() * (2 * (mitadAncho - r));
+      final y = alturaDeCaida(x, r);
+      _crear(nivel, x, y.isFinite ? y : yFondo - r);
+      inicio.add(nivel);
+    }
+    final h = pasoFijo / subpasos;
+    for (var paso = 0; paso < 240; paso++) {
+      for (var s = 0; s < subpasos; s++) {
+        _integrar(h);
+        for (var it = 0; it < iteraciones; it++) {
+          _restricciones(it == iteraciones - 1, h);
+        }
+      }
+    }
+    for (final m in mojones) {
+      m
+        ..px = m.x
+        ..py = m.y
+        ..tocado = true
+        ..golpe = 0
+        ..edad = 2;
+    }
+    _sucesos.clear();
   }
 
   Mojon _crear(int nivel, double x, double y) {
@@ -395,26 +431,31 @@ class JuegoFusion {
     switch (fase) {
       case FaseFusion.jugando:
         _vigilarDesborde(dt);
-        if (fase == FaseFusion.jugando && t >= duracionTurno) {
-          fase = FaseFusion.descargaFinal;
+        if (fase == FaseFusion.jugando && puntosCrudos >= topePuntosFusion && t > 3.5) {
+          fase = FaseFusion.maximo;
           _tFase = 0;
-          _tFinalPieza = 0.5;
           cayendo = null;
-          _sucesos.add(const SucesoFusion(TipoSuceso.finTurno));
+          _sucesos.add(const SucesoFusion(TipoSuceso.maximo));
         }
-      case FaseFusion.descargaFinal:
-        _descargaFinal(dt);
       case FaseFusion.desbordado:
+      case FaseFusion.maximo:
         if (_tFase >= 1.8) fase = FaseFusion.terminado;
       case FaseFusion.terminado:
         break;
     }
   }
 
+  /// Clave del evento número [i]: primero la lista fija y después la rueda cada [cadaEventoRueda] s.
+  (double, String) _evento(int i) {
+    if (i < _eventos.length) return (_eventos[i].t, _eventos[i].clave);
+    final k = i - _eventos.length;
+    return (_eventos.last.t + (k + 1) * cadaEventoRueda, _rueda[k % _rueda.length]);
+  }
+
   void _eventosDelTurno() {
-    while (_proximoEvento < _eventos.length && t >= _eventos[_proximoEvento].t) {
-      final e = _eventos[_proximoEvento++];
-      switch (e.clave) {
+    while (t >= _evento(_proximoEvento).$1) {
+      final clave = _evento(_proximoEvento++).$2;
+      switch (clave) {
         case 'temblor':
           temblorHasta = t + duracionTemblor;
         case 'frijoles':
@@ -426,7 +467,7 @@ class JuegoFusion {
             _lluvia.add((t + 0.6 + i * 0.35, -40 + _rng.nextDouble() * 80, 1 + _rng.nextInt(2)));
           }
       }
-      _sucesos.add(SucesoFusion(TipoSuceso.aviso, clave: e.clave));
+      _sucesos.add(SucesoFusion(TipoSuceso.aviso, clave: clave));
     }
   }
 
@@ -648,33 +689,6 @@ class JuegoFusion {
       cayendo = null;
       _sucesos.add(const SucesoFusion(TipoSuceso.desborde));
     }
-  }
-
-  void _descargaFinal(double dt) {
-    if (mojones.isEmpty) {
-      if (_tFinalPieza > -0.9) {
-        _tFinalPieza -= dt;
-      } else {
-        fase = FaseFusion.terminado;
-      }
-      return;
-    }
-    _tFinalPieza -= dt;
-    if (_tFinalPieza > 0) return;
-    // Más rápido si quedan muchos.
-    _tFinalPieza = mojones.length > 20 ? 0.06 : 0.09;
-    var k = 0;
-    for (var i = 1; i < mojones.length; i++) {
-      final a = mojones[i], b = mojones[k];
-      if (a.nivel < b.nivel || (a.nivel == b.nivel && a.id < b.id)) k = i;
-    }
-    final m = mojones.removeAt(k);
-    final pts = bonusFinalNivel[m.nivel];
-    _sumar(pts);
-    bonusFinal += pts;
-    piezasFinal++;
-    _sucesos.add(SucesoFusion(TipoSuceso.finalPieza, x: m.x, y: m.y, nivel: m.nivel, puntos: pts));
-    if (mojones.isEmpty) _tFinalPieza = 0;
   }
 
   /// Y del centro donde quedaría una pieza de radio [r] soltada en [x] (primer choque al bajar). Para la guía.

@@ -137,13 +137,12 @@ void main() {
       expect(s.where((e) => e.tipo == TipoSuceso.tragado), hasLength(2));
     });
 
-    test('tirar al azar sin pensar desborda la poceta y termina antes del turno', () {
+    test('tirar al azar sin pensar desborda la poceta', () {
       var alguno = false;
       for (var s = 1; s <= 4; s++) {
         final r = jugarBot(TipoBot.malo, s);
         if (r.desbordo) {
           alguno = true;
-          expect(r.ms, lessThan(duracionTurno * 1000));
           expect(r.ms, greaterThanOrEqualTo(minMsFusion));
         }
       }
@@ -173,34 +172,67 @@ void main() {
       expect(tipos.indexOf(TipoSuceso.alerta), lessThan(tipos.indexOf(TipoSuceso.desborde)));
     });
 
-    test('fin del turno: descarga final suma bonus por cada pieza que queda', () {
+    test('sin reloj: si no se desborda la partida sigue', () {
       final j = JuegoFusion(semilla: 5);
-      correr(j, 1);
-      final xs = [-38.0, -14.0, 14.0, 38.0];
-      for (final x in xs) {
-        while (!j.puedeSoltar) {
-          j.avanzar(pasoFijo);
-        }
-        j.apuntar(x);
-        j.soltar();
+      final claves = <String>[];
+      for (var k = 0; k < 60 * 240; k++) {
+        j.avanzar(pasoFijo);
+        claves.addAll(j.tomarSucesos().where((s) => s.tipo == TipoSuceso.aviso).map((s) => s.clave));
       }
+      expect(j.terminado, isFalse);
+      expect(j.fase, FaseFusion.jugando);
+      expect(j.t, greaterThan(239));
+      // Pasada la lista fija los eventos siguen en rueda.
+      expect(claves.sublist(claves.length - 3), ['temblor', 'frijoles', 'lluvia']);
+      expect(claves, isNot(contains('ultimos10')));
+    });
+
+    test('arranque al azar: mojones de niveles distintos, asentados, sin puntos ni sucesos', () {
+      for (var s = 1; s <= 20; s++) {
+        final j = JuegoFusion(semilla: s, piezasInicio: 4);
+        expect(j.mojones, hasLength(4));
+        expect(j.inicio.toSet(), hasLength(4));
+        expect(j.inicio.every((n) => n >= 1 && n <= nivelMaximoInicio), isTrue);
+        expect(j.puntosCrudos, 0);
+        expect(j.tomarSucesos(), isEmpty);
+        for (final m in j.mojones) {
+          expect(m.y - m.r, greaterThan(lineaDesborde));
+          expect(m.x.abs() + m.r, lessThanOrEqualTo(mitadAncho + 0.5));
+        }
+        // Al arrancar la pila puede rodar un poco, pero no se funde, no suma ni pasa la línea.
+        correr(j, 3);
+        expect(j.mojones, hasLength(4));
+        expect(j.puntosCrudos, 0);
+        expect(j.mojones.every((m) => m.y - m.r > lineaDesborde), isTrue);
+        expect(j.terminado, isFalse);
+      }
+      final a = JuegoFusion(semilla: 8, piezasInicio: 6), b = JuegoFusion(semilla: 8, piezasInicio: 6);
+      expect([for (final m in a.mojones) (m.nivel, m.x, m.y)], [for (final m in b.mojones) (m.nivel, m.x, m.y)]);
+      expect(JuegoFusion(semilla: 8, piezasInicio: 99).mojones, hasLength(piezasInicioMaximo));
+      expect(JuegoFusion(semilla: 8).mojones, isEmpty);
+    });
+
+    test('con arranque al azar los bots siguen dentro del contrato', () {
+      for (final tipo in TipoBot.values) {
+        final r = jugarBot(tipo, 2, piezasInicio: 6);
+        expect(r.puntos, lessThanOrEqualTo(((r.ms / 1000 + 1) * puntosPorSegundoFusion).floor()));
+        expect(r.ms, inInclusiveRange(minMsFusion, maxMsFusion));
+      }
+    });
+
+    test('al llegar al puntaje máximo se acaba ganando', () {
+      final j = JuegoFusion(semilla: 1);
+      correr(j, 5);
+      j.tomarSucesos();
+      j.puntosCrudos = topePuntosFusion;
       final tipos = <TipoSuceso>[];
-      var bonus = 0;
       while (!j.terminado) {
         j.avanzar(pasoFijo);
-        for (final s in j.tomarSucesos()) {
-          tipos.add(s.tipo);
-          if (s.tipo == TipoSuceso.finalPieza) bonus += s.puntos;
-        }
-        expect(j.t, lessThan(duracionTurno + 10));
+        tipos.addAll(j.tomarSucesos().map((e) => e.tipo));
       }
+      expect(tipos, contains(TipoSuceso.maximo));
       expect(j.desbordo, isFalse);
-      expect(tipos.where((t) => t == TipoSuceso.finTurno), hasLength(1));
-      expect(j.piezasFinal, greaterThan(0));
-      expect(j.bonusFinal, bonus);
-      expect(bonus, greaterThan(0));
-      expect(j.mojones, isEmpty);
-      expect(j.t, greaterThanOrEqualTo(duracionTurno));
+      expect(j.llegoAlMaximo, isTrue);
     });
 
     test('la presión sube a x2 y x4 con el tiempo', () {
@@ -239,8 +271,9 @@ void main() {
         }
         expect(j.mojones.length + j.fusiones, greaterThan(4));
         expect(llamadas, isEmpty);
-        // Que termine solo: se adelanta el reloj del juego.
-        j.t = duracionTurno - 0.5;
+        // Que termine solo: llega al puntaje máximo.
+        j.t = 30;
+        j.puntosCrudos = topePuntosFusion;
         for (var f = 0; f < 400 && llamadas.isEmpty; f++) {
           await tester.pump(const Duration(milliseconds: 50));
         }

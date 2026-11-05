@@ -15,6 +15,7 @@ import '../../animaciones.dart';
 import '../../emoji.dart';
 import '../../idioma.dart';
 import '../../tema.dart';
+import '../control.dart';
 import 'estadisticas.dart';
 import 'marco.dart';
 import 'memoria_logica.dart';
@@ -22,13 +23,16 @@ import 'memoria_pintor.dart';
 import 'sonido.dart';
 
 class VistaMemoria extends StatefulWidget {
-  const VistaMemoria({super.key, required this.alTerminar, this.mov = Movimiento.completo, this.juego});
+  const VistaMemoria({super.key, required this.alTerminar, this.mov = Movimiento.completo, this.juego, this.piezasInicio});
 
   final AlTerminarJuego alTerminar;
   final Movimiento mov;
 
   /// Partida ya armada (para pruebas). Si es null se crea una con semilla al azar.
   final JuegoFusion? juego;
+
+  /// Mojones con los que arranca la poceta. Si es null sale del flag `fusion_piezas_inicio`.
+  final int? piezasInicio;
 
   @override
   State<VistaMemoria> createState() => _EstadoMemoria();
@@ -43,7 +47,11 @@ const _efectos = [
 const _rojo = Color(0xFFE5484D);
 
 class _EstadoMemoria extends State<VistaMemoria> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
-  late final JuegoFusion _j = widget.juego ?? JuegoFusion(semilla: DateTime.now().microsecondsSinceEpoch & 0x7fffffff);
+  late final JuegoFusion _j = widget.juego ??
+      JuegoFusion(
+        semilla: DateTime.now().microsecondsSinceEpoch & 0x7fffffff,
+        piezasInicio: widget.piezasInicio ?? ControlImperio.vivo?.flags.fusionPiezasInicio ?? piezasInicioDefecto,
+      );
   late final EfectosFusion _ef = EfectosFusion(mov: widget.mov);
   late final RelojJuego _reloj = RelojJuego(this, _paso);
   final _tic = _Aviso();
@@ -205,7 +213,7 @@ class _EstadoMemoria extends State<VistaMemoria> with SingleTickerProviderStateM
   void _refrescarMarcador() {
     final cuenta = _j.fase == FaseFusion.jugando && _j.cuentaDesborde > 0 ? ((segundosDesborde - _j.cuentaDesborde) * 10).ceil() : -1;
     final pista = !_yaSolto && _j.t < 8;
-    final seg = _j.restante.ceil();
+    final seg = _j.t.floor();
     final banner = _banner != null && _ef.tiempo >= _bannerHasta;
     if (banner) _banner = null;
     if (_j.palancaLista && !_avisoPalanca) _avisoPalanca = true;
@@ -317,14 +325,11 @@ class _EstadoMemoria extends State<VistaMemoria> with SingleTickerProviderStateM
         vibracionSuave();
         _anunciar(tr('¡SE DESBORDÓ!', 'IT OVERFLOWED!'),
             sub: tr('Un mojón pasó la línea roja más de 2 s', 'A poo stayed over the red line for over 2 s'), color: _rojo, dur: 9);
-      case TipoSuceso.finTurno:
-        _sonar('gana', volumen: 0.85);
-        _anunciar(tr('DESCARGA FINAL', 'FINAL FLUSH'), sub: tr('Cada pieza que queda suma puntos', 'Every piece left scores points'),
-            color: const Color(0xFFFFD60A), dur: 9);
-      case TipoSuceso.finalPieza:
-        _ef.hundir(s.x, s.y, s.nivel);
-        _ef.texto(s.x, s.y - radioDe(s.nivel), '+${s.puntos}', s.nivel >= 8 ? const Color(0xFFFFD60A) : Colors.white, tam: 11.0 + s.nivel);
-        _sonar(s.nivel >= 6 ? 'glug' : 'plop', volumen: 0.3 + s.nivel * 0.06);
+      case TipoSuceso.maximo:
+        _sonar('gana', volumen: 0.9);
+        _ef.destellar(const Color(0xFFFFD60A), 0.5);
+        vibracionSuave();
+        _anunciar(tr('¡PUNTAJE MÁXIMO!', 'MAX SCORE!'), sub: tr('No cabe un punto más', 'Not one more point fits'), color: const Color(0xFFFFD60A), dur: 9);
       case TipoSuceso.aviso:
         _aviso(s.clave);
     }
@@ -355,9 +360,6 @@ class _EstadoMemoria extends State<VistaMemoria> with SingleTickerProviderStateM
       case 'lluvia':
         _sonar('viento', volumen: 0.6);
         _anunciar(tr('¡CAEN DEL TECHO!', 'INCOMING FROM ABOVE!'), sub: tr('Llueven bolitas', 'Little ones raining down'));
-      case 'ultimos10':
-        _sonar('alerta', volumen: 0.6);
-        _anunciar(tr('¡ÚLTIMOS 10 SEGUNDOS!', 'LAST 10 SECONDS!'), color: _rojo, dur: 1.4);
     }
   }
 
@@ -433,9 +435,8 @@ class _EstadoMemoria extends State<VistaMemoria> with SingleTickerProviderStateM
   Widget _marcador(BuildContext context) {
     final p = paleta(context);
     final record = recordMinijuego('memoria');
-    final restante = _j.restante.ceil();
-    final final10 = _j.fase == FaseFusion.jugando && restante <= 10;
-    final reloj = '${restante ~/ 60}:${(restante % 60).toString().padLeft(2, '0')}';
+    final seg = _j.t.floor();
+    final reloj = '${seg ~/ 60}:${(seg % 60).toString().padLeft(2, '0')}';
     final g = GeoFusion.de(_tam);
     return Stack(
       children: [
@@ -485,11 +486,7 @@ class _EstadoMemoria extends State<VistaMemoria> with SingleTickerProviderStateM
               _caja(
                 p,
                 fuerte: true,
-                fondo: final10 && restante.isEven ? _rojo : null,
-                borde: final10 ? _rojo : null,
-                Text(reloj,
-                    key: const Key('memoria_reloj'),
-                    style: numeros(context, tamano: 20, weight: FontWeight.w900, color: final10 ? (restante.isEven ? Colors.white : _rojo) : p.texto)),
+                Text(reloj, key: const Key('memoria_reloj'), style: numeros(context, tamano: 20, weight: FontWeight.w900, color: p.texto)),
               ),
               if (record > 0)
                 Padding(
@@ -595,10 +592,12 @@ class _EstadoMemoria extends State<VistaMemoria> with SingleTickerProviderStateM
     if (!_fin) return const SizedBox.shrink();
     final record = recordMinijuego('memoria');
     final puntos = _j.puntosVisibles;
-    final titulo = _j.desbordo ? tr('¡SE DESBORDÓ!', 'IT OVERFLOWED!') : tr('¡POCETA LIMPIA!', 'BOWL CLEAN!');
+    final seg = _j.t.floor();
+    final aguante = tr('Aguantaste ${seg ~/ 60}:${(seg % 60).toString().padLeft(2, '0')}', 'You lasted ${seg ~/ 60}:${(seg % 60).toString().padLeft(2, '0')}');
+    final titulo = _j.desbordo ? tr('¡SE DESBORDÓ!', 'IT OVERFLOWED!') : tr('¡PUNTAJE MÁXIMO!', 'MAX SCORE!');
     final pista = _j.desbordo
-        ? tr('Junta los iguales abajo y usa la palanca antes de llegar a la línea', 'Merge matches low and use the lever before the line')
-        : tr('${_j.piezasFinal} piezas en la descarga final: +${_j.bonusFinal}', '${_j.piezasFinal} pieces in the final flush: +${_j.bonusFinal}');
+        ? '$aguante. ${tr('Junta los iguales abajo y usa la palanca antes de llegar a la línea', 'Merge matches low and use the lever before the line')}'
+        : aguante;
     return IgnorePointer(
       child: Align(
         alignment: const Alignment(0, -0.1),

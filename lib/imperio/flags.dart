@@ -110,6 +110,10 @@ class FlagsImperio {
   /// las apuestas. El servidor valida el mismo flag al retar.
   final int apuestaMaxMin;
 
+  /// Mojones que ya están en la poceta al empezar Fusión real (`fusion_piezas_inicio`, 0 a 6, niveles distintos al
+  /// azar). Es la perilla de dificultad de ese minijuego; solo la app la usa.
+  final int fusionPiezasInicio;
+
   /// clave → variante asignada (solo las flags con variantes). Va en `sesion_inicio`.
   final Map<String, String> variantes;
 
@@ -170,6 +174,7 @@ class FlagsImperio {
     this.escalaMejoras = 100,
     this.estiloPrecioMult = 1,
     this.apuestaMaxMin = 60,
+    this.fusionPiezasInicio = 4,
     this.variantes = const {},
     this.temporadas = const [],
   });
@@ -316,6 +321,7 @@ class FlagsImperio {
       escalaMejoras: numero('escala_mejoras', d.escalaMejoras, 1, 10000),
       estiloPrecioMult: numero('estilo_precio_mult', d.estiloPrecioMult, 0.01, 1000),
       apuestaMaxMin: numero('apuesta_max_min', d.apuestaMaxMin.toDouble(), 0, 60).round(),
+      fusionPiezasInicio: numero('fusion_piezas_inicio', d.fusionPiezasInicio.toDouble(), 0, 6).round(),
       temporadas: leerTemporadas(valor('temporadas')),
       variantes: {
         for (final e in m.entries)
