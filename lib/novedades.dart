@@ -21,6 +21,16 @@ class VersionNovedades {
 
 /// El historial público, de la más nueva a la más vieja. Al sacar una versión nueva se agrega arriba.
 const historialNovedades = <VersionNovedades>[
+  VersionNovedades('2.19.0', '2026-11-05', [
+    ('🎮', 'SALA DE JUEGOS nueva: Tubería Express ahora es surf de barro con el Atasco persiguiéndote, Destapa pasa al baño del estadio con hasta 4 inodoros y Fusión real junta mojones en la poceta hasta llegar al Rey.',
+        'New GAME ROOM: Pipe Express is now mud surfing with the Clog chasing you, Unclog moves to the stadium bathroom with up to 4 toilets and Royal Fusion merges poops in the toilet until you reach the King.'),
+    ('🎵', 'Los minijuegos ahora tienen sonido y música propia. Si molesta, la bocina de arriba los calla.',
+        'Mini games now have their own sounds and music. If it bothers you, the speaker up top mutes them.'),
+    ('✉️', 'MENSAJES PRIVADOS: escríbele a alguien desde su perfil con el botón MENSAJE. En Ajustes eliges quién te puede escribir: todos, tus amigos o nadie.',
+        'PRIVATE MESSAGES: write to someone from their profile with the MESSAGE button. In Settings you choose who can write to you: everyone, your friends or nobody.'),
+    ('💬', 'En la zona de tu Cloaca ves los últimos mensajes y contestas ahí mismo, y en el Baño la General muestra lo último que se dijo.',
+        'In your Sewer area you see the latest messages and reply right there, and in the Bathroom the General chat shows the latest messages.'),
+  ]),
   VersionNovedades('2.18.0', '2026-11-04', [
     ('🚽', 'CLOACAS: arma tu Cloaca de hasta 25 cagones o únete con un código. Cada semana compiten en una liga: cada cagada de verdad suma 10 puntos (hasta 3 al día) y el Imperio suma hasta 10 más. La Cloaca ganadora se lleva Rollos de Oro y un ícono nuevo para la app.',
         'SEWERS: build your Sewer of up to 25 poopers or join with a code. Every week they compete in a league: every real poop adds 10 points (up to 3 a day) and the Empire adds up to 10 more. The winning Sewer gets Golden Rolls and a new app icon.'),

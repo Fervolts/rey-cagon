@@ -1,5 +1,5 @@
 // Sonido de los minijuegos: efectos cortos y un loop de música por juego.
-// Los archivos salen de scripts/sonidos.py (síntesis propia) y viven en assets/sonidos/.
+// Los archivos salen de scripts/sonidos.py (efectos) y scripts/musica_cagar.py (músicas), síntesis propia, y viven en assets/sonidos/.
 // Nunca lanza: en tests o sin audio no suena y ya. El silencio se guarda en el teléfono.
 
 import 'dart:async';
@@ -15,7 +15,7 @@ const efectosMinijuegos = <String>[
   'combo', 'fusion1', 'fusion2', 'fusion3', 'fusion4', 'cucaracha', 'fallo', 'perdiste', 'gana', 'boton', 'alerta', 'viento',
 ];
 
-/// Músicas en `assets/sonidos/NOMBRE.m4a` (loops de ~30 s).
+/// Músicas en `assets/sonidos/NOMBRE.m4a` (loops sin corte; la de Fusión dura 96 s).
 const musicasMinijuegos = <String>['musica_tuberia', 'musica_destapa', 'musica_fusion'];
 
 class Sonido {
