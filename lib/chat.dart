@@ -15,7 +15,7 @@ import 'animaciones.dart';
 import 'avisos.dart';
 import 'cagadon.dart' show TarjetaReto;
 import 'chat_vivo.dart';
-import 'cloaca.dart' show TarjetaCloaca;
+import 'cloaca.dart' show NubeCloacas, TarjetaCloaca;
 import 'popups.dart' show PantallaPopups;
 import 'presumir.dart';
 import 'privados.dart';
@@ -590,7 +590,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
   final _pidiendo = <String>{};
   Set<String> _admins = {};
   final _texto = TextEditingController();
-  // Solo se puede mencionar a gente que sigues.
+  // Solo se puede mencionar a gente que sigues (en la sala de una Cloaca, solo a sus miembros).
   List<Map<String, dynamic>> _amigos = [];
   List<Map<String, dynamic>> _sugerencias = [];
   bool _enviando = false;
@@ -637,6 +637,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
   bool get _esSoporte => widget.sala == 'soporte';
   // Chat privado entre dos (lib/privados.dart): sin escribiendo, sin hilos, sin menciones ni fijados.
   bool get _esDm => esSalaDm(widget.sala);
+  bool get _esCloaca => widget.sala.startsWith('cloaca:');
 
   @override
   bool get wantKeepAlive => true;
@@ -1032,7 +1033,8 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
   // Las @palabras que no son de nadie conocido se buscan de a tandas (también las que no existen,
   // para no volver a pedirlas).
   void _pedirMenciones(String? texto) {
-    if (texto == null || !texto.contains('@')) return;
+    // En la Cloaca solo cuentan sus miembros, que ya están en _amigos.
+    if (_esCloaca || texto == null || !texto.contains('@')) return;
     final conocidos = _porUsername;
     final faltan = [
       for (final c in candidatosMencion(texto))
@@ -1237,8 +1239,14 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
 
   Future<void> _cargarAmigos() async {
     try {
-      final f = await db.from('follows').select('followed').eq('follower', _yo);
-      final ids = [for (final x in f) x['followed'] as String];
+      final List<String> ids;
+      if (_esCloaca) {
+        final c = (await const NubeCloacas().mia()).cloaca;
+        ids = c == null || c.sala != widget.sala ? const [] : [for (final m in c.miembros) if (m.userId != _yo) m.userId];
+      } else {
+        final f = await db.from('follows').select('followed').eq('follower', _yo);
+        ids = [for (final x in f) x['followed'] as String];
+      }
       if (ids.isEmpty) return;
       final r = await db.from('profiles').select(_columnasPerfil).inFilter('id', ids).order('username');
       if (mounted) setState(() => _amigos = List<Map<String, dynamic>>.from(r));

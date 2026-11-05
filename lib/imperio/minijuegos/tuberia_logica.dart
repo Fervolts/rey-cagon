@@ -56,7 +56,7 @@ class CucarachaTuberia {
   final double fase;
   bool viva = true;
 
-  /// Si murió: true = aplastada (pesado), false = pateada (liviano).
+  /// Si murió: true = aplastada (pesado o embalado), false = pateada (liviano y lento).
   bool aplastada = false;
   double muerte = 0;
 }
@@ -112,6 +112,9 @@ class JuegoTuberia {
   static const cadaRampa = 200.0;
   static const largoRampa = 2.4;
   static const velocidadRampa = 11.5;
+
+  /// Desde esta velocidad las cucarachas se aplastan solas, sin ir pesado.
+  static const velocidadAplasta = 9.0;
   static const anguloRampa = 0.62;
 
   // Atasco.
@@ -620,7 +623,7 @@ class JuegoTuberia {
       if (_y - altura(c.x) > 0.9) continue;
       c.viva = false;
       c.muerte = _t;
-      if (_pesado) {
+      if (_pesado || velocidad >= velocidadAplasta) {
         c.aplastada = true;
         _aplastadas++;
         final pts = 4 + _combo ~/ 2;

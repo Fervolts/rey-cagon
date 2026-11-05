@@ -143,6 +143,37 @@ void main() {
       expect(s.first.valor, 1);
     });
 
+    test('embalado aplasta cucarachas sin apretar; lento y liviano las patea', () {
+      // Lento (arranque) y liviano: la patea.
+      final lento = JuegoTuberia(azar: Random(5));
+      lento.cucarachas.add(CucarachaTuberia(lento.x + 0.4, 0));
+      final c1 = lento.cucarachas.last;
+      for (var k = 0; k < 60 && c1.viva; k++) {
+        lento.avanzar(1 / 60);
+      }
+      expect(lento.velocidad, lessThan(JuegoTuberia.velocidadAplasta));
+      expect(c1.viva, isFalse);
+      expect(c1.aplastada, isFalse);
+
+      // Embalado y liviano: la aplasta igual.
+      final j = JuegoTuberia(azar: Random(5));
+      final r = Random(7);
+      while (!j.terminado && !(j.enSuelo && j.velocidad >= JuegoTuberia.velocidadAplasta + 1)) {
+        j.presionado = botBueno(j, r);
+        j.avanzar(1 / 60);
+      }
+      expect(j.terminado, isFalse);
+      j.cucarachas.removeWhere((c) => c.viva);
+      j.presionado = false;
+      j.cucarachas.add(CucarachaTuberia(j.x + 0.4, 0));
+      final c2 = j.cucarachas.last;
+      for (var k = 0; k < 30 && c2.viva; k++) {
+        j.avanzar(1 / 60);
+      }
+      expect(c2.viva, isFalse);
+      expect(c2.aplastada, isTrue);
+    });
+
     test('apretar y soltar cambian el peso', () {
       final j = JuegoTuberia(azar: Random(3));
       expect(j.pesado, isFalse);
