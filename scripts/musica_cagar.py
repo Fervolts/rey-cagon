@@ -325,6 +325,44 @@ def triangulo(abierto=False, sr=s.SRM):
     return y * np.exp(-t / (0.35 if abierto else 0.025)) * (1 - np.exp(-t / 0.0003))
 
 
+def _sonajas(n, sr, golpes, decae):
+    # Las sonajas no suenan juntas: unos milisegundos de diferencia entre pares.
+    t = np.arange(n) / sr
+    env = sum(a * np.exp(-np.maximum(t - d, 0) / decae) * (t >= d) for d, a in golpes)
+    return s.norm(s.filtro_fft(s.ruido(n), sr, 5200, 12500)) * env
+
+
+def pandeiro(golpe, sr=s.SRM):
+    # G = grave abierto con el pulgar (cuero afinado en do), T = tapa seca,
+    # P = sonajas fuertes, p = sonajas suaves.
+    n = s.muestras(0.3, sr)
+    t = np.arange(n) / sr
+    if golpe == 'G':
+        cuero = s.seno_f(s.hz(48) * (1 + 0.04 * np.exp(-t / 0.006)), sr) * np.exp(-t / 0.16)
+        y = cuero + 0.35 * _sonajas(n, sr, [(0, 1), (0.004, 0.6), (0.011, 0.4)], 0.03)
+    elif golpe == 'T':
+        tapa = s.norm(s.filtro_fft(s.ruido(n), sr, 700, 4500)) * np.exp(-t / 0.012)
+        cuero = s.seno_f(s.hz(55) * np.ones(n), sr) * np.exp(-t / 0.03)
+        y = 0.8 * tapa + 0.4 * cuero + 0.5 * _sonajas(n, sr, [(0, 1), (0.005, 0.7), (0.012, 0.5)], 0.035)
+    elif golpe == 'P':
+        y = 0.75 * _sonajas(n, sr, [(0, 1), (0.006, 0.8), (0.014, 0.5)], 0.045)
+    else:
+        y = 0.3 * _sonajas(n, sr, [(0, 1), (0.005, 0.5)], 0.025)
+    return y * (1 - np.exp(-t / 0.0005))
+
+
+def rulo(dur, sr=s.SRM):
+    # Sonajas en trémolo que crecen hasta el golpe siguiente.
+    n = s.muestras(dur + 0.05, sr)
+    paso = 0.032
+    golpes = [(d, 0.25 + 0.75 * (d / dur) ** 1.5) for d in np.arange(0, dur, paso)]
+    return 0.7 * _sonajas(n, sr, golpes, 0.02)
+
+
+# Pandeiro en dos compases (semicorcheas): el primero marca, el segundo contesta a la clave con el grave en el 2a y el 4a.
+PANDEIRO = ['G.ppT.P.G..pT.Pp', 'G.p.T.PG..P.T.PG']
+
+
 def cuica(f0=520, sube=1.7, dur=0.28, sr=s.SRM):
     # Cuíca: el tono sube y baja como un gemido.
     t = s.tiempo(dur, sr)
@@ -417,8 +455,12 @@ def musica_fusion_bossa():
         bc, f = c * 4, c // 4
         for bb, g in [(0, 1.0), (1.5, 0.45), (2, 0.85), (3.5, 0.45)]:
             p.poner('bombo', bc + bb, s.kick(suave_=True), g)
-        for k in range(16):
-            p.poner('shaker', bc + k * 0.25, s.shaker(), [0.9, 0.35, 0.6, 0.45][k % 4], humano=0.002)
+        # Pandeiro desde la segunda frase: un patrón de dos compases, no un colchón de semicorcheas.
+        if f >= 1:
+            patron = PANDEIRO[c % 2]
+            for k, golpe in enumerate(patron):
+                if golpe != '.':
+                    p.poner('pandeiro', bc + k * 0.25, pandeiro(golpe), 1.0, humano=0.003)
         # Triángulo en los contratiempos, abierto en el 4y.
         for k in range(8):
             if k % 2:
@@ -455,6 +497,9 @@ def musica_fusion_bossa():
     for k, g in enumerate([0.3, 0.45, 0.6, 0.8]):
         p.poner('caja', 48 + 15 + k * 0.25, s.snare(seco=False, oscuro=True), g)
 
+    # Rulos de sonajas que empujan a la frase siguiente.
+    for b0, largo in [(15, 1.0), (47, 1.0), (31.5, 0.5)]:
+        p.poner('pandeiro', b0, rulo(largo * p.spb), 1.0)
     # Arpa (nylon brillante) que sube antes de la 2a y la 4a frase.
     for b0, nombre in [(15, 'C7'), (47, 'C7')]:
         notas = [s.midi(m) for m in VOICING_BOSSA[nombre]]
@@ -476,7 +521,7 @@ def musica_fusion_bossa():
     return p.mezcla({
         'lead': (-14, 0.22, 0.12), 'resp': (-19, 0.3, 0.2), 'doble': (-26, 0.3, 0.1), 'guitarra': (-20, 0.15, 0),
         'pad': (-27, 0.45, 0), 'cuerdas': (-31, 0.4, 0), 'bajo': (-18, 0.04, 0), 'bombo': (-24, 0.02, 0), 'rim': (-31, 0.12, 0),
-        'shaker': (-32, 0.05, 0), 'hat': (-37, 0.05, 0), 'caja': (-42, 0.2, 0), 'triangulo': (-35, 0.15, 0),
+        'pandeiro': (-29, 0.1, 0), 'hat': (-37, 0.05, 0), 'caja': (-42, 0.2, 0), 'triangulo': (-35, 0.15, 0),
         'surdo': (-26, 0.08, 0), 'conga': (-25, 0.12, 0), 'agogo': (-29, 0.2, 0.1),
         'arpa': (-36, 0.35, 0.2), 'campanitas': (-36, 0.4, 0.2), 'cuica': (-40, 0.25, 0.1),
     }, reverb_tau=0.28, eco_beats=1.0, eco_fb=0.2)
