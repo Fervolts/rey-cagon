@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Publica una versión para el actualizador dentro de la app.
 #   scripts/publicar.sh "Notas de la versión"
-#   SIN_LINK=1 scripts/publicar.sh "…"   # no toca el link fijo
-# Sube build/…/app-release.apk y version.json al bucket público `releases` de Supabase.
+#   SIN_LINK=1 scripts/publicar.sh "…"   # no copia el APK al escritorio
+# Sube el APK al release de GitHub y version.json al bucket público `releases` de Supabase.
 # Antes: subir `version:` en pubspec.yaml (el número después del + es el que compara la app).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -47,43 +47,35 @@ subir() { # $1 archivo local, $2 nombre en el bucket, $3 tipo
     "https://$REF.supabase.co/storage/v1/object/releases/$2" >/dev/null
 }
 
-subir "$APK" "$NOMBRE" application/vnd.android.package-archive
-# Link fijo para la primera instalación. SIN_LINK=1 lo deja en la versión anterior.
-[ "${SIN_LINK:-}" = 1 ] || subir "$APK" rey-cagon.apk application/vnd.android.package-archive
+# La APK va en el release de GitHub: Supabase Free no acepta archivos de más de 50 MiB.
+# El actualizador (OkHttp) sigue la redirección de GitHub. El README baja releases/latest/download/rey-cagon.apk.
+# Primero el release y después version.json: si algo falla, nadie ve una versión sin APK.
+REPO=$(git remote get-url origin | sed -E 's#.*github\.com[:/]##; s#\.git$##')
+D=$(mktemp -d) && cp "$APK" "$D/rey-cagon.apk"
+gh release create "v$VERSION" "$D/rey-cagon.apk" -R "$REPO" --target "$(git rev-parse HEAD)" --title "$VERSION" --notes "$NOTAS" >/dev/null
+rm -rf "$D"
+URL="https://github.com/$REPO/releases/download/v$VERSION/rey-cagon.apk"
+# GitHub tarda unos segundos en servir el archivo nuevo.
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  BAJADA=$(curl -sL "$URL" | shasum -a 256 | awk '{print $1}')
+  [ "$BAJADA" = "$SHA" ] && break
+  sleep 10
+done
+[ "$BAJADA" = "$SHA" ] || { echo "El APK de $URL no coincide con el compilado." >&2; exit 1; }
+echo "Release v$VERSION en GitHub"
 
 TMP=$(mktemp)
-python3 - "$VERSION" "$BUILD" "$NOMBRE" "$SHA" "$NOTAS" "$REF" > "$TMP" <<'PY'
+python3 - "$VERSION" "$BUILD" "$URL" "$SHA" "$NOTAS" > "$TMP" <<'PY2'
 import json, sys
-v, b, n, sha, notas, ref = sys.argv[1:]
-print(json.dumps({
-    "version": v, "build": int(b), "sha256": sha, "notas": notas,
-    "url": f"https://{ref}.supabase.co/storage/v1/object/public/releases/{n}",
-}, ensure_ascii=False))
-PY
+v, b, url, sha, notas = sys.argv[1:]
+print(json.dumps({"version": v, "build": int(b), "sha256": sha, "notas": notas, "url": url}, ensure_ascii=False))
+PY2
 subir "$TMP" version.json application/json
 rm -f "$TMP"
 [ "${SIN_LINK:-}" = 1 ] || cp "$APK" ~/Desktop/rey-cagon.apk
 
-# Limpieza: el plan Free tiene 1 GB de storage. Quedan solo esta versión y la anterior (n-1) en el bucket.
-curl -s -X POST -H "Authorization: Bearer $K" -H "apikey: $K" -H 'Content-Type: application/json' \
-  -d '{"prefix":"","limit":1000}' "https://$REF.supabase.co/storage/v1/object/list/releases" |
-  python3 -c '
-import json, re, sys
-v = sorted((int(m.group(1)), o["name"]) for o in json.load(sys.stdin) if (m := re.fullmatch(r"rey-cagon-.+\+(\d+)\.apk", o["name"])))
-print("\n".join(n for _, n in v[:-2]))' |
-  while read -r VIEJA; do
-    curl -sf -X DELETE -H "Authorization: Bearer $K" -H "apikey: $K" \
-      "https://$REF.supabase.co/storage/v1/object/releases/$VIEJA" >/dev/null && echo "Borrada $VIEJA"
-  done
 # Igual en local: AABs de Play guardados en ~/Desktop/rey-cagon-play, quedan los 2 más nuevos.
 ls -t ~/Desktop/rey-cagon-play/*-play.aab 2>/dev/null | tail -n +3 | while read -r VIEJA; do rm -f "$VIEJA"; done
-
-# Release en GitHub: el README descarga releases/latest/download/rey-cagon.apk.
-if [ "${SIN_LINK:-}" != 1 ] && command -v gh >/dev/null; then
-  D=$(mktemp -d) && cp "$APK" "$D/rey-cagon.apk"
-  gh release create "v$VERSION" "$D/rey-cagon.apk" --title "$VERSION" --notes "$NOTAS" >/dev/null && echo "Release v$VERSION en GitHub"
-  rm -rf "$D"
-fi
 
 # Aviso push de versión nueva (avisarVersion en supabase/functions/notificaciones).
 W=$(curl -s -X POST -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
@@ -95,4 +87,4 @@ ENVIADOS=$(curl -s -X POST -H "x-webhook-secret: $W" -H 'Content-Type: applicati
 echo "Push de actualización: $ENVIADOS"
 
 echo "Publicada $VERSION+$BUILD"
-echo "Link fijo: https://$REF.supabase.co/storage/v1/object/public/releases/rey-cagon.apk"
+echo "Link fijo: https://github.com/$REPO/releases/latest/download/rey-cagon.apk"
