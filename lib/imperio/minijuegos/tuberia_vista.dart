@@ -86,8 +86,8 @@ class _VistaTuberiaState extends State<VistaTuberia> with SingleTickerProviderSt
   int _bannerVez = 0;
   double _tBanner = 0;
 
-  // Tutorial: dura hasta [_limpiosTutorial] aterrizajes limpios en total (se guardan en el teléfono).
-  static const _claveTutorial = 'tuberia_tutorial_limpios', _limpiosTutorial = 6;
+  // Tutorial: solo en la primera partida (se marca visto al empezarla), hasta [_limpiosTutorial] aterrizajes limpios.
+  static const _claveTutorial = 'tuberia_tutorial_visto', _limpiosTutorial = 6;
   bool _tutorial = false;
   int _limpiosGuardados = 0, _plafsTutorial = 0;
 
@@ -117,23 +117,15 @@ class _VistaTuberiaState extends State<VistaTuberia> with SingleTickerProviderSt
   Future<void> _leerTutorial() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      _limpiosGuardados = prefs.getInt(_claveTutorial) ?? 0;
+      if (prefs.getBool(_claveTutorial) ?? false) return;
+      await prefs.setBool(_claveTutorial, true);
     } catch (_) {
       return;
     }
-    if (!mounted || _limpiosGuardados >= _limpiosTutorial) return;
+    if (!mounted) return;
     setState(() => _tutorial = true);
     _tLetrero = 0;
     _mostrarBanner(tr('Mantén en las bajadas.\nSuelta en las subidas para volar.', 'Hold on downhills.\nRelease on uphills to fly.'), 4);
-  }
-
-  void _guardarTutorial() {
-    unawaited(() async {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setInt(_claveTutorial, _limpiosGuardados);
-      } catch (_) {}
-    }());
   }
 
   // Consejos del tutorial según lo que acaba de pasar.
@@ -142,8 +134,8 @@ class _VistaTuberiaState extends State<VistaTuberia> with SingleTickerProviderSt
     switch (s.tipo) {
       case TipoSuceso.limpio:
         _limpiosGuardados++;
-        _guardarTutorial();
         if (_limpiosGuardados >= _limpiosTutorial) {
+          setState(() => _tutorial = false);
           _mostrarBanner(tr('¡Ya le agarraste el truco!', "You've got the hang of it!"), 2.5);
         } else if (_limpiosGuardados <= 2) {
           _mostrarBanner(tr('¡LIMPIO! Caer en bajada da velocidad', 'CLEAN! Landing downhill gives speed'), 2.5);

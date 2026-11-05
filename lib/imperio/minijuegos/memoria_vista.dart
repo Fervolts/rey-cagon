@@ -289,10 +289,21 @@ class _EstadoMemoria extends State<VistaMemoria> with SingleTickerProviderStateM
         _anunciar(tr('¡DESCARGA REAL!', 'ROYAL FLUSH!'), sub: tr('Dos Reyes se fueron por el tubo', 'Two Kings went down the pipe'),
             color: const Color(0xFFFFD60A), dur: 2.4);
       case TipoSuceso.palanca:
-        _sonar('descarga', volumen: 0.75);
-        _ef.salpicar(0, 86, 12, fuerza: 1.2);
-        _ef.sacudir(4);
-        _anunciar(tr('¡GLUUUG!', 'GLUUUG!'), sub: tr('La palanca se tragó a los chiquitos', 'The lever swallowed the little ones'), dur: 1.3);
+        _sonar('descarga', volumen: 1);
+        _sonar('burbuja', volumen: 0.5);
+        _ef.salpicar(-47, 4, 14, fuerza: 1.3);
+        _ef.salpicar(47, 4, 14, fuerza: 1.3);
+        _ef.salpicar(0, 86, 18, fuerza: 1.6);
+        _ef.sacudir(9);
+        _ef.destellar(const Color(0xFF8FD8F0), 0.45);
+        _congelar(0.05);
+        vibracionSuave();
+        _anunciar(tr('¡GLUUUG!', 'GLUUUG!'),
+            sub: s.cadena > 0
+                ? tr('Se tragó ${s.cadena} chiquito${s.cadena == 1 ? '' : 's'} y bajó la pila', 'Swallowed ${s.cadena} little one${s.cadena == 1 ? '' : 's'} and sank the pile')
+                : tr('No había chiquitos, pero la pila bajó', 'No little ones, but the pile sank'),
+            color: const Color(0xFF8FD8F0),
+            dur: 1.6);
       case TipoSuceso.tragado:
         _ef.tragar(s.x, s.y, s.nivel, retraso: _rng.nextDouble() * 0.25);
         _sonar('glug', volumen: 0.3 + _rng.nextDouble() * 0.3);

@@ -403,6 +403,7 @@ class PintorFusion extends CustomPainter {
     if (ef.sacudida > 0) {
       canvas.translate(sin(t * 61) * ef.sacudida, cos(t * 53) * ef.sacudida * 0.7);
     }
+    _yAgua = _nivelAgua();
     _tanque(canvas, g, t);
     _poceta(canvas, g);
     _aguaAtras(canvas, g, t);
@@ -411,6 +412,7 @@ class PintorFusion extends CustomPainter {
     _mojones(canvas, g, t);
     _fantasmas(canvas, g, t);
     _aguaDelante(canvas, g, t);
+    _chorros(canvas, g, t);
     _linea(canvas, g, t);
     _mosca(canvas, g, t);
     _garra(canvas, g, t);
@@ -563,8 +565,11 @@ class PintorFusion extends CustomPainter {
     // Palanca cromada a la izquierda del tanque.
     final pivote = g.p(-46, -99);
     var angulo = 0.0;
-    if (j.desdePalanca < 0.6) {
-      angulo = -0.9 * (1 - j.desdePalanca / 0.6);
+    if (j.desdePalanca < 0.12) {
+      angulo = -1.1 * (j.desdePalanca / 0.12);
+    } else if (j.desdePalanca < 0.9) {
+      final u = (j.desdePalanca - 0.12) / 0.78;
+      angulo = -1.1 * exp(-4 * u) * cos(u * 11);
     } else if (lista && mov != Movimiento.nada) {
       angulo = sin(t * 12) * 0.16;
     }
@@ -641,7 +646,17 @@ class PintorFusion extends CustomPainter {
     return mov == Movimiento.nada ? 0 : a;
   }
 
-  static const double _yAgua = 86;
+  static const double _yAguaBase = 86;
+  double _yAgua = _yAguaBase;
+
+  // La palanca vacía media poceta y se vuelve a llenar; la descarga real, más.
+  double _nivelAgua() {
+    if (mov == Movimiento.nada) return _yAguaBase;
+    var baja = 0.0;
+    if (j.desdePalanca < 1.8) baja = sin(pi * pow(j.desdePalanca / 1.8, 0.7)) * 22;
+    if (j.desdeDescargaReal < 2.2) baja = max(baja, sin(pi * pow(j.desdeDescargaReal / 2.2, 0.7)) * 26);
+    return _yAguaBase + baja;
+  }
 
   Path _superficie(GeoFusion g, double t, {required bool cerrar}) {
     final a = 0.6 + 2.6 * _agitacion();
@@ -687,12 +702,18 @@ class PintorFusion extends CustomPainter {
 
   void _remolino(Canvas c, GeoFusion g, double t) {
     double f = 0;
-    if (j.desdePalanca < 1.2) f = sin(j.desdePalanca / 1.2 * pi);
+    if (j.desdePalanca < 1.8) f = sin(j.desdePalanca / 1.8 * pi) * 1.25;
     if (j.desdeDescargaReal < 1.8) f = max(f, sin(j.desdeDescargaReal / 1.8 * pi) * 1.3);
     if (f <= 0.01) return;
     c.save();
     c.clipPath(_interior);
     final centro = g.p(0, 104);
+    // Hueco oscuro del desagüe.
+    _sombreado
+      ..shader = ui.Gradient.radial(centro, 16 * g.s * f, [const Color(0xCC0B2530), const Color(0x000B2530)])
+      ..color = const Color(0xFF000000);
+    c.drawOval(Rect.fromCenter(center: centro, width: 34 * g.s * f, height: 18 * g.s * f), _sombreado);
+    _sombreado.shader = null;
     final ciclon = imagenes['ciclon'];
     if (ciclon != null) {
       c.save();
@@ -708,12 +729,12 @@ class PintorFusion extends CustomPainter {
     _trazo
       ..strokeWidth = 1.6 * g.s
       ..color = Colors.white.withValues(alpha: (0.75 * f).clamp(0.0, 0.9));
-    for (var k = 0; k < 3; k++) {
+    for (var k = 0; k < 5; k++) {
       final p = Path();
       for (var i = 0; i <= 30; i++) {
         final th = i / 30 * pi * 3.2;
         final r = (2 + th * 4.2) * f;
-        final a = th - t * 8 + k * pi * 2 / 3;
+        final a = th - t * 11 + k * pi * 2 / 5;
         final o = centro + Offset(cos(a) * r * g.s, sin(a) * r * g.s * 0.55);
         if (i == 0) {
           p.moveTo(o.dx, o.dy);
@@ -811,6 +832,37 @@ class PintorFusion extends CustomPainter {
             rot: f.giro * u * 9, alfa: 1 - u * u, id: f.nivel, t: t, mirada: Offset(cos(a + 1), sin(a + 1)), miedo: true);
       }
     }
+  }
+
+  // Agua que baja por las paredes de la poceta al jalar (como el borde de un inodoro de verdad).
+  void _chorros(Canvas c, GeoFusion g, double t) {
+    final d = min(j.desdePalanca, j.desdeDescargaReal);
+    if (d > 1.1 || mov == Movimiento.nada) return;
+    final f = d < 0.15 ? d / 0.15 : 1 - (d - 0.15) / 0.95;
+    c.save();
+    c.clipPath(_interior);
+    for (final lado in const [-1.0, 1.0]) {
+      for (var k = 0; k < 4; k++) {
+        final p = Path();
+        for (var i = 0; i <= 12; i++) {
+          final u = i / 12;
+          final y = 2 + u * (_yAgua - 2);
+          final pared = y < yRecto ? mitadAncho : radioElipseX * sqrt(max(0.0, 1 - pow((y - yRecto) / radioElipseY, 2)));
+          final x = lado * (pared - 2.5 - k * 2.2 - u * 3) + sin(u * 9 + t * 22 + k) * 0.8;
+          final o = g.p(x, y);
+          if (i == 0) {
+            p.moveTo(o.dx, o.dy);
+          } else {
+            p.lineTo(o.dx, o.dy);
+          }
+        }
+        _trazo
+          ..strokeWidth = (2.4 - k * 0.4) * g.s
+          ..color = Color.fromRGBO(200, 238, 250, (0.8 - k * 0.15) * f);
+        c.drawPath(p, _trazo);
+      }
+    }
+    c.restore();
   }
 
   void _aguaDelante(Canvas c, GeoFusion g, double t) {

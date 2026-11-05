@@ -174,6 +174,9 @@ const List<_Evento> _eventos = [
 
 const double duracionTemblor = 1.4;
 
+/// Segundos que el remolino de la palanca chupa la pila hacia abajo.
+const double duracionSuccion = 1.0;
+
 class _Lado {
   const _Lado(this.ax, this.ay, this.nx, this.ny);
   final double ax, ay, nx, ny;
@@ -329,12 +332,14 @@ class JuegoFusion {
     return m;
   }
 
-  /// Jala la palanca si está llena: se traga todos los niveles 1 y 2 (sin puntos).
+  /// Jala la palanca si está llena: se traga todos los niveles 1 y 2 (sin puntos) y durante [duracionSuccion] s el
+  /// remolino chupa la pila hacia el fondo, así baja aunque no haya chiquitos. [SucesoFusion.cadena] = cuántos se tragó.
   bool jalarPalanca() {
     if (!palancaLista || fase != FaseFusion.jugando) return false;
     carga = 0;
     desdePalanca = 0;
-    _sucesos.add(const SucesoFusion(TipoSuceso.palanca, y: yFondo));
+    final tragados = mojones.where((m) => m.nivel <= 2).length;
+    _sucesos.add(SucesoFusion(TipoSuceso.palanca, y: yFondo, cadena: tragados));
     for (final m in mojones) {
       if (m.nivel <= 2) {
         m.vivo = false;
@@ -447,7 +452,9 @@ class JuegoFusion {
   void _integrar(double h) {
     final vmax = velocidadMaxima * h;
     final vsubir = velocidadSubida * h;
-    final g = gravedad * h * h;
+    // Succión de la palanca: más gravedad y un tirón hacia el centro que se apaga solo.
+    final succion = fase == FaseFusion.jugando && desdePalanca < duracionSuccion ? 1 - desdePalanca / duracionSuccion : 0.0;
+    final g = gravedad * (1 + 1.6 * succion) * h * h;
     for (final m in mojones) {
       var vx = m.x - m.px, vy = m.y - m.py;
       final v2 = vx * vx + vy * vy;
@@ -462,7 +469,7 @@ class JuegoFusion {
       vy *= 0.999;
       m.px = m.x;
       m.py = m.y;
-      m.x += vx;
+      m.x += vx - m.x * succion * 0.9 * h * h * 60;
       m.y += vy + g;
       if (m.r < m.rObjetivo) m.r = min(m.rObjetivo, m.r + (m.rObjetivo - m.r) * 0.08 + 0.02);
       m.carga = 0;
