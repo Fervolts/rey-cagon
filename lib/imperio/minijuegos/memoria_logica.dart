@@ -9,9 +9,11 @@
 // Puntos: crear un nivel da puntosPorNivel, que crece más rápido que el tamaño (los grandes valen mucho más). Fusiones
 // encadenadas (una fusión que provoca otra en menos de 0.5 s) multiplican hasta x4, y la presión multiplica todo: x2
 // desde el segundo 60 y x4 desde el 120, así que aguantar sin desbordar es lo que más paga. Dos Reyes juntos hacen la
-// descarga gigante. No hay reloj: se juega hasta que la poceta se desborda (o hasta llegar a topePuntosFusion). La
-// partida puede arrancar con unos mojones ya adentro (niveles distintos al azar): esa es la perilla de dificultad. Nada
-// pasa de topePuntosFusion y lo que se reporta nunca pasa de (segundos + 1) * puntosPorSegundoFusion.
+// descarga gigante (y cada descarga real de la partida paga más que la anterior). Con dos Reyes vivos se atraen y la
+// poceta crece (todo se achica con una animación) para que se puedan juntar; tras la descarga vuelve a su tamaño. No hay
+// reloj ni tope práctico: se juega hasta que la poceta se desborda. La partida puede arrancar con unos mojones ya adentro
+// (niveles distintos al azar): esa es la perilla de dificultad. Lo que se reporta nunca pasa de topePuntosFusion (el
+// límite de la columna en el servidor) ni de (segundos + 1) * puntosPorSegundoFusion.
 
 import 'dart:math';
 
@@ -33,11 +35,21 @@ const int bonusDescargaReal = 140;
 const int multiplicadorMaximoFusion = 4;
 const double ventanaCombo = 0.5;
 
-/// Contrato del servidor.
-const int topePuntosFusion = 3600;
+/// Contrato del servidor (flags `minijuego_*_memoria`). El tope es el de la columna: en la práctica no se llega.
+const int topePuntosFusion = 1000000;
 const int puntosPorSegundoFusion = 400;
 const int minMsFusion = 3000;
-const int maxMsFusion = 600000;
+const int maxMsFusion = 3600000;
+
+/// La poceta crece (las piezas se achican a esta fracción) cada vez que hay dos Reyes vivos, hasta [crecidasMaximas].
+const double escalaPorCrecida = 0.85;
+const int crecidasMaximas = 3;
+
+/// Tirón entre Reyes vivos y, durante el evento imán, entre iguales cercanos (unidades/s²).
+const double atraccionReyes = 300;
+const double atraccionIman = 170;
+const double alcanceIman = 34;
+const double duracionIman = 5;
 
 /// Mojones que ya están en la poceta al empezar (flag `fusion_piezas_inicio`), cada uno de un nivel distinto.
 const int piezasInicioDefecto = 4;
@@ -48,7 +60,7 @@ const int nivelMaximoInicio = 6;
 
 /// Después de los eventos fijos, uno cada tantos segundos en rueda.
 const double cadaEventoRueda = 25;
-const List<String> _rueda = ['temblor', 'frijoles', 'lluvia'];
+const List<String> _rueda = ['temblor', 'iman', 'frijoles', 'lluvia'];
 
 /// Paso fijo y subpasos de la física.
 const double pasoFijo = 1 / 60;
@@ -87,14 +99,19 @@ int puntosReportables(int puntos, int ms) {
 }
 
 class Mojon {
-  Mojon(this.id, this.nivel, this.x, this.y) : px = x, py = y, r = radioDe(nivel), rObjetivo = radioDe(nivel);
+  Mojon(this.id, this.nivel, this.x, this.y, {double escala = 1})
+      : px = x,
+        py = y,
+        r = radioDe(nivel) * escala,
+        rObjetivo = radioDe(nivel) * escala;
   final int id;
   final int nivel;
   double x, y, px, py;
 
-  /// Radio actual: al nacer de una fusión crece desde el de sus padres hasta [rObjetivo].
+  /// Radio actual: al nacer de una fusión crece desde el de sus padres hasta [rObjetivo]; cuando la poceta crece se
+  /// achica despacio hasta el nuevo.
   double r;
-  final double rObjetivo;
+  double rObjetivo;
   double edad = 0;
 
   /// Aplastón de 0 a 1 (al caer o al nacer); se apaga solo.
@@ -126,8 +143,11 @@ enum TipoSuceso {
   /// Se creó un Rey (nivel 9).
   rey,
 
-  /// Dos Reyes: se va todo por el desagüe.
+  /// Dos Reyes: se va todo por el desagüe. [SucesoFusion.cadena] = número de descarga real en la partida.
   descargaReal,
+
+  /// Hay dos Reyes: la poceta crece. [SucesoFusion.nivel] = cuántas veces lleva.
+  crece,
 
   /// Palanca: se tragó los chiquitos. Va seguido de un [tragado] por pieza.
   palanca,
@@ -235,6 +255,14 @@ class JuegoFusion {
   int fusiones = 0;
   int nivelMasAlto = 1;
   int reyes = 0;
+  int descargas = 0;
+
+  /// Tamaño de las piezas respecto al normal (baja cuando la poceta crece) y veces que creció.
+  double escala = 1;
+  int crecidas = 0;
+  int crecidasTotal = 0;
+  double desdeCrecida = 99;
+  double imanHasta = -1;
 
   /// Pieza en la pinza y la que viene.
   late int actual;
@@ -276,6 +304,10 @@ class JuegoFusion {
   /// La poceta se calienta: desde el segundo 60 todo vale x2 y desde el 120 x4.
   int get presion => t >= 120 ? 4 : (t >= 60 ? 2 : 1);
   bool get temblando => t < temblorHasta;
+  bool get imanActivo => t < imanHasta;
+
+  /// Radio de una pieza nueva de [nivel] con el tamaño actual de la poceta.
+  double radio(int nivel) => radioDe(nivel) * escala;
   bool get llegoAlMaximo => fase == FaseFusion.maximo || (fase == FaseFusion.terminado && !motivoDesborde);
   bool get puedeSoltar => fase == FaseFusion.jugando && _espera <= 0;
   double get esperaFraccion => (_espera / esperaSoltar).clamp(0.0, 1.0);
@@ -316,7 +348,7 @@ class JuegoFusion {
     return 1;
   }
 
-  void apuntar(double x) => apunte = x.clamp(-mitadAncho + radioDe(actual), mitadAncho - radioDe(actual));
+  void apuntar(double x) => apunte = x.clamp(-mitadAncho + radio(actual), mitadAncho - radio(actual));
 
   /// Suelta la pieza de la pinza en [apunte]. Devuelve si se pudo.
   bool soltar() {
@@ -363,7 +395,7 @@ class JuegoFusion {
   }
 
   Mojon _crear(int nivel, double x, double y) {
-    final m = Mojon(_ids++, nivel, x, y);
+    final m = Mojon(_ids++, nivel, x, y, escala: escala);
     mojones.add(m);
     return m;
   }
@@ -406,11 +438,13 @@ class JuegoFusion {
     _tFase += dt;
     desdePalanca += dt;
     desdeDescargaReal += dt;
+    desdeCrecida += dt;
     if (_espera > 0) _espera -= dt;
 
     if (fase == FaseFusion.jugando) {
       _eventosDelTurno();
       _llover();
+      _vigilarReyes();
     }
     if (temblando) _sacudir();
 
@@ -462,6 +496,8 @@ class JuegoFusion {
           _frijoles = 6;
           // La pieza que viene ya es frijol.
           siguiente = _sorteo();
+        case 'iman':
+          imanHasta = t + duracionIman;
         case 'lluvia':
           for (var i = 0; i < 5; i++) {
             _lluvia.add((t + 0.6 + i * 0.35, -40 + _rng.nextDouble() * 80, 1 + _rng.nextInt(2)));
@@ -474,7 +510,7 @@ class JuegoFusion {
   void _llover() {
     while (_lluvia.isNotEmpty && t >= _lluvia.first.$1) {
       final (_, x, nivel) = _lluvia.removeAt(0);
-      final r = radioDe(nivel);
+      final r = radio(nivel);
       _crear(nivel, x.clamp(-mitadAncho + r, mitadAncho - r), yColgado - 14);
     }
   }
@@ -496,6 +532,7 @@ class JuegoFusion {
     // Succión de la palanca: más gravedad y un tirón hacia el centro que se apaga solo.
     final succion = fase == FaseFusion.jugando && desdePalanca < duracionSuccion ? 1 - desdePalanca / duracionSuccion : 0.0;
     final g = gravedad * (1 + 1.6 * succion) * h * h;
+    _atraer(h);
     for (final m in mojones) {
       var vx = m.x - m.px, vy = m.y - m.py;
       final v2 = vx * vx + vy * vy;
@@ -512,7 +549,12 @@ class JuegoFusion {
       m.py = m.y;
       m.x += vx - m.x * succion * 0.9 * h * h * 60;
       m.y += vy + g;
-      if (m.r < m.rObjetivo) m.r = min(m.rObjetivo, m.r + (m.rObjetivo - m.r) * 0.08 + 0.02);
+      if (m.r < m.rObjetivo) {
+        m.r = min(m.rObjetivo, m.r + (m.rObjetivo - m.r) * 0.08 + 0.02);
+      } else if (m.r > m.rObjetivo) {
+        // La poceta creció: se achica en ~1 s para que se vea.
+        m.r = max(m.rObjetivo, m.r - (m.r - m.rObjetivo) * 0.012 - 0.0005);
+      }
       m.carga = 0;
     }
   }
@@ -627,11 +669,14 @@ class JuegoFusion {
     if (fase == FaseFusion.jugando && carga < cargaPalanca) carga++;
 
     if (a.nivel == nivelMaximo) {
-      // Dos Reyes: descarga real, se va todo.
-      final pts = bonusDescargaReal * min<int>(cadena, multiplicadorMaximoFusion) * presion;
+      // Dos Reyes: descarga real, se va todo. Cada una de la partida paga más que la anterior; la poceta vuelve a su tamaño.
+      descargas++;
+      final pts = bonusDescargaReal * descargas * min<int>(cadena, multiplicadorMaximoFusion) * presion;
       _sumar(pts);
       desdeDescargaReal = 0;
-      _sucesos.add(SucesoFusion(TipoSuceso.descargaReal, x: x, y: y, nivel: nivelMaximo, puntos: pts, cadena: cadena));
+      escala = 1;
+      crecidas = 0;
+      _sucesos.add(SucesoFusion(TipoSuceso.descargaReal, x: x, y: y, nivel: nivelMaximo, puntos: pts, cadena: descargas));
       for (final m in mojones) {
         if (m.vivo) {
           m.vivo = false;
@@ -643,7 +688,7 @@ class JuegoFusion {
     }
 
     final nivel = a.nivel + 1;
-    final m = Mojon(_ids++, nivel, x, y)
+    final m = Mojon(_ids++, nivel, x, y, escala: escala)
       ..r = a.r * 1.02
       ..px = x - ((a.x - a.px) + (b.x - b.px)) / 2
       ..py = y - ((a.y - a.py) + (b.y - b.py)) / 2
@@ -662,6 +707,52 @@ class JuegoFusion {
   }
 
   void _sumar(int p) => puntosCrudos = min(puntosCrudos + p, topePuntosFusion);
+
+  /// Con dos Reyes vivos la poceta crece (si le quedan crecidas y ya terminó la anterior).
+  void _vigilarReyes() {
+    if (crecidas >= crecidasMaximas || desdeCrecida < 1.5) return;
+    var vivos = 0;
+    for (final m in mojones) {
+      if (m.vivo && m.nivel == nivelMaximo) vivos++;
+    }
+    if (vivos < 2) return;
+    crecidas++;
+    crecidasTotal++;
+    escala *= escalaPorCrecida;
+    desdeCrecida = 0;
+    for (final m in mojones) {
+      m.rObjetivo = radioDe(m.nivel) * escala;
+    }
+    _sucesos.add(SucesoFusion(TipoSuceso.crece, nivel: crecidas));
+  }
+
+  /// Los Reyes vivos se buscan siempre; durante el imán, cada pieza busca a la igual más cercana a su alcance.
+  void _atraer(double h) {
+    if (fase != FaseFusion.jugando) return;
+    final iman = imanActivo;
+    final h2 = h * h;
+    for (final a in mojones) {
+      if (a == cayendo || (a.nivel != nivelMaximo && !iman)) continue;
+      Mojon? cerca;
+      var mejor = double.infinity;
+      for (final b in mojones) {
+        if (identical(a, b) || b.nivel != a.nivel || b == cayendo) continue;
+        final dx = b.x - a.x, dy = b.y - a.y;
+        final d2 = dx * dx + dy * dy;
+        if (d2 < mejor) {
+          mejor = d2;
+          cerca = b;
+        }
+      }
+      if (cerca == null) continue;
+      final rey = a.nivel == nivelMaximo;
+      final d = sqrt(mejor);
+      if (d < 1e-6 || (!rey && d > a.r + cerca.r + alcanceIman)) continue;
+      final f = (rey ? atraccionReyes : atraccionIman) * h2 / d;
+      a.x += (cerca.x - a.x) * f;
+      a.y += (cerca.y - a.y) * f;
+    }
+  }
 
   void _vigilarDesborde(double dt) {
     var arriba = false;

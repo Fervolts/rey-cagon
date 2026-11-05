@@ -406,6 +406,7 @@ class PintorFusion extends CustomPainter {
     _yAgua = _nivelAgua();
     _tanque(canvas, g, t);
     _poceta(canvas, g);
+    _crecida(canvas, g);
     _aguaAtras(canvas, g, t);
     _remolino(canvas, g, t);
     _guia(canvas, g);
@@ -538,7 +539,7 @@ class PintorFusion extends CustomPainter {
     final rotulo = _texto(tr('SIGUE', 'NEXT'), max(7.0, 3.0 * s), const Color(0xFFFFD60A));
     rotulo.paint(c, Offset(ventana.center.dx - rotulo.width / 2, ventana.top + 1.2 * s));
     final sig = j.siguiente;
-    final rSig = min(radioDe(sig) * 1.05, 10.0);
+    final rSig = min(j.radio(sig) * 1.05, 10.0);
     _dibujarMojon(c, g, 0, -85 + (10 - rSig) * 0.3, rSig, sig, id: -1, ojos: true, mirada: const Offset(0, 1), t: t);
 
     // Barra de carga: 10 segmentos.
@@ -607,6 +608,27 @@ class PintorFusion extends CustomPainter {
     // Tubo del tanque a la poceta.
     _relleno.color = oscuro ? const Color(0xFF8E9BA4) : const Color(0xFFC5D0D8);
     c.drawRect(Rect.fromLTRB(g.p(-5, -50).dx, g.p(0, -50).dy, g.p(5, -47).dx, g.p(0, -47).dy), _relleno);
+  }
+
+  // ----- La poceta crece: el contorno sale hacia afuera en ondas doradas y se apaga.
+  void _crecida(Canvas c, GeoFusion g) {
+    final d = j.desdeCrecida;
+    if (mov == Movimiento.nada || d > 1.4) return;
+    final centro = g.p(0, 60);
+    for (var i = 0; i < (mov == Movimiento.completo ? 3 : 1); i++) {
+      final k = ((d - i * 0.18) / 1.0).clamp(0.0, 1.0);
+      if (k <= 0 || k >= 1) continue;
+      c.save();
+      c.translate(centro.dx, centro.dy);
+      final e = 1 + 0.22 * Curves.easeOut.transform(k);
+      c.scale(e, e);
+      c.translate(-centro.dx, -centro.dy);
+      _trazo
+        ..strokeWidth = max(1.0, (1.6 - k) * g.s)
+        ..color = const Color(0xFFFFD60A).withValues(alpha: (1 - k) * 0.9);
+      c.drawPath(_interior, _trazo);
+      c.restore();
+    }
   }
 
   // ----- Poceta de frente, cortada: pedestal, porcelana, interior, borde.
@@ -750,7 +772,7 @@ class PintorFusion extends CustomPainter {
   // ----- Guía punteada desde la garra hasta donde va a caer.
   void _guia(Canvas c, GeoFusion g) {
     if (j.fase != FaseFusion.jugando) return;
-    final r = radioDe(j.actual);
+    final r = j.radio(j.actual);
     final x = j.apunte;
     final yFin = j.alturaDeCaida(x, r);
     if (!yFin.isFinite) return;
@@ -920,7 +942,7 @@ class PintorFusion extends CustomPainter {
     c.drawRect(Rect.fromLTRB(g.p(-56, yRiel - 1.2).dx, g.p(0, yRiel - 1.2).dy, g.p(56, yRiel + 1.2).dx, g.p(0, yRiel + 1.2).dy), _relleno);
     if (j.fase != FaseFusion.jugando) return;
     final x = j.apunte;
-    final r = radioDe(j.actual);
+    final r = j.radio(j.actual);
     final espera = j.esperaFraccion;
     final carro = g.p(x, yRiel);
     _relleno.color = const Color(0xFF3B4A55);

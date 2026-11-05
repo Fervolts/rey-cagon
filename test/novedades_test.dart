@@ -4,7 +4,7 @@ import 'package:rey_cagon/novedades.dart';
 void main() {
   test('historial de novedades bien formado', () {
     expect(historialNovedades, isNotEmpty);
-    expect(historialNovedades.first.version, '2.19.2');
+    expect(historialNovedades.first.version, '2.19.3');
     for (var i = 0; i < historialNovedades.length; i++) {
       final v = historialNovedades[i];
       expect(v.novedades, isNotEmpty, reason: v.version);

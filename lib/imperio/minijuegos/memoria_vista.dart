@@ -16,6 +16,7 @@ import '../../emoji.dart';
 import '../../idioma.dart';
 import '../../tema.dart';
 import '../control.dart';
+import '../telemetria.dart';
 import 'estadisticas.dart';
 import 'marco.dart';
 import 'memoria_logica.dart';
@@ -249,7 +250,7 @@ class _EstadoMemoria extends State<VistaMemoria> with SingleTickerProviderStateM
         }
       case TipoSuceso.fusion:
         final n = s.nivel;
-        final r = radioDe(n);
+        final r = _j.radio(n);
         _sonar(switch (n) { <= 2 => 'fusion1', <= 4 => 'fusion2', <= 6 => 'fusion3', _ => 'fusion4' }, volumen: 0.45 + n * 0.06);
         _ef.estallido(s.x, s.y, n, r);
         if (s.puntos > 0) {
@@ -272,12 +273,12 @@ class _EstadoMemoria extends State<VistaMemoria> with SingleTickerProviderStateM
         }
       case TipoSuceso.dorado:
         _sonar('dorado', volumen: 0.9);
-        _ef.chispas(s.x, s.y, 16, const Color(0xFFFFD60A), radio: radioDe(8));
+        _ef.chispas(s.x, s.y, 16, const Color(0xFFFFD60A), radio: _j.radio(8));
         _anunciar(tr('¡MOJÓN DORADO!', 'GOLDEN POO!'), sub: tr('Uno más y nace un Rey', 'One more and a King is born'),
             color: const Color(0xFFFFD60A));
       case TipoSuceso.rey:
         _sonar('gana', volumen: 0.9);
-        _ef.chispas(s.x, s.y, 24, const Color(0xFFFFD60A), radio: radioDe(9));
+        _ef.chispas(s.x, s.y, 24, const Color(0xFFFFD60A), radio: _j.radio(9));
         _ef.sacudir(9);
         _ef.destellar(const Color(0xFFFFD60A), 0.55);
         _congelar(0.08);
@@ -287,15 +288,24 @@ class _EstadoMemoria extends State<VistaMemoria> with SingleTickerProviderStateM
       case TipoSuceso.descargaReal:
         _sonar('descarga', volumen: 1);
         _sonar('gana', volumen: 0.8);
-        _ef.estallido(s.x, s.y, nivelMaximo, radioDe(nivelMaximo));
+        _ef.estallido(s.x, s.y, nivelMaximo, radioDe(nivelMaximo) * 1.2);
         _ef.salpicar(s.x, 86, 20, fuerza: 1.6);
         _ef.texto(s.x, s.y - 30, '+${s.puntos}', const Color(0xFFFFD60A), tam: 26, dur: 1.6);
         _ef.sacudir(14);
         _ef.destellar(Colors.white, 0.85);
         _congelar(0.08);
         vibracionSuave();
-        _anunciar(tr('¡DESCARGA REAL!', 'ROYAL FLUSH!'), sub: tr('Dos Reyes se fueron por el tubo', 'Two Kings went down the pipe'),
+        _anunciar(s.cadena > 1 ? tr('¡DESCARGA REAL x${s.cadena}!', 'ROYAL FLUSH x${s.cadena}!') : tr('¡DESCARGA REAL!', 'ROYAL FLUSH!'),
+            sub: tr('Dos Reyes se fueron por el tubo y la poceta volvió a su tamaño', 'Two Kings went down the pipe and the bowl shrank back'),
             color: const Color(0xFFFFD60A), dur: 2.4);
+      case TipoSuceso.crece:
+        _sonar('burbuja', volumen: 0.8);
+        _sonar('combo', volumen: 0.6);
+        _ef.sacudir(4);
+        _ef.destellar(const Color(0xFFFFD60A), 0.3);
+        vibracionSuave();
+        _anunciar(tr('¡LA POCETA CRECE!', 'THE BOWL GROWS!'),
+            sub: tr('Los Reyes se buscan: júntalos', 'The Kings pull together: merge them'), color: const Color(0xFFFFD60A), dur: 2);
       case TipoSuceso.palanca:
         _sonar('descarga', volumen: 1);
         _sonar('burbuja', volumen: 0.5);
@@ -357,6 +367,10 @@ class _EstadoMemoria extends State<VistaMemoria> with SingleTickerProviderStateM
         _sonar('combo', volumen: 0.9);
         _anunciar(tr('PRESIÓN x4', 'PRESSURE x4'), sub: tr('Todo vale cuatro veces', 'Everything is worth four times'),
             color: const Color(0xFFFFD60A));
+      case 'iman':
+        _sonar('burbuja', volumen: 0.6);
+        _anunciar(tr('¡IMÁN DE MOJONES!', 'POO MAGNET!'), sub: tr('Los iguales se atraen 5 s', 'Matches pull together for 5 s'),
+            color: const Color(0xFFFF9F1C));
       case 'lluvia':
         _sonar('viento', volumen: 0.6);
         _anunciar(tr('¡CAEN DEL TECHO!', 'INCOMING FROM ABOVE!'), sub: tr('Llueven bolitas', 'Little ones raining down'));
@@ -372,6 +386,10 @@ class _EstadoMemoria extends State<VistaMemoria> with SingleTickerProviderStateM
     vibracionSuave();
     final ms = max(_sw.elapsedMilliseconds, (_j.t * 1000).round()).clamp(minMsFusion, maxMsFusion - 1);
     final puntos = puntosReportables(_j.puntosVisibles, ms);
+    Telemetria.instancia.registrar('fusion_fin', {
+      'puntos': puntos, 'ms': ms, 'fusiones': _j.fusiones, 'nivel': _j.nivelMasAlto, 'reyes': _j.reyes,
+      'descargas': _j.descargas, 'crecidas': _j.crecidasTotal, 'desbordo': _j.desbordo,
+    });
     final espera = switch (widget.mov) { Movimiento.completo => 1100, Movimiento.simple => 800, Movimiento.nada => 500 };
     _hud.avisar();
     _cierre = Timer(Duration(milliseconds: espera), () {

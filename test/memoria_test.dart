@@ -29,12 +29,13 @@ void correr(JuegoFusion j, double segundos) {
 void main() {
   group('Fusión real: contrato', () {
     test('las constantes son las del servidor', () {
-      expect(topePuntosFusion, 3600);
+      expect(topePuntosFusion, 1000000);
       expect(puntosPorSegundoFusion, 400);
       expect(minMsFusion, 3000);
-      expect(maxMsFusion, 600000);
+      expect(maxMsFusion, 3600000);
       expect(puntosReportables(99999, 1000), 800);
-      expect(puntosReportables(99999, 500000), 3600);
+      expect(puntosReportables(99999, 500000), 99999);
+      expect(puntosReportables(9999999, 3599999), topePuntosFusion);
       expect(puntosReportables(-5, 4000), 0);
     });
 
@@ -119,6 +120,85 @@ void main() {
       expect(j.fase, FaseFusion.jugando);
     });
 
+    test('dos Reyes con algo en medio: la poceta crece, se atraen y hacen la descarga real', () {
+      final j = JuegoFusion(semilla: 1);
+      final r = radioDe(nivelMaximo);
+      poner(j, nivelMaximo, -mitadAncho + r, yFondo - r, id: 1);
+      poner(j, nivelMaximo, mitadAncho - r, yFondo - r - 30, id: 2);
+      poner(j, 3, 0, yFondo - 12, id: 3);
+      poner(j, 2, 4, yFondo - 30, id: 4);
+      final tipos = <TipoSuceso>[];
+      for (var t = 0.0; t < 8 && !tipos.contains(TipoSuceso.descargaReal); t += pasoFijo) {
+        j.avanzar(pasoFijo);
+        tipos.addAll(j.tomarSucesos().map((e) => e.tipo));
+      }
+      expect(tipos, contains(TipoSuceso.crece));
+      expect(tipos, contains(TipoSuceso.descargaReal));
+      expect(tipos.indexOf(TipoSuceso.crece), lessThan(tipos.indexOf(TipoSuceso.descargaReal)));
+      expect(j.crecidasTotal, greaterThanOrEqualTo(1));
+      expect(j.descargas, 1);
+      expect(j.escala, 1);
+      expect(j.fase, FaseFusion.jugando);
+    });
+
+    test('la poceta crece hasta 3 veces y las piezas se achican despacio', () {
+      final j = JuegoFusion(semilla: 2);
+      final r = radioDe(nivelMaximo);
+      // Reyes quietos lejos uno del otro: el tirón los junta, así que se vuelven a poner cada vez.
+      void reyesLejos() {
+        j.mojones.clear();
+        poner(j, nivelMaximo, -mitadAncho + r, yFondo - r, id: 1);
+        poner(j, nivelMaximo, mitadAncho - r, yFondo - r - 60, id: 2);
+        j.desdeCrecida = 99;
+        j.avanzar(pasoFijo);
+        j.tomarSucesos();
+      }
+
+      for (var k = 0; k < crecidasMaximas; k++) {
+        reyesLejos();
+      }
+      expect(j.crecidas, crecidasMaximas);
+      expect(j.escala, closeTo(pow(escalaPorCrecida, crecidasMaximas), 1e-9));
+      expect(j.radio(4), closeTo(radioDe(4) * j.escala, 1e-9));
+      final m = j.mojones.first;
+      expect(m.rObjetivo, closeTo(r * j.escala, 1e-9));
+      expect(m.r, greaterThan(m.rObjetivo));
+      reyesLejos();
+      expect(j.crecidas, crecidasMaximas);
+    });
+
+    test('cada descarga real paga más que la anterior', () {
+      final j = JuegoFusion(semilla: 1);
+      final r = radioDe(nivelMaximo);
+      final pagos = <int>[];
+      for (var k = 0; k < 2; k++) {
+        poner(j, nivelMaximo, -r - 0.5, yFondo - r - 20, id: 10 + k * 2);
+        poner(j, nivelMaximo, r + 0.5, yFondo - r - 20, id: 11 + k * 2);
+        correr(j, 1.5);
+        pagos.addAll(j.tomarSucesos().where((e) => e.tipo == TipoSuceso.descargaReal).map((e) => e.puntos));
+      }
+      expect(pagos, hasLength(2));
+      expect(pagos[1], greaterThan(pagos[0]));
+      expect(j.descargas, 2);
+    });
+
+    test('el imán junta iguales que están cerca', () {
+      final sin = JuegoFusion(semilla: 3), con = JuegoFusion(semilla: 3);
+      for (final j in [sin, con]) {
+        poner(j, 3, -mitadAncho + radioDe(3), yFondo - radioDe(3) - 1, id: 1);
+        poner(j, 3, -mitadAncho + radioDe(3) * 3 + 14, yFondo - radioDe(3) - 1, id: 2);
+      }
+      con.imanHasta = 99;
+      double cuando(JuegoFusion j) {
+        while (j.fusiones == 0 && j.t < 5) {
+          j.avanzar(pasoFijo);
+        }
+        return j.t;
+      }
+
+      expect(cuando(con), lessThan(cuando(sin)));
+    });
+
     test('la palanca se carga con fusiones y se traga solo los nivel 1 y 2', () {
       final j = JuegoFusion(semilla: 1);
       expect(j.jalarPalanca(), isFalse);
@@ -183,7 +263,7 @@ void main() {
       expect(j.fase, FaseFusion.jugando);
       expect(j.t, greaterThan(239));
       // Pasada la lista fija los eventos siguen en rueda.
-      expect(claves.sublist(claves.length - 3), ['temblor', 'frijoles', 'lluvia']);
+      expect(claves.sublist(claves.length - 3), ['temblor', 'iman', 'frijoles']);
       expect(claves, isNot(contains('ultimos10')));
     });
 
@@ -284,7 +364,7 @@ void main() {
         final (puntos, ms) = llamadas.single;
         expect(ms, inInclusiveRange(minMsFusion, maxMsFusion));
         expect(puntos, lessThanOrEqualTo(((ms / 1000 + 1) * puntosPorSegundoFusion).floor()));
-        expect(puntos, j.puntosVisibles);
+        expect(puntos, puntosReportables(j.puntosVisibles, ms));
         await tester.pumpWidget(const SizedBox());
       });
     }

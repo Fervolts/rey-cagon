@@ -21,6 +21,12 @@ class VersionNovedades {
 
 /// El historial público, de la más nueva a la más vieja. Al sacar una versión nueva se agrega arriba.
 const historialNovedades = <VersionNovedades>[
+  VersionNovedades('2.19.3', '2026-11-05', [
+    ('👑', 'Fusión real ya no tiene tope de puntos: juegas hasta que se desborde. Con dos Reyes en la poceta, la poceta crece y los Reyes se buscan solos para la descarga real.',
+        'Royal Fusion has no score cap anymore: play until it overflows. With two Kings in the bowl, the bowl grows and the Kings pull together for the royal flush.'),
+    ('🧲', 'Nuevo evento en Fusión real: el imán de mojones junta a los iguales por 5 segundos. Y cada descarga real de la partida paga más que la anterior.',
+        'New Royal Fusion event: the poo magnet pulls matches together for 5 seconds. And every royal flush in a game pays more than the last one.'),
+  ]),
   VersionNovedades('2.19.2', '2026-11-05', [
     ('🪶', 'Los minijuegos gastan mucha menos memoria en teléfonos sencillos (Android Go o con poca RAM): el sonido va más liviano y la música se apaga ahí para que no se cierre el juego.',
         'Minigames use much less memory on basic phones (Android Go or low RAM): sound is lighter and music is turned off there so the game does not close.'),

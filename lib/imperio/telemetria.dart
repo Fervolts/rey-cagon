@@ -49,6 +49,7 @@ Future<int> _enviarPorRpc(List<Map<String, Object?>> lote) async {
 /// - `minijuego_toca` {id}: tocó una tarjeta de la Sala (abierta o "próximamente")
 /// - `minijuego_inicia` {juego}: empezó una partida de la Sala
 /// - `minijuego_fin` {juego, puntos, ms, minutos, mj, record}: el servidor guardó la partida (minutos = lo que pagó; mj = lo que sumó la app)
+/// - `fusion_fin` {puntos, ms, fusiones, nivel, reyes, descargas, crecidas, desbordo}: terminó una partida de Fusión real (2.19.3)
 /// - `minijuego_rechazo` {juego, puntos, motivo}: el servidor no aceptó la partida (apagado, juego, invalida)
 /// - `pestana_abre` {}
 /// - `mejoras_abre` {edificio}: desplegó las mejoras de un edificio (`poceta` = las de TU POCETA)

@@ -106,7 +106,8 @@ ResultadoBot jugarBot(TipoBot tipo, int semilla, {double dt = 1 / 60, int piezas
   var proximo = 0.3;
   var ms = 0.0;
   var soltadas = 0;
-  while (!j.terminado && ms < maxMsFusion) {
+  // Tope de los bots: 10 min (sin tope una partida buena podría durar la hora entera del servidor).
+  while (!j.terminado && ms < 600000) {
     j.avanzar(dt);
     ms += dt * 1000;
     j.tomarSucesos();
