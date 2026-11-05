@@ -10,6 +10,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import numpy as np  # noqa: E402
 import sonidos as s  # noqa: E402
 
 s.CALIDADES.update({'m9': [0, 3, 7, 10, 14], '9': [0, 4, 7, 10, 14], 'add9': [0, 4, 7, 14]})
@@ -160,48 +161,108 @@ def musica_destapa():
     }, reverb_tau=0.22, eco_beats=0.75, eco_fb=0.3)
 
 
+def vibrafono(f, dur, sr=s.SRM):
+    # Barras afinadas 1:4:10, motor de trémolo y pedal: suena lo que dura la nota y se apaga.
+    n = s.muestras(dur + 0.08, sr)
+    t = np.arange(n) / sr
+    y = np.sin(s.TAU * f * t) * np.exp(-t / 1.3)
+    y += 0.22 * np.sin(s.TAU * f * 4 * t) * np.exp(-t / 0.22)
+    y += 0.05 * np.sin(s.TAU * f * 10 * t) * np.exp(-t / 0.05)
+    y *= 1 - 0.22 * (1 - np.cos(s.TAU * 5.2 * t)) / 2
+    apagar = np.clip((dur + 0.08 - t) / 0.08, 0, 1)
+    return y * apagar * (1 - np.exp(-t / 0.0008))
+
+
+def marimba_afinada(f, dur, sr=s.SRM):
+    t = s.tiempo(dur, sr)
+    esc = (440 / f) ** 0.35
+    y = np.sin(s.TAU * f * t + 0.6 * np.exp(-t / 0.012) * np.sin(s.TAU * f * t)) * np.exp(-t / (0.45 * esc))
+    y += 0.3 * np.sin(s.TAU * f * 4 * t) * np.exp(-t / (0.08 * esc))
+    y += 0.08 * np.sin(s.TAU * f * 10 * t) * np.exp(-t / (0.02 * esc))
+    return y * (1 - np.exp(-t / 0.0006))
+
+
+def rhodes(f, dur, sr=s.SRM):
+    # Piano eléctrico por FM 1:1, dos voces apenas desafinadas.
+    n = s.muestras(dur + 0.15, sr)
+    t = np.arange(n) / sr
+    indice = 1.1 * np.exp(-t / 0.18) + 0.25
+    y = sum(np.sin(s.TAU * f * c * t + indice * np.sin(s.TAU * f * c * t)) for c in (2 ** (-3 / 1200), 2 ** (3 / 1200)))
+    y *= np.exp(-t / 1.6) * np.clip((dur + 0.15 - t) / 0.15, 0, 1)
+    return y * (1 - np.exp(-t / 0.002))
+
+
+# Voicings abiertos (sin segundas en el grave): la nota del motivo siempre es nota del acorde.
+VOICING = {
+    'Fmaj7': ['A3', 'C4', 'E4', 'G4'], 'Am7': ['G3', 'C4', 'E4'], 'Dm7': ['F3', 'A3', 'C4', 'E4'],
+    'Gm7': ['Bb3', 'D4', 'F4', 'A4'], 'C7': ['Bb3', 'E4', 'G4'], 'Bbmaj7': ['A3', 'D4', 'F4'],
+}
+RAIZ = {'Fmaj7': 'F2', 'Am7': 'A2', 'Dm7': 'D2', 'Gm7': 'G2', 'C7': 'C2', 'Bbmaj7': 'Bb1'}
+
+
 def musica_fusion():
     s.semilla('musica_fusion')
-    p = s.Pista(96, 12, swing=0.58)
+    p = s.Pista(108, 16)
+    a = ['Fmaj7', 'Am7', 'Dm7', 'Gm7 C7']
     frases = [
-        (['Fmaj7', 'Dm9', 'Bbmaj7', 'C9'], 0, 'E5/1 G5/1 Bb5/1 D6/2 C6/1'),
-        (['Bbmaj7', 'Gm9', 'Ebmaj7', 'F9'], 5, 'A5/1 C6/1 Eb6/1 G6/2 F6/1'),
-        (['Fmaj7', 'Dm9', 'Bbmaj7', 'C9'], 12, 'G5/1 E5/1 D5/1 C5/2 Bb4/1'),
+        (a, 0, 'A4/1 Bb4/1 C5/1 E5/1 G5/1 E5/1'),
+        (a, 0, 'D5/1 E5/1 G5/1 Bb5/1 A5/1 G5/1'),
+        (['Bbmaj7', 'Dm7', 'Gm7', 'C7'], 5, 'E5/1 G5/1 Bb5/1 D6/1 C6/1 Bb5/1'),
+        (a, 0, 'G5/1 E5/1 D5/1 C5/1 Bb4/1 G4/1'),
     ]
-    mar = lambda hz, d: s.marimba(hz, 1.2, s.SRM, 0.55)  # noqa: E731
+    vib = lambda hz, d: vibrafono(hz, d)  # noqa: E731
+    mar = lambda hz, d: marimba_afinada(hz, 0.9)  # noqa: E731
     for f, (acordes, tr, resp) in enumerate(frases):
         b0 = f * 16
         notas = [n + tr for n in CAGAR]
-        motivo(p, 'lead', b0, notas, mar, humano=0.004)
-        respuesta(p, 'lead', b0, resp, mar, 0.85)
-        if f == 2:
-            motivo(p, 'lead2', b0, notas, lambda hz, d: s.kalimba(hz, 0.8), octava=-1, humano=0.004)
-        for c, nombre in enumerate(acordes):
+        motivo(p, 'lead', b0, notas, vib, humano=0.003)
+        respuesta(p, 'resp', b0, resp, mar, 0.9)
+        if f == 3:
+            motivo(p, 'doble', b0, notas, lambda hz, d: marimba_afinada(hz, 0.7), octava=1, humano=0.003)
+        if f >= 2:
+            ritmo_morse(p, 'morse', b0, s.shaker(), 1.0)
+        for c, compas in enumerate(acordes):
             bc = b0 + c * 4
-            r = s.raiz_bajo(nombre, 41)
-            sig = s.raiz_bajo(frases[(f + 1) % 3][0][0] if c == 3 else acordes[c + 1], 41)
-            for b, mm, d in [(0, r, 1.3), (1.5, r, 0.45), (2.0, r + 7, 0.9), (3.5, sig - 1 if c % 2 else r + 12, 0.45)]:
-                p.poner('bajo', bc + b, s.bajo_pluck(s.hz(mm), d * p.spb), 1.0, humano=0.003)
-            p.poner('pad', bc, s.pad(s.voces(nombre, 53), 4 * p.spb + 0.3), 1.0)
-            if f >= 1:
-                ch = s.voces(nombre, 60)
-                arp = ch + [ch[1] + 12, ch[2] + 12, ch[0] + 12, ch[2]]
-                for k in range(8):
-                    p.poner('kalimba', bc + k * 0.5, s.kalimba(s.hz(arp[k % len(arp)]), 0.7), 0.8 if k % 2 == 0 else 0.6, humano=0.004)
+            partes = compas.split()
+            largo = 4 / len(partes)
+            for k, nombre in enumerate(partes):
+                bk = bc + k * largo
+                vs = [s.midi(x) for x in VOICING[nombre]]
+                # Rhodes: golpe en el 1 y empujón en el "y" del 2.
+                for b, d, g in ([(0, 1.4, 1.0), (1.5, 2.3, 0.75)] if largo == 4 else [(0, 1.8, 1.0)]):
+                    for m in vs:
+                        p.poner('rhodes', bk + b, rhodes(s.hz(m), d * p.spb), g, humano=0.004)
+                r = s.midi(RAIZ[nombre])
+                if largo == 4:
+                    sig = s.midi(RAIZ[(acordes[c + 1] if c < 3 else frases[(f + 1) % 4][0][0]).split()[0]])
+                    paso = sig + (1 if sig < r else -1) if abs(sig - r) > 2 else r + 7
+                    pasos = [(0, r, 1.3), (1.5, r, 0.45), (2.5, r + 7, 0.9), (3.5, paso, 0.45)]
+                else:
+                    pasos = [(0, r, 1.2), (1.5, r + 7, 0.45)]
+                for b, m, d in pasos:
+                    p.poner('bajo', bk + b, s.bajo_pluck(s.hz(m), d * p.spb), 1.0, humano=0.003)
+                if f >= 1:
+                    arp = vs + [vs[1] + 12, vs[0] + 12]
+                    for i in range(int(largo * 2)):
+                        p.poner('kalimba', bk + i * 0.5, s.kalimba(s.hz(arp[i % len(arp)] + 12), 0.6), 0.8 if i % 2 == 0 else 0.55, humano=0.004)
             p.poner('bombo', bc, s.kick(suave_=True))
             p.poner('bombo', bc + 2.5, s.kick(suave_=True), 0.8)
             if c % 2 == 1:
                 p.poner('bombo', bc + 1.75, s.kick(suave_=True), 0.5)
             p.poner('caja', bc + 1, s.snare(seco=False, oscuro=True), 0.8, humano=0.003)
             p.poner('caja', bc + 3, s.snare(seco=False, oscuro=True), 0.85, humano=0.003)
-            for k in range(8):
-                p.poner('hat', bc + k * 0.5, s.hat(), 0.7 if k % 2 == 0 else 0.45, humano=0.003)
-        if f >= 1:
-            ritmo_morse(p, 'morse', b0, s.shaker(), 1.0)
+            for k in range(16 if f >= 1 else 8):
+                paso = 0.25 if f >= 1 else 0.5
+                p.poner('hat', bc + k * paso, s.hat(), (0.7 if (k * paso) % 1 == 0 else 0.4) * (0.8 if f >= 1 else 1), humano=0.003)
+        for k, g in enumerate([0.3, 0.45, 0.6, 0.75]):
+            p.poner('caja', b0 + 15 + k * 0.25, s.snare(seco=False, oscuro=True), g * (1 if f % 2 else 0.5))
+    p.poner('hat', 0, s.platillo(), 0.4)
+    p.poner('hat', 32, s.platillo(), 0.4)
     return p.mezcla({
-        'lead': (-14, 0.25, 0.3), 'lead2': (-24, 0.3, 0.2), 'kalimba': (-27, 0.3, 0.2), 'bajo': (-19, 0.04, 0),
-        'pad': (-27, 0.4, 0), 'bombo': (-21, 0.02, 0), 'caja': (-27, 0.2, 0), 'hat': (-33, 0.05, 0), 'morse': (-31, 0.1, 0),
-    }, reverb_tau=0.3, eco_beats=0.75, eco_fb=0.3)
+        'lead': (-14, 0.25, 0.12), 'resp': (-19, 0.3, 0.2), 'doble': (-25, 0.3, 0.1), 'rhodes': (-21, 0.3, 0),
+        'kalimba': (-29, 0.3, 0.15), 'bajo': (-19, 0.04, 0), 'bombo': (-21, 0.02, 0), 'caja': (-27, 0.2, 0),
+        'hat': (-34, 0.05, 0), 'morse': (-31, 0.1, 0),
+    }, reverb_tau=0.3, eco_beats=1.0, eco_fb=0.25)
 
 
 MUSICAS = {'musica_tuberia': musica_tuberia, 'musica_destapa': musica_destapa, 'musica_fusion': musica_fusion}
