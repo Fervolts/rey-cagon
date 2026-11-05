@@ -154,41 +154,37 @@ void main() {
       expect(j.pesado, isTrue);
     });
 
-    test('toque corto = salto: despega, sube más de 1.2 m y no se encadena en el aire', () {
-      final j = JuegoTuberia(azar: Random(3));
-      for (var i = 0; i < 90 && !j.enSuelo; i++) {
-        j.avanzar(1 / 60);
+    test('la caída prevista del tutorial coincide con donde de verdad cae', () {
+      final j = JuegoTuberia(azar: Random(8));
+      final r = Random(8);
+      var revisadas = 0;
+      for (var i = 0; i < 60 * 90 && !j.terminado && revisadas < 8; i++) {
+        final p = botBueno(j, r);
+        j.presionado = p;
+        final prev = j.caida(pesado: p);
+        if (prev != null && j.alturaSobreSuelo > 0.5) {
+          while (!j.enSuelo && !j.terminado) {
+            j.avanzar(1 / 60);
+          }
+          expect((j.x - prev.x).abs(), lessThan(0.6));
+          revisadas++;
+        } else {
+          j.avanzar(1 / 60);
+        }
       }
-      expect(j.enSuelo, isTrue);
-      j.tomarSucesos();
-      j.saltar();
-      expect(j.enSuelo, isFalse);
-      expect(j.tomarSucesos().where((s) => s.tipo == TipoSuceso.salto), hasLength(1));
-      j.saltar(); // en el aire no hace doble salto
-      j.avanzar(1 / 60);
-      expect(j.tomarSucesos().where((s) => s.tipo == TipoSuceso.salto), isEmpty);
-      var alto = 0.0;
-      for (var i = 0; i < 120 && !j.enSuelo; i++) {
-        j.avanzar(1 / 60);
-        alto = max(alto, j.alturaSobreSuelo);
-      }
-      expect(alto, greaterThan(1.2));
+      expect(revisadas, greaterThan(0));
     });
 
-    test('saltar justo antes de aterrizar salta al tocar el lodo', () {
-      final j = JuegoTuberia(azar: Random(3));
-      for (var i = 0; i < 90 && !j.enSuelo; i++) {
-        j.avanzar(1 / 60);
+    test('antes de los arcos los rollos van pegados al piso', () {
+      var vistos = 0;
+      for (var s = 0; s < 6; s++) {
+        final j = JuegoTuberia(azar: Random(s));
+        for (final r in j.rollos.where((r) => r.x < JuegoTuberia.desdeArcos - 30)) {
+          expect(r.y - j.altura(r.x), closeTo(0.9, 0.01));
+          vistos++;
+        }
       }
-      j.saltar();
-      j.tomarSucesos();
-      var saltos = 0;
-      for (var i = 0; i < 240 && saltos == 0; i++) {
-        if (!j.enSuelo && j.alturaSobreSuelo < 0.15 && j.vy < 0) j.saltar();
-        j.avanzar(1 / 60);
-        saltos += j.tomarSucesos().where((s) => s.tipo == TipoSuceso.salto).length;
-      }
-      expect(saltos, 1);
+      expect(vistos, greaterThan(0));
     });
 
     test('la velocidad nunca pasa del máximo y el terreno es continuo', () {

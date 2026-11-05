@@ -45,6 +45,7 @@ class PintorTuberia extends CustomPainter {
     required this.imagenes,
     required this.oscuro,
     required this.mov,
+    this.tutorial = false,
     required Listenable repaint,
   }) : super(repaint: repaint);
 
@@ -55,6 +56,10 @@ class PintorTuberia extends CustomPainter {
   final ImagenesTuberia imagenes;
   final bool oscuro;
   final Movimiento mov;
+
+  /// Primeras partidas: pistas sin límite de tiempo y, en el aire, dónde vas a caer (verde = bajada, rojo = plaf).
+  final bool tutorial;
+  final _camino = <double>[];
 
   // ---------------------------------------------------------------- pinturas (una vez)
   static final _p = Paint()..isAntiAlias = true;
@@ -943,11 +948,12 @@ class PintorTuberia extends CustomPainter {
   }
 
   void _pistas(Canvas canvas, JuegoTuberia j, double t) {
-    if (j.tiempo > 16 || !j.vivo) return;
+    if ((j.tiempo > 16 && !tutorial) || !j.vivo) return;
     String? s;
     final p = j.pendiente(j.x + 0.5);
     if (j.enSuelo && !j.pesado && p < -0.15) s = tr('MANTÉN', 'HOLD');
     if (j.enSuelo && j.pesado && p > 0.2) s = tr('SUELTA', 'RELEASE');
+    if (tutorial && !j.enSuelo) s = _caida(canvas, j);
     if (s == null) return;
     final tp = _texto(s, 22, const Color(0xFF171513));
     final x = _sx(j.x), y = _sy(j.y) - 2.6 * _ppm + (mov == Movimiento.nada ? 0 : sin(t * 8) * 4);
@@ -969,7 +975,34 @@ class PintorTuberia extends CustomPainter {
     canvas.drawPath(_tmp, _p..color = const Color(0xFF171513));
   }
 
+  // Tutorial en el aire: puntos de la trayectoria y una marca donde vas a caer. Si con el dedo al revés caerías
+  // limpio en una bajada, devuelve la pista (MANTÉN o SUELTA).
+  String? _caida(Canvas canvas, JuegoTuberia j) {
+    final ahora = j.caida(pesado: j.pesado, camino: _camino);
+    if (ahora == null) return null;
+    const verde = Color(0xFF3DD68C), rojo = Color(0xFFE5484D);
+    final color = ahora.limpio ? verde : (ahora.plaf ? rojo : const Color(0xFFF4E3CF));
+    for (var i = 0; i + 1 < _camino.length; i += 2) {
+      canvas.drawCircle(Offset(_sx(_camino[i]), _sy(_camino[i + 1])), 2.6, _p..color = color.withValues(alpha: 0.75));
+    }
+    final m = Offset(_sx(ahora.x), _sy(ahora.y));
+    _pTrazo
+      ..strokeWidth = 3
+      ..color = color;
+    canvas.drawLine(m.translate(-12, 0), m.translate(12, 0), _pTrazo);
+    canvas.drawLine(m.translate(0, -16), m.translate(0, -4), _pTrazo);
+    if (ahora.limpio) return null;
+    final otra = j.caida(pesado: !j.pesado);
+    if (otra == null || !otra.limpio) return null;
+    return j.pesado ? tr('SUELTA', 'RELEASE') : tr('MANTÉN', 'HOLD');
+  }
+
   @override
   bool shouldRepaint(PintorTuberia old) =>
-      old.juego != juego || old.oscuro != oscuro || old.mov != mov || old.imagenes != imagenes || old.efectos != efectos;
+      old.juego != juego ||
+      old.oscuro != oscuro ||
+      old.mov != mov ||
+      old.imagenes != imagenes ||
+      old.efectos != efectos ||
+      old.tutorial != tutorial;
 }

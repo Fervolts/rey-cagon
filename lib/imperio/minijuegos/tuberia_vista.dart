@@ -1,5 +1,5 @@
-// Tubería Express: surf de una mano por la cloaca. Toque corto = salto. Mantener el dedo = pesado (baja rápido),
-// soltar = liviano (vuela en la cresta). Lógica en tuberia_logica.dart, dibujo en tuberia_pintor.dart (un solo CustomPainter) y efectos, animación
+// Tubería Express: surf de una mano por la cloaca. Mantener el dedo = pesado (baja rápido), soltar = liviano (vuela en
+// la cresta). Lógica en tuberia_logica.dart, dibujo en tuberia_pintor.dart (un solo CustomPainter) y efectos, animación
 // del mojón y cámara en tuberia_efectos.dart. El mundo lo repinta el Ticker; el marcador solo se reconstruye cuando
 // cambia algo que muestra. Si la app se va al fondo, la partida se pausa (y el cronómetro también). Los PNG se cargan
 // una sola vez para toda la app; mientras tanto el pintor dibuja formas de respaldo.
@@ -10,6 +10,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../animaciones.dart';
 import '../../idioma.dart';
@@ -85,6 +86,11 @@ class _VistaTuberiaState extends State<VistaTuberia> with SingleTickerProviderSt
   int _bannerVez = 0;
   double _tBanner = 0;
 
+  // Tutorial: dura hasta [_limpiosTutorial] aterrizajes limpios en total (se guardan en el teléfono).
+  static const _claveTutorial = 'tuberia_tutorial_limpios', _limpiosTutorial = 6;
+  bool _tutorial = false;
+  int _limpiosGuardados = 0, _plafsTutorial = 0;
+
   // Sonido: último toque de cada tipo (reloj real) para no saturar.
   final _ultimo = <String, double>{};
   double _tPresion = 0, _ultimoPujo = -9, _ultimoPujoLargo = -9, _ultimoViento = -9, _proxBurbuja = 3;
@@ -105,6 +111,53 @@ class _VistaTuberiaState extends State<VistaTuberia> with SingleTickerProviderSt
     }
     _sw.start();
     _reloj.arrancar();
+    unawaited(_leerTutorial());
+  }
+
+  Future<void> _leerTutorial() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _limpiosGuardados = prefs.getInt(_claveTutorial) ?? 0;
+    } catch (_) {
+      return;
+    }
+    if (!mounted || _limpiosGuardados >= _limpiosTutorial) return;
+    setState(() => _tutorial = true);
+    _tLetrero = 0;
+    _mostrarBanner(tr('Mantén en las bajadas.\nSuelta en las subidas para volar.', 'Hold on downhills.\nRelease on uphills to fly.'), 4);
+  }
+
+  void _guardarTutorial() {
+    unawaited(() async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setInt(_claveTutorial, _limpiosGuardados);
+      } catch (_) {}
+    }());
+  }
+
+  // Consejos del tutorial según lo que acaba de pasar.
+  void _tutorialSuceso(SucesoTuberia s) {
+    if (!_tutorial) return;
+    switch (s.tipo) {
+      case TipoSuceso.limpio:
+        _limpiosGuardados++;
+        _guardarTutorial();
+        if (_limpiosGuardados >= _limpiosTutorial) {
+          _mostrarBanner(tr('¡Ya le agarraste el truco!', "You've got the hang of it!"), 2.5);
+        } else if (_limpiosGuardados <= 2) {
+          _mostrarBanner(tr('¡LIMPIO! Caer en bajada da velocidad', 'CLEAN! Landing downhill gives speed'), 2.5);
+        }
+      case TipoSuceso.plaf:
+        _plafsTutorial++;
+        if (_plafsTutorial <= 3) {
+          _mostrarBanner(
+              tr('Caíste en una SUBIDA.\nEn el aire, mira la marca: verde = bajada.\nMantén para caer antes, suelta para volar más.',
+                  'You landed UPHILL.\nIn the air, watch the mark: green = downhill.\nHold to drop sooner, release to fly further.'),
+              4);
+        }
+      default:
+    }
   }
 
   ImagenesTuberia _con(String n, ui.Image i) {
@@ -157,13 +210,9 @@ class _VistaTuberiaState extends State<VistaTuberia> with SingleTickerProviderSt
     }
   }
 
-  void _sube(PointerEvent e) {
+  void _sube(PointerEvent _) {
     _dedos = max(0, _dedos - 1);
-    if (_dedos == 0) {
-      _j.presionado = false;
-      // Toque corto = salto; mantener sigue siendo bajar pesado.
-      if (e is PointerUpEvent && _tPresion < 0.2 && !_fin && !_pausado) _j.saltar();
-    }
+    if (_dedos == 0) _j.presionado = false;
   }
 
   // ---------------------------------------------------------------- cuadro
@@ -255,12 +304,8 @@ class _VistaTuberiaState extends State<VistaTuberia> with SingleTickerProviderSt
   static const _rojo = Color(0xFFE5484D);
 
   void _suceso(SucesoTuberia s) {
+    _tutorialSuceso(s);
     switch (s.tipo) {
-      case TipoSuceso.salto:
-        _suena('plop', 0.5 + 0.2 * s.fuerza);
-        _suena('viento', 0.2);
-        _anim.golpe(-2.2);
-        _ef.salpicar(s.x, s.y, 8, color: _barro, fuerza: 3, forma: FormaParticula.gota);
       case TipoSuceso.despegue:
         _ultimoViento = _ef.fase;
         _suena('viento', 0.18 + 0.25 * s.fuerza);
@@ -424,6 +469,7 @@ class _VistaTuberiaState extends State<VistaTuberia> with SingleTickerProviderSt
                 imagenes: _img,
                 oscuro: oscuro,
                 mov: widget.mov,
+                tutorial: _tutorial,
                 repaint: _tic,
               ),
             ),
@@ -566,7 +612,8 @@ class _VistaTuberiaState extends State<VistaTuberia> with SingleTickerProviderSt
     } else if (_banner != null) {
       hijo = KeyedSubtree(
         key: ValueKey(_bannerVez),
-        child: _caja(p, fuerte: true, Text(_banner!, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: p.texto))),
+        child: _caja(p, fuerte: true,
+            Text(_banner!, textAlign: TextAlign.center, style: TextStyle(fontSize: _banner!.contains('\n') ? 15 : 18, fontWeight: FontWeight.w900, color: p.texto))),
       );
     }
     return switch (widget.mov) {

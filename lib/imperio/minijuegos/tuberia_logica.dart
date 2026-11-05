@@ -5,7 +5,6 @@
 // soltar = liviano. Bajar pesado acelera; soltar en el fondo del valle deja subir liviano y la cresta lo lanza al aire
 // (despega cuando la curva de la loma se le escapa más rápido que la gravedad). Aterrizar alineado con una bajada es
 // limpio (+velocidad, sube el combo); aterrizar contra la loma es un plaf (pierde velocidad, combo a cero).
-// Un toque corto = salto (impulso hacia afuera de la ladera); si se toca justo antes de aterrizar, salta al tocar el lodo.
 // Detrás viene el Atasco, una pared de lodo que acelera por tramos. Si te alcanza, fin.
 //
 // Puntos = metros + bonus. El servidor exige puntos <= (segundos + 1) * 16: la velocidad máxima es 12.8 m/s y además
@@ -30,7 +29,6 @@ enum TipoSuceso {
   atascoAcelera,
   record,
   atrapado,
-  salto,
 }
 
 /// Algo que pasó en el último paso. [x], [y] en metros del mundo; [fuerza] de 0 a ~1.
@@ -106,10 +104,10 @@ class JuegoTuberia {
   static const duracionFiebre = 5.0;
   static const cadaDorado = 25.0;
   static const adelante = 120.0;
-  static const impulsoSalto = 5.4; // m/s hacia afuera de la ladera
-  static const _recargaSalto = 0.3;
-  static const _bufferSalto = 0.15;
   static const tiempoMaximo = 1150.0; // s; el servidor acepta hasta 1200
+
+  /// Metros desde donde los rollos van en arco (antes, en el piso) y desde donde hay arcos altos.
+  static const desdeArcos = 140.0, desdeArcosAltos = 300.0;
 
   // Radios de choque.
   static const radioRollo = 1.15;
@@ -142,7 +140,6 @@ class JuegoTuberia {
   bool _recordAvisado = false;
   bool _terminado = false;
   bool _pesado = false;
-  double _ultimoSalto = -9, _saltoPedido = -9;
   int _limpios = 0, _plafs = 0, _rollosAgarrados = 0, _aplastadas = 0;
 
   // ---------------------------------------------------------------- lo que se lee desde fuera
@@ -205,26 +202,6 @@ class JuegoTuberia {
     if (_terminado) return;
     _terminado = true;
     _sucesos.add(SucesoTuberia(TipoSuceso.atrapado, x: _x, y: _y, valor: 1));
-  }
-
-  /// Toque corto. En el suelo salta ya; en el aire queda pedido un instante y salta al aterrizar.
-  void saltar() {
-    if (_terminado) return;
-    if (!_suelo) {
-      _saltoPedido = _t;
-      return;
-    }
-    if (_t - _ultimoSalto < _recargaSalto) return;
-    _ultimoSalto = _t;
-    _saltoPedido = -9;
-    final d1 = pendiente(_x);
-    final c = 1 / sqrt(1 + d1 * d1), sn = d1 * c;
-    _suelo = false;
-    _vx = _s * c - impulsoSalto * sn;
-    _vy = _s * sn + impulsoSalto * c;
-    _aire = 0;
-    _alturaMax = 0;
-    _sucesos.add(SucesoTuberia(TipoSuceso.salto, x: _x, y: _y, fuerza: (_s / velocidadMaxima).clamp(0.0, 1.0)));
   }
 
   void apretar() => _pesado = true;
@@ -331,13 +308,24 @@ class JuegoTuberia {
   void _decorar(_Nudo a, _Nudo b) {
     if (b.x < 12) return;
     final k = _nudos.length;
-    // Arco de rollos: al cerrar el pico que sigue a un valle (pico - valle - pico).
-    if (b.pico && k >= 3) {
+    // Rollos al cerrar el pico que sigue a un valle (pico - valle - pico). Al principio, sin velocidad todavía, van
+    // pegados al piso del valle (se agarran solo bajando); los arcos en el aire llegan después.
+    if (b.pico && k >= 3 && _nudos[k - 3].x < desdeArcos) {
       final p1 = _nudos[k - 3];
       final ancho = b.x - p1.x;
-      final prob = p1.x < 25 ? 0.0 : 0.62;
-      if (_azar.nextDouble() < prob) {
-        final alto = _azar.nextDouble() < 0.3; // arco alto: solo con un buen salto
+      if (p1.x >= 25 && _azar.nextDouble() < 0.7) {
+        final arco = _arcos++;
+        final medio = _nudos[k - 2].x;
+        for (var i = 0; i < 3; i++) {
+          final rx = medio + ancho * 0.08 * (i - 1);
+          rollos.add(RolloTuberia(rx, altura(rx) + 0.9, arco));
+        }
+      }
+    } else if (b.pico && k >= 3) {
+      final p1 = _nudos[k - 3];
+      final ancho = b.x - p1.x;
+      if (_azar.nextDouble() < 0.62) {
+        final alto = p1.x >= desdeArcosAltos && _azar.nextDouble() < 0.3; // arco alto: solo con un buen salto
         final cuantos = 3 + _azar.nextInt(3);
         final x0 = p1.x + ancho * (alto ? 0.25 : 0.12);
         final x1 = p1.x + ancho * (alto ? 0.75 : 0.55);
@@ -431,9 +419,45 @@ class JuegoTuberia {
         _aterrizar();
       }
     }
-    if (_suelo && _t - _saltoPedido < _bufferSalto) saltar();
     if (_x > antes) _tocarCosas();
     _reglas(h);
+  }
+
+  /// Dónde caería si sigue en el aire con el dedo [pesado], sin tocar el estado (para el tutorial). Null en el suelo.
+  /// Si se pasa [camino], lo llena con pares x, y de la trayectoria.
+  ({double x, double y, bool limpio, bool plaf})? caida({required bool pesado, List<double>? camino}) {
+    if (_suelo || _terminado) return null;
+    camino?.clear();
+    var x = _x, y = _y, vx = _vx, vy = _vy, aire = _aire;
+    const h = 1 / 60;
+    final g = gravedad * (pesado ? factorPesado : 1);
+    for (var i = 0; i < 300; i++) {
+      aire += h;
+      vy -= g * h;
+      final v = sqrt(vx * vx + vy * vy);
+      final f = 1 - _arrastreAire * v * h;
+      vx *= f;
+      vy *= f;
+      if (v > velocidadMaxima) {
+        final r = velocidadMaxima / v;
+        vx *= r;
+        vy *= r;
+      }
+      vx = max(0.5, vx);
+      x += vx * h;
+      y += vy * h;
+      if (camino != null && i % 5 == 0) camino.addAll([x, y]);
+      final suelo = altura(x);
+      if (y <= suelo) {
+        final d1 = pendiente(x);
+        final c = 1 / sqrt(1 + d1 * d1), sn = d1 * c;
+        final vt = vx * c + vy * sn;
+        final vn = -(-vx * sn + vy * c);
+        final ang = atan2(vn.abs(), max(vt, 0.01));
+        return (x: x, y: suelo, limpio: aire >= _aireMinimoLimpio && ang < anguloLimpio && d1 < -0.08, plaf: ang > anguloPlaf);
+      }
+    }
+    return null;
   }
 
   void _aterrizar() {
