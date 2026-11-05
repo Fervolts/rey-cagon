@@ -175,6 +175,75 @@ void main() {
       expect(revisadas, greaterThan(0));
     });
 
+    test('hay una rampa cada ~200 m, lanza alto y de ella nunca se cae en plaf', () {
+      var lanzadas = 0;
+      for (var s = 0; s < 4; s++) {
+        final j = JuegoTuberia(azar: Random(s));
+        final r = Random(s);
+        final rampas = <double>{};
+        var enRampa = false;
+        for (var i = 0; i < 60 * 240 && !j.terminado; i++) {
+          j.presionado = botBueno(j, r);
+          j.avanzar(1 / 60);
+          for (final rr in j.rampas) {
+            rampas.add(rr.x);
+          }
+          for (final e in j.tomarSucesos()) {
+            if (e.tipo == TipoSuceso.rampa) {
+              lanzadas++;
+              enRampa = true;
+            }
+            if (enRampa && (e.tipo == TipoSuceso.plaf)) fail('plaf al caer de una rampa');
+            if (e.tipo == TipoSuceso.limpio || e.tipo == TipoSuceso.aterrizaje || e.tipo == TipoSuceso.plaf) enRampa = false;
+          }
+        }
+        final xs = rampas.toList()..sort();
+        for (var k = 1; k < xs.length; k++) {
+          expect(xs[k] - xs[k - 1], inInclusiveRange(175, 225));
+        }
+        expect(xs.first, inInclusiveRange(200, 225));
+      }
+      expect(lanzadas, greaterThan(2));
+    });
+
+    test('plaf solo abajo de una subida; arriba de la loma la caída es suave y no frena', () {
+      var plafs = 0, suaves = 0;
+      // Fracción de la subida en x (o null si ahí no es subida).
+      double? fraccion(JuegoTuberia j, double x, double y) {
+        final n = j.nudosEntre(x - 15, x + 15).toList();
+        for (var k = 0; k + 1 < n.length; k++) {
+          if (n[k].$1 <= x && x <= n[k + 1].$1) {
+            if (n[k + 1].$2 <= n[k].$2) return null;
+            return (y - n[k].$2) / (n[k + 1].$2 - n[k].$2);
+          }
+        }
+        return null;
+      }
+
+      for (var s = 0; s < 6; s++) {
+        final j = JuegoTuberia(azar: Random(s));
+        final r = Random(s + 50);
+        for (var i = 0; i < 60 * 120 && !j.terminado; i++) {
+          // Bot torpe: suelta y aprieta al azar, así cae en todos lados.
+          if (i % 20 == 0) j.presionado = r.nextBool();
+          final antes = j.velocidad;
+          j.avanzar(1 / 60);
+          for (final e in j.tomarSucesos()) {
+            if (e.tipo == TipoSuceso.plaf) {
+              plafs++;
+              expect(fraccion(j, e.x, e.y), lessThan(JuegoTuberia.alturaSuave));
+            }
+            if (e.tipo == TipoSuceso.aterrizaje && e.valor == 1) {
+              suaves++;
+              expect(j.velocidad, greaterThanOrEqualTo(min(antes * 0.75, JuegoTuberia.velocidadMaxima) - 0.5));
+            }
+          }
+        }
+      }
+      expect(plafs, greaterThan(0));
+      expect(suaves, greaterThan(0));
+    });
+
     test('antes de los arcos los rollos van pegados al piso', () {
       var vistos = 0;
       for (var s = 0; s < 6; s++) {

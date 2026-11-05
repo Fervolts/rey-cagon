@@ -144,8 +144,8 @@ class _VistaTuberiaState extends State<VistaTuberia> with SingleTickerProviderSt
         _plafsTutorial++;
         if (_plafsTutorial <= 3) {
           _mostrarBanner(
-              tr('Caíste en una SUBIDA.\nEn el aire, mira la marca: verde = bajada.\nMantén para caer antes, suelta para volar más.',
-                  'You landed UPHILL.\nIn the air, watch the mark: green = downhill.\nHold to drop sooner, release to fly further.'),
+              tr('Chocaste ABAJO de una subida.\nArriba de la loma caes suave; verde = bajada.\nMantén para caer antes, suelta para volar más.',
+                  'You hit the BOTTOM of an uphill.\nOn top of the hill you land soft; green = downhill.\nHold to drop sooner, release to fly further.'),
               4);
         }
       default:
@@ -306,6 +306,7 @@ class _VistaTuberiaState extends State<VistaTuberia> with SingleTickerProviderSt
         _suena('chapuzon', 0.25 + 0.5 * s.fuerza);
         _anim.golpe(1.2 + 2 * s.fuerza);
         _ef.salpicar(s.x, s.y, 6 + (8 * s.fuerza).round(), color: _barro, fuerza: 2.5 + 3 * s.fuerza, forma: FormaParticula.gota);
+        if (s.valor == 1) _ef.texto(s.x, s.y + 1.4, tr('¡ARRIBA!', 'ON TOP!'), color: const Color(0xFFF4E3CF), tam: 16, vida: 0.8);
       case TipoSuceso.limpio:
         _suena('chapuzon', 0.35 + 0.5 * s.fuerza);
         _anim.golpe(1.5 + 2 * s.fuerza);
@@ -380,6 +381,20 @@ class _VistaTuberiaState extends State<VistaTuberia> with SingleTickerProviderSt
         _tLetrero = 2.4;
         _ef.destellar(Colors.white, 0.35);
         _hud.avisar();
+      case TipoSuceso.rampa:
+        _suena('viento', 0.7);
+        _suena('combo', 0.6);
+        _anim
+          ..alegria = 1.2
+          ..golpe(-2);
+        _ef.salpicar(s.x, s.y + 0.3, 16, color: _amarillo, fuerza: 6, forma: FormaParticula.chispa, tam: 0.1, gravedad: -4, vida: 0.6);
+        _ef.salpicar(s.x, s.y, 10, color: _barro, fuerza: 4, forma: FormaParticula.gota);
+        _ef.texto(s.x + 2, s.y + 2.2, tr('¡RAMPA!', 'RAMP!'), tam: 26);
+        _ef.hitstop(0.05);
+        _ef.sacudir(4);
+        _ef.destellar(_amarillo, 0.3);
+        vibracionSuave();
+        if (_tutorial) _mostrarBanner(tr('¡RAMPA! Suelta para volar más.\nDe una rampa siempre caes bien.', 'RAMP! Release to fly further.\nYou always land fine off a ramp.'), 2.5);
       case TipoSuceso.atascoCerca:
         _suena('alerta', 0.5);
         _ef.destellar(_rojo, 0.25);

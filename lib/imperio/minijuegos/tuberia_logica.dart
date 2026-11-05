@@ -4,7 +4,9 @@
 // unidos con coseno, como una ola). Un solo control: mantener el dedo = pesado (más gravedad, se pega a la ladera);
 // soltar = liviano. Bajar pesado acelera; soltar en el fondo del valle deja subir liviano y la cresta lo lanza al aire
 // (despega cuando la curva de la loma se le escapa más rápido que la gravedad). Aterrizar alineado con una bajada es
-// limpio (+velocidad, sube el combo); aterrizar contra la loma es un plaf (pierde velocidad, combo a cero).
+// limpio (+velocidad, sube el combo); aterrizar contra la parte baja de una subida es un plaf (pierde velocidad, combo a
+// cero). Arriba de la loma (desde [alturaSuave] de la subida) se cae suave: conserva casi toda la velocidad. Cada
+// [cadaRampa] m hay una rampa que lanza alto, con una fila de rollos en el vuelo, y su aterrizaje nunca es plaf.
 // Detrás viene el Atasco, una pared de lodo que acelera por tramos. Si te alcanza, fin.
 //
 // Puntos = metros + bonus. El servidor exige puntos <= (segundos + 1) * 16: la velocidad máxima es 12.8 m/s y además
@@ -25,6 +27,7 @@ enum TipoSuceso {
   aplasta,
   choqueCucaracha,
   zona,
+  rampa,
   atascoCerca,
   atascoAcelera,
   record,
@@ -56,6 +59,14 @@ class CucarachaTuberia {
   /// Si murió: true = aplastada (pesado), false = pateada (liviano).
   bool aplastada = false;
   double muerte = 0;
+}
+
+class RampaTuberia {
+  RampaTuberia(this.x);
+
+  /// Donde termina el labio (lanza desde [x] - [JuegoTuberia.largoRampa]).
+  final double x;
+  bool usada = false, decorada = false;
 }
 
 class _Nudo {
@@ -94,6 +105,15 @@ class JuegoTuberia {
   static const anguloPlaf = 0.80;
   static const _aireMinimoLimpio = 0.30;
 
+  /// Fracción de la subida desde la que caer ya no es plaf (0 = fondo del valle, 1 = la cresta).
+  static const alturaSuave = 0.45;
+
+  // Rampas.
+  static const cadaRampa = 200.0;
+  static const largoRampa = 2.4;
+  static const velocidadRampa = 11.5;
+  static const anguloRampa = 0.62;
+
   // Atasco.
   static const separacionInicial = 26.0;
   static const separacionMaxima = 38.0;
@@ -119,6 +139,7 @@ class JuegoTuberia {
   final _nudos = <_Nudo>[];
   final rollos = <RolloTuberia>[];
   final cucarachas = <CucarachaTuberia>[];
+  final rampas = <RampaTuberia>[];
   final _sucesos = <SucesoTuberia>[];
 
   double _x = 0, _y = 1.2, _vx = velocidadInicial, _vy = 0, _s = velocidadInicial;
@@ -140,6 +161,8 @@ class JuegoTuberia {
   bool _recordAvisado = false;
   bool _terminado = false;
   bool _pesado = false;
+  bool _deRampa = false; // el vuelo actual salió de una rampa: no hay plaf al caer
+  double _proxRampa = cadaRampa;
   int _limpios = 0, _plafs = 0, _rollosAgarrados = 0, _aplastadas = 0;
 
   // ---------------------------------------------------------------- lo que se lee desde fuera
@@ -168,6 +191,7 @@ class JuegoTuberia {
   bool get vivo => !_terminado;
   int get limpios => _limpios;
   int get plafs => _plafs;
+  bool get vueloDeRampa => _deRampa && !_suelo;
   int get rollosAgarrados => _rollosAgarrados;
   int get aplastadas => _aplastadas;
 
@@ -300,6 +324,11 @@ class JuegoTuberia {
       final y = ult.y + (yy - ult.y).clamp(-0.45 * dx, 0.45 * dx);
       final n = _Nudo(ult.x + dx, y, pico);
       _nudos.add(n);
+      // Rampa en el fondo del primer valle pasada cada marca (se llega bajando, con velocidad).
+      if (!pico && n.x >= _proxRampa) {
+        rampas.add(RampaTuberia(n.x + 0.4));
+        _proxRampa += cadaRampa;
+      }
       _decorar(ult, n);
     }
   }
@@ -357,6 +386,7 @@ class JuegoTuberia {
     }
     rollos.removeWhere((r) => r.x < _x - 30);
     cucarachas.removeWhere((c) => c.x < _x - 30);
+    rampas.removeWhere((r) => r.x < _x - 30);
   }
 
   // ---------------------------------------------------------------- paso
@@ -419,8 +449,65 @@ class JuegoTuberia {
         _aterrizar();
       }
     }
-    if (_x > antes) _tocarCosas();
+    if (_x > antes) {
+      _tocarCosas();
+      _rampas(antes);
+    }
     _reglas(h);
+  }
+
+  void _rampas(double antes) {
+    for (final r in rampas) {
+      if (r.usada) continue;
+      final xs = r.x - largoRampa;
+      if (xs > _x) break; // van ordenadas por x
+      if (antes > xs) continue;
+      r.usada = true;
+      if (_y - altura(xs) > 1.2) continue; // pasó volando por encima
+      final s = max(velocidadRampa, min(velocidadMaxima, velocidad));
+      _suelo = false;
+      _vx = s * cos(anguloRampa);
+      _vy = s * sin(anguloRampa);
+      _y = max(_y, altura(_x));
+      _aire = 0;
+      _alturaMax = 0;
+      _deRampa = true;
+      _sucesos.add(SucesoTuberia(TipoSuceso.rampa, x: xs, y: altura(xs), fuerza: 1));
+    }
+  }
+
+  /// Fila de rollos sobre el vuelo liviano de una rampa (a velocidad de rampa), puesta antes de que se vea.
+  void _decorarRampa(RampaTuberia r) {
+    r.decorada = true;
+    final xs = r.x - largoRampa;
+    var x = xs, y = altura(xs), vx = velocidadRampa * cos(anguloRampa), vy = velocidadRampa * sin(anguloRampa);
+    const h = 1 / 120;
+    final arco = _arcos++;
+    var puestos = 0;
+    for (var i = 1; i <= 240 && puestos < 7; i++) {
+      vy -= gravedad * h;
+      final v = sqrt(vx * vx + vy * vy);
+      final f = 1 - _arrastreAire * v * h;
+      vx *= f;
+      vy *= f;
+      x += vx * h;
+      y += vy * h;
+      if (y <= altura(x)) break;
+      if (i >= 30 && i % 18 == 0) {
+        rollos.add(RolloTuberia(x, max(y + 0.35, altura(x) + 0.9), arco));
+        puestos++;
+      }
+    }
+    rollos.sort((a, b) => a.x.compareTo(b.x));
+  }
+
+  /// Plaf: chocar de frente contra la parte baja de una subida. Arriba de la loma, o saliendo de una rampa, se cae suave.
+  bool _esPlaf(double x, double y, double ang, double d1) {
+    if (ang <= anguloPlaf || _deRampa || d1 <= 0.08) return false;
+    final i = _segmento(x);
+    final a = _nudos[i], b = _nudos[i + 1];
+    if (b.y <= a.y) return false;
+    return (y - a.y) / (b.y - a.y) < alturaSuave;
   }
 
   /// Dónde caería si sigue en el aire con el dedo [pesado], sin tocar el estado (para el tutorial). Null en el suelo.
@@ -454,7 +541,7 @@ class JuegoTuberia {
         final vt = vx * c + vy * sn;
         final vn = -(-vx * sn + vy * c);
         final ang = atan2(vn.abs(), max(vt, 0.01));
-        return (x: x, y: suelo, limpio: aire >= _aireMinimoLimpio && ang < anguloLimpio && d1 < -0.08, plaf: ang > anguloPlaf);
+        return (x: x, y: suelo, limpio: aire >= _aireMinimoLimpio && ang < anguloLimpio && d1 < -0.08, plaf: _esPlaf(x, suelo, ang, d1));
       }
     }
     return null;
@@ -467,8 +554,11 @@ class JuegoTuberia {
     final vn = -(-_vx * sn + _vy * c); // contra el suelo (positivo = hacia adentro)
     final ang = atan2(vn.abs(), max(vt, 0.01));
     final aire = _aire;
+    final plaf = _esPlaf(_x, _y, ang, d1);
+    final v = sqrt(_vx * _vx + _vy * _vy);
     _suelo = true;
     _aire = 0;
+    _deRampa = false;
     if (aire < 0.12) {
       // Un saltito: sin evento.
       _s = max(velocidadMinima, vt);
@@ -485,15 +575,16 @@ class JuegoTuberia {
       _bonus += pts;
       _sucesos.add(SucesoTuberia(TipoSuceso.limpio, x: _x, y: _y, puntos: pts, valor: _combo, fuerza: fuerza));
       if (_combo > antes && _combo >= 2) _sucesos.add(SucesoTuberia(TipoSuceso.combo, x: _x, y: _y, valor: _combo));
-    } else if (ang > anguloPlaf) {
+    } else if (plaf) {
       _s = max(velocidadMinima, vt * 0.45);
       _plafs++;
       final perdio = _combo;
       if (!enFiebre) _combo = 0;
       _sucesos.add(SucesoTuberia(TipoSuceso.plaf, x: _x, y: _y, valor: perdio, fuerza: max(fuerza, 0.6)));
     } else {
-      _s = max(velocidadMinima, vt);
-      _sucesos.add(SucesoTuberia(TipoSuceso.aterrizaje, x: _x, y: _y, fuerza: fuerza));
+      // Caída suave: conserva casi toda la velocidad aunque caiga torcido. valor 1 = habría sido plaf más abajo.
+      _s = min(velocidadMaxima, max(velocidadMinima, max(vt, v * 0.8)));
+      _sucesos.add(SucesoTuberia(TipoSuceso.aterrizaje, x: _x, y: _y, fuerza: fuerza, valor: ang > anguloPlaf ? 1 : 0));
     }
   }
 
@@ -582,6 +673,9 @@ class JuegoTuberia {
         r.dorado = true;
         _doradoPuesto = r;
       }
+    }
+    for (final r in rampas) {
+      if (!r.decorada && r.x - _x < 70) _decorarRampa(r);
     }
     // Zonas.
     final z = zonaEn(_x);

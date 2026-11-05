@@ -146,6 +146,7 @@ class PintorTuberia extends CustomPainter {
 
     _lomaTrasera(canvas, cam, abajo, arriba);
     _ladera(canvas, j, labio, arriba, abajo);
+    _rampas(canvas, j, t);
     _cucarachas(canvas, j, t);
     _rollos(canvas, j, t);
     _mojon(canvas, j, t, c);
@@ -579,6 +580,64 @@ class PintorTuberia extends CustomPainter {
         final a = t * 2.5;
         canvas.drawImageRect(ch, Rect.fromLTWH(0, 0, ch.width.toDouble(), ch.height.toDouble()),
             Rect.fromCenter(center: centro + Offset(cos(a), sin(a)) * tam * 0.6, width: tam * 0.45, height: tam * 0.45), _pImg);
+      }
+    }
+  }
+
+  // Rampa de tubo: cuña curva de metal con franjas amarillas y flechas que laten.
+  void _rampas(Canvas canvas, JuegoTuberia j, double t) {
+    const largo = JuegoTuberia.largoRampa;
+    for (final r in j.rampas) {
+      final xs = r.x - largo;
+      if (_sx(r.x) < -_ppm * 2 || _sx(xs) > _w + _ppm * 2) continue;
+      final base = j.altura(xs);
+      final lomo = Path()..moveTo(_sx(xs), _sy(j.altura(xs) - 0.05));
+      for (var i = 1; i <= 10; i++) {
+        final u = i / 10;
+        final x = xs + largo * u;
+        lomo.lineTo(_sx(x), _sy(base + (1 - cos(u * JuegoTuberia.anguloRampa * 2.2)) / (1 - cos(JuegoTuberia.anguloRampa * 2.2)) * 1.7));
+      }
+      final cuerpo = Path.from(lomo)
+        ..lineTo(_sx(r.x), _sy(j.altura(r.x) - 0.3))
+        ..lineTo(_sx(xs), _sy(j.altura(xs) - 0.3))
+        ..close();
+      canvas.drawPath(cuerpo, _p..color = const Color(0xFF6E7C86));
+      canvas.save();
+      canvas.clipPath(cuerpo);
+      for (var k = -2; k < 8; k++) {
+        final x0 = _sx(xs + k * 0.5);
+        final franja = Path()
+          ..moveTo(x0, _sy(base + 2.2))
+          ..lineTo(x0 + 0.25 * _ppm, _sy(base + 2.2))
+          ..lineTo(x0 + 0.25 * _ppm + 0.6 * _ppm, _sy(base - 0.4))
+          ..lineTo(x0 + 0.6 * _ppm, _sy(base - 0.4))
+          ..close();
+        canvas.drawPath(franja, _p..color = const Color(0xFFFFD60A));
+      }
+      canvas.restore();
+      _pTrazo
+        ..strokeWidth = max(2.0, 0.12 * _ppm)
+        ..color = const Color(0xFFDCE4E9);
+      canvas.drawPath(lomo, _pTrazo);
+      _pTrazo
+        ..strokeWidth = max(1.5, 0.06 * _ppm)
+        ..color = const Color(0xFF2B1A12);
+      canvas.drawPath(cuerpo, _pTrazo);
+      // Flechas que suben antes de usarla.
+      if (!r.usada) {
+        for (var k = 0; k < 3; k++) {
+          final fase = mov == Movimiento.nada ? 1.0 : 0.5 + 0.5 * sin(t * 7 - k * 1.1);
+          final cx = _sx(xs - 2.2 + k * 0.8), cy = _sy(j.altura(xs - 2.2 + k * 0.8) + 1.2 + k * 0.25);
+          final s = 0.32 * _ppm;
+          final flecha = Path()
+            ..moveTo(cx - s, cy + s * 0.6)
+            ..lineTo(cx + s * 0.2, cy - s * 0.2)
+            ..lineTo(cx - s, cy - s * 1.0);
+          _pTrazo
+            ..strokeWidth = max(2.0, 0.1 * _ppm)
+            ..color = Color.fromRGBO(255, 214, 10, 0.35 + 0.65 * fase);
+          canvas.drawPath(flecha, _pTrazo);
+        }
       }
     }
   }
