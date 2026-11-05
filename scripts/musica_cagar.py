@@ -4,7 +4,7 @@
 # raya = 3 semicorcheas, punto = 1, una de silencio entre elementos y tres entre letras.
 # CAGAR ocupa 49 semicorcheas: tres compases y la primera del cuarto. El resto del cuarto compás es la respuesta.
 # Usa los instrumentos y la mezcla circular de sonidos.py (loop sin corte por construcción).
-# Uso: python3 scripts/musica_cagar.py [carpeta_salida]   (por defecto assets/sonidos)
+# Uso: python3 scripts/musica_cagar.py [carpeta_salida] [nombres...]   (por defecto assets/sonidos y las tres músicas)
 
 import os
 import sys
@@ -265,13 +265,117 @@ def musica_fusion():
     }, reverb_tau=0.3, eco_beats=1.0, eco_fb=0.25)
 
 
+def flauta(f, dur, sr=s.SRM):
+    # Flauta: casi seno, soplido filtrado al ataque y vibrato que entra tarde.
+    n = s.muestras(dur + 0.07, sr)
+    t = np.arange(n) / sr
+    vib = 1 + 0.0045 * np.sin(s.TAU * 5.3 * t) * np.clip((t - 0.18) / 0.25, 0, 1)
+    fase = np.cumsum(s.TAU * f * vib / sr)
+    y = np.sin(fase) + 0.22 * np.sin(2 * fase) + 0.07 * np.sin(3 * fase)
+    soplo = s.filtro_fft(s.ruido(n), sr, f * 1.2, 7000)
+    y = y + 0.5 * soplo / (np.abs(soplo).max() + 1e-9) * (0.25 * np.exp(-t / 0.04) + 0.04)
+    ataque = 1 - np.exp(-t / 0.025)
+    return y * ataque * np.clip((dur + 0.07 - t) / 0.07, 0, 1)
+
+
+def nylon(f, dur, sr=s.SRM):
+    # Guitarra de nylon apagada con la palma: corta y redonda.
+    n = s.muestras(dur + 0.04, sr)
+    y = s.karplus(f, dur + 0.04, sr, 0.3, 0.7)[:n]
+    t = np.arange(len(y)) / sr
+    return y * np.clip((dur + 0.04 - t) / 0.04, 0, 1)
+
+
+VOICING_BOSSA = {
+    'Fmaj7': ['A3', 'E4', 'G4'], 'Am7': ['G3', 'C4', 'E4'], 'Dm7': ['F3', 'C4', 'E4'],
+    'Gm7': ['Bb3', 'F4', 'A4'], 'C7': ['Bb3', 'E4', 'A4'], 'Bbmaj7': ['A3', 'D4', 'F4'],
+}
+# Clave de la bossa en corcheas sobre dos compases: 1, 2y, 4 | 2y, 4y. La guitarra suma el 1 del segundo compás.
+CLAVE = [0, 1.5, 3, 5, 6.5]
+GUITARRA = [0, 1.5, 3, 4, 5, 6.5]
+
+
+def musica_fusion_bossa():
+    s.semilla('musica_fusion_bossa')
+    p = s.Pista(120, 16)
+    a = ['Fmaj7', 'Am7', 'Dm7', 'Gm7 C7']
+    frases = [
+        (a, 0, 'A4/1 Bb4/1 C5/1 E5/1 G5/1 E5/1'),
+        (a, 0, 'D5/1 E5/1 G5/1 Bb5/1 A5/1 G5/1'),
+        (['Bbmaj7', 'Dm7', 'Gm7', 'C7'], 5, 'E5/1 G5/1 Bb5/1 D6/1 C6/1 Bb5/1'),
+        (a, 0, 'G5/1 E5/1 D5/1 C5/1 Bb4/1 G4/1'),
+    ]
+    # Acordes en línea: (beat, nombre, largo).
+    linea = []
+    for f, (acordes, _, _) in enumerate(frases):
+        for c, compas in enumerate(acordes):
+            partes = compas.split()
+            for k, nombre in enumerate(partes):
+                linea.append((f * 16 + c * 4 + k * 4 / len(partes), nombre, 4 / len(partes)))
+    total = 64
+
+    def acorde_en(b):
+        b %= total
+        return [x for x in linea if x[0] <= b + 1e-9][-1][1]
+
+    vib = lambda hz, d: vibrafono(hz, min(d, 0.6))  # noqa: E731
+    for f, (_, tr, resp) in enumerate(frases):
+        b0 = f * 16
+        notas = [n + tr for n in CAGAR]
+        motivo(p, 'lead', b0, notas, flauta, humano=0.004)
+        respuesta(p, 'resp', b0, resp, vib, 0.95, legato=0.6)
+        if f == 3:
+            motivo(p, 'doble', b0, notas, lambda hz, d: vibrafono(hz, min(d, 0.5)), octava=1, humano=0.003)
+        for dos in (0, 8):
+            for b in CLAVE:
+                p.poner('rim', b0 + dos + b, s.madera(1050), 0.9, humano=0.003)
+            for b in GUITARRA:
+                bb = b0 + dos + b
+                nombre = acorde_en(bb + 0.5)  # la anticipación ya toca el acorde que viene
+                for i, m in enumerate(VOICING_BOSSA[nombre]):
+                    p.poner('guitarra', bb + i * 0.012, nylon(s.hz(s.midi(m)), 0.55 * p.spb), 0.95 - 0.1 * i, humano=0.003)
+    for b, nombre, largo in linea:
+        r = s.midi(RAIZ[nombre])
+        if largo == 4:
+            sig = s.midi(RAIZ[acorde_en(b + 4)])
+            pasos = [(0, r, 1.4), (1.5, r + 7, 0.45), (2, r + 7, 1.4), (3.5, sig, 0.45)]
+        else:
+            pasos = [(0, r, 1.4), (1.5, r + 7, 0.45)]
+        for bb, m, d in pasos:
+            p.poner('bajo', b + bb, s.bajo_pluck(s.hz(m), d * p.spb), 1.0 if bb % 2 == 0 else 0.8, humano=0.003)
+    for c in range(16):
+        bc = c * 4
+        for bb, g in [(0, 1.0), (1.5, 0.45), (2, 0.85), (3.5, 0.45)]:
+            p.poner('bombo', bc + bb, s.kick(suave_=True), g)
+        for k in range(16):
+            p.poner('shaker', bc + k * 0.25, s.shaker(), [0.9, 0.35, 0.6, 0.45][k % 4], humano=0.002)
+        if c >= 8:
+            for k in range(8):
+                p.poner('hat', bc + k * 0.5, s.hat(), 0.5 if k % 2 else 0.3, humano=0.002)
+    for f in range(4):
+        if f % 2:
+            for k, g in enumerate([0.3, 0.45, 0.6]):
+                p.poner('caja', f * 16 + 15.25 + k * 0.25, s.snare(seco=False, oscuro=True), g)
+    return p.mezcla({
+        'lead': (-14, 0.22, 0.12), 'resp': (-19, 0.3, 0.2), 'doble': (-26, 0.3, 0.1), 'guitarra': (-20, 0.15, 0),
+        'bajo': (-18, 0.04, 0), 'bombo': (-23, 0.02, 0), 'rim': (-26, 0.12, 0), 'shaker': (-31, 0.05, 0),
+        'hat': (-36, 0.05, 0), 'caja': (-28, 0.2, 0),
+    }, reverb_tau=0.28, eco_beats=1.0, eco_fb=0.2)
+
+
 MUSICAS = {'musica_tuberia': musica_tuberia, 'musica_destapa': musica_destapa, 'musica_fusion': musica_fusion}
+# Versiones alternas: solo se generan si se piden por nombre.
+ALTERNAS = {'musica_fusion_bossa': musica_fusion_bossa}
 
 
 def main():
-    salida = sys.argv[1] if len(sys.argv) > 1 else s.SALIDA
+    args = sys.argv[1:]
+    todas = {**MUSICAS, **ALTERNAS}
+    nombres = [a for a in args if a in todas]
+    carpetas = [a for a in args if a not in todas]
+    salida = carpetas[0] if carpetas else s.SALIDA
     os.makedirs(salida, exist_ok=True)
-    for nombre, f in MUSICAS.items():
+    for nombre, f in ((n, todas[n]) for n in (nombres or MUSICAS)):
         x = f()
         s.escribir_m4a(os.path.join(salida, nombre + '.m4a'), x, s.SRM)
         print(f'{nombre:16s} {len(x) / s.SRM:5.2f} s')
