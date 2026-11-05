@@ -364,13 +364,28 @@ def rulo(dur, sr=s.SRM):
 PANDEIRO = ['G.ppT.P.G..pT.Pp', 'G.p.T.PG..P.T.PG']
 
 
-def cuica(f0=520, sube=1.7, dur=0.28, sr=s.SRM):
-    # Cuíca: el tono sube y baja como un gemido.
-    t = s.tiempo(dur, sr)
-    curva = np.sin(np.pi * np.clip(t / dur, 0, 1)) ** 0.7
-    fase = s.TAU * np.cumsum(f0 * (1 + (sube - 1) * curva)) / sr
-    y = np.sin(fase) + 0.35 * np.sin(2 * fase) + 0.1 * np.sin(3 * fase)
-    return y * curva * (1 - np.exp(-t / 0.01))
+def cuica(n0='F4', n1='C5', dur=0.28, forma='uo', sr=s.SRM):
+    # Cuíca: tambor de fricción. Tono rico y nasal que se desliza entre dos notas de la tonalidad,
+    # con el raspado de la vara (la amplitud tiembla). forma 'uo' sube y vuelve, 'ui' sube y se queda.
+    n = s.muestras(dur + 0.04, sr)
+    t = np.arange(n) / sr
+    u = np.clip(t / dur, 0, 1)
+    if forma == 'ui':
+        curva = 1 - np.exp(-u / 0.18)
+    else:
+        curva = np.sin(np.pi * np.clip(u / 0.85, 0, 1)) ** 0.8
+    m = s.midi(n0) + (s.midi(n1) - s.midi(n0)) * curva + 0.12 * np.sin(s.TAU * 7 * t)
+    fase = s.TAU * np.cumsum(440 * 2 ** ((m - 69) / 12)) / sr
+    y = sum(np.sin(k * fase) / k ** 0.9 for k in range(1, 9))
+    y = s.filtro_fft(y, sr, 500, 3200) + 0.4 * y
+    raspa = 1 + 0.3 * np.sin(s.TAU * 38 * t + 2 * np.sin(s.TAU * 5 * t))
+    env = np.minimum(1, t / 0.008) * np.exp(-np.maximum(t - dur, 0) / 0.02) * (0.75 + 0.25 * np.sin(np.pi * u))
+    return s.norm(y) * raspa * env
+
+
+# Cuíca en un compás: (beat, forma, de, a, duración en s). Grave y largo en el contratiempo, agudos cortos que contestan.
+CUICA = [(0.5, 'uo', 'F4', 'C5', 0.3), (1.5, 'ui', 'C5', 'F5', 0.11), (1.75, 'ui', 'C5', 'F5', 0.11),
+         (2.5, 'uo', 'F4', 'C5', 0.34), (3.5, 'ui', 'A4', 'D5', 0.16)]
 
 
 def pad_calido(ms, dur, sr=s.SRM):
@@ -512,8 +527,13 @@ def musica_fusion_bossa():
         for ini, d, _, raya in morse():
             if ini * 0.25 < 8:
                 p.poner('agogo', b0 + ini * 0.25, agogo(s.hz(s.midi('G5' if raya else 'C6'))), 1.0 if raya else 0.7)
-    for x, f0, sube in [(128 + 7.5, 520, 1.7), (128 + 13.5, 600, 1.5), (128 + 14.5, 480, 1.9)]:
-        p.poner('cuica', x, cuica(f0, sube), 1.0)
+    # La cuíca toma el break: groove en los compases 1 y 3 (contesta al Morse) y grito largo al final.
+    for b0 in (128, 136):
+        for x, forma, n0, n1, d in CUICA:
+            p.poner('cuica', b0 + x, cuica(n0, n1, d, forma), 1.0, humano=0.004)
+        for x, forma, n0, n1, d in [(4.5, 'ui', 'C5', 'F5', 0.12), (5.5, 'uo', 'A4', 'D5', 0.3), (6.5, 'ui', 'C5', 'G5', 0.2)]:
+            p.poner('cuica', b0 + x, cuica(n0, n1, d, forma), 0.9, humano=0.004)
+    p.poner('cuica', 141.5, cuica('C5', 'C6', 1.1, 'ui'), 1.0)
     # Subida del break a la vuelta del tema: caja en semicorcheas que crece y surdo que cae.
     for k in range(16):
         p.poner('caja', 140 + k * 0.25, s.snare(seco=False, oscuro=True), 0.15 + 0.6 * (k / 15) ** 1.6)
@@ -562,8 +582,12 @@ def musica_fusion_bossa():
         p.poner('campanitas', b0, s.platillo(), 0.35)
     # Cuíca en los huecos del motivo.
     for f in (1, 3, 9, 11):
-        for x, f0, sube in [(13.5, 520, 1.7), (7.75, 600, 1.5)][: 2 if f in (3, 11) else 1]:
-            p.poner('cuica', f * 16 + x, cuica(f0 - 40 * (f == 1), sube), 1.0)
+        for x, forma, n0, n1, d in [(13.5, 'uo', 'F4', 'C5', 0.3), (7.75, 'ui', 'C5', 'F5', 0.14), (15, 'ui', 'A4', 'D5', 0.16)][: 3 if f in (3, 11) else 2]:
+            p.poner('cuica', f * 16 + x, cuica(n0, n1, d, forma), 1.0)
+    # En la vuelta del tema la cuíca acompaña con el groove cada dos compases, más suave que en el break.
+    for c in range(36, 48, 2):
+        for x, forma, n0, n1, d in CUICA:
+            p.poner('cuica', c * 4 + x, cuica(n0, n1, d, forma), 0.55, humano=0.004)
     # Guitarra que contesta suelta en el segundo compás del B.
     for b0 in (32, 160):
         for k, m in enumerate(['D5', 'C5', 'Bb4', 'G4']):
@@ -575,7 +599,7 @@ def musica_fusion_bossa():
         'pad': (-27, 0.45, 0), 'cuerdas': (-31, 0.4, 0), 'bajo': (-18, 0.04, 0), 'bombo': (-24, 0.02, 0), 'rim': (-31, 0.12, 0),
         'pandeiro': (-29, 0.1, 0), 'hat': (-37, 0.05, 0), 'caja': (-42, 0.2, 0), 'triangulo': (-35, 0.15, 0),
         'surdo': (-26, 0.08, 0), 'conga': (-25, 0.12, 0), 'agogo': (-29, 0.2, 0.1),
-        'arpa': (-36, 0.35, 0.2), 'campanitas': (-36, 0.4, 0.2), 'cuica': (-40, 0.25, 0.1),
+        'arpa': (-36, 0.35, 0.2), 'campanitas': (-36, 0.4, 0.2), 'cuica': (-30, 0.2, 0.08),
     }, reverb_tau=0.28, eco_beats=1.0, eco_fb=0.2)
 
 
