@@ -8,6 +8,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../../animaciones.dart';
+import '../../diagnostico.dart';
 import '../../emoji.dart';
 import '../../idioma.dart';
 import '../../tema.dart';
@@ -109,12 +110,14 @@ class _PantallaMinijuegoState extends State<PantallaMinijuego> {
 
   @override
   void dispose() {
-    unawaited(Sonido.pararMusica());
+    Diagnostico.instancia.partidaTermina();
+    unawaited(Sonido.soltarTodo());
     super.dispose();
   }
 
   void _jugar() {
-    Telemetria.instancia.registrar('minijuego_inicia', {'juego': widget.juego});
+    Telemetria.instancia.registrar('minijuego_inicia', {'juego': widget.juego, 'liviano': telefonoLiviano});
+    Diagnostico.instancia.partidaEmpieza(widget.juego);
     setState(() {
       _fase = _Fase.jugando;
       _res = null;
@@ -125,6 +128,7 @@ class _PantallaMinijuegoState extends State<PantallaMinijuego> {
 
   Future<void> _fin(int puntos, int ms) async {
     if (_fase == _Fase.fin) return;
+    Diagnostico.instancia.partidaTermina();
     unawaited(Sonido.pararMusica());
     setState(() {
       _fase = _Fase.fin;

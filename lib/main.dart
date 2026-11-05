@@ -12,6 +12,7 @@ import 'accesorios.dart';
 import 'actualizar.dart';
 import 'amigos.dart';
 import 'animaciones.dart';
+import 'diagnostico.dart';
 import 'avisos.dart';
 import 'avisos_resumen.dart';
 import 'cagadon.dart';
@@ -56,6 +57,8 @@ Future<void> main() async {
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   registrarLicencias();
   await Supabase.initialize(url: supabaseUrl, publishableKey: supabaseKey);
+  // Errores, teléfono y por qué se cerró la vez anterior, a la telemetría. También prende el modo liviano.
+  await Diagnostico.instancia.iniciar();
   try {
     await iniciarRecordatorio();
     await iniciarPush();

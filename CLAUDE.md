@@ -51,6 +51,7 @@ Repo público: nada de refs de proyecto, keys, correos ni usernames reales en c�
 | `avisos.dart` | Notificaciones dentro de la app, navegación `ir()` |
 | `push.dart` | FCM (`iniciarPush`, handler en segundo plano) |
 | `widget.dart` | Widgets de pantalla de inicio, `clienteDeFondo()` (Supabase en motor aparte) |
+| `diagnostico.dart` | `Diagnostico`: errores sin atrapar (`error_app`), datos del teléfono (`equipo`), por qué se cerró (`app_salida`), partidas cortadas y fotos de memoria; prende `telefonoLiviano` (Android Go o < 3 GB: `Sonido.liviano`, caché de imágenes chica). Canal `rey_cagon/equipo` en MainActivity.kt. Símbolos del APK directo en `~/.rey-cagon/simbolos/<build>` |
 | `animaciones.dart` | Niveles de movimiento |
 | `tema.dart` | `Paleta`, `tema()`, `Rotulo`, `numeros()` |
 | `emoji.dart` | Mapa emoji → PNG Fluent, widget `Emoji` |

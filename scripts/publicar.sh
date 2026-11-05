@@ -28,7 +28,11 @@ if [ "${ANTES_DE_PLAY:-}" != 1 ]; then
   fi
 fi
 
-flutter build apk --release --flavor directo --target-platform android-arm,android-arm64 --split-debug-info=build/simbolos
+# Símbolos por build y fuera de build/ (flutter clean lo borra): las pilas de `error_app` del APK directo vienen sin nombres
+# y se leen con `flutter symbolize -i pila.txt -d ~/.rey-cagon/simbolos/<build>/app.android-arm64.symbols`.
+SIMBOLOS="$HOME/.rey-cagon/simbolos/$BUILD"
+mkdir -p "$SIMBOLOS"
+flutter build apk --release --flavor directo --target-platform android-arm,android-arm64 --split-debug-info="$SIMBOLOS"
 APK=build/app/outputs/flutter-apk/app-directo-release.apk
 SHA=$(shasum -a 256 "$APK" | awk '{print $1}')
 NOMBRE="rey-cagon-$VERSION+$BUILD.apk"

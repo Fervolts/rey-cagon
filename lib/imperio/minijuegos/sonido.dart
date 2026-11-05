@@ -1,6 +1,8 @@
 // Sonido de los minijuegos: efectos cortos y un loop de música por juego.
 // Los archivos salen de scripts/sonidos.py (efectos) y scripts/musica_cagar.py (músicas), síntesis propia, y viven en assets/sonidos/.
 // Nunca lanza: en tests o sin audio no suena y ya. El silencio se guarda en el teléfono.
+// Modo liviano (teléfonos con poca RAM): un solo reproductor SoundPool por efecto en vez de hasta 4 MediaPlayer, y sin música.
+// Los efectos se sueltan al salir del juego (`liberar`).
 
 import 'dart:async';
 import 'dart:io' show Platform;
@@ -29,8 +31,13 @@ class Sonido {
   static const _clave = 'minijuegos_silencio';
   static bool _leido = false;
 
+  /// Teléfono con poca memoria (lo prende el diagnóstico al arrancar).
+  static bool liviano = false;
+
   static final _pools = <String, AudioPool>{};
   static final _cargando = <String, Future<AudioPool?>>{};
+  static final _sueltos = <String, AudioPlayer>{};
+  static final _cargandoSuelto = <String, Future<AudioPlayer?>>{};
   static AudioPlayer? _musica;
   static String? _musicaActual;
   static AppLifecycleListener? _ciclo;
@@ -87,11 +94,32 @@ class Sonido {
     }();
   }
 
+  // Liviano: un reproductor de baja latencia (SoundPool, el audio ya decodificado y compartido) por efecto.
+  static Future<AudioPlayer?> _suelto(String nombre) {
+    final ya = _sueltos[nombre];
+    if (ya != null) return Future.value(ya);
+    return _cargandoSuelto[nombre] ??= () async {
+      try {
+        await _mezclar();
+        final p = AudioPlayer();
+        await p.setPlayerMode(PlayerMode.lowLatency);
+        await p.setReleaseMode(ReleaseMode.stop);
+        await p.setSource(AssetSource('sonidos/$nombre.wav'));
+        _sueltos[nombre] = p;
+        return p;
+      } catch (_) {
+        return null;
+      } finally {
+        _cargandoSuelto.remove(nombre);
+      }
+    }();
+  }
+
   /// Carga de antemano los efectos de un juego para que el primero no llegue tarde.
   static Future<void> precargar(Iterable<String> nombres) async {
     if (apagado) return;
     await leerPreferencia();
-    await Future.wait(nombres.map(_pool));
+    await Future.wait(liviano ? nombres.map(_suelto) : nombres.map(_pool));
   }
 
   /// Toca un efecto. [volumen] de 0 a 1.
@@ -99,15 +127,42 @@ class Sonido {
     if (_mudo) return;
     unawaited(() async {
       try {
+        if (liviano) {
+          final p = await _suelto(nombre);
+          if (p == null) return;
+          // SoundPool no avisa cuando termina: se para y se vuelve a tocar desde el principio.
+          await p.stop();
+          await p.setVolume(volumen.clamp(0.0, 1.0));
+          await p.resume();
+          return;
+        }
         final p = await _pool(nombre);
         await p?.start(volume: volumen.clamp(0.0, 1.0));
       } catch (_) {}
     }());
   }
 
+  /// Suelta todos los efectos cargados (al salir de un juego o con poca memoria). Se vuelven a cargar al tocarlos.
+  static Future<void> liberar() async {
+    final pools = _pools.values.toList();
+    final sueltos = _sueltos.values.toList();
+    _pools.clear();
+    _sueltos.clear();
+    for (final p in pools) {
+      try {
+        await p.dispose();
+      } catch (_) {}
+    }
+    for (final p in sueltos) {
+      try {
+        await p.dispose();
+      } catch (_) {}
+    }
+  }
+
   /// Arranca el loop de un juego (si ya suena ese, no hace nada).
   static Future<void> musica(String nombre, {double volumen = 0.45}) async {
-    if (_mudo) return;
+    if (_mudo || liviano) return;
     if (_musicaActual == nombre && _musica?.state == PlayerState.playing) return;
     try {
       _ciclo ??= AppLifecycleListener(
@@ -131,5 +186,16 @@ class Sonido {
     try {
       await _musica?.stop();
     } catch (_) {}
+  }
+
+  /// Al salir del juego: para la música, suelta su reproductor y los efectos.
+  static Future<void> soltarTodo() async {
+    _musicaActual = null;
+    final m = _musica;
+    _musica = null;
+    try {
+      await m?.dispose();
+    } catch (_) {}
+    await liberar();
   }
 }

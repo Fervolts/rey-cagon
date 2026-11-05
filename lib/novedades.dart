@@ -21,6 +21,12 @@ class VersionNovedades {
 
 /// El historial público, de la más nueva a la más vieja. Al sacar una versión nueva se agrega arriba.
 const historialNovedades = <VersionNovedades>[
+  VersionNovedades('2.19.2', '2026-11-05', [
+    ('🪶', 'Los minijuegos gastan mucha menos memoria en teléfonos sencillos (Android Go o con poca RAM): el sonido va más liviano y la música se apaga ahí para que no se cierre el juego.',
+        'Minigames use much less memory on basic phones (Android Go or low RAM): sound is lighter and music is turned off there so the game does not close.'),
+    ('🔧', 'Si la app se cierra sola, ahora nos enteramos de por qué y lo arreglamos más rápido.',
+        'If the app closes by itself, we now find out why and fix it faster.'),
+  ]),
   VersionNovedades('2.19.1', '2026-11-05', [
     ('🧩', 'Fusión real ya no tiene reloj: juegas hasta que la poceta se desborda. Cada partida arranca con algunos mojones al azar y el fondo se queda quieto.',
         'Royal Fusion has no timer anymore: you play until the toilet overflows. Every game starts with a few random poops and the background stays still.'),

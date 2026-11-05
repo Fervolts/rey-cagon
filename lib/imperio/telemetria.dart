@@ -122,6 +122,22 @@ Future<int> _enviarPorRpc(List<Map<String, Object?>> lote) async {
 /// - `avisos_tarjeta_descarta` {total}: la cerró; no vuelve en 14 días
 /// - `error` {donde, tipo, red}: tipo = clase de la excepción; red = si fue de red. Los guardados fallidos con la app en el fondo no cuentan (se repiten al volver)
 ///
+/// Fuera del Imperio (lib/diagnostico.dart, 2.19.2; los de memoria llevan rss_mb, rss_max_mb e imagenes_mb del proceso):
+/// - `equipo` {modelo, marca, sdk, ram_baja, ram_mb, libre_mb, umbral_mb, memoria_baja, clase_mb, clase_grande_mb, java_usada_mb,
+///   java_max_mb, nativa_mb, liviano}: uno por arranque. liviano = Android Go o menos de 3 GB (sonido liviano, sin música, caché chica)
+/// - `error_app` {donde, tipo, mensaje, contexto, red, juego, pila}: error sin atrapar (`flutter` = de un widget o del dibujo,
+///   `plataforma` = asíncrono). Uno por tipo y primera línea de pila, hasta 15 por sesión. pila = líneas cortas (sin símbolos si es
+///   el APK directo: se simbolizan con los .symbols de esa versión)
+/// - `app_salida` {razon, descripcion, importancia, pss_mb, rss_mb, cuando, estado, hace_s}: por qué se cerró el proceso las veces
+///   anteriores (Android 11+, `ApplicationExitInfo`; razon = poca_memoria, crash, crash_nativo, anr, usuario, salio_solo, senal…;
+///   importancia 100 = estaba en pantalla). Solo las que no se habían mandado, hasta 5 por arranque
+/// - `minijuego_cortado` {juego, hace_s, ultima_foto, razon?, segundos?, pss_mb?, rss_mb?}: una partida quedó abierta (la app murió
+///   o la mataron). Con la salida que la cerró si Android la registró: segundos = de empezar a morir
+/// - `memoria_foto` {motivo, juego, seg, libre_mb, memoria_baja, java_usada_mb, nativa_mb}: memoria al empezar una partida (`inicio`)
+///   y cada 20 s mientras dura (`partida`)
+/// - `memoria_baja` {juego, liviano}: Android avisó que falta memoria (uno cada 30 s como mucho); se sueltan caché y efectos
+/// - `minijuego_inicia` lleva además `liviano` desde 2.19.2
+///
 /// Nombres: `[a-z0-9_]`, hasta 40. Datos: JSON plano, hasta ~3,5 KB (si no, se manda `{recortado: true}`).
 class Telemetria {
   static const int maxCola = 500;
