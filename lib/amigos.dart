@@ -148,16 +148,28 @@ class _PantallaAmigosState extends State<PantallaAmigos> with AutomaticKeepAlive
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(content: Text(texto)));
 
+  // Toques en curso: un segundo toque mientras va el primero se ignora.
+  final _siguiendo = <String>{};
+
   Future<void> _seguir(String id) async {
+    if (!_siguiendo.add(id)) return;
+    final sigo = _sigo.contains(id);
+    // Se ve al instante; si el servidor falla, vuelve como estaba.
+    setState(() => _sigo = sigo ? ({..._sigo}..remove(id)) : {..._sigo, id});
     try {
-      if (_sigo.contains(id)) {
+      if (sigo) {
         await db.from('follows').delete().eq('follower', _yo).eq('followed', id);
       } else {
         await db.from('follows').insert({'followed': id});
       }
-      await _cargar();
+      // Sin esperar: el resto de la lista se pone al día por detrás.
+      _cargar();
     } catch (e) {
+      if (!mounted) return;
+      setState(() => _sigo = sigo ? {..._sigo, id} : ({..._sigo}..remove(id)));
       _aviso(textoError(e));
+    } finally {
+      _siguiendo.remove(id);
     }
   }
 

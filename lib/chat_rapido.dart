@@ -9,7 +9,7 @@ import 'accesorios.dart' show Avatar, columnasAvatar;
 import 'chat.dart' show aceptoReglas;
 import 'emoji.dart';
 import 'idioma.dart';
-import 'main.dart' show db, textoError;
+import 'main.dart' show db, textoError, ultimosDeSala;
 import 'tema.dart';
 
 class ChatRapido extends StatefulWidget {
@@ -27,7 +27,7 @@ class _ChatRapidoState extends State<ChatRapido> {
   final _texto = TextEditingController();
   final _perfiles = <String, Map<String, dynamic>>{};
   List<Map<String, dynamic>> _ultimos = const [];
-  StreamSubscription? _sub;
+  VoidCallback? _soltar;
   bool _cargado = false, _enviando = false;
 
   String get _yo => db.auth.currentUser!.id;
@@ -46,22 +46,18 @@ class _ChatRapidoState extends State<ChatRapido> {
 
   @override
   void dispose() {
-    _sub?.cancel();
+    _soltar?.call();
     _texto.dispose();
     super.dispose();
   }
 
   void _escuchar() {
-    _sub?.cancel();
-    _sub = db
-        .from('mensajes')
-        .stream(primaryKey: ['id'])
-        .eq('sala', widget.sala)
-        .order('id', ascending: false)
-        .limit(widget.cuantos * 3)
-        .listen(_alLlegar, onError: (_) {
-          if (mounted) setState(() => _cargado = true);
-        });
+    _soltar?.call();
+    _soltar = ultimosDeSala(widget.sala, widget.cuantos * 3, _alLlegar);
+    // Si la primera consulta falla, que no quede la rueda para siempre.
+    Timer(const Duration(seconds: 20), () {
+      if (mounted && !_cargado) setState(() => _cargado = true);
+    });
   }
 
   // Sin respuestas de hilos ni ocultos de otros: lo mismo que se ve abajo del todo en el chat.

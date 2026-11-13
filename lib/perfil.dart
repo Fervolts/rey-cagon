@@ -329,15 +329,23 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
   }
 
   Future<void> _seguir() async {
+    final sigo = _p!['lo_sigo'] == true;
+    // Se ve al instante (botón y contador); si el servidor falla, vuelve como estaba.
+    void poner(bool si) => setState(() {
+          _p = {..._p!, 'lo_sigo': si, 'seguidores': ((_p!['seguidores'] as num?)?.toInt() ?? 0) + (si ? 1 : -1)};
+        });
     setState(() => _ocupado = true);
+    poner(!sigo);
     try {
-      if (_p!['lo_sigo'] == true) {
+      if (sigo) {
         await db.from('follows').delete().eq('follower', db.auth.currentUser!.id).eq('followed', widget.usuarioId);
       } else {
         await db.from('follows').insert({'followed': widget.usuarioId});
       }
-      await _cargar();
+      // Sin esperar: lo demás del perfil se pone al día por detrás.
+      _cargar();
     } catch (e) {
+      if (mounted) poner(sigo);
       _mensaje(textoError(e));
     } finally {
       if (mounted) setState(() => _ocupado = false);
@@ -1355,17 +1363,27 @@ class _PantallaBuscarState extends State<PantallaBuscar> {
     }
   }
 
+  // Toques en curso: un segundo toque mientras va el primero se ignora.
+  final _enCurso = <String>{};
+
   Future<void> _toggle(String id) async {
+    if (!_enCurso.add(id)) return;
     final yo = db.auth.currentUser!.id;
+    final sigo = _sigo.contains(id);
+    // Se ve al instante; si el servidor falla, vuelve como estaba.
+    setState(() => _sigo = sigo ? ({..._sigo}..remove(id)) : {..._sigo, id});
     try {
-      if (_sigo.contains(id)) {
+      if (sigo) {
         await db.from('follows').delete().eq('follower', yo).eq('followed', id);
       } else {
         await db.from('follows').insert({'followed': id});
       }
-      await _buscar(_q);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(textoError(e))));
+      if (!mounted) return;
+      setState(() => _sigo = sigo ? {..._sigo, id} : ({..._sigo}..remove(id)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(textoError(e))));
+    } finally {
+      _enCurso.remove(id);
     }
   }
 

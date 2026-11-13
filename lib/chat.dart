@@ -24,7 +24,7 @@ import 'idioma.dart';
 import 'imperio/tarjeta_bano.dart';
 import 'imperio/regalos.dart' show TarjetaImperio, TarjetaRegalo;
 import 'imperio/tarjeta_cartera.dart';
-import 'main.dart' show db, esDeRed;
+import 'main.dart' show db, esDeRed, ultimosDeSala;
 import 'panel.dart';
 import 'perfil.dart' show PantallaPerfil;
 import 'teclado_emojis.dart';
@@ -193,18 +193,12 @@ class _PantallaChatState extends State<PantallaChat> {
   // Lo último de la sala general, para verlo desde la lista sin entrar.
   List<Map<String, dynamic>> _ultimos = const [];
   final _perfiles = <String, Map<String, dynamic>>{};
-  StreamSubscription? _subUltimos;
+  VoidCallback? _soltarUltimos;
 
   @override
   void initState() {
     super.initState();
-    _subUltimos = db
-        .from('mensajes')
-        .stream(primaryKey: ['id'])
-        .eq('sala', 'global')
-        .order('id', ascending: false)
-        .limit(12)
-        .listen(_alLlegarUltimos, onError: (_) {});
+    _soltarUltimos = ultimosDeSala('global', 12, _alLlegarUltimos);
     db.rpc('es_admin').then((v) {
       if (mounted) setState(() => _soyAdmin = v == true);
     }).catchError((_) {});
@@ -215,7 +209,7 @@ class _PantallaChatState extends State<PantallaChat> {
 
   @override
   void dispose() {
-    _subUltimos?.cancel();
+    _soltarUltimos?.call();
     irA.removeListener(_irA);
     super.dispose();
   }

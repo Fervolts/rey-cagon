@@ -5,6 +5,7 @@ import 'emoji.dart';
 import 'genero.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -56,7 +57,7 @@ Future<void> main() async {
   // Solo vertical: nada de la app está pensado para acostado.
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   registrarLicencias();
-  await Supabase.initialize(url: supabaseUrl, publishableKey: supabaseKey);
+  await Supabase.initialize(url: supabaseUrl, publishableKey: supabaseKey, httpClient: ClienteConTope());
   // Errores, teléfono y por qué se cerró la vez anterior, a la telemetría. También prende el modo liviano.
   await Diagnostico.instancia.iniciar();
   try {
@@ -81,6 +82,23 @@ Future<void> main() async {
 }
 
 final db = Supabase.instance.client;
+
+/// Toda petición a Supabase con tiempo máximo. Sin esto, con la red mala una consulta o un envío se
+/// quedaba colgado minutos (rueda girando, botón de enviar apagado). Al vencer lanza TimeoutException,
+/// que esDeRed toma como corte: conReintento la repite y textoError dice "Sin conexión".
+class ClienteConTope extends http.BaseClient {
+  final _http = http.Client();
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest pedido) {
+    // Subir una foto con datos lentos tarda más que una consulta.
+    final tope = pedido.url.path.contains('/storage/') ? const Duration(seconds: 60) : const Duration(seconds: 15);
+    return _http.send(pedido).timeout(tope);
+  }
+
+  @override
+  void close() => _http.close();
+}
 
 var _canales = 0;
 
@@ -172,6 +190,53 @@ VoidCallback escucharCagadas(String nombre, VoidCallback onCambio) {
       });
   final ciclo = AppLifecycleListener(onResume: avisar);
   return () {
+    espera?.cancel();
+    ciclo.dispose();
+    db.removeChannel(canal);
+  };
+}
+
+/// Los últimos [cuantos] mensajes de [sala], siempre al día: consulta, y vuelve a consultar cuando
+/// realtime avisa de un cambio, cuando el canal se reconecta tras un corte y al volver a la app.
+/// Antes las vistas previas usaban .stream(), que tras un corte de red se quedaba congelado.
+/// Devuelve con qué soltarlo en dispose().
+VoidCallback ultimosDeSala(String sala, int cuantos, void Function(List<Map<String, dynamic>>) alLlegar) {
+  var vivo = true;
+  Timer? espera;
+  Future<void> pedir() async {
+    try {
+      final r = await conReintento(() => db.from('mensajes').select().eq('sala', sala).order('id', ascending: false).limit(cuantos));
+      if (vivo) alLlegar(r);
+    } catch (_) {
+      // Sin red: queda lo que ya se veía; el próximo aviso o la vuelta a la app lo pone al día.
+    }
+  }
+
+  void avisar() {
+    espera?.cancel();
+    espera = Timer(const Duration(milliseconds: 300), pedir);
+  }
+
+  final filtro = PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'sala', value: sala);
+  var cortado = false;
+  final canal = db
+      .channel('ultimos-$sala-${_canales++}')
+      .onPostgresChanges(event: PostgresChangeEvent.insert, schema: 'public', table: 'mensajes', filter: filtro, callback: (_) => avisar())
+      .onPostgresChanges(event: PostgresChangeEvent.update, schema: 'public', table: 'mensajes', filter: filtro, callback: (_) => avisar())
+      // Los borrados no se pueden filtrar en realtime; son pocos.
+      .onPostgresChanges(event: PostgresChangeEvent.delete, schema: 'public', table: 'mensajes', callback: (_) => avisar())
+      .subscribe((estado, [_]) {
+        if (estado != RealtimeSubscribeStatus.subscribed) {
+          cortado = true;
+        } else if (cortado) {
+          cortado = false;
+          avisar();
+        }
+      });
+  final ciclo = AppLifecycleListener(onResume: avisar);
+  pedir();
+  return () {
+    vivo = false;
     espera?.cancel();
     ciclo.dispose();
     db.removeChannel(canal);
