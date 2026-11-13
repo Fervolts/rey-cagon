@@ -168,6 +168,8 @@ class _EditorPopupState extends State<_EditorPopup> {
   bool _push = true;
   // null = para todos; 'es' o 'en' = solo los teléfonos en ese idioma.
   String? _idioma;
+  // null = para todos; 'directo' = APK de GitHub; 'play' = instalados desde Play.
+  String? _canal;
   bool _conBoton = false;
   bool _ocupado = false;
 
@@ -177,6 +179,12 @@ class _EditorPopupState extends State<_EditorPopup> {
         'texto': _texto.text.trim(),
         if (_conBoton) 'boton_texto': _boton.text.trim(),
         if (_conBoton) 'boton_url': _url.text.trim(),
+      };
+
+  (String, String) get _paraQuien => switch (_canal) {
+        'directo' => ('los teléfonos con la APK directa', 'phones with the direct APK'),
+        'play' => ('los teléfonos con la app de Play', 'phones with the Play app'),
+        _ => ('TODOS los teléfonos', 'EVERY phone'),
       };
 
   String? get _problema {
@@ -198,8 +206,8 @@ class _EditorPopupState extends State<_EditorPopup> {
       builder: (context) => AlertDialog(
         title: Text(tr('¿Publicarlo?', 'Publish it?')),
         content: Text(_push
-            ? tr('Le llega una notificación a TODOS los teléfonos ahora mismo, y sale como pop-up al abrir la app por ${_duraciones[_dias]}. El push no se puede deshacer.',
-                'A notification goes out to EVERY phone right now, and it shows as a pop-up when opening the app for ${_duraciones[_dias]}. The push can\'t be undone.')
+            ? tr('Le llega una notificación a ${_paraQuien.$1} ahora mismo, y sale como pop-up al abrir la app por ${_duraciones[_dias]}. El push no se puede deshacer.',
+                'A notification goes out to ${_paraQuien.$2} right now, and it shows as a pop-up when opening the app for ${_duraciones[_dias]}. The push can\'t be undone.')
             : tr('Sale como pop-up al abrir la app por ${_duraciones[_dias]}. Sin notificación.', 'Shows as a pop-up when opening the app for ${_duraciones[_dias]}. No notification.')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('NO', 'NO'))),
@@ -214,10 +222,11 @@ class _EditorPopupState extends State<_EditorPopup> {
         ..._popup,
         'push': _push,
         'idioma': _idioma,
+        'canal': _canal,
         'hasta': DateTime.now().toUtc().add(Duration(days: _dias)).toIso8601String(),
       });
       if (!mounted) return;
-      _aviso(context, _push ? tr('Publicado y enviado a todos 📢', 'Published and sent to everyone 📢') : tr('Publicado 📢', 'Published 📢'));
+      _aviso(context, _push ? tr('Publicado y enviado 📢', 'Published and sent 📢') : tr('Publicado 📢', 'Published 📢'));
       Navigator.pop(context, true);
     } catch (e) {
       if (mounted) _aviso(context, textoError(e));
@@ -300,6 +309,11 @@ class _EditorPopupState extends State<_EditorPopup> {
                 for (final (valor, nombre) in const [(null, 'TODOS'), ('es', 'ESPAÑOL'), ('en', 'ENGLISH')])
                   ChoiceChip(label: TextoConEmojis(nombre), selected: _idioma == valor, onSelected: (_) => setState(() => _idioma = valor)),
               ]),
+              const SizedBox(height: 8),
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                for (final (valor, nombre) in [(null, tr('TODAS LAS APPS', 'ALL APPS')), ('directo', tr('SOLO APK DIRECTA', 'DIRECT APK ONLY')), ('play', tr('SOLO PLAY', 'PLAY ONLY'))])
+                  ChoiceChip(label: TextoConEmojis(nombre), selected: _canal == valor, onSelected: (_) => setState(() => _canal = valor)),
+              ]),
               const SizedBox(height: 16),
               Rotulo(tr('Sale por', 'Shows for')),
               const SizedBox(height: 8),
@@ -310,7 +324,7 @@ class _EditorPopupState extends State<_EditorPopup> {
               const SizedBox(height: 8),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: Text(tr('Mandar notificación a todos', 'Send a notification to everyone')),
+                title: Text(tr('Mandar notificación', 'Send a notification')),
                 subtitle: Text(tr('Si lo apagas, solo sale al abrir la app', 'If you turn it off, it only shows when opening the app')),
                 value: _push,
                 onChanged: (v) => setState(() => _push = v),

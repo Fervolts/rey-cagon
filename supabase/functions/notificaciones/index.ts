@@ -10,7 +10,7 @@
 //   - trigger mensajes_avisar_mencion: { tipo: "mencion" } → aviso a quien mencionaron con @.
 //   - trigger mensajes_avisar_respuesta: { tipo: "respuesta" } → respuesta en un hilo de una sala pública.
 //   - retos (Cagadón): { tipo: "reto", evento } → nuevo, aceptado, rechazado o fin del día.
-//   - trigger anuncios_avisar: { tipo: "anuncio" } → anuncio de un admin a todos los teléfonos.
+//   - trigger anuncios_avisar: { tipo: "anuncio" } → anuncio de un admin a todos (o a un idioma o canal).
 //   - cron push_poceta: { tipo: "poceta", lista } → empujones del Imperio.
 //   - cron push_racha: { tipo: "racha", lista: [{ user_id, llevas, dia }] } → racha del Imperio a punto de perderse.
 //   - cron push_ganadores: { tipo: "ganadores", periodo, lista } → quién ganó la semana/mes/año entre tus amigos.
@@ -516,13 +516,17 @@ async function avisarCloaca(semana: string) {
   ), { tipo: "cloaca", semana }, "ganadores");
 }
 
-// Anuncio de un admin: a todos los teléfonos (o solo a los de un idioma), de Play y de la APK
-// directa. No se guarda por usuario: la app lee public.anuncios directo.
+// Anuncio de un admin: a todos los teléfonos, o solo a los de un idioma y/o un canal (play o
+// directo; los tokens sin canal son de la APK directa). No se guarda por usuario: la app lee
+// public.anuncios directo.
 async function avisarAnuncio(id: number) {
-  const { data: a } = await db.from("anuncios").select("titulo, texto, emoji, idioma").eq("id", id).single();
+  const { data: a } = await db.from("anuncios").select("titulo, texto, emoji, idioma, canal").eq("id", id).single();
   if (!a) return Response.json({ enviados: 0 });
-  const consulta = db.from("push_tokens").select("token, user_id");
-  const { data: tokens } = await (a.idioma ? consulta.eq("idioma", a.idioma) : consulta);
+  let consulta = db.from("push_tokens").select("token, user_id");
+  if (a.idioma) consulta = consulta.eq("idioma", a.idioma);
+  if (a.canal === "play") consulta = consulta.eq("canal", "play");
+  if (a.canal === "directo") consulta = consulta.or("canal.is.null,canal.eq.directo");
+  const { data: tokens } = await consulta;
   if (!tokens?.length) return Response.json({ enviados: 0 });
   const mensaje = { titulo: `${a.emoji ?? "📢"} ${a.titulo}`, cuerpo: recortar(a.texto, 160), data: { tipo: "anuncio", id: String(id) } };
   const { enviados } = await repartir("anuncio", tokens, () => mensaje);
