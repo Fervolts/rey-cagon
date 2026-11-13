@@ -182,6 +182,7 @@ create trigger muro_comentarios_validar before insert on public.muro_comentarios
 create table public.muro_reportes (
   post_id bigint not null references public.muro (id) on delete cascade,
   user_id uuid not null default auth.uid() references public.profiles (id) on delete cascade,
+  motivo text not null check (char_length(motivo) <= 200),
   created_at timestamptz not null default now(),
   primary key (post_id, user_id)
 );
