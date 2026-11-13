@@ -74,6 +74,13 @@ const _errores = {
   'Esa apuesta todavía no se puede cobrar': "That bet can't be collected yet",
   'Ya cobraste esa apuesta': 'You already collected that bet',
   'Perdiste esa apuesta': 'You lost that bet',
+  'Solo puedes publicar a tu nombre': 'You can only post as yourself',
+  'Publicación vacía': 'Empty post',
+  'Texto muy largo': 'Text too long',
+  'Ya publicaste mucho esta hora. Espera un rato.': "You've posted a lot this hour. Wait a while.",
+  'Solo puedes comentar a tu nombre': 'You can only comment as yourself',
+  'Comentario vacío': 'Empty comment',
+  'Ya comentaste mucho esta hora. Espera un rato.': "You've commented a lot this hour. Wait a while.",
 };
 
 /// Un mensaje de error del servidor en el idioma de la app.
@@ -89,6 +96,7 @@ String trServidor(String mensaje) {
   if (genero != null) return 'You can only change your gender once a year. Next change: ${genero[1]}';
   final faltan = RegExp(r'^Te faltan cagadas: necesitas (\d+)$').firstMatch(mensaje);
   if (faltan != null) return 'Not enough poops: you need ${faltan[1]}';
+  if (mensaje.startsWith('Dibujo inválido: ')) return 'Invalid drawing';
   final link = RegExp(r'^Link bloqueado: no se permiten (.+)$').firstMatch(mensaje);
   if (link != null) return 'Link blocked: ${_bloqueados[link[1]] ?? link[1]} not allowed';
   return mensaje;
