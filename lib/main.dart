@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'emoji.dart';
 import 'genero.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -102,8 +103,6 @@ class ClienteConTope extends http.BaseClient {
 
 var _canales = 0;
 
-/// Llama [onCambio] (agrupado en 400ms) cuando alguien registra o borra una cagada o un follow,
-/// y cuando la app vuelve a primer plano. Devuelve con qué soltarlo en dispose().
 /// Errores de red: el teléfono cortó la conexión (pantalla apagada, app en segundo plano, cambio
 /// de wifi a datos). No son fallas de verdad: se reintenta y no se le muestra nada feo a nadie.
 bool esDeRed(Object e) {
@@ -149,11 +148,60 @@ Future<T> conReintento<T>(Future<T> Function() consulta) async {
   }
 }
 
-VoidCallback escucharCagadas(String nombre, VoidCallback onCambio) {
+/// Llama [onCambio] (agrupado en 2 s) cuando alguien registra o borra una cagada o un follow,
+/// y cuando la app vuelve a primer plano. Devuelve con qué soltarlo en dispose().
+/// Nunca hay dos cargas a la vez: un aviso durante la carga deja una sola repetición para el final.
+/// Con [contexto], si la pantalla no se ve (pestaña de atrás o tapada por otra ruta) no carga:
+/// queda pendiente y carga cuando vuelve a verse.
+VoidCallback escucharCagadas(String nombre, Future<void> Function() onCambio, {BuildContext? contexto}) {
   Timer? espera;
+  var vivo = true;
+  var enVuelo = false;
+  var otraVez = false;
+  ValueListenable<TickerModeData>? esperandoVerse;
+  Future<void> correr() async {
+    if (!vivo) return;
+    if (enVuelo) {
+      otraVez = true;
+      return;
+    }
+    enVuelo = true;
+    try {
+      await onCambio();
+    } catch (_) {
+      // Cada pantalla muestra sus errores; aquí solo no se rompe la cola.
+    } finally {
+      enVuelo = false;
+    }
+    if (otraVez && vivo) {
+      otraVez = false;
+      correr();
+    }
+  }
+
+  void alVerse() {
+    final v = esperandoVerse;
+    if (v == null || !v.value.enabled) return;
+    v.removeListener(alVerse);
+    esperandoVerse = null;
+    correr();
+  }
+
+  void tocar() {
+    final c = contexto;
+    if (c != null && c.mounted) {
+      final v = TickerMode.getValuesNotifier(c);
+      if (!v.value.enabled) {
+        esperandoVerse ??= v..addListener(alVerse);
+        return;
+      }
+    }
+    correr();
+  }
+
   void avisar() {
     espera?.cancel();
-    espera = Timer(const Duration(milliseconds: 400), onCambio);
+    espera = Timer(const Duration(seconds: 2), tocar);
   }
 
   // El canal se vuelve a unir solo tras un error o un corte; en ese hueco pudo perderse algo.
@@ -190,7 +238,9 @@ VoidCallback escucharCagadas(String nombre, VoidCallback onCambio) {
       });
   final ciclo = AppLifecycleListener(onResume: avisar);
   return () {
+    vivo = false;
     espera?.cancel();
+    esperandoVerse?.removeListener(alVerse);
     ciclo.dispose();
     db.removeChannel(canal);
   };
@@ -199,13 +249,13 @@ VoidCallback escucharCagadas(String nombre, VoidCallback onCambio) {
 /// Los últimos [cuantos] mensajes de [sala], siempre al día: consulta, y vuelve a consultar cuando
 /// realtime avisa de un cambio, cuando el canal se reconecta tras un corte y al volver a la app.
 /// Antes las vistas previas usaban .stream(), que tras un corte de red se quedaba congelado.
-/// Devuelve con qué soltarlo en dispose().
-VoidCallback ultimosDeSala(String sala, int cuantos, void Function(List<Map<String, dynamic>>) alLlegar) {
+/// [columna] cambia el campo que se filtra (soporte usa 'hilo'). Devuelve con qué soltarlo en dispose().
+VoidCallback ultimosDeSala(String sala, int cuantos, void Function(List<Map<String, dynamic>>) alLlegar, {String columna = 'sala'}) {
   var vivo = true;
   Timer? espera;
   Future<void> pedir() async {
     try {
-      final r = await conReintento(() => db.from('mensajes').select().eq('sala', sala).order('id', ascending: false).limit(cuantos));
+      final r = await conReintento(() => db.from('mensajes').select().eq(columna, sala).order('id', ascending: false).limit(cuantos));
       if (vivo) alLlegar(r);
     } catch (_) {
       // Sin red: queda lo que ya se veía; el próximo aviso o la vuelta a la app lo pone al día.
@@ -217,10 +267,10 @@ VoidCallback ultimosDeSala(String sala, int cuantos, void Function(List<Map<Stri
     espera = Timer(const Duration(milliseconds: 300), pedir);
   }
 
-  final filtro = PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'sala', value: sala);
+  final filtro = PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: columna, value: sala);
   var cortado = false;
   final canal = db
-      .channel('ultimos-$sala-${_canales++}')
+      .channel('ultimos-$columna-$sala-${_canales++}')
       .onPostgresChanges(event: PostgresChangeEvent.insert, schema: 'public', table: 'mensajes', filter: filtro, callback: (_) => avisar())
       .onPostgresChanges(event: PostgresChangeEvent.update, schema: 'public', table: 'mensajes', filter: filtro, callback: (_) => avisar())
       // Los borrados no se pueden filtrar en realtime; son pocos.
@@ -380,7 +430,7 @@ class _PantallaInicioState extends State<PantallaInicio> {
   int _tab = 0;
 
   // Puntito en la pestaña del baño: hay mensajes de otros desde la última vez que entraste.
-  final _subs = <StreamSubscription>[];
+  final _subs = <VoidCallback>[];
   // La general y la de tu idioma; los ids son de una sola secuencia, así que se comparan directo.
   int _ultimoGeneral = 0, _ultimoIdioma = 0, _vistoBano = 0, _ultimoSoporte = 0, _vistoSoporte = 0;
 
@@ -439,18 +489,12 @@ class _PantallaInicioState extends State<PantallaInicio> {
   }
 
   // El último mensaje de otra persona en esa sala; los propios cuentan como vistos.
-  StreamSubscription _escucharUltimo(String columna, String valor, void Function(int) poner) => db
-      .from('mensajes')
-      .stream(primaryKey: ['id'])
-      .eq(columna, valor)
-      .order('id')
-      .limit(1)
-      .listen((filas) {
+  VoidCallback _escucharUltimo(String columna, String valor, void Function(int) poner) => ultimosDeSala(valor, 1, (filas) {
         if (filas.isEmpty || !mounted) return;
         final m = filas.first;
         setState(() => poner(m['id'] as int));
         if (m['user_id'] == _yo || _tab == _tabBano) _marcarVisto();
-      }, onError: (_) {});
+      }, columna: columna);
 
   // Un toque en un push o en un aviso: cambiar de pestaña (el baño elige después su sub-pestaña).
   void _irA() {
@@ -493,8 +537,8 @@ class _PantallaInicioState extends State<PantallaInicio> {
     _cicloHexa.dispose();
     privadosSinLeer.removeListener(_alCambiarPrivados);
     irA.removeListener(_irA);
-    for (final s in _subs) {
-      s.cancel();
+    for (final soltar in _subs) {
+      soltar();
     }
     super.dispose();
   }
@@ -600,6 +644,11 @@ class _PantallaRankingState extends State<PantallaRanking> {
   late final VoidCallback _soltar;
   late final AppLifecycleListener _ciclo;
   Timer? _relojActualizacion;
+  // Número del último pedido de _cargar.
+  int _pedido = 0;
+  // Contra el doble toque en CAGUÉ y en DESHACER.
+  bool _enviando = false;
+  bool _deshaciendo = false;
   // Se decide una vez por apertura de la app: aparece o no, y en qué esquina.
   final _secreto = Secreto();
 
@@ -611,7 +660,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
     if (!widget.trono) _irAPeriodo(alNacer: true);
     _cargar();
     secretoAbierto.addListener(_alAbrirSecreto);
-    _soltar = escucharCagadas(widget.trono ? 'trono' : 'ranking', () => _cargar(spinner: false));
+    _soltar = escucharCagadas(widget.trono ? 'trono' : 'ranking', () => _cargar(spinner: false), contexto: context);
     // Al volver de Ajustes (permiso de instalar) o de otra app, se vuelve a ofrecer la actualización.
     _ciclo = AppLifecycleListener(onResume: () {
       // Después de la alerta nuclear si PantallaInicio sacó una al volver.
@@ -620,8 +669,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
           if (mounted) revisarActualizacion(context);
         });
       }
-      // La conexión pudo morir en segundo plano: se recarga en silencio.
-      Future<void>.delayed(const Duration(milliseconds: 600), () => _cargar(spinner: false));
+      // La recarga al volver la hace escucharCagadas.
     });
     // Bienvenida, permisos y actualización: una sola vez, desde el trono.
     if (widget.trono) _avisoPrimeraVez();
@@ -724,20 +772,23 @@ class _PantallaRankingState extends State<PantallaRanking> {
 
   Future<void> _cargar({bool spinner = true}) async {
     if (!mounted) return;
+    // Cambiar periodo, filtro o modo con una carga en vuelo: solo cuenta la respuesta del último pedido.
+    final pedido = ++_pedido;
     if (spinner) setState(() => _cargando = true);
     try {
-      final (data, hoy, yo) = await conReintento(() => (
+      // El ranking secreto solo se pide en su modo (al que solo se entra con el secreto); el servidor igual lo niega sin él.
+      final conSecretas = _secretoAbierto && _modoSecreto && !widget.trono;
+      final (data, hoy, yo, secretas) = await conReintento(() => (
             db.rpc('leaderboard', params: {'period': _periodo, 'solo_siguiendo': _soloSiguiendo}),
             // El aviso del día compara solo contra la gente que sigues.
             db.rpc('leaderboard', params: {'period': 'day', 'solo_siguiendo': true}),
             db.from('profiles').select('placer_desbloqueado, genero, cagadas').eq('id', _yo).maybeSingle(),
+            conSecretas
+                ? db.rpc('ranking_placer', params: {'period': _periodo, 'solo_siguiendo': _soloSiguiendo}) as Future<dynamic>
+                : Future<dynamic>.value(),
           ).wait);
       final abierto = yo?['placer_desbloqueado'] == true;
-      // El ranking secreto solo se pide en su modo; el servidor igual lo niega sin el secreto.
-      final secretas = abierto && _modoSecreto && !widget.trono
-          ? await conReintento(() => db.rpc('ranking_placer', params: {'period': _periodo, 'solo_siguiendo': _soloSiguiendo}))
-          : null;
-      if (!mounted) return;
+      if (!mounted || pedido != _pedido) return;
       setState(() {
         _filas = List<Map<String, dynamic>>.from(data);
         _hoy = List<Map<String, dynamic>>.from(hoy);
@@ -755,9 +806,9 @@ class _PantallaRankingState extends State<PantallaRanking> {
       refrescarRanking(db).catchError((_) {});
     } catch (e) {
       // Si fue la red, se queda lo que ya había y se recarga al volver a la app.
-      if (spinner || !esDeRed(e)) _mensaje(textoError(e));
+      if (pedido == _pedido && (spinner || !esDeRed(e))) _mensaje(textoError(e));
     } finally {
-      if (mounted) setState(() => _cargando = false);
+      if (mounted && pedido == _pedido) setState(() => _cargando = false);
     }
   }
 
@@ -781,12 +832,29 @@ class _PantallaRankingState extends State<PantallaRanking> {
 
   /// [animacion] es la del botón: la racha y las preguntas salen cuando el mojón ya cayó.
   Future<void> _cague(Future<void> animacion) async {
+    if (_enviando) return;
     HapticFeedback.mediumImpact();
+    setState(() => _enviando = true);
     try {
-      final nueva = await db.from('cagadas').insert({}).select('id').single();
+      final Map<String, dynamic> nueva;
+      try {
+        nueva = await _insertarCagada();
+      } finally {
+        if (mounted) setState(() => _enviando = false);
+      }
       frescaTrasCagar();
       _mensaje(tr('Registrado 💩', 'Logged 💩'));
-      await _cargar(spinner: false);
+      // La racha y el parte salen con la cuenta subida aquí; el ranking se pone al día por detrás.
+      final fila = _miFilaHoy;
+      if (fila == null) {
+        await _cargar(spinner: false);
+      } else if (mounted) {
+        setState(() {
+          fila['total'] = _miHoy + 1;
+          _misCagadas++;
+        });
+        _cargar(spinner: false);
+      }
       await animacion;
       if (!mounted) return;
       await mostrarRacha(context, _miHoy, perfil: _miFilaHoy, lugar: _miLugar);
@@ -799,7 +867,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
           'peso': ?parte.peso,
           if (secreta) ...{'placer': parte.placer, 'etiquetas': parte.etiquetas.toList()},
         };
-        if (cambios.isNotEmpty) await db.from('cagadas').update(cambios).eq('id', nueva['id']);
+        if (cambios.isNotEmpty) await conReintento(() => db.from('cagadas').update(cambios).eq('id', nueva['id']));
       }
       // Llegó a un hito o desbloqueó algo: ofrece presumirlo en el chat.
       if (mounted) await ofrecerPresumir(context, _misCagadas);
@@ -809,6 +877,22 @@ class _PantallaRankingState extends State<PantallaRanking> {
       _mensaje(e.hint == 'limite_hora' ? trServidor(e.message) : 'Error: ${trServidor(e.message)}');
     } catch (e) {
       _mensaje(textoError(e));
+    }
+  }
+
+  /// Inserta la cagada. Si la red se cae justo después de enviarla, pudo quedar guardada aunque no llegó
+  /// la respuesta: si hay una propia de los últimos 2 minutos, cuenta como hecha.
+  Future<Map<String, dynamic>> _insertarCagada() async {
+    try {
+      return await db.from('cagadas').insert({}).select('id').single();
+    } catch (e) {
+      if (!esDeRed(e)) rethrow;
+      final desde = DateTime.now().toUtc().subtract(const Duration(minutes: 2)).toIso8601String();
+      final ya = await conReintento(() =>
+              db.from('cagadas').select('id').eq('user_id', _yo).gte('created_at', desde).order('created_at', ascending: false).limit(1).maybeSingle())
+          .catchError((_) => null);
+      if (ya == null) rethrow;
+      return ya;
     }
   }
 
@@ -859,6 +943,8 @@ class _PantallaRankingState extends State<PantallaRanking> {
   }
 
   Future<void> _deshacer() async {
+    if (_deshaciendo) return;
+    setState(() => _deshaciendo = true);
     try {
       final ultima = await db
           .from('cagadas')
@@ -874,6 +960,8 @@ class _PantallaRankingState extends State<PantallaRanking> {
       await _cargar(spinner: false);
     } catch (e) {
       _mensaje(textoError(e));
+    } finally {
+      if (mounted) setState(() => _deshaciendo = false);
     }
   }
 
@@ -1010,10 +1098,10 @@ class _PantallaRankingState extends State<PantallaRanking> {
       ),
       const SizedBox(height: 4),
       // La mosca vuela alrededor del botón (ver trono_vivo.dart); tocarla nunca registra nada.
-      ZonaMosca(child: Respira(activo: !_cargando && _miHoy == 0, child: _BotonCague(onTap: _cague))),
+      ZonaMosca(child: Respira(activo: !_cargando && _miHoy == 0, child: _BotonCague(onTap: _cague, ocupado: _enviando))),
       Center(
         child: TextButton.icon(
-          onPressed: _deshacer,
+          onPressed: _deshaciendo ? null : _deshacer,
           icon: const Icon(Icons.undo, size: 18),
           label: Text(tr('DESHACER LA ÚLTIMA', 'UNDO THE LAST ONE')),
         ),
@@ -1342,10 +1430,13 @@ class _Chisme extends StatelessWidget {
 /// Botón redondo principal; al apretarlo se encoge y cambia de color. Según el teléfono el
 /// mojón vuela a un inodoro, da un brinco dentro del botón o no se mueve (ver animaciones.dart).
 class _BotonCague extends StatefulWidget {
-  const _BotonCague({required this.onTap});
+  const _BotonCague({required this.onTap, this.ocupado = false});
 
   /// Recibe la animación para esperarla antes de abrir lo que sigue.
   final void Function(Future<void> animacion) onTap;
+
+  /// Hay una cagada enviándose: otro toque no hace nada.
+  final bool ocupado;
 
   @override
   State<_BotonCague> createState() => _BotonCagueState();
@@ -1373,6 +1464,7 @@ class _BotonCagueState extends State<_BotonCague> with SingleTickerProviderState
       _pujo = false;
       return;
     }
+    if (widget.ocupado) return;
     final caja = context.findRenderObject() as RenderBox?;
     final nivel = movimiento(context);
     // El efecto de la tienda de estilo va primero: queda debajo del inodoro y no lo espera nadie.

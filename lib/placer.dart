@@ -7,7 +7,7 @@ import 'accesorios.dart';
 import 'animaciones.dart';
 import 'emoji.dart';
 import 'idioma.dart';
-import 'main.dart' show db;
+import 'main.dart' show conReintento, db;
 import 'tema.dart';
 
 /// Cagadas que pide la hoja secreta de Tips.
@@ -28,7 +28,7 @@ Future<bool> desbloquearSecreto(BuildContext context, {Rect? esquina}) async {
   final yo = db.auth.currentUser?.id;
   if (yo == null) return false;
   try {
-    await db.from('profiles').update({'placer_desbloqueado': true}).eq('id', yo);
+    await conReintento(() => db.from('profiles').update({'placer_desbloqueado': true}).eq('id', yo));
   } catch (_) {
     return false;
   }

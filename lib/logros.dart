@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -8,7 +9,7 @@ import 'animaciones.dart';
 import 'emoji.dart';
 import 'genero.dart';
 import 'idioma.dart';
-import 'main.dart' show db;
+import 'main.dart' show db, esDeRed;
 import 'presumir.dart' show AvisoExpediente, bordeExpediente, colorExpediente;
 import 'racha.dart';
 import 'tema.dart';
@@ -170,7 +171,9 @@ Future<void> sincronizarLogros() async {
           ignoreDuplicates: true,
         );
     await p.setStringList(_pendientes, []);
-  } catch (_) {
+  } catch (e) {
+    // Sin red no vale probar clave por clave: todas fallarían igual. Se reintenta la próxima vez.
+    if (esDeRed(e)) return;
     // Si la base rechaza una clave (por ejemplo, una nueva antes de su migración), las demás no
     // se quedan trabadas: se suben una por una y solo quedan pendientes las que fallan.
     final fallan = <String>[];
@@ -193,7 +196,8 @@ Future<Set<String>> logrosDe(String uid) async {
   final claves = <String>{};
   if (esMio) {
     claves.addAll(_leer(await _prefs(), _locales));
-    await sincronizarLogros();
+    // Las locales ya están en [claves]: la subida no tiene por qué frenar la pantalla.
+    unawaited(sincronizarLogros());
   }
   try {
     final filas = await db.from('logros').select('clave').eq('user_id', uid);

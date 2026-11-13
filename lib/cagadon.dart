@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -7,7 +9,7 @@ import 'emoji.dart';
 import 'idioma.dart';
 import 'imperio/apuesta_local.dart';
 import 'imperio/formato.dart';
-import 'main.dart' show db, escucharCagadas;
+import 'main.dart' show conReintento, db, escucharCagadas, textoError;
 import 'tema.dart';
 
 // El Cagadón: reto 1 vs 1 entre amigos. Gana el que cague más hoy (hora de Venezuela);
@@ -143,9 +145,17 @@ class RetosDeHoy extends StatefulWidget {
   State<RetosDeHoy> createState() => _RetosDeHoyState();
 }
 
+var _canalesRetos = 0;
+
 class _RetosDeHoyState extends State<RetosDeHoy> {
-  late final Stream<List<Map<String, dynamic>>> _retos =
-      db.from('retos').stream(primaryKey: ['id']).eq('dia', _hoyCaracas());
+  /// Los retos de hoy. Antes salían de .stream(), que tras un corte de red se quedaba congelado:
+  /// ahora se consultan y se vuelven a consultar cuando realtime avisa, cuando el canal se reconecta
+  /// y al volver a la app. El día se recalcula en cada consulta (la app puede quedar abierta de un día a otro).
+  List<Map<String, dynamic>>? _hoy;
+  late final RealtimeChannel _canal;
+  late final AppLifecycleListener _ciclo;
+  Timer? _espera;
+  var _cortado = false;
 
   /// Apuestas con algo por cobrar o recuperar (de hoy o de días pasados) y el nombre del otro.
   List<Map<String, dynamic>> _porCobrar = [];
@@ -155,15 +165,58 @@ class _RetosDeHoyState extends State<RetosDeHoy> {
   @override
   void initState() {
     super.initState();
+    _canal = db
+        .channel('retos-hoy-${_canalesRetos++}')
+        // Sin filtro por día: el día cambia y los borrados no se pueden filtrar; la base solo manda los míos.
+        .onPostgresChanges(event: PostgresChangeEvent.all, schema: 'public', table: 'retos', callback: (_) => _avisar())
+        .subscribe((estado, [_]) {
+          if (estado != RealtimeSubscribeStatus.subscribed) {
+            _cortado = true;
+          } else if (_cortado) {
+            _cortado = false;
+            _avisar();
+          }
+        });
+    _ciclo = AppLifecycleListener(onResume: _avisar);
+    _pedirRetos();
     _cargarPorCobrar();
+  }
+
+  @override
+  void dispose() {
+    _espera?.cancel();
+    _ciclo.dispose();
+    db.removeChannel(_canal);
+    super.dispose();
+  }
+
+  void _avisar() {
+    _espera?.cancel();
+    _espera = Timer(const Duration(milliseconds: 300), _pedirRetos);
+  }
+
+  Future<void> _pedirRetos() async {
+    try {
+      final hoy = await conReintento(() => db.from('retos').select().eq('dia', _hoyCaracas()).order('id'));
+      if (!mounted) return;
+      // Un reto de hoy cambió de estado (rechazado, cancelado, aceptado): puede haber algo nuevo que recuperar.
+      final estados = [for (final r in hoy) '${r['id']}:${r['estado']}'].join(',');
+      final antes = _estados;
+      _estados = estados;
+      setState(() => _hoy = hoy);
+      if (antes.isNotEmpty && estados != antes) _cargarPorCobrar();
+    } catch (_) {
+      // Sin red: queda lo que ya se veía; el próximo aviso o la vuelta a la app lo pone al día.
+    }
   }
 
   Future<void> _cargarPorCobrar() async {
     try {
-      final filas = [for (final f in await db.rpc('reto_apuesta_pendientes') as List) Map<String, dynamic>.from(f as Map)];
+      final pendientes = await conReintento(() => db.rpc('reto_apuesta_pendientes'));
+      final filas = [for (final f in pendientes as List) Map<String, dynamic>.from(f as Map)];
       final faltan = {for (final f in filas) f['otro'] as String}.difference(_nombres.keys.toSet());
       if (faltan.isNotEmpty) {
-        final ps = await db.from('profiles').select('id, username').inFilter('id', faltan.toList());
+        final ps = await conReintento(() => db.from('profiles').select('id, username').inFilter('id', faltan.toList()));
         _nombres = {..._nombres, for (final p in ps) p['id'] as String: (p['username'] ?? '') as String};
       }
       if (mounted) setState(() => _porCobrar = filas);
@@ -171,17 +224,9 @@ class _RetosDeHoyState extends State<RetosDeHoy> {
   }
 
   @override
-  Widget build(BuildContext context) => StreamBuilder<List<Map<String, dynamic>>>(
-        stream: _retos,
-        builder: (context, snap) {
-          final hoy = snap.data ?? [];
-          // Un reto de hoy cambió de estado (rechazado, cancelado, aceptado): puede haber algo nuevo que recuperar.
-          final estados = [for (final r in hoy) '${r['id']}:${r['estado']}'].join(',');
-          if (snap.hasData && estados != _estados) {
-            final antes = _estados;
-            _estados = estados;
-            if (antes.isNotEmpty) _cargarPorCobrar();
-          }
+  Widget build(BuildContext context) => Builder(
+        builder: (context) {
+          final hoy = _hoy ?? [];
           final vivos = hoy.where((r) => r['estado'] == 'pendiente' || r['estado'] == 'aceptado').toList();
           final ids = {for (final r in vivos) r['id']};
           final cobros = _porCobrar.where((f) => !ids.contains(f['id'])).toList();
@@ -339,10 +384,17 @@ class _InvitacionState extends State<_Invitacion> {
   @override
   void initState() {
     super.initState();
+    _cargarOtro();
+  }
+
+  Future<void> _cargarOtro() async {
     final otro = _meRetaron ? widget.reto['retador'] : widget.reto['retado'];
-    db.from('profiles').select(_columnasPerfil).eq('id', otro).maybeSingle().then((p) {
+    try {
+      final p = await conReintento(() => db.from('profiles').select(_columnasPerfil).eq('id', otro).maybeSingle());
       if (mounted) setState(() => _otro = p);
-    });
+    } catch (e) {
+      if (mounted) _aviso(context, textoError(e));
+    }
   }
 
   Future<void> _responder(String accion) async {
@@ -350,8 +402,8 @@ class _InvitacionState extends State<_Invitacion> {
     try {
       await db.rpc('responder_reto', params: {'rid': widget.reto['id'], 'accion': accion});
       if (mounted && accion == 'aceptar') _aviso(context, tr('¡Que empiece el Cagadón! 💩', 'Let the Poop-Off begin! 💩'));
-    } on PostgrestException catch (e) {
-      if (mounted) _aviso(context, trServidor(e.message));
+    } catch (e) {
+      if (mounted) _aviso(context, textoError(e));
     } finally {
       if (mounted) setState(() => _ocupado = false);
     }
@@ -375,8 +427,8 @@ class _InvitacionState extends State<_Invitacion> {
                 ? _avisoApuesta(apuesta, cuenta.mj)
                 : tr('Cagadón aceptado sin apuesta: abre el Imperio para apostar.', 'Poop-Off accepted with no bet: open the Empire to bet.'));
       }
-    } on PostgrestException catch (e) {
-      if (mounted) _aviso(context, trServidor(e.message));
+    } catch (e) {
+      if (mounted) _aviso(context, textoError(e));
     } finally {
       if (mounted) setState(() => _ocupado = false);
     }
@@ -452,11 +504,17 @@ class _TarjetaRetoState extends State<TarjetaReto> {
   Map<String, dynamic>? _apuesta;
   String? _estadoApuesta;
 
+  /// La primera carga falló (sin red o sin el reto): se ofrece reintentar.
+  bool _falla = false;
+
+  /// Marca de "la apuesta no se pudo pedir": se deja la que había y se vuelve a pedir la próxima vez.
+  static const Object _sinApuesta = Object();
+
   @override
   void initState() {
     super.initState();
     _cargar();
-    _soltar = escucharCagadas('reto-${widget.id}', _cargar);
+    _soltar = escucharCagadas('reto-${widget.id}', _cargar, contexto: context);
   }
 
   @override
@@ -467,23 +525,36 @@ class _TarjetaRetoState extends State<TarjetaReto> {
 
   Future<void> _cargar() async {
     try {
-      final filas = await db.rpc('reto_publico', params: {'rid': widget.id}) as List;
-      if (filas.isEmpty) return;
+      final filas = await conReintento(() => db.rpc('reto_publico', params: {'rid': widget.id})) as List;
+      if (filas.isEmpty) {
+        if (mounted) setState(() => _falla = true);
+        return;
+      }
       final r = filas.first as Map<String, dynamic>;
-      if (_perfiles.isEmpty) {
-        final ps = await db.from('profiles').select(_columnasPerfil).inFilter('id', [r['retador'], r['retado']]);
-        _perfiles = {for (final p in ps) p['id'] as String: p};
-      }
+      // Perfiles y apuesta no dependen uno del otro: van a la vez.
       // La apuesta solo cambia con el estado del reto (o al cobrar): no se pide en cada cagada.
-      if (_estadoApuesta != r['estado']) {
-        try {
-          final a = await db.rpc('reto_apuesta', params: {'rid': widget.id});
-          _apuesta = a is Map ? Map<String, dynamic>.from(a) : null;
-          _estadoApuesta = r['estado'] as String?;
-        } catch (_) {}
+      final pedirApuesta = _estadoApuesta != r['estado'];
+      final (ps, a) = await (
+        _perfiles.isEmpty
+            ? conReintento(() => db.from('profiles').select(_columnasPerfil).inFilter('id', [r['retador'], r['retado']]))
+            : Future<List<Map<String, dynamic>>?>.value(),
+        pedirApuesta ? conReintento(() => db.rpc('reto_apuesta', params: {'rid': widget.id})).catchError((_) => _sinApuesta) : Future.value(_sinApuesta),
+      ).wait;
+      if (ps != null) _perfiles = {for (final p in ps) p['id'] as String: p};
+      if (pedirApuesta && !identical(a, _sinApuesta)) {
+        _apuesta = a is Map ? Map<String, dynamic>.from(a) : null;
+        _estadoApuesta = r['estado'] as String?;
       }
-      if (mounted) setState(() => _r = r);
-    } catch (_) {}
+      if (mounted) {
+        setState(() {
+          _r = r;
+          _falla = false;
+        });
+      }
+    } catch (_) {
+      // Sin datos todavía: en vez de la ruedita eterna, un botón para reintentar.
+      if (mounted && _r == null) setState(() => _falla = true);
+    }
   }
 
   Future<void> _recargarApuesta() async {
@@ -495,7 +566,21 @@ class _TarjetaRetoState extends State<TarjetaReto> {
   Widget build(BuildContext context) {
     final p = paleta(context);
     final r = _r;
-    if (r == null) return const SizedBox(height: 60, child: Center(child: CircularProgressIndicator()));
+    if (r == null) {
+      if (!_falla) return const SizedBox(height: 60, child: Center(child: CircularProgressIndicator()));
+      return SizedBox(
+        height: 60,
+        child: Center(
+          child: TextButton(
+            onPressed: () {
+              setState(() => _falla = false);
+              _cargar();
+            },
+            child: Text(tr('No se pudo cargar el Cagadón. Reintentar', 'Could not load the Poop-Off. Retry')),
+          ),
+        ),
+      );
+    }
     final fin = r['estado'] == 'terminado';
     final a = r['a'] as int, b = r['b'] as int;
     final ganador = r['ganador'];

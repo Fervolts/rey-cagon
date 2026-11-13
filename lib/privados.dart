@@ -65,7 +65,8 @@ String? privadoAbierto;
 final privadosCambiaron = ValueNotifier<int>(0);
 
 /// Cada cuánto se recarga sola la bandeja mientras está en pantalla y la app al frente.
-const repasoBandeja = Duration(seconds: 20);
+/// Lo nuevo llega por push (privadosCambiaron); esto solo cubre un push perdido.
+const repasoBandeja = Duration(seconds: 60);
 
 var _bandejasMontadas = 0;
 
@@ -110,8 +111,9 @@ Future<void> revisarPrivados() async {
   }
 }
 
-/// Guarda como visto el último mensaje de la sala.
-Future<void> marcarPrivadoVisto(String sala) async {
+/// Guarda como visto el último mensaje de la sala. Con [revisar] en false no vuelve a pedir la bandeja
+/// (quien llama ya la está recargando).
+Future<void> marcarPrivadoVisto(String sala, {bool revisar = true}) async {
   try {
     final r = await conReintento(() => db.from('mensajes').select('id').eq('sala', sala).order('id', ascending: false).limit(1));
     if (r.isEmpty) return;
@@ -119,17 +121,20 @@ Future<void> marcarPrivadoVisto(String sala) async {
     final id = r.first['id'] as int;
     if (id > (prefs.getInt(clavePrivadoVisto(sala)) ?? 0)) await prefs.setInt(clavePrivadoVisto(sala), id);
   } catch (_) {}
-  await revisarPrivados();
+  if (revisar) await revisarPrivados();
 }
 
 /// Abre la conversación con esa persona. Se marca vista al entrar y al salir.
-Future<void> abrirPrivado(BuildContext context, String otroId, String username) async {
+/// [alVolver] corre apenas se cierra la conversación, sin esperar a que se guarde lo visto.
+Future<void> abrirPrivado(BuildContext context, String otroId, String username, {VoidCallback? alVolver}) async {
   final sala = salaDm(db.auth.currentUser!.id, otroId);
   privadoAbierto = sala;
   marcarPrivadoVisto(sala);
   await Navigator.push(context, MaterialPageRoute(builder: (_) => _PantallaPrivado(sala: sala, otroId: otroId, username: username)));
   if (privadoAbierto == sala) privadoAbierto = null;
-  await marcarPrivadoVisto(sala);
+  alVolver?.call();
+  // Si quien abrió ya recarga la bandeja (alVolver), no se pide otra vez.
+  await marcarPrivadoVisto(sala, revisar: alVolver == null);
 }
 
 /// Desde un push o un aviso: solo se sabe la sala. Se busca el nombre y se abre.
@@ -278,8 +283,13 @@ class _PantallaPrivadosState extends State<PantallaPrivados> {
   }
 
   Future<void> _abrir(Map<String, dynamic> f) async {
-    await abrirPrivado(context, '${f['otro']}', (f['perfil'] as Map?)?['username'] as String? ?? '?');
-    await _cargar();
+    // La bandeja recarga apenas se vuelve; lo visto se guarda en paralelo.
+    await abrirPrivado(context, '${f['otro']}', (f['perfil'] as Map?)?['username'] as String? ?? '?', alVolver: _cargar);
+    // Ya quedó guardado lo visto: se repinta el puntito sin otra consulta.
+    final filas = _filas, prefs = _prefs;
+    if (!mounted || filas == null || prefs == null) return;
+    setState(() {});
+    privadosSinLeer.value = filas.any((f) => _sinLeer(f, prefs, db.auth.currentUser!.id));
   }
 
   @override

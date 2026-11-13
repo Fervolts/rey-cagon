@@ -7,7 +7,7 @@ import 'accesorios.dart';
 import 'cagadon.dart' show retar;
 import 'emoji.dart';
 import 'idioma.dart';
-import 'main.dart' show conReintento, db, escucharCagadas, textoError;
+import 'main.dart' show conReintento, db, escucharCagadas, esDeRed, textoError;
 import 'perfil.dart' show PantallaPerfil;
 import 'tema.dart';
 import 'vivo.dart';
@@ -59,6 +59,8 @@ class _PantallaAmigosState extends State<PantallaAmigos> with AutomaticKeepAlive
   List<Map<String, dynamic>> _sugeridos = [];
   bool _cargando = true;
   late final VoidCallback _soltar;
+  // Número del último pedido de _cargar: solo cuenta la respuesta más nueva.
+  int _pedido = 0;
 
   String get _yo => db.auth.currentUser!.id;
 
@@ -72,7 +74,7 @@ class _PantallaAmigosState extends State<PantallaAmigos> with AutomaticKeepAlive
       if (mounted) setState(() => _favoritos = (prefs.getStringList('amigos_favoritos') ?? []).toSet());
     });
     _cargar();
-    _soltar = escucharCagadas('amigos', _cargar);
+    _soltar = escucharCagadas('amigos', () => _cargar(spinner: false), contexto: context);
   }
 
   @override
@@ -83,21 +85,26 @@ class _PantallaAmigosState extends State<PantallaAmigos> with AutomaticKeepAlive
     super.dispose();
   }
 
-  Future<void> _cargar() async {
+  /// [spinner] en false: recarga en segundo plano; si falla por la red se queda lo que había sin avisar.
+  Future<void> _cargar({bool spinner = true}) async {
+    final pedido = ++_pedido;
     try {
-      final (sigo, meSiguen, bloqueos) = await conReintento(() => (
+      final (sigo, meSiguen, bloqueos, activos) = await conReintento(() => (
             db.from('follows').select('followed').eq('follower', _yo),
             db.from('follows').select('follower').eq('followed', _yo),
             db.from('bloqueos').select('bloqueado'),
+            widget.buscar
+                ? db.from('profiles').select(_columnas).neq('id', _yo).gt('cagadas', 0).order('cagadas', ascending: false).limit(60)
+                    as Future<List<Map<String, dynamic>>>
+                : Future.value(<Map<String, dynamic>>[]),
           ).wait);
       final s = {for (final f in sigo) f['followed'] as String};
       final m = {for (final f in meSiguen) f['follower'] as String};
       final ids = {...s, ...m}.toList();
-      final perfiles = ids.isEmpty ? <Map<String, dynamic>>[] : await db.from('profiles').select(_columnas).inFilter('id', ids);
-      final activos = widget.buscar
-          ? await db.from('profiles').select(_columnas).neq('id', _yo).gt('cagadas', 0).order('cagadas', ascending: false).limit(60)
-          : <Map<String, dynamic>>[];
-      if (!mounted) return;
+      final perfiles = ids.isEmpty
+          ? <Map<String, dynamic>>[]
+          : await conReintento(() => db.from('profiles').select(_columnas).inFilter('id', ids));
+      if (!mounted || pedido != _pedido) return;
       final bloqueados = {for (final b in bloqueos) b['bloqueado'] as String};
       final porId = {for (final p in perfiles) p['id'] as String: p};
       setState(() {
@@ -115,9 +122,9 @@ class _PantallaAmigosState extends State<PantallaAmigos> with AutomaticKeepAlive
       });
       if (_q.isNotEmpty) await _buscar(_q);
     } catch (e) {
-      if (mounted) {
+      if (mounted && pedido == _pedido) {
         setState(() => _cargando = false);
-        _aviso(textoError(e));
+        if (spinner || !esDeRed(e)) _aviso(textoError(e));
       }
     }
   }
@@ -162,8 +169,7 @@ class _PantallaAmigosState extends State<PantallaAmigos> with AutomaticKeepAlive
       } else {
         await db.from('follows').insert({'followed': id});
       }
-      // Sin esperar: el resto de la lista se pone al día por detrás.
-      _cargar();
+      // El resto de la lista se pone al día con el aviso de Realtime (escucharCagadas).
     } catch (e) {
       if (!mounted) return;
       setState(() => _sigo = sigo ? {..._sigo, id} : ({..._sigo}..remove(id)));

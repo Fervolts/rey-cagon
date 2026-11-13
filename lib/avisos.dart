@@ -70,6 +70,8 @@ var _canales = 0;
 /// Devuelve con qué soltarlo en dispose().
 VoidCallback escucharAvisos({VoidCallback? onAnuncio}) {
   final yo = db.auth.currentUser!.id;
+  // Si el canal se cae, lo que llegó mientras tanto no avisó: al volver se cuenta de nuevo.
+  var cortado = false;
   final canal = db
       .channel('avisos-${_canales++}')
       .onPostgresChanges(
@@ -88,7 +90,14 @@ VoidCallback escucharAvisos({VoidCallback? onAnuncio}) {
           onAnuncio?.call();
         },
       )
-      .subscribe();
+      .subscribe((estado, [_]) {
+        if (estado != RealtimeSubscribeStatus.subscribed) {
+          cortado = true;
+        } else if (cortado) {
+          cortado = false;
+          contarAvisos();
+        }
+      });
   final ciclo = AppLifecycleListener(onResume: contarAvisos);
   contarAvisos();
   return () {

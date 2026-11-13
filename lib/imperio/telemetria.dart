@@ -142,7 +142,7 @@ Future<int> _enviarPorRpc(List<Map<String, Object?>> lote) async {
 /// Nombres: `[a-z0-9_]`, hasta 40. Datos: JSON plano, hasta ~3,5 KB (si no, se manda `{recortado: true}`).
 class Telemetria {
   static const int maxCola = 500;
-  static const int tamanoLote = 100;
+  static const int tamanoLote = 25;
   static const int maxBytesDatos = 3500;
   static const String clavePrefs = 'imperio_telemetria_cola';
   static final RegExp _nombreValido = RegExp(r'^[a-z0-9_]{1,40}$');
@@ -210,18 +210,24 @@ class Telemetria {
     _programarGuardado();
   }
 
-  /// Manda la cola en lotes de 100 y quita lo enviado. Si un lote falla, para y lo deja para la próxima.
+  /// Manda la cola en lotes de 25 y quita lo enviado. Si un lote falla por red, para y lo deja para la próxima;
+  /// si falla por otra cosa (el servidor lo rechaza), lo descarta y sigue: si no, taparía la cola para siempre.
+  /// Sin sesión válida no manda nada (el RPC lo rechazaría y se perderían).
   Future<void> vaciar() async {
     if (_vaciando) return;
     _vaciando = true;
     try {
+      if (identical(_enviar, _enviarPorRpc)) {
+        final s = db.auth.currentSession;
+        if (s == null || s.isExpired) return;
+      }
       await _cargar();
       while (_cola.isNotEmpty) {
         final lote = _cola.take(tamanoLote).toList();
         try {
           await _enviar(lote);
-        } catch (_) {
-          break;
+        } catch (e) {
+          if (esDeRed(e)) break;
         }
         final enviados = Set<Map<String, Object?>>.identity()..addAll(lote);
         _cola.removeWhere(enviados.contains);

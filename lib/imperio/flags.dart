@@ -330,24 +330,33 @@ class FlagsImperio {
     );
   }
 
-  /// Flags del servidor (y las guarda); sin red, las últimas guardadas; sin nada, los defaults. No lanza.
+  /// Con copia guardada la devuelve al toque y pide las del servidor en fondo (rigen desde la próxima carga);
+  /// sin copia espera al servidor (y las guarda); sin red ni copia, los defaults. No lanza.
   static Future<FlagsImperio> cargar({String? usuario, PedirFlags? pedir}) async {
     final clave = claveCache(usuario);
-    try {
-      final r = await (pedir ?? _pedirPorRpc)().timeout(espera);
-      if (r is Map) {
-        try {
-          final p = await SharedPreferences.getInstance();
-          await p.setString(clave, jsonEncode(r));
-        } catch (_) {}
-        return FlagsImperio.desdeJson(r);
-      }
-    } catch (_) {}
+    Future<FlagsImperio?> delServidor() async {
+      try {
+        final r = await (pedir ?? _pedirPorRpc)().timeout(espera);
+        if (r is Map) {
+          try {
+            final p = await SharedPreferences.getInstance();
+            await p.setString(clave, jsonEncode(r));
+          } catch (_) {}
+          return FlagsImperio.desdeJson(r);
+        }
+      } catch (_) {}
+      return null;
+    }
+
     try {
       final p = await SharedPreferences.getInstance();
       final s = p.getString(clave);
-      if (s != null) return FlagsImperio.desdeJson(jsonDecode(s));
+      if (s != null) {
+        final guardadas = FlagsImperio.desdeJson(jsonDecode(s));
+        unawaited(delServidor());
+        return guardadas;
+      }
     } catch (_) {}
-    return porDefecto;
+    return await delServidor() ?? porDefecto;
   }
 }

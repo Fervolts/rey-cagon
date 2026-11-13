@@ -44,7 +44,7 @@ class _PantallaCalendarioState extends State<PantallaCalendario> {
   void initState() {
     super.initState();
     _cargar();
-    _soltar = escucharCagadas('calendario', () => _cargar(spinner: false));
+    _soltar = escucharCagadas('calendario', () => _cargar(spinner: false), contexto: context);
   }
 
   @override

@@ -41,15 +41,20 @@ Future<void> revisarActualizacion(BuildContext context) async {
 
 Future<void> _revisar(BuildContext context) async {
   final Map<String, dynamic> remota;
+  final cliente = HttpClient()..connectionTimeout = const Duration(seconds: 8);
   try {
-    final cliente = HttpClient()..connectionTimeout = const Duration(seconds: 8);
-    final req = await cliente.getUrl(Uri.parse('$_manifiesto?t=${DateTime.now().millisecondsSinceEpoch}'));
-    final res = await req.close();
-    if (res.statusCode != 200) return;
-    remota = jsonDecode(await res.transform(utf8.decoder).join()) as Map<String, dynamic>;
-    cliente.close();
+    // Con tope: una conexión colgada dejaba la revisión trabada hasta cerrar la app.
+    remota = await () async {
+      final req = await cliente.getUrl(Uri.parse('$_manifiesto?t=${DateTime.now().millisecondsSinceEpoch}'));
+      final res = await req.close();
+      if (res.statusCode != 200) throw HttpException('${res.statusCode}');
+      return jsonDecode(await res.transform(utf8.decoder).join()) as Map<String, dynamic>;
+    }()
+        .timeout(const Duration(seconds: 15));
   } catch (_) {
     return; // Sin internet o sin manifiesto: se revisa la próxima vez.
+  } finally {
+    cliente.close(force: true);
   }
   final local = int.tryParse((await PackageInfo.fromPlatform()).buildNumber) ?? 0;
   final build = remota['build'] as int? ?? 0;

@@ -24,7 +24,7 @@ import 'idioma.dart';
 import 'imperio/tarjeta_bano.dart';
 import 'imperio/regalos.dart' show TarjetaImperio, TarjetaRegalo;
 import 'imperio/tarjeta_cartera.dart';
-import 'main.dart' show db, esDeRed, ultimosDeSala;
+import 'main.dart' show conReintento, db, esDeRed, textoError, ultimosDeSala;
 import 'panel.dart';
 import 'perfil.dart' show PantallaPerfil;
 import 'teclado_emojis.dart';
@@ -150,7 +150,38 @@ const _erroresHilo = {
 };
 
 String _error(Object e) =>
-    e is PostgrestException ? (enIngles ? _erroresHilo[e.message] : null) ?? trServidor(e.message) : '$e';
+    e is PostgrestException ? (enIngles ? _erroresHilo[e.message] : null) ?? trServidor(e.message) : textoError(e);
+
+/// Id que la app le pone a cada mensaje (uuid v4): si un reintento llega dos veces, se guarda uno.
+String nuevoClienteId() {
+  final r = Random.secure();
+  final b = List<int>.generate(16, (_) => r.nextInt(256));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  final h = b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
+  return '${h.substring(0, 8)}-${h.substring(8, 12)}-${h.substring(12, 16)}-${h.substring(16, 20)}-${h.substring(20)}';
+}
+
+/// Guarda un mensaje con su [clienteId] y devuelve la fila. Si la red se cae a medio camino,
+/// antes de repetir mira si el intento anterior sí llegó, para no guardarlo dos veces.
+Future<Map<String, dynamic>> mandarMensaje(Map<String, dynamic> fila, String clienteId) {
+  Future<Map<String, dynamic>?> yaEsta() => db.from('mensajes').select().eq('cliente_id', clienteId).maybeSingle();
+  var intento = 0;
+  return conReintento(() async {
+    if (intento++ > 0) {
+      final ya = await yaEsta();
+      if (ya != null) return ya;
+    }
+    try {
+      return await db.from('mensajes').insert({...fila, 'cliente_id': clienteId}).select().single();
+    } on PostgrestException catch (e) {
+      // Ya estaba guardado (llegó el intento anterior aunque su respuesta se perdió).
+      final ya = e.code == '23505' ? await yaEsta() : null;
+      if (ya == null) rethrow;
+      return ya;
+    }
+  });
+}
 
 /// Las reacciones que se pueden poner. Mismos que el check de mensaje_reacciones en la base.
 const _reaccionesRapidas = ['💩', '😂', '🔥', '👑', '🤢', '💀'];
@@ -490,9 +521,16 @@ class _BandejaState extends State<_Bandeja> {
   }
 
   Future<void> _cargar() async {
-    final r = List<Map<String, dynamic>>.from(await db.rpc('hilos_soporte'))
-      ..sort((a, b) => (b['created_at'] as String).compareTo(a['created_at'] as String));
-    if (mounted) setState(() => _hilos = r);
+    try {
+      final r = List<Map<String, dynamic>>.from(await conReintento(() => db.rpc('hilos_soporte')))
+        ..sort((a, b) => (b['created_at'] as String).compareTo(a['created_at'] as String));
+      if (mounted) setState(() => _hilos = r);
+    } catch (e) {
+      if (!mounted) return;
+      // Sin esto la rueda giraba para siempre: se muestra la lista vacía (se puede jalar para recargar).
+      setState(() => _hilos ??= []);
+      _aviso(context, textoError(e));
+    }
   }
 
   @override
@@ -617,6 +655,9 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
   // Cuándo llegó cada mensaje nuevo (para animarlo una sola vez) y cuándo puse cada reacción
   // ("id emoji", para el brinco del chip).
   final _llegada = <int, DateTime>{};
+  // Mensajes que se están mandando: cliente_id -> id temporal (mayor que cualquier id real).
+  final _pendientes = <String, int>{};
+  var _ultimoTemporal = 1 << 53;
   final _rebote = <String, DateTime>{};
   // La pantalla del hilo es otra ruta: escucha esto para repintarse cuando la sala cambia.
   final _version = ValueNotifier<int>(0);
@@ -734,7 +775,11 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
 
   bool _esDeAqui(Map<String, dynamic> m) => _esSoporte ? m['hilo'] == widget.hilo : m['sala'] == widget.sala;
 
-  Future<void> _cargar({int intento = 0}) async {
+  // Volver a la app y reconectar el canal piden recargar casi a la vez: se hace una sola consulta.
+  Future<void>? _cargaEnCurso;
+  Future<void> _cargar({int intento = 0}) => _cargaEnCurso ??= _cargarYa(intento: intento).whenComplete(() => _cargaEnCurso = null);
+
+  Future<void> _cargarYa({int intento = 0}) async {
     _reintentoCarga?.cancel();
     try {
       final base = db.from('mensajes').select();
@@ -752,6 +797,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
           ..clear()
           ..addEntries([for (final m in r) MapEntry(m['id'] as int, m)])
           ..addEntries(recientes);
+        _soltarPendientes(r);
         _cargado = true;
         _errorCarga = null;
         _cargaFallando = false;
@@ -765,7 +811,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
       // Sin la migración de hilos la columna no existe: se pide como antes.
       if (_hayHilos && e is PostgrestException && (e.code == '42703' || e.message.contains('responde_a'))) {
         _hayHilos = false;
-        return _cargar(intento: intento);
+        return _cargarYa(intento: intento);
       }
       // Sin red: se reintenta solo, cada vez más espaciado (tope 30 s) y sin rendirse mientras la
       // sala esté abierta. Mientras, se sigue mostrando lo que ya había con el aviso arriba.
@@ -804,11 +850,13 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
   Future<void> _cargarRespuestas(List<int> padres) async {
     if (!_hayHilos || padres.isEmpty) return;
     try {
-      final todas = <Map<String, dynamic>>[];
-      for (var i = 0; i < padres.length; i += 150) {
-        final tanda = padres.sublist(i, min(i + 150, padres.length));
-        todas.addAll(await db.from('mensajes').select().inFilter('responde_a', tanda).order('id', ascending: false).limit(1000));
-      }
+      final todas = [
+        for (final r in await Future.wait([
+          for (var i = 0; i < padres.length; i += 150)
+            db.from('mensajes').select().inFilter('responde_a', padres.sublist(i, min(i + 150, padres.length))).order('id', ascending: false).limit(1000),
+        ]))
+          ...r,
+      ];
       if (!mounted) return;
       final ultimo = todas.fold<int>(0, (a, m) => max(a, m['id'] as int));
       final nuevas = <int, Map<int, Map<String, dynamic>>>{};
@@ -821,6 +869,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
           final recientes = _respuestas[padre]?.entries.where((e) => e.key > ultimo).toList() ?? const [];
           _respuestas[padre] = {...?nuevas[padre]}..addEntries(recientes);
         }
+        _soltarPendientes(todas);
       });
       _cargarReacciones([for (final m in todas) m['id'] as int]);
     } catch (_) {}
@@ -829,11 +878,13 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
   Future<void> _cargarReacciones(List<int> ids) async {
     if (!_hayReacciones || ids.isEmpty) return;
     try {
-      final todas = <Map<String, dynamic>>[];
-      for (var i = 0; i < ids.length; i += 150) {
-        final tanda = ids.sublist(i, min(i + 150, ids.length));
-        todas.addAll(await db.from('mensaje_reacciones').select('mensaje_id, user_id, emoji').inFilter('mensaje_id', tanda).limit(1000));
-      }
+      final todas = [
+        for (final r in await Future.wait([
+          for (var i = 0; i < ids.length; i += 150)
+            db.from('mensaje_reacciones').select('mensaje_id, user_id, emoji').inFilter('mensaje_id', ids.sublist(i, min(i + 150, ids.length))).limit(1000),
+        ]))
+          ...r,
+      ];
       if (!mounted) return;
       setState(() {
         for (final id in ids) {
@@ -1219,16 +1270,30 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
     if (!mounted || m['id'] == null || !_esDeAqui(m)) return;
     final id = m['id'] as int;
     final padre = m['responde_a'] as int?;
+    final temporal = _pendientes.remove(m['cliente_id']);
     // Llegó su mensaje: ya no está escribiendo.
     if (!_esConocido(id) && m['user_id'] is String) _escribiendo.quitar(m['user_id'] as String);
     setState(() {
-      if (_cargado && !_esConocido(id)) _llegada[id] = DateTime.now();
+      // Es uno mío que se estaba mandando: reemplaza la burbuja temporal sin volver a animar.
+      if (temporal != null) {
+        _quitar(temporal);
+      } else if (_cargado && !_esConocido(id)) {
+        _llegada[id] = DateTime.now();
+      }
       if (padre == null) {
         _porId[id] = m;
       } else {
         (_respuestas[padre] ??= {})[id] = m;
       }
     });
+  }
+
+  // Quita la burbuja temporal de los mensajes míos que ya vinieron del servidor.
+  void _soltarPendientes(Iterable<Map<String, dynamic>> filas) {
+    for (final m in filas) {
+      final temporal = _pendientes.remove(m['cliente_id']);
+      if (temporal != null) _quitar(temporal);
+    }
   }
 
   Future<void> _cargarAmigos() async {
@@ -1290,6 +1355,8 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
         _perfiles[p['id'] as String] = p;
       }
       if (mounted) setState(() {});
+    }).catchError((_) {
+      // Sin red: se vuelven a pedir en el próximo repintado.
     }).whenComplete(() => _pidiendo.removeAll(faltan));
   }
 
@@ -1301,42 +1368,75 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
     if (t.isEmpty && tarjeta == null) return false;
     if (!_esSoporte && !await aceptoReglas(donde)) return false;
     if (!mounted) return false;
-    setState(() => _enviando = true);
+    final clienteId = nuevoClienteId();
+    final fila = <String, dynamic>{
+      'sala': widget.sala,
+      if (_esSoporte) 'hilo': widget.hilo,
+      'texto': t,
+      'tarjeta': ?tarjeta,
+      'es_bug': bug,
+      'responde_a': ?respondeA,
+    };
+    // El texto se pinta ya, atenuado, y la caja queda limpia; las tarjetas esperan al servidor.
+    final temporal = tarjeta == null ? ++_ultimoTemporal : null;
+    if (temporal != null) {
+      _pendientes[clienteId] = temporal;
+      final m = {...fila, 'id': temporal, 'user_id': _yo, 'created_at': DateTime.now().toUtc().toIso8601String(), 'cliente_id': clienteId, 'pendiente': true};
+      setState(() {
+        _llegada[temporal] = DateTime.now();
+        if (respondeA == null) {
+          _porId[temporal] = m;
+        } else {
+          (_respuestas[respondeA] ??= {})[temporal] = m;
+        }
+      });
+      if (texto == null) _texto.clear();
+    } else {
+      setState(() => _enviando = true);
+    }
     try {
-      final nuevo = await db
-          .from('mensajes')
-          .insert({
-            'sala': widget.sala,
-            if (_esSoporte) 'hilo': widget.hilo,
-            'texto': t,
-            'tarjeta': ?tarjeta,
-            'es_bug': bug,
-            'responde_a': ?respondeA,
-          })
-          .select()
-          .single();
-      // Se pinta ya, sin esperar a realtime.
-      _poner(nuevo);
-      if (texto == null && tarjeta == null) _texto.clear();
+      _poner(await mandarMensaje(fila, clienteId));
       return true;
     } catch (e) {
+      // La respuesta se perdió pero el mensaje llegó por realtime: está mandado.
+      if (temporal != null && !_pendientes.containsKey(clienteId)) return true;
+      if (temporal != null) {
+        _pendientes.remove(clienteId);
+        if (mounted) {
+          setState(() => _quitar(temporal));
+          // El texto vuelve a la caja para no perderlo.
+          if (texto == null) {
+            final caja = _texto.text.trim().isEmpty ? t : '$t\n${_texto.text}';
+            _texto.value = TextEditingValue(text: caja, selection: TextSelection.collapsed(offset: caja.length));
+          }
+        }
+      }
       if (donde.mounted) _aviso(donde, _esDm ? errorPrivado(e) : _error(e));
       return false;
     } finally {
-      if (mounted) setState(() => _enviando = false);
+      if (temporal == null && mounted) setState(() => _enviando = false);
     }
   }
 
   Future<void> _compartir() async {
-    final yo = await db.from('profiles').select('cagadas').eq('id', _yo).single();
-    final ultima = await db
-        .from('cagadas')
-        .select('id, tipo')
-        .eq('user_id', _yo)
-        .not('tipo', 'is', null)
-        .order('created_at', ascending: false)
-        .limit(1)
-        .maybeSingle();
+    final Map<String, dynamic> yo;
+    final Map<String, dynamic>? ultima;
+    try {
+      (yo, ultima) = await (
+        conReintento(() => db.from('profiles').select('cagadas').eq('id', _yo).single()),
+        conReintento(() => db
+            .from('cagadas')
+            .select('id, tipo')
+            .eq('user_id', _yo)
+            .not('tipo', 'is', null)
+            .order('created_at', ascending: false)
+            .limit(1)
+            .maybeSingle()),
+      ).wait;
+    } catch (e) {
+      if (mounted) _aviso(context, textoError(e));
+      return;
+    }
     final total = (yo['cagadas'] as num?)?.toInt() ?? 0;
     if (!mounted) return;
     final logrados = hitos.where((h) => h <= total).toList().reversed;
@@ -1485,8 +1585,8 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
           _borrados.add(m['id'] as int);
           if (mounted) setState(() => _quitar(m['id'] as int));
       }
-    } on PostgrestException catch (e) {
-      if (mounted) _aviso(context, e.code == '23505' ? tr('Ya lo habías reportado', "You've already reported it") : _error(e));
+    } catch (e) {
+      if (mounted) _aviso(context, e is PostgrestException && e.code == '23505' ? tr('Ya lo habías reportado', "You've already reported it") : _error(e));
     }
   }
 
@@ -1500,6 +1600,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
   Widget _mensaje(Map<String, dynamic> m, {Map<String, dynamic>? anterior, bool enHilo = false}) {
     final id = m['id'] as int;
     final mio = m['user_id'] == _yo;
+    final pendiente = m['pendiente'] == true;
     final llego = _llegada[id];
     final hora = DateTime.tryParse('${m['created_at']}'), horaAnterior = DateTime.tryParse('${anterior?['created_at']}');
     final seguido = anterior != null &&
@@ -1512,18 +1613,22 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
     _pedirMenciones(m['texto'] as String?);
     return GestureDetector(
       key: ValueKey<int>(id),
-      onLongPress: () => _opciones(m, enHilo: enHilo),
+      // Mientras se manda no tiene id real: sin menú.
+      onLongPress: pendiente ? null : () => _opciones(m, enHilo: enHilo),
       child: _Aparecer(
         animar: llego != null && DateTime.now().difference(llego) < const Duration(seconds: 1),
         desdeDerecha: mio,
-        child: _Burbuja(
-          mensaje: m,
-          perfil: _perfiles[m['user_id']],
-          mio: mio,
-          admin: _admins.contains(m['user_id']),
-          meMencionan: _mencionaA(m['texto'] as String?),
-          seguido: seguido,
-          pie: _pie(m, mio: mio, conHilo: !enHilo),
+        child: Opacity(
+          opacity: pendiente ? .5 : 1,
+          child: _Burbuja(
+            mensaje: m,
+            perfil: _perfiles[m['user_id']],
+            mio: mio,
+            admin: _admins.contains(m['user_id']),
+            meMencionan: _mencionaA(m['texto'] as String?),
+            seguido: seguido,
+            pie: _pie(m, mio: mio, conHilo: !enHilo),
+          ),
         ),
       ),
     );
@@ -1609,8 +1714,8 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
     if (desfijar == true) {
       try {
         await _fijar(m, null);
-      } on PostgrestException catch (e) {
-        if (mounted) _aviso(context, trServidor(e.message));
+      } catch (e) {
+        if (mounted) _aviso(context, textoError(e));
       }
     }
   }
@@ -2177,12 +2282,13 @@ class _PantallaHiloState extends State<_PantallaHilo> with ConTecladoEmojis {
   Future<void> _mandar() async {
     final texto = _texto.text.trim();
     if (texto.isEmpty) return;
+    // La caja se limpia al tocar; la burbuja sale atenuada hasta que el servidor la confirma.
+    _texto.clear();
+    _alFinal();
     final ok = await _sala._enviar(texto: texto, respondeA: _id, desde: context);
     if (!mounted) return;
-    if (ok) {
-      _texto.clear();
-      _alFinal();
-    }
+    // No se mandó: el texto vuelve a la caja.
+    if (!ok && _texto.text.trim().isEmpty) _texto.text = texto;
     setState(() {});
   }
 

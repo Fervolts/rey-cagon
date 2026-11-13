@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -21,40 +22,57 @@ void main() {
       expect((t.cola.last['datos'] as Map)['n'], 519);
     });
 
-    test('manda en lotes de 100 y vacía la cola', () async {
+    test('manda en lotes de 25 y vacía la cola', () async {
       final lotes = <int>[];
       final t = Telemetria(enviar: (l) async {
         lotes.add(l.length);
         return l.length;
       });
-      for (var i = 0; i < 250; i++) {
+      for (var i = 0; i < 60; i++) {
         t.registrar('pujo_x', {'n': i});
       }
       await t.vaciar();
-      expect(lotes, [100, 100, 50]);
+      expect(lotes, [25, 25, 10]);
       expect(t.pendientes, 0);
       final p = await SharedPreferences.getInstance();
       expect(jsonDecode(p.getString(Telemetria.clavePrefs)!), isEmpty);
     });
 
-    test('si falla un lote, se queda con lo que no salió', () async {
+    test('si falla un lote por red, se queda con lo que no salió', () async {
       var llamadas = 0;
       final t = Telemetria(enviar: (l) async {
-        if (++llamadas == 2) throw Exception('sin red');
+        if (++llamadas == 2) throw TimeoutException('sin red');
         return l.length;
       });
-      for (var i = 0; i < 250; i++) {
+      for (var i = 0; i < 60; i++) {
         t.registrar('logro', {'n': i});
       }
       await t.vaciar();
-      expect(t.pendientes, 150);
-      expect((t.cola.first['datos'] as Map)['n'], 100);
+      expect(t.pendientes, 35);
+      expect((t.cola.first['datos'] as Map)['n'], 25);
       await t.vaciar();
       expect(t.pendientes, 0);
     });
 
+    test('si el servidor rechaza un lote, lo descarta y sigue', () async {
+      var llamadas = 0;
+      final enviados = <int>[];
+      final t = Telemetria(enviar: (l) async {
+        if (++llamadas == 1) throw Exception('rechazado');
+        enviados.addAll([for (final e in l) (e['datos'] as Map)['n'] as int]);
+        return l.length;
+      });
+      for (var i = 0; i < 60; i++) {
+        t.registrar('logro', {'n': i});
+      }
+      await t.vaciar();
+      expect(t.pendientes, 0);
+      expect(enviados.first, 25);
+      expect(enviados, hasLength(35));
+    });
+
     test('lo guardado sobrevive a otro arranque y va delante', () async {
-      final a = Telemetria(enviar: (_) async => throw Exception('sin red'));
+      final a = Telemetria(enviar: (_) async => throw TimeoutException('sin red'));
       a.registrar('sesion_inicio', {'cagadas': 3});
       await a.vaciar();
       final enviados = <String>[];
@@ -147,6 +165,17 @@ void main() {
       expect(sinRed.precioGuantes, 150);
       final otro = await FlagsImperio.cargar(usuario: 'u2', pedir: () async => throw Exception('sin red'));
       expect(otro.precioGuantes, 100);
+    });
+
+    test('con copia no espera al servidor y la refresca para la próxima', () async {
+      await FlagsImperio.cargar(usuario: 'u3', pedir: () async => {'precio_guantes': f(150)});
+      final lento = Completer<Object?>();
+      final rapido = await FlagsImperio.cargar(usuario: 'u3', pedir: () => lento.future);
+      expect(rapido.precioGuantes, 150);
+      lento.complete({'precio_guantes': f(200)});
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      final luego = await FlagsImperio.cargar(usuario: 'u3', pedir: () async => throw Exception('sin red'));
+      expect(luego.precioGuantes, 200);
     });
   });
 }

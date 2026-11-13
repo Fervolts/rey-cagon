@@ -198,15 +198,27 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   int _desfase = 0; // reloj del servidor menos reloj del teléfono, en ms
   int get ahora => DateTime.now().millisecondsSinceEpoch + _desfase;
 
-  bool _cargado = false, _ocupadoNube = false, _guardandoNube = false, _cerrado = false;
+  bool _cargado = false, _ocupadoNube = false, _cerrado = false;
   bool _visible = false, _enPrimerPlano = true;
   Timer? _bucle;
   final Stopwatch _reloj = Stopwatch();
   int _ultimoAviso = 0;
   double _desdeLocal = 0, _desdeNube = 0;
 
-  /// Un guardado en la nube falló con la app en el fondo: se repite al volver.
+  /// Un guardado en la nube falló: se repite al volver al frente o con el reintento.
   bool _pendienteNube = false;
+
+  /// Guardado en vuelo (lo comparten los que piden guardar mientras sube) y si hay que repetirlo al terminar.
+  Future<bool>? _guardado;
+  bool _guardarOtraVez = false;
+  /// Error del último guardado que no subió (lo relanzan jalar, mudarse, abdicar y comprar estilo).
+  Object? _errorGuardar;
+
+  /// Recarga en vuelo, cuándo fue la última buena y si falta algo por cargar (una sub-carga falló).
+  Future<void>? _recarga;
+  bool _recargarOtraVez = false, _faltaCargar = false;
+  int _ultimaRecargaOk = 0;
+  Timer? _reintento;
 
   // Telemetría: sesión abierta, último tiempo fuera, lo visto en el tick anterior y errores ya anotados.
   ContadorSesion? _sesion;
@@ -241,6 +253,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     _ocupadoNube = true;
     try {
       final carga = await nube.cargar();
+      _ultimaRecargaOk = DateTime.now().millisecondsSinceEpoch;
       estadoNube = carga.estado;
       _desfase = carga.ahora.millisecondsSinceEpoch - DateTime.now().millisecondsSinceEpoch;
       final vacio = carga.nuevo || carga.estado.isEmpty;
@@ -292,6 +305,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     unawaited(_guardarLocal());
     _actualizarBucle();
     notifyListeners();
+    if (sinConexion) _programarReintento();
     if (!sinConexion) unawaited(_cargarCadena(estadoServidor: estadoNube));
     if (!sinConexion) unawaited(_cargarProgreso());
     if (!sinConexion) unawaited(cargarCofre());
@@ -310,6 +324,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       await cargarEstilosMios();
       if (!_cerrado) notifyListeners();
     } catch (e) {
+      _faltaCargar = true;
       if (!esDeRed(e)) _error('estilos_cargar', e);
     }
   }
@@ -331,6 +346,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       unawaited(_guardarLocal());
     } catch (_) {
       // Sin el RPC (migración sin aplicar) o sin red: los candados cuentan las cagadas como antes.
+      _faltaCargar = true;
       _error('progreso');
     }
   }
@@ -338,9 +354,12 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   /// Trae el estado de la cadena. Si el servidor tiene más jaladas que la partida, mira [estadoServidor] (el de la
   /// última carga) con [arregloCadena]: o adopta la partida del servidor (reinicio) o jala aquí (guardado perdido).
   Future<void> _cargarCadena({Map<String, dynamic>? estadoServidor}) async {
+    // Si se jaló, mudó o abdicó mientras volvía la respuesta, ya es vieja: se descarta.
+    final antes = (imperio.partida.jaladas, imperio.partida.mudanzas, imperio.partida.abdicaciones);
     try {
       final c = await nube.cadena();
       if (_cerrado) return;
+      if ((imperio.partida.jaladas, imperio.partida.mudanzas, imperio.partida.abdicaciones) != antes) return;
       cadena = c;
       final p = imperio.partida;
       final arreglo = arregloCadena(jaladasCadena: c.jaladas, jaladasPartida: p.jaladas,
@@ -393,6 +412,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       notifyListeners();
     } catch (_) {
       // Sin el RPC (migración sin aplicar) o sin red: el botón dice PRONTO hasta la próxima recarga.
+      _faltaCargar = true;
       _error('cadena');
     }
   }
@@ -415,6 +435,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       cofre = c;
       notifyListeners();
     } catch (e) {
+      _faltaCargar = true;
       _error('cofre', e);
     }
   }
@@ -428,6 +449,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       if (_cargado) _sumarLogros(imperio.logrosDeRegalos(dados: r.dados));
       notifyListeners();
     } catch (e) {
+      _faltaCargar = true;
       _error('regalos', e);
     }
   }
@@ -459,6 +481,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
         }
       }
     } catch (e) {
+      _faltaCargar = true;
       _error('cloaca', e);
     }
   }
@@ -504,6 +527,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       if (_cargado) _sumarLogros(imperio.revisarLogros());
       notifyListeners();
     } catch (e) {
+      _faltaCargar = true;
       _error('minijuegos', e);
     }
   }
@@ -603,11 +627,42 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// Al volver a la pestaña o a la app: trae cagadas nuevas, Fichas y el total. No pisa la partida local.
-  Future<void> recargarCagadas() async {
-    if (!_cargado || _ocupadoNube || _cerrado) return;
+  /// Sin [forzada] se salta si la última recarga buena fue hace menos de 30 s (y no falta nada ni se está sin conexión).
+  Future<void> recargarCagadas({bool forzada = false}) {
+    if (!_cargado || _ocupadoNube && _recarga == null || _cerrado) return Future.value();
+    if (_recarga != null) {
+      if (forzada) _recargarOtraVez = true;
+      return _recarga!;
+    }
+    if (!forzada && !sinConexion && !_faltaCargar && DateTime.now().millisecondsSinceEpoch - _ultimaRecargaOk < 30000) {
+      return Future.value();
+    }
+    final f = _recargar();
+    // Si ya terminó (falló sin esperar), no queda en vuelo.
+    if (_ocupadoNube) _recarga = f;
+    return f;
+  }
+
+  /// Tras un error de red en una operación con el servidor: se trae lo que quedó allá.
+  void _resincronizar(Object e) {
+    if (esDeRed(e)) unawaited(recargarCagadas(forzada: true));
+  }
+
+  /// Reintenta la nube en ~15 s si sigue sin conexión o con un guardado pendiente (solo con la app al frente).
+  void _programarReintento() {
+    if (_cerrado || (_reintento?.isActive ?? false)) return;
+    _reintento = Timer(const Duration(seconds: 15), () {
+      if (_cerrado || !_enPrimerPlano) return;
+      if (sinConexion || _pendienteNube) unawaited(_guardarNube());
+    });
+  }
+
+  Future<void> _recargar() async {
     _ocupadoNube = true;
     try {
       final carga = await nube.cargar();
+      _ultimaRecargaOk = DateTime.now().millisecondsSinceEpoch;
+      _faltaCargar = false;
       if (sinConexion) _desfase = carga.ahora.millisecondsSinceEpoch - DateTime.now().millisecondsSinceEpoch;
       sinConexion = false;
       fundador = carga.fundador;
@@ -626,14 +681,22 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       unawaited(cargarCofre());
       unawaited(cargarRegalos());
       unawaited(cargarCloaca());
+      unawaited(cargarMinijuegos());
+      unawaited(_cargarEstilos());
     } catch (e) {
       _error('recargar', e);
       if (!sinConexion) {
         sinConexion = true;
         notifyListeners();
       }
+      _programarReintento();
     } finally {
       _ocupadoNube = false;
+      _recarga = null;
+      if (_recargarOtraVez && !_cerrado) {
+        _recargarOtraVez = false;
+        unawaited(recargarCagadas(forzada: true));
+      }
     }
   }
 
@@ -859,6 +922,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       r = await nube.gastarCiruelas(id);
     } catch (e) {
       _error('ciruelas_gastar', e);
+      _resincronizar(e);
       rethrow;
     }
     if (_cerrado) return false;
@@ -885,6 +949,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       r = await nube.comprarEstetica(id);
     } catch (e) {
       _error('estetica_compra', e);
+      _resincronizar(e);
       rethrow;
     }
     if (_cerrado) return false;
@@ -919,12 +984,13 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     if (tengoEstilo(e.id)) return;
     final precio = precioEstilo(e);
     if (imperio.saldo < precio || imperio.partida.rollos < e.rollos) throw StateError('falta');
-    // El servidor mira lo último guardado: primero se sube la partida.
-    await _guardarNube();
+    // El servidor mira lo último guardado: primero se sube la partida. Si no subió, no se compra.
+    if (!await _guardarNube()) throw _errorGuardar ?? StateError('guardar');
     try {
       await comprarEstiloEnBase(e.id);
     } catch (err) {
       if (!esDeRed(err)) _error('estilo_compra', err);
+      _resincronizar(err);
       rethrow;
     }
     if (_cerrado) return;
@@ -984,6 +1050,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       r = await nube.usarFicha();
     } catch (e) {
       _error('fichas_usar', e);
+      _resincronizar(e);
       rethrow;
     }
     if (_cerrado) return false;
@@ -1006,6 +1073,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       r = await nube.usarFichas(que);
     } catch (e) {
       _error('fichas_usar', e);
+      _resincronizar(e);
       rethrow;
     }
     if (_cerrado) return false;
@@ -1049,6 +1117,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
       c = await nube.cofre(reclamar: true);
     } catch (e) {
       _error('cofre_reclamar', e);
+      _resincronizar(e);
       rethrow;
     }
     if (_cerrado) return null;
@@ -1285,13 +1354,14 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     if (jalando) throw StateError('Ya se está jalando');
     jalando = true;
     try {
-      // El servidor revisa contra su mj_total si ya toca un Rollo: primero se le sube lo jugado.
-      await _guardarNube();
+      // El servidor revisa contra su mj_total si ya toca un Rollo: primero se le sube lo jugado (si no sube, no se jala).
+      if (!await _guardarNube()) throw _errorGuardar ?? StateError('guardar');
       final int n;
       try {
         n = await nube.jalar();
       } catch (e) {
         _error('jalar', e);
+        _resincronizar(e);
         rethrow;
       }
       final ganados = imperio.jalar();
@@ -1330,12 +1400,13 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     if (mudando || jalando) throw StateError('Ya se está mudando');
     mudando = true;
     try {
-      await _guardarNube();
+      if (!await _guardarNube()) throw _errorGuardar ?? StateError('guardar');
       final ResultadoMudanza r;
       try {
         r = await nube.mudar();
       } catch (e) {
         _error('mudar', e);
+        _resincronizar(e);
         rethrow;
       }
       if (!r.ok) {
@@ -1389,12 +1460,13 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     if (abdicando || mudando || jalando) throw StateError('Ya se está abdicando');
     abdicando = true;
     try {
-      await _guardarNube();
+      if (!await _guardarNube()) throw _errorGuardar ?? StateError('guardar');
       final ResultadoAbdicar r;
       try {
         r = await nube.abdicar();
       } catch (e) {
         _error('abdicar', e);
+        _resincronizar(e);
         rethrow;
       }
       if (!r.ok) {
@@ -1462,18 +1534,51 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _guardarNube() async {
+  /// Sube la partida. Devuelve si quedó guardada. Si ya hay un guardado en vuelo, se comparte y se repite al terminar
+  /// (con lo jugado mientras tanto): nada se pierde aunque lo pidan varios a la vez.
+  Future<bool> _guardarNube() {
     _desdeNube = 0;
+    if (_guardado != null) {
+      _guardarOtraVez = true;
+      return _guardado!;
+    }
+    return _guardado = _subir();
+  }
+
+  Future<bool> _subir() async {
+    bool ok;
+    try {
+      do {
+        _guardarOtraVez = false;
+        ok = await _subirUnaVez();
+      } while (ok && _guardarOtraVez && !_cerrado);
+    } finally {
+      _guardado = null;
+    }
+    // Después del guardado: la telemetría no le quita red a la partida.
     unawaited(_vaciarTelemetria());
-    if (_guardandoNube || _ocupadoNube) return;
-    _guardandoNube = true;
+    return ok;
+  }
+
+  Future<bool> _subirUnaVez() async {
+    // Una recarga en vuelo trae Fichas y cadena: se espera para no cruzarse con ella.
+    while (_recarga != null) {
+      await _recarga;
+    }
+    // Todavía arrancando (iniciar tiene la nube): ese guardado no toca.
+    if (_ocupadoNube) {
+      _errorGuardar = StateError('cargando');
+      return false;
+    }
     try {
       // Sin conexión desde el arranque: primero cargar (crea la fila y trae cagadas), luego guardar.
       if (sinConexion) {
-        _guardandoNube = false;
-        await recargarCagadas();
-        if (sinConexion) return;
-        _guardandoNube = true;
+        await recargarCagadas(forzada: true);
+        if (sinConexion) {
+          _errorGuardar = StateError('sin_conexion');
+          _pendienteNube = true;
+          return false;
+        }
       }
       // Ritmo efectivo (MJ/s o pujos del Dedo, lo mayor): el antitrampa del servidor lo usa como techo.
       // _mps_edificios y _pujo: los lee la tarjeta de cartera del chat (el servidor no confía en los números del cliente).
@@ -1484,23 +1589,30 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
         _anotar('version_vieja', {'build': build});
         if (!_cerrado) notifyListeners();
       }
+      if (r.ignorado) {
+        // El servidor no lo tomó (copia de antes de una jalada o versión vieja): se trae lo de allá.
+        _errorGuardar = StateError('guardado_ignorado');
+        if (!r.versionVieja) unawaited(recargarCagadas(forzada: true));
+        return false;
+      }
       if (r.recortado) {
         // Para cazar trampas (supabase/consultas/exploits.sql): cuánto dijo la app y cuánto aceptó el servidor.
         _anotar('guardado_recortado', {'mj_app': imperio.mjTotal, 'mj_servidor': r.mjTotal});
         aceptarRecorte(imperio.partida, r.mjTotal, mjCasaServidor: r.mjCasa);
       }
+      _pendienteNube = false;
+      return true;
     } catch (e) {
       // Android corta la red unos segundos después de mandar la app al fondo: ese guardado se repite al volver
-      // (lo local ya quedó). No es error ni "sin conexión".
-      if (!_enPrimerPlano) {
-        _pendienteNube = true;
-      } else {
+      // (lo local ya quedó). No es error ni "sin conexión". Al frente tampoco se marca sin conexión (un fallo suelto
+      // no apaga la pestaña): queda pendiente y, si fue la red, se reintenta en ~15 s (otro error espera al próximo guardado).
+      _errorGuardar = e;
+      _pendienteNube = true;
+      if (_enPrimerPlano) {
         _error('guardar_nube', e);
-        sinConexion = true;
-        if (!_cerrado) notifyListeners();
+        if (esDeRed(e)) _programarReintento();
       }
-    } finally {
-      _guardandoNube = false;
+      return false;
     }
   }
 
@@ -1519,6 +1631,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     cloacaCambio.removeListener(_cloacaCambio);
     _bucle?.cancel();
     _bucle = null;
+    _reintento?.cancel();
     _cerrarSesion();
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_cargado ? guardarTodo() : _vaciarTelemetria());

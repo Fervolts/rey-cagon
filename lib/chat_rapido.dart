@@ -2,11 +2,12 @@
 // Lo usa la zona de la Cloaca encima del código para invitar.
 
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 
 import 'accesorios.dart' show Avatar, columnasAvatar;
-import 'chat.dart' show aceptoReglas;
+import 'chat.dart' show aceptoReglas, mandarMensaje, nuevoClienteId;
 import 'emoji.dart';
 import 'idioma.dart';
 import 'main.dart' show db, textoError, ultimosDeSala;
@@ -27,8 +28,11 @@ class _ChatRapidoState extends State<ChatRapido> {
   final _texto = TextEditingController();
   final _perfiles = <String, Map<String, dynamic>>{};
   List<Map<String, dynamic>> _ultimos = const [];
+  // Lo último del servidor (más nuevo primero) y lo mío que se está mandando (más viejo primero).
+  List<Map<String, dynamic>> _servidor = const [];
+  final _pendientes = <Map<String, dynamic>>[];
   VoidCallback? _soltar;
-  bool _cargado = false, _enviando = false;
+  bool _cargado = false;
 
   String get _yo => db.auth.currentUser!.id;
 
@@ -63,17 +67,12 @@ class _ChatRapidoState extends State<ChatRapido> {
   // Sin respuestas de hilos ni ocultos de otros: lo mismo que se ve abajo del todo en el chat.
   void _alLlegar(List<Map<String, dynamic>> filas) {
     if (!mounted) return;
-    final ultimos = filas
-        .where((m) => m['responde_a'] == null && (m['oculto'] != true || m['user_id'] == _yo))
-        .take(widget.cuantos)
-        .toList()
-        .reversed
-        .toList();
+    _servidor = filas.where((m) => m['responde_a'] == null && (m['oculto'] != true || m['user_id'] == _yo)).toList();
     setState(() {
-      _ultimos = ultimos;
+      _armar();
       _cargado = true;
     });
-    final faltan = {for (final m in ultimos) '${m['user_id']}'}.where((id) => !_perfiles.containsKey(id)).toList();
+    final faltan = {for (final m in _ultimos) '${m['user_id']}'}.where((id) => !_perfiles.containsKey(id)).toList();
     if (faltan.isEmpty) return;
     db.from('profiles').select(columnasAvatar).inFilter('id', faltan).then((r) {
       for (final p in r) {
@@ -83,26 +82,48 @@ class _ChatRapidoState extends State<ChatRapido> {
     }).catchError((_) {});
   }
 
+  // Lo del servidor con lo mío que todavía no llegó abajo; se ven los últimos [cuantos].
+  void _armar() {
+    final llegados = {for (final m in _servidor) m['cliente_id']};
+    _pendientes.removeWhere((m) => llegados.contains(m['cliente_id']));
+    final todos = [..._servidor.take(widget.cuantos).toList().reversed, ..._pendientes];
+    _ultimos = todos.sublist(max(0, todos.length - widget.cuantos));
+  }
+
   Future<void> _enviar() async {
     final t = _texto.text.trim();
-    if (t.isEmpty || _enviando) return;
+    if (t.isEmpty) return;
     if (!await aceptoReglas(context) || !mounted) return;
-    setState(() => _enviando = true);
+    final clienteId = nuevoClienteId();
+    final local = <String, dynamic>{'sala': widget.sala, 'texto': t, 'user_id': _yo, 'cliente_id': clienteId, 'pendiente': true};
+    // Se ve ya, atenuado, y la caja queda limpia; no se espera al eco de realtime.
+    _texto.clear();
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _pendientes.add(local);
+      _armar();
+    });
     try {
-      await db.from('mensajes').insert({'sala': widget.sala, 'texto': t});
-      _texto.clear();
-      FocusManager.instance.primaryFocus?.unfocus();
+      await mandarMensaje({'sala': widget.sala, 'texto': t}, clienteId);
+      if (mounted) setState(() => local.remove('pendiente'));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: TextoConEmojis(textoError(e))));
-    } finally {
-      if (mounted) setState(() => _enviando = false);
+      // La respuesta se perdió pero ya vino del servidor: está mandado.
+      if (!mounted || !_pendientes.contains(local)) return;
+      setState(() {
+        _pendientes.remove(local);
+        _armar();
+      });
+      // El texto vuelve a la caja para no perderlo.
+      final caja = _texto.text.trim().isEmpty ? t : '$t\n${_texto.text}';
+      _texto.value = TextEditingValue(text: caja, selection: TextSelection.collapsed(offset: caja.length));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: TextoConEmojis(textoError(e))));
     }
   }
 
   Widget _fila(Paleta p, Map<String, dynamic> m) {
     final perfil = _perfiles['${m['user_id']}'];
     final texto = '${m['texto'] ?? ''}'.trim();
-    return Padding(
+    final fila = Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         SizedBox(width: 28, height: 28, child: perfil == null ? const Emoji('💩', tamano: 22) : Avatar(perfil, tamano: 26)),
@@ -117,6 +138,7 @@ class _ChatRapidoState extends State<ChatRapido> {
         ),
       ]),
     );
+    return m['pendiente'] == true ? Opacity(opacity: .5, child: fila) : fila;
   }
 
   @override
@@ -172,10 +194,8 @@ class _ChatRapidoState extends State<ChatRapido> {
               key: const Key('chat_rapido_enviar'),
               tooltip: tr('Enviar', 'Send'),
               style: IconButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radio))),
-              onPressed: _enviando ? null : _enviar,
-              icon: _enviando
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.send, size: 20),
+              onPressed: _enviar,
+              icon: const Icon(Icons.send, size: 20),
             ),
           ),
         ]),

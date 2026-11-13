@@ -40,8 +40,7 @@ Future<int> _contarHoy(SupabaseClient db) async {
 /// Widgets de ranking de la semana: entre los que sigues y entre todos. Tu puesto, cuánto te
 /// falta para pasar al de arriba y los vecinos.
 Future<void> refrescarRanking(SupabaseClient db) async {
-  await _pintarRanking(db, global: false);
-  await _pintarRanking(db, global: true);
+  await Future.wait([_pintarRanking(db, global: false), _pintarRanking(db, global: true)]);
 }
 
 Future<void> _pintarRanking(SupabaseClient db, {required bool global}) async {
@@ -167,12 +166,14 @@ Future<void> widgetCague(Uri? uri) async {
   } catch (_) {
     aviso = tr('SIN INTERNET', 'NO INTERNET');
   }
+  // Las tres consultas a la vez: en serie el widget tardaba el triple con mala señal.
+  final ranking = refrescarRanking(db).catchError((_) {});
   int? hoy;
   try {
     hoy = await _contarHoy(db);
   } catch (_) {}
   await _pintar(hoy: hoy, estado: aviso);
-  await refrescarRanking(db).catchError((_) {});
+  await ranking;
   // El aviso dura un rato y vuelve al contador.
   await Future<void>.delayed(const Duration(seconds: 4));
   await _pintar(estado: null);

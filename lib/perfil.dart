@@ -94,7 +94,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
   void initState() {
     super.initState();
     _cargar();
-    _soltar = escucharCagadas('perfil', _cargar);
+    _soltar = escucharCagadas('perfil', _cargar, contexto: context);
     if (_esMio) _cargarImperio();
     _cargarPartida();
     _esMio ? _cargarMensajesDe() : _cargarPuedoEscribir();
@@ -175,21 +175,41 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
   }
 
   Future<void> _cargar() async {
+    final Map<String, dynamic>? g;
     try {
-      final (rows, bloqueo, meSigue) = await conReintento(() => (
+      final (rows, bloqueo, meSigue, genero) = await conReintento(() => (
             db.rpc('perfil', params: {'uid': widget.usuarioId}),
             db.from('bloqueos').select('bloqueado').eq('bloqueado', widget.usuarioId).maybeSingle(),
             _esMio
                 ? Future<Map<String, dynamic>?>.value(null)
                 : db.from('follows').select('follower').eq('follower', widget.usuarioId).eq('followed', db.auth.currentUser!.id).maybeSingle(),
+            _esMio
+                ? db.from('profiles').select('genero, genero_cambiado, placer_desbloqueado').eq('id', widget.usuarioId).maybeSingle()
+                : Future<Map<String, dynamic>?>.value(null),
           ).wait);
-      final g = _esMio
-          ? await db.from('profiles').select('genero, genero_cambiado, placer_desbloqueado').eq('id', widget.usuarioId).maybeSingle()
-          : null;
-      final (cagadas, ganados) = _esMio ? await (cagadasPropias(widget.usuarioId), victorias(widget.usuarioId)).wait : await _vitrinaAjena();
+      g = genero;
+      if (!mounted) return;
+      // Lo principal se pinta ya; la vitrina llega después.
+      setState(() {
+        _p = (rows as List).firstOrNull;
+        _bloqueado = bloqueo != null;
+        _meSigue = meSigue != null;
+        _genero = g?['genero'];
+        _generoCambiado = DateTime.tryParse(g?['genero_cambiado'] ?? '')?.toLocal();
+      });
+    } catch (e) {
+      if (_p == null || !esDeRed(e)) _mensaje(textoError(e));
+      return;
+    }
+    // La vitrina: si falla, el perfil se queda con lo que ya tenía.
+    try {
       // logrosDe no falla: si la tabla no existe todavía, vuelve con lo del teléfono.
-      final claves = cagadas == null ? <String>{} : await logrosDe(widget.usuarioId);
-      final (lado, verLado) = await _ladosSecretos(g);
+      final ((cagadas, ganados), clavesTodas, (lado, verLado)) = await (
+        _esMio ? (cagadasPropias(widget.usuarioId), victorias(widget.usuarioId)).wait : _vitrinaAjena(),
+        logrosDe(widget.usuarioId),
+        _ladosSecretos(g),
+      ).wait;
+      final claves = cagadas == null ? <String>{} : clavesTodas;
       final nuevos = cagadas != null && _esMio ? await _secretosNuevos(cagadas, ganados, claves, lado) : <String>{};
       final misSecretos = cagadas != null && !_esMio ? await _secretosDeQuienMira(verLado) : <String>{};
       if (mounted) {
@@ -201,15 +221,10 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
           _verLadoSecreto = verLado;
           _misSecretos = misSecretos;
           _nuevos = nuevos;
-          _p = (rows as List).firstOrNull;
-          _bloqueado = bloqueo != null;
-          _meSigue = meSigue != null;
-          _genero = g?['genero'];
-          _generoCambiado = DateTime.tryParse(g?['genero_cambiado'] ?? '')?.toLocal();
         });
       }
     } catch (e) {
-      if (_p == null || !esDeRed(e)) _mensaje(textoError(e));
+      if (_cagadas == null || !esDeRed(e)) _mensaje(textoError(e));
     }
   }
 
@@ -286,6 +301,8 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
 
   /// Bloquear: deja de verlo en los rankings y se cortan los follows en los dos sentidos.
   Future<void> _alternarBloqueo() async {
+    if (_ocupado) return;
+    setState(() => _ocupado = true);
     try {
       if (_bloqueado) {
         await db.from('bloqueos').delete().eq('bloqueador', db.auth.currentUser!.id).eq('bloqueado', widget.usuarioId);
@@ -297,6 +314,8 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
       await _cargar();
     } catch (e) {
       _mensaje(textoError(e));
+    } finally {
+      if (mounted) setState(() => _ocupado = false);
     }
   }
 
@@ -901,16 +920,13 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                         ),
                     ]),
                   ),
-                FutureBuilder<int>(
-                  future: victorias(widget.usuarioId),
-                  builder: (context, v) => (v.data ?? 0) == 0
-                      ? const SizedBox.shrink()
-                      : Padding(
-                          padding: const EdgeInsets.only(top: 10),
-                          child: Text(tr('🏆 ${v.data} Cagadón${v.data == 1 ? '' : 'es'} ganado${v.data == 1 ? '' : 's'}', '🏆 ${v.data} Poop-Off${v.data == 1 ? '' : 's'} won'),
-                              textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700)),
-                        ),
-                ),
+                // Sale de _cargar (la vitrina ya lo pide): pedirlo aquí lo repetía en cada build.
+                if (_victorias > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Text(tr('🏆 $_victorias Cagadón${_victorias == 1 ? '' : 'es'} ganado${_victorias == 1 ? '' : 's'}', '🏆 $_victorias Poop-Off${_victorias == 1 ? '' : 's'} won'),
+                        textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  ),
                 const SizedBox(height: 16),
                 Card(
                   child: Padding(
@@ -1094,6 +1110,7 @@ class _EditarPerfilState extends State<_EditarPerfil> {
   int get _total => (widget.perfil['total'] as num?)?.toInt() ?? 0;
 
   Future<void> _guardar() async {
+    if (_ocupado) return;
     setState(() => _ocupado = true);
     try {
       await db.from('profiles').update({
@@ -1109,6 +1126,9 @@ class _EditarPerfilState extends State<_EditarPerfil> {
               ? tr('Username de 2 a 24 letras, bio de máximo 140', 'Username 2 to 24 characters, bio up to 140')
               : trServidor(e.message);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(texto)));
+    } catch (e) {
+      // Red caída u otro error: sin esto el error se escapaba sin aviso.
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(textoError(e))));
     } finally {
       if (mounted) setState(() => _ocupado = false);
     }
