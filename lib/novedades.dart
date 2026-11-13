@@ -21,6 +21,12 @@ class VersionNovedades {
 
 /// El historial público, de la más nueva a la más vieja. Al sacar una versión nueva se agrega arriba.
 const historialNovedades = <VersionNovedades>[
+  VersionNovedades('2.19.4', '2026-11-13', [
+    ('📶', 'Con internet lento la app va mucho mejor: el chat muestra tu mensaje al toque y no se repite, el botón CAGUÉ responde enseguida y las pantallas ya no recargan de más.',
+        'The app works much better on slow internet: chat shows your message right away without duplicates, the CAGUÉ button responds instantly and screens no longer reload for nothing.'),
+    ('🏰', 'En el Imperio ya no se pierde lo jugado si se cae la señal, y jalar la cadena, mudarte o abdicar ya no fallan por un guardado atrasado.',
+        'In the Empire your progress is no longer lost when the signal drops, and pulling the chain, moving or abdicating no longer fail because of a late save.'),
+  ]),
   VersionNovedades('2.19.3', '2026-11-05', [
     ('👑', 'Fusión real ya no tiene tope de puntos: juegas hasta que se desborde. Con dos Reyes en la poceta, la poceta crece y los Reyes se buscan solos para la descarga real.',
         'Royal Fusion has no score cap anymore: play until it overflows. With two Kings in the bowl, the bowl grows and the Kings pull together for the royal flush.'),
