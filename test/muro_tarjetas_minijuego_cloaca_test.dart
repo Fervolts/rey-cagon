@@ -49,7 +49,10 @@ const _cloaca = {
 
 void main() {
   setUp(() => idioma.value = 'es');
-  tearDown(() => nubeCloacas = const NubeCloacas());
+  tearDown(() {
+    nubeCloacas = const NubeCloacas();
+    olvidarMiaMuro();
+  });
 
   test('conMiles pone punto en español y coma en inglés', () {
     expect(conMiles(0), '0');

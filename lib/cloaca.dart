@@ -1157,7 +1157,11 @@ Future<EstadoCloaca>? _miaMuro;
 String? _miaMuroClave;
 
 Future<EstadoCloaca> miaParaMuro() {
-  final clave = '${db.auth.currentUser?.id}:${cloacaCambio.value}';
+  String? yo;
+  try {
+    yo = db.auth.currentUser?.id;
+  } catch (_) {} // Sin Supabase iniciado (pruebas).
+  final clave = '$yo:${cloacaCambio.value}';
   if (_miaMuro == null || _miaMuroClave != clave) {
     _miaMuroClave = clave;
     final f = nubeCloacas.mia();
@@ -1170,6 +1174,9 @@ Future<EstadoCloaca> miaParaMuro() {
   }
   return _miaMuro!;
 }
+
+@visibleForTesting
+void olvidarMiaMuro() => _miaMuro = null;
 
 class _TarjetaMiCloacaMuroState extends State<TarjetaMiCloacaMuro> {
   EstadoCloaca? _mia;
