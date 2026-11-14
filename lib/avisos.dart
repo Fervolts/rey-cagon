@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'ajustes_avisos.dart';
 import 'emoji.dart';
 import 'idioma.dart';
+import 'actualizar.dart' show esDePlay;
 import 'imperio/regalos.dart' show irARegalos;
 import 'main.dart' show conReintento, db, textoError;
 import 'perfil.dart' show PantallaPerfil;
@@ -41,6 +42,10 @@ class Ir {
 final irA = ValueNotifier<Ir?>(null);
 void ir(String a, {int? hilo, String? periodo, String? usuario}) => irA.value = Ir(a, hilo: hilo, periodo: periodo, usuario: usuario);
 
+// Pop-ups para todos o para el canal de esta app. Los admins pueden leer todos (para la lista de
+// Pop-ups), pero en sus avisos solo ven los de su canal, como cualquiera.
+final _deMiCanal = 'canal.is.null,canal.eq.${esDePlay ? 'play' : 'directo'}';
+
 /// Avisos sin leer más anuncios sin ver. Lo pinta la campana y el puntito de la pestaña.
 final avisosSinLeer = ValueNotifier<int>(0);
 
@@ -54,7 +59,7 @@ Future<void> contarAvisos() async {
     final visto = prefs.getInt(_anuncioVisto) ?? 0;
     final (n, a) = await (
       db.from('notificaciones').count(CountOption.exact).eq('user_id', yo).eq('leida', false),
-      db.from('anuncios').count(CountOption.exact).gt('id', visto).or('idioma.is.null,idioma.eq.${idioma.value}'),
+      db.from('anuncios').count(CountOption.exact).gt('id', visto).or('idioma.is.null,idioma.eq.${idioma.value}').or(_deMiCanal),
     ).wait;
     avisosSinLeer.value = n + a;
   } catch (_) {}
@@ -116,7 +121,7 @@ Future<void> mostrarAnuncioNuevo(BuildContext context) async {
         .from('anuncios')
         .select()
         .gt('id', visto)
-        .or('idioma.is.null,idioma.eq.${idioma.value}')
+        .or('idioma.is.null,idioma.eq.${idioma.value}').or(_deMiCanal)
         .gt('hasta', DateTime.now().toUtc().toIso8601String())
         .order('id', ascending: false)
         .limit(1)
@@ -193,7 +198,7 @@ class _PantallaAvisosState extends State<PantallaAvisos> {
       final visto = prefs.getInt(_anuncioVisto) ?? 0;
       final (notis, anuncios) = await conReintento(() => (
             db.from('notificaciones').select().eq('user_id', _yo).order('created_at', ascending: false).limit(100),
-            db.from('anuncios').select().or('idioma.is.null,idioma.eq.${idioma.value}').order('created_at', ascending: false).limit(30),
+            db.from('anuncios').select().or('idioma.is.null,idioma.eq.${idioma.value}').or(_deMiCanal).order('created_at', ascending: false).limit(30),
           ).wait);
       final todos = [
         for (final n in notis) {...n, ..._enSuIdioma(n), 'nuevo': n['leida'] != true},
