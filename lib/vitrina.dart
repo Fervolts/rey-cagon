@@ -17,8 +17,11 @@ import 'racha.dart';
 import 'tema.dart';
 import 'tipos.dart';
 
-/// El título que se gana con el total histórico.
-String tituloPorTotal(int total) => switch (total) {
+/// El título que se gana con el total histórico. [genero] es el de otra persona (en el muro);
+/// sin él se usa el propio.
+String tituloPorTotal(int total, {String? genero}) {
+  String segun(String rey, String reina) => (genero ?? miGenero) == 'mujer' ? reina : rey;
+  return switch (total) {
       < 10 => tr('Aprendiz del trono', 'Throne apprentice'),
       < 50 => tr(segun('Cagón de confianza', 'Cagona de confianza'), 'Trusted pooper'),
       < 200 => tr(segun('Rey del barrio', 'Reina del barrio'), segun('King of the block', 'Queen of the block')),
@@ -26,6 +29,7 @@ String tituloPorTotal(int total) => switch (total) {
           segun('Undisputed king of the throne', 'Undisputed queen of the throne')),
       _ => tr(segun('Emperador del trono', 'Emperatriz del trono'), segun('Emperor of the throne', 'Empress of the throne')),
     };
+}
 
 const _hitos = [10, 25, 50, 100, 200, 365, 500, 1000];
 
