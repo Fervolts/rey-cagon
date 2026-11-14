@@ -21,7 +21,11 @@ class VersionNovedades {
 
 /// El historial público, de la más nueva a la más vieja. Al sacar una versión nueva se agrega arriba.
 const historialNovedades = <VersionNovedades>[
-  VersionNovedades('2.22.0', '2026-11-14', [
+  VersionNovedades('2.23.0', '2026-11-14', [
+    ('🚽', 'El TRONO es nuevo: CAGUÉ es una barra grande, y arriba ves tu racha de días, tu semana, lo de hoy y tus Cagadones.',
+        'The THRONE is new: I POOPED is a big bar, and you see your day streak, your week, today and your Poop-Offs up top.'),
+    ('🎯', 'Misiones del día: 3 retos distintos cada día, de cagar, del Baño y del Imperio. Cumple las 3 y te llevas un premio misterioso.',
+        'Daily missions: 3 different challenges every day, about pooping, the Bathroom and the Empire. Finish all 3 for a mystery prize.'),
     ('🎮', 'Si haces récord en un minijuego, pégalo en el Baño: sale tu puntaje y tu puesto entre amigos, y los demás pueden tocar JUGAR para ganarte.',
         'Set a record in a minigame and pin it in the Bathroom: it shows your score and your rank among friends, and others can tap PLAY to beat you.'),
     ('🕳️', 'Pega tu Cloaca en el Baño con su puesto en la liga y sus miembros. Quien no tenga Cloaca puede tocar UNIRME y entrar sin pedir el código.',

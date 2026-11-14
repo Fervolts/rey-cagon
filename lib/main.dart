@@ -1485,8 +1485,8 @@ class _Chisme extends StatelessWidget {
   }
 }
 
-/// Botón redondo principal; al apretarlo se encoge y cambia de color. Según el teléfono el
-/// mojón vuela a un inodoro, da un brinco dentro del botón o no se mueve (ver animaciones.dart).
+/// La barra amarilla CAGUÉ; al apretarla se aplasta y cambia de color. Según el teléfono el
+/// mojón vuela a un inodoro, da un brinco dentro de la barra o no se mueve (ver animaciones.dart).
 class _BotonCague extends StatefulWidget {
   const _BotonCague({required this.onTap, this.ocupado = false});
 
@@ -1776,7 +1776,6 @@ class _Podio extends StatelessWidget {
   }
 }
 
-/// Barra amarilla fija abajo con el puesto propio, cuando no está en el podio.
 /// La cuadrícula 2x2 del trono: RACHA, SEMANA, HOY y CAGADÓN. Pura: recibe los datos (null = cargando).
 class CuadriculaTrono extends StatelessWidget {
   const CuadriculaTrono({
