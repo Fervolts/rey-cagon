@@ -346,15 +346,14 @@ class _Resultado extends StatelessWidget {
 
 /// Errores de `validar_mensaje` para la tarjeta de jalada (los mismos textos que en la migración).
 const _jaladaVieja = 'Esa jalada no existe o ya pasó';
-const _jaladaRepetida = 'Esa jalada ya salió en el chat';
+const _jaladaRepetida = 'Esa jalada ya salió en el muro';
 
-/// Manda la tarjeta "jaló la cadena por Nª vez" a la sala general. El servidor revisa que la jalada [n] sea la última
+/// Pega la tarjeta "jaló la cadena por Nª vez" en el muro. El servidor revisa que la jalada [n] sea la última
 /// y de hace menos de un día.
 Future<void> presumirJalada(BuildContext context, int n, int rollos) async {
   if (!context.mounted || !await aceptoReglas(context)) return;
   try {
-    await db.from('mensajes').insert({
-      'sala': 'global',
+    await db.from('muro').insert({
       'tarjeta': {'tipo': 'jalada', 'n': n, 'rollos': rollos},
     });
     if (context.mounted) _aviso(context, tr('Publicado en $nombreSala 🚽', 'Posted in $nombreSala 🚽'));
@@ -366,7 +365,7 @@ Future<void> presumirJalada(BuildContext context, int n, int rollos) async {
       mensaje == _jaladaVieja
           ? tr('Esa jalada ya es vieja para presumirla.', 'That flush is too old to show off.')
           : mensaje == _jaladaRepetida
-              ? tr('Esa jalada ya está en el chat.', 'That flush is already in the chat.')
+              ? tr('Esa jalada ya está en el muro.', 'That flush is already on the wall.')
               : textoError(e),
     );
   }

@@ -1,4 +1,4 @@
-// Presumir el baño en el chat: una "foto" del baño. No se sube ninguna imagen: la tarjeta trae lo que dibuja el baño
+// Presumir el baño en el muro: una "foto" del baño. No se sube ninguna imagen: la tarjeta trae lo que dibuja el baño
 // (lo arma el servidor desde tu fila, rama 'bano' de validar_mensaje) y aquí se pinta con el código del juego, quieto.
 
 import 'dart:math';
@@ -284,8 +284,7 @@ Future<void> presumirBano(BuildContext context, ControlImperio control) async {
   if (!await aceptoReglas(context)) return;
   try {
     await guardado;
-    await db.from('mensajes').insert({
-      'sala': 'global',
+    await db.from('muro').insert({
       'tarjeta': {'tipo': 'bano'},
     });
     control.anotar('bano_compartir');

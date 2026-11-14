@@ -18,7 +18,7 @@ import 'moneda_app.dart';
 import 'motor.dart';
 import 'tarjeta_cartera.dart';
 
-// Compartir cartera: el estado de cuenta del Imperio en el chat (los números los pone el servidor)
+// Compartir cartera: el estado de cuenta del Imperio en el muro (los números los pone el servidor)
 // o como imagen para historias (los números salen de esta partida).
 
 /// Un renglón de MOVIMIENTOS del estado de cuenta: un edificio, cuántos tiene y lo que produce por segundo.
@@ -145,11 +145,10 @@ class _HojaCarteraState extends State<_HojaCartera> {
     try {
       // El servidor lee la fila guardada: primero se guarda lo de ahora.
       await widget.c.guardarParaCartera();
-      await db.from('mensajes').insert({
-        'sala': 'global',
+      await db.from('muro').insert({
         'tarjeta': {'tipo': 'cartera'},
       });
-      widget.c.compartioCartera('chat');
+      widget.c.compartioCartera('muro');
       nav.pop();
       _aviso(mensajero, tr('Publicado en $nombreSala 🚽', 'Posted in $nombreSala 🚽'));
     } catch (e) {

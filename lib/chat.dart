@@ -13,18 +13,15 @@ import 'accesorios.dart';
 import 'amigos.dart';
 import 'animaciones.dart';
 import 'avisos.dart';
-import 'cagadon.dart' show TarjetaReto;
 import 'chat_sin_leer.dart' show ChatCual, VistoMientras;
 import 'chat_vivo.dart';
-import 'cloaca.dart' show NubeCloacas, TarjetaCloaca;
+import 'cloaca.dart' show NubeCloacas;
 import 'popups.dart' show PantallaPopups;
 import 'presumir.dart';
 import 'privados.dart';
+import 'tarjeta_pegada.dart';
 import 'emoji.dart';
 import 'idioma.dart';
-import 'imperio/tarjeta_bano.dart';
-import 'imperio/regalos.dart' show TarjetaImperio, TarjetaRegalo;
-import 'imperio/tarjeta_cartera.dart';
 import 'main.dart' show conReintento, db, esDeRed, textoError, ultimosDeSala;
 import 'panel.dart';
 import 'perfil.dart' show PantallaPerfil;
@@ -193,16 +190,8 @@ Future<void> ofrecerPresumir(BuildContext context, int total) async {
   final esHito = hitos.contains(total);
   if (!esHito && desbloqueo == null) return;
   final presumir = esHito ? await preguntarHito(context, total) : await preguntarDesbloqueo(context, desbloqueo!);
-  if (presumir != true || !context.mounted || !await aceptoReglas(context)) return;
-  try {
-    await db.from('mensajes').insert({
-      'sala': 'global',
-      'tarjeta': esHito ? {'tipo': 'hito', 'n': total} : {'tipo': 'desbloqueo', 'emoji': desbloqueo!.emoji},
-    });
-    if (context.mounted) _aviso(context, tr('Publicado en $nombreSala 🚽', 'Posted in $nombreSala 🚽'));
-  } catch (e) {
-    if (context.mounted) _aviso(context, _error(e));
-  }
+  if (presumir != true || !context.mounted) return;
+  await pegarEnMuro(context, esHito ? {'tipo': 'hito', 'n': total} : {'tipo': 'desbloqueo', 'emoji': desbloqueo!.emoji});
 }
 
 void _aviso(BuildContext context, String texto) => ScaffoldMessenger.of(context)
@@ -812,7 +801,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
     return [for (final id in ids.take(_limite)) _porId[id]!];
   }
 
-  bool _esDeAqui(Map<String, dynamic> m) => _esSoporte ? m['hilo'] == widget.hilo : m['sala'] == widget.sala;
+  bool _esDeAqui(Map<String, dynamic> m) => m['tarjeta'] == null && (_esSoporte ? m['hilo'] == widget.hilo : m['sala'] == widget.sala);
 
   // Volver a la app y reconectar el canal piden recargar casi a la vez: se hace una sola consulta.
   Future<void>? _cargaEnCurso;
@@ -822,7 +811,8 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
     _reintentoCarga?.cancel();
     try {
       final base = db.from('mensajes').select();
-      final deAqui = _esSoporte ? base.eq('hilo', widget.hilo!) : base.eq('sala', widget.sala);
+      // Las tarjetas viven en el muro: las que todavía mandan apps viejas al chat no se pintan aquí.
+      final deAqui = (_esSoporte ? base.eq('hilo', widget.hilo!) : base.eq('sala', widget.sala)).isFilter('tarjeta', null);
       // Las respuestas de hilos no van en el flujo: se piden aparte con _cargarRespuestas.
       final r = await (_hayHilos ? deAqui.isFilter('responde_a', null) : deAqui).order('id', ascending: false).limit(_limite)
           // Sin esto, una consulta colgada (red que no responde) dejaba la rueda girando para siempre.
@@ -1457,33 +1447,6 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
     }
   }
 
-  Future<void> _compartir() async {
-    final Map<String, dynamic> yo;
-    final Map<String, dynamic>? ultima;
-    try {
-      (yo, ultima) = await (
-        conReintento(() => db.from('profiles').select('cagadas').eq('id', _yo).single()),
-        conReintento(() => db
-            .from('cagadas')
-            .select('id, tipo')
-            .eq('user_id', _yo)
-            .not('tipo', 'is', null)
-            .order('created_at', ascending: false)
-            .limit(1)
-            .maybeSingle()),
-      ).wait;
-    } catch (e) {
-      if (mounted) _aviso(context, textoError(e));
-      return;
-    }
-    final total = (yo['cagadas'] as num?)?.toInt() ?? 0;
-    if (!mounted) return;
-    final logrados = hitos.where((h) => h <= total).toList().reversed;
-    final mios = desbloqueos.where((d) => d.minimo <= total).toList().reversed;
-    final tarjeta = await elegirPresumir(context, ultima: ultima, total: total, hitos: logrados, mios: mios);
-    if (tarjeta != null) await _enviar(tarjeta: tarjeta);
-  }
-
   Future<void> _reportarError() async {
     final que = TextEditingController();
     final enviar = await showDialog<bool>(
@@ -1722,7 +1685,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
         title: Text('📌 ${tr('ANUNCIO', 'ANNOUNCEMENT')} · ${_perfiles[m['user_id']]?['username'] ?? ''}'),
         content: SingleChildScrollView(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            if (tarjeta != null) ...[_Tarjeta(tarjeta), const SizedBox(height: 8)],
+            if (tarjeta != null) ...[TarjetaPegada(tarjeta), const SizedBox(height: 8)],
             if (texto.isNotEmpty) _TextoConLinks(texto),
             const SizedBox(height: 12),
             Text(tr('Fijado hasta el ${hasta.day}/${hasta.month}', 'Pinned until ${hasta.month}/${hasta.day}'), style: numeros(context, tamano: 12, color: paleta(context).textoSuave)),
@@ -1863,9 +1826,8 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
             padding: const EdgeInsets.fromLTRB(4, 6, 8, 6),
             decoration: BoxDecoration(border: Border(top: BorderSide(color: p.borde))),
             child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              if (!_esSoporte && !_esDm)
-                IconButton(onPressed: _enviando ? null : _compartir, icon: const Icon(Icons.emoji_events_outlined), tooltip: tr('Presumir', 'Show off')),
-              if (_esSoporte || _esDm) const SizedBox(width: 8),
+              // Presumir ya no va aquí: el botón 🏆 está en el muro.
+              const SizedBox(width: 8),
               Expanded(
                 child: TextField(
                   controller: _texto,
@@ -2004,7 +1966,7 @@ class _Burbuja extends StatelessWidget {
               Text(_hora(mensaje['created_at']), style: numeros(context, tamano: 10, color: p.textoSuave)),
             ]),
             const SizedBox(height: 6),
-            _Tarjeta(tarjeta),
+            TarjetaPegada(tarjeta),
             if (cuerpo.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: _TextoConLinks(cuerpo)),
             if (oculto) etiquetaOculto,
             ?pie,
@@ -2380,29 +2342,6 @@ class _PantallaHiloState extends State<_PantallaHilo> with ConTecladoEmojis {
           )),
         ),
       ])),
-    );
-  }
-}
-
-class _Tarjeta extends StatelessWidget {
-  const _Tarjeta(this.t);
-
-  final Map<String, dynamic> t;
-
-  @override
-  Widget build(BuildContext context) {
-    if (t['tipo'] == 'reto' || t['tipo'] == 'reto_fin') return TarjetaReto(id: t['id'] as int, compacta: true);
-    if (t['tipo'] == 'cartera') return TarjetaCartera(t);
-    if (t['tipo'] == 'bano') return TarjetaBano(t);
-    if (t['tipo'] == 'regalo') return TarjetaRegalo(t);
-    if (t['tipo'] == 'imperio') return TarjetaImperio(t);
-    if (t['tipo'] == 'cloaca') return TarjetaCloaca(t);
-    final propia = tarjetaPresumir(t);
-    if (propia != null) return propia;
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(border: Border.all(color: acento, width: 2), borderRadius: BorderRadius.circular(radio)),
-      child: const Emoji('💩', tamano: 40),
     );
   }
 }

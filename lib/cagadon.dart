@@ -364,9 +364,12 @@ class _BotonCobrarState extends State<_BotonCobrar> with SingleTickerProviderSta
 }
 
 class _Invitacion extends StatefulWidget {
-  const _Invitacion(this.reto);
+  const _Invitacion(this.reto, {this.alResponder});
 
   final Map<String, dynamic> reto;
+
+  /// La tarjeta del muro se recarga al responder (en inicio lo hace realtime).
+  final VoidCallback? alResponder;
 
   @override
   State<_Invitacion> createState() => _InvitacionState();
@@ -402,6 +405,7 @@ class _InvitacionState extends State<_Invitacion> {
     try {
       await db.rpc('responder_reto', params: {'rid': widget.reto['id'], 'accion': accion});
       if (mounted && accion == 'aceptar') _aviso(context, tr('¡Que empiece el Cagadón! 💩', 'Let the Poop-Off begin! 💩'));
+      widget.alResponder?.call();
     } catch (e) {
       if (mounted) _aviso(context, textoError(e));
     } finally {
@@ -420,6 +424,7 @@ class _InvitacionState extends State<_Invitacion> {
       final cuenta = res != null && apuesta <= res.tope ? res.cuenta(apuesta) : null;
       await db.rpc('aceptar_reto_apuesta', params: {'rid': widget.reto['id'], 'p_apuesta': cuenta == null ? 0 : apuesta, 'p_fraccion': cuenta?.fraccion ?? 0});
       if (cuenta != null) await pagarApuesta(reto: (widget.reto['id'] as num).toInt(), min: apuesta, fraccion: cuenta.fraccion, rol: 'acepta');
+      widget.alResponder?.call();
       if (mounted) {
         _aviso(
             context,
@@ -485,11 +490,14 @@ class _InvitacionState extends State<_Invitacion> {
 }
 
 /// Marcador de un Cagadón aceptado o terminado. Sirve en inicio y en el chat; se refresca solo.
+/// Con [muro] es la tarjeta del muro: muestra el reto en cualquier estado (pendiente con sus botones solo para el
+/// retado o el que retó, rajado, vencido) y la misma tarjeta pasa a marcador en vivo y a resultado.
 class TarjetaReto extends StatefulWidget {
-  const TarjetaReto({super.key, required this.id, this.compacta = false});
+  const TarjetaReto({super.key, required this.id, this.compacta = false, this.muro = false});
 
   final int id;
   final bool compacta;
+  final bool muro;
 
   @override
   State<TarjetaReto> createState() => _TarjetaRetoState();
@@ -506,6 +514,9 @@ class _TarjetaRetoState extends State<TarjetaReto> {
 
   /// La primera carga falló (sin red o sin el reto): se ofrece reintentar.
   bool _falla = false;
+
+  /// Reto pendiente de hoy en el que estoy (solo en el muro): se muestra la invitación con sus botones.
+  Map<String, dynamic>? _invitacion;
 
   /// Marca de "la apuesta no se pudo pedir": se deja la que había y se vuelve a pedir la próxima vez.
   static const Object _sinApuesta = Object();
@@ -525,12 +536,18 @@ class _TarjetaRetoState extends State<TarjetaReto> {
 
   Future<void> _cargar() async {
     try {
-      final filas = await conReintento(() => db.rpc('reto_publico', params: {'rid': widget.id})) as List;
+      final filas = await conReintento(() => db.rpc(widget.muro ? 'reto_muro' : 'reto_publico', params: {'rid': widget.id})) as List;
       if (filas.isEmpty) {
         if (mounted) setState(() => _falla = true);
         return;
       }
       final r = filas.first as Map<String, dynamic>;
+      // Pendiente y de hoy con uno de los dos mirando: la fila completa (trae la apuesta) para la invitación.
+      final yo = db.auth.currentUser?.id;
+      Map<String, dynamic>? invitacion;
+      if (r['estado'] == 'pendiente' && r['dia'] == _hoyCaracas() && (yo == r['retador'] || yo == r['retado'])) {
+        invitacion = await conReintento(() => db.from('retos').select().eq('id', widget.id).maybeSingle());
+      }
       // Perfiles y apuesta no dependen uno del otro: van a la vez.
       // La apuesta solo cambia con el estado del reto (o al cobrar): no se pide en cada cagada.
       final pedirApuesta = _estadoApuesta != r['estado'];
@@ -548,6 +565,7 @@ class _TarjetaRetoState extends State<TarjetaReto> {
       if (mounted) {
         setState(() {
           _r = r;
+          _invitacion = invitacion;
           _falla = false;
         });
       }
@@ -560,6 +578,39 @@ class _TarjetaRetoState extends State<TarjetaReto> {
   Future<void> _recargarApuesta() async {
     _estadoApuesta = null;
     await _cargar();
+  }
+
+  /// Reto sin marcador (muro): pendiente visto por otros, rajado, vencido o cancelado. Solo lectura.
+  Widget _sinMarcador(BuildContext context, Map<String, dynamic> r) {
+    final p = paleta(context);
+    final retador = _perfiles[r['retador']], retado = _perfiles[r['retado']];
+    final de = retador?['username'] ?? '…', a = retado?['username'] ?? '…';
+    final estado = r['estado'];
+    final texto = switch (estado) {
+      'pendiente' when r['dia'] == _hoyCaracas() => tr('⏳ Esperando a que $a acepte', '⏳ Waiting for $a to accept'),
+      'rechazado' => tr('🐔 $a se rajó', '🐔 $a chickened out'),
+      'cancelado' => tr('🚫 $de canceló el Cagadón', '🚫 $de called off the Poop-Off'),
+      _ => tr('⌛ $a no respondió a tiempo', "⌛ $a didn't answer in time"),
+    };
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: acento, width: 2), borderRadius: BorderRadius.circular(radio)),
+      child: Column(children: [
+        TextoConEmojis(tr('⚔️ $de retó a $a a un Cagadón', '⚔️ $de challenged $a to a Poop-Off'),
+            textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w900)),
+        const SizedBox(height: 8),
+        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          if (retador != null) Avatar(retador, tamano: 30),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text('VS', style: TextStyle(fontWeight: FontWeight.w900, color: p.textoSuave)),
+          ),
+          if (retado != null) Avatar(retado, tamano: 30),
+        ]),
+        const SizedBox(height: 8),
+        TextoConEmojis(texto, textAlign: TextAlign.center, style: TextStyle(color: p.textoSuave, fontSize: 13)),
+      ]),
+    );
   }
 
   @override
@@ -581,6 +632,9 @@ class _TarjetaRetoState extends State<TarjetaReto> {
         ),
       );
     }
+    final invitacion = _invitacion;
+    if (invitacion != null) return _Invitacion(invitacion, alResponder: _cargar);
+    if (r['a'] == null || r['b'] == null) return _sinMarcador(context, r);
     final fin = r['estado'] == 'terminado';
     final a = r['a'] as int, b = r['b'] as int;
     final ganador = r['ganador'];

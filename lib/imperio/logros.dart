@@ -59,7 +59,7 @@ class PantallaLogrosImperio extends StatelessWidget {
   }
 }
 
-/// Pregunta si presume el logro [id] del Imperio y, si sí, lo manda a la sala general como tarjeta
+/// Pregunta si presume el logro [id] del Imperio y, si sí, lo pega en el muro como tarjeta
 /// `{'tipo': 'logro_imperio', 'id': id}`. El servidor revisa que el logro esté en tu partida guardada.
 /// [guardar] sube la partida antes de publicar: un logro recién ganado todavía no está en la nube.
 /// Si el servidor aún no lo ve (había otro guardado en curso), guarda de nuevo y reintenta.
@@ -67,8 +67,7 @@ Future<void> presumirLogroImperio(BuildContext context, String id, {Future<void>
   final presumir = await preguntarLogroImperio(context, id);
   if (presumir != true || !context.mounted || !await aceptoReglas(context)) return;
   bool sinLogro(Object e) => e is PostgrestException && e.message == _sinLogro;
-  Future<void> publicar() => db.from('mensajes').insert({
-        'sala': 'global',
+  Future<void> publicar() => db.from('muro').insert({
         'tarjeta': {'tipo': 'logro_imperio', 'id': id},
       });
   try {

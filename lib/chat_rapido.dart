@@ -64,10 +64,12 @@ class _ChatRapidoState extends State<ChatRapido> {
     });
   }
 
-  // Sin respuestas de hilos ni ocultos de otros: lo mismo que se ve abajo del todo en el chat.
+  // Sin respuestas de hilos, tarjetas (viven en el muro) ni ocultos de otros: lo mismo que se ve abajo del todo en el chat.
   void _alLlegar(List<Map<String, dynamic>> filas) {
     if (!mounted) return;
-    _servidor = filas.where((m) => m['responde_a'] == null && (m['oculto'] != true || m['user_id'] == _yo)).toList();
+    _servidor = filas
+        .where((m) => m['responde_a'] == null && m['tarjeta'] == null && (m['oculto'] != true || m['user_id'] == _yo))
+        .toList();
     setState(() {
       _armar();
       _cargado = true;
