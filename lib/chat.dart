@@ -208,6 +208,25 @@ void _aviso(BuildContext context, String texto) => ScaffoldMessenger.of(context)
   ..hideCurrentSnackBar()
   ..showSnackBar(SnackBar(content: Text(texto)));
 
+/// Hoja con el motivo de un reporte (chat y muro). Devuelve el texto en español, que es lo que guarda la base.
+Future<String?> elegirMotivoReporte(BuildContext context) => showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          // El primero es lo que se guarda en la base de datos; el segundo, lo que se ve en inglés.
+          for (final (mo, moEn) in const [
+            ('Odio o insultos', 'Hate or insults'),
+            ('Acoso', 'Harassment'),
+            ('Contenido sexual', 'Sexual content'),
+            ('Spam o estafa', 'Spam or scam'),
+            ('Datos personales', 'Personal info'),
+            ('Otro', 'Other'),
+          ])
+            ListTile(title: Text(tr(mo, moEn)), onTap: () => Navigator.pop(context, mo)),
+        ]),
+      ),
+    );
+
 /// Pestaña del medio (nombre al azar): la sala general, la de cada idioma (primero la tuya), los
 /// amigos y, desde el botón de arriba, el soporte con los admins.
 class PantallaChat extends StatefulWidget {
@@ -291,6 +310,8 @@ class _PantallaChatState extends State<PantallaChat> {
   void _irA() {
     final destino = irA.value;
     if (destino == null || destino.bano || !mounted) return;
+    // Una lista vieja que se está cerrando (el popUntil de abajo) no abre nada: la nueva sí.
+    if (ModalRoute.of(context)?.isActive == false) return;
     destino.bano = true;
     switch (destino.a) {
       case 'soporte':
@@ -1537,23 +1558,7 @@ class _SalaState extends State<Sala> with AutomaticKeepAliveClientMixin, ConTecl
           _texto.selection = TextSelection.collapsed(offset: _texto.text.length);
           _mencionar(_amigos.firstWhere((a) => a['id'] == m['user_id']));
         case 'reportar':
-          final motivo = await showModalBottomSheet<String>(
-            context: context,
-            builder: (context) => SafeArea(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                // El primero es lo que se guarda en la base de datos; el segundo, lo que se ve en inglés.
-                for (final (mo, moEn) in const [
-                  ('Odio o insultos', 'Hate or insults'),
-                  ('Acoso', 'Harassment'),
-                  ('Contenido sexual', 'Sexual content'),
-                  ('Spam o estafa', 'Spam or scam'),
-                  ('Datos personales', 'Personal info'),
-                  ('Otro', 'Other'),
-                ])
-                  ListTile(title: Text(tr(mo, moEn)), onTap: () => Navigator.pop(context, mo)),
-              ]),
-            ),
-          );
+          final motivo = await elegirMotivoReporte(context);
           if (motivo == null) return;
           await db.from('mensaje_reportes').insert({'mensaje_id': m['id'], 'motivo': motivo});
           if (mounted) _aviso(context, tr('Reportado. Gracias 🙏', 'Reported. Thanks 🙏'));

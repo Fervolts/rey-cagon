@@ -17,7 +17,8 @@ import 'tema.dart';
 // Edge Function), más los anuncios de los admins (public.anuncios, iguales para todos).
 
 /// A dónde mandar a la persona: un toque en un push o en un aviso. Cada pantalla que sabe
-/// llegar ahí marca su parte como hecha (la de abajo cambia de pestaña, el baño elige su pestaña).
+/// llegar ahí marca su parte como hecha (la de abajo cambia de pestaña, el muro del baño abre la lista
+/// de chats y esa lista elige su sala).
 class Ir {
   Ir(this.a, {this.hilo, this.periodo, this.usuario});
 
@@ -34,7 +35,7 @@ class Ir {
 
   /// Perfil a abrir encima (RAMPAGE / HEXAKILL de un amigo), si la pantalla de destino sabe hacerlo.
   final String? usuario;
-  bool inicio = false, bano = false, enHilo = false, ranking = false;
+  bool inicio = false, muro = false, bano = false, enHilo = false, ranking = false;
 }
 
 final irA = ValueNotifier<Ir?>(null);

@@ -27,6 +27,7 @@ import 'idioma.dart';
 import 'inodoro.dart';
 import 'invitar_play.dart';
 import 'logros.dart' show ganarLogro;
+import 'muro.dart';
 import 'config.dart';
 import 'novedades.dart';
 import 'nuclear.dart';
@@ -565,7 +566,7 @@ class _PantallaInicioState extends State<PantallaInicio> {
             PantallaRanking(trono: true, onVerRanking: () => setState(() => _tab = 1)),
             const PantallaRanking(),
             PantallaImperio(activo: _tab == 2),
-            const PantallaChat(),
+            const PantallaMuro(),
             PantallaPerfil(usuarioId: yo),
           ].indexed)
             TickerMode(enabled: _tab == i, child: hijo),
