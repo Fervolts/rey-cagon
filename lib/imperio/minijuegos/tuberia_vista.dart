@@ -48,6 +48,14 @@ Future<ui.Image> _imagen(String nombre) => _cargas[nombre] ??= () async {
       }
     }();
 
+/// La llama el marco durante la instrucción: así el juego no decodifica PNG ni crea sonidos en sus primeros cuadros.
+void precargarTuberia() {
+  for (final n in _VistaTuberiaState._imagenes) {
+    _imagen(n).ignore();
+  }
+  unawaited(Sonido.precargar(_sonidos));
+}
+
 class VistaTuberia extends StatefulWidget {
   const VistaTuberia({super.key, required this.alTerminar, this.mov = Movimiento.completo, this.juego});
   final AlTerminarJuego alTerminar;

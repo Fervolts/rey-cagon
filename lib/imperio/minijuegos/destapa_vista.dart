@@ -35,6 +35,14 @@ Future<ui.Image> _imagen(String nombre) => _cargas[nombre] ??= () async {
       }
     }();
 
+/// La llama el marco durante la instrucción: así el juego no decodifica PNG ni crea sonidos en sus primeros cuadros.
+void precargarDestapa() {
+  for (final n in _VistaDestapaState._archivos) {
+    _imagen(n).ignore();
+  }
+  unawaited(Sonido.precargar(_VistaDestapaState._sonidos));
+}
+
 class VistaDestapa extends StatefulWidget {
   const VistaDestapa({super.key, required this.alTerminar, this.mov = Movimiento.completo, this.juego});
 

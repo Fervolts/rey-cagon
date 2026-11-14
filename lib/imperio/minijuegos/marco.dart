@@ -98,6 +98,17 @@ class _PantallaMinijuegoState extends State<PantallaMinijuego> {
   double _mj = 0;
   int _puntos = 0;
   bool _guardando = false;
+  ControlImperio? _tapado; // a quién se le dijo que se está jugando, para soltarlo una sola vez
+
+  /// Mientras se juega, el Imperio de abajo no avisa ni guarda (ver ControlImperio.jugandoMinijuego).
+  void _tapar(bool si) {
+    if (si && _tapado == null) {
+      _tapado = _c?..jugandoMinijuego(true);
+    } else if (!si && _tapado != null) {
+      _tapado!.jugandoMinijuego(false);
+      _tapado = null;
+    }
+  }
 
   ControlImperio? get _c => widget.control ?? ControlImperio.vivo;
   DatosJuego get _d => juegosAbiertosDatos[widget.juego]!;
@@ -106,10 +117,19 @@ class _PantallaMinijuegoState extends State<PantallaMinijuego> {
   void initState() {
     super.initState();
     unawaited(Sonido.leerPreferencia());
+    switch (widget.juego) {
+      case 'tuberia':
+        precargarTuberia();
+      case 'destapa':
+        precargarDestapa();
+      default:
+        precargarMemoria();
+    }
   }
 
   @override
   void dispose() {
+    _tapar(false);
     Diagnostico.instancia.partidaTermina();
     unawaited(Sonido.soltarTodo());
     super.dispose();
@@ -118,6 +138,7 @@ class _PantallaMinijuegoState extends State<PantallaMinijuego> {
   void _jugar() {
     Telemetria.instancia.registrar('minijuego_inicia', {'juego': widget.juego, 'liviano': telefonoLiviano});
     Diagnostico.instancia.partidaEmpieza(widget.juego);
+    _tapar(true);
     setState(() {
       _fase = _Fase.jugando;
       _res = null;
@@ -128,6 +149,7 @@ class _PantallaMinijuegoState extends State<PantallaMinijuego> {
 
   Future<void> _fin(int puntos, int ms) async {
     if (_fase == _Fase.fin) return;
+    _tapar(false);
     Diagnostico.instancia.partidaTermina();
     unawaited(Sonido.pararMusica());
     setState(() {

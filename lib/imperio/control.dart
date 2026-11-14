@@ -203,6 +203,7 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _bucle;
   final Stopwatch _reloj = Stopwatch();
   int _ultimoAviso = 0;
+  int _minijuegosJugando = 0;
   double _desdeLocal = 0, _desdeNube = 0;
 
   /// Un guardado en la nube falló: se repite al volver al frente o con el reintento.
@@ -860,10 +861,20 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     _sesion?.sumarTiempo(dt);
     _desdeLocal += dt;
     _desdeNube += dt;
+    // Con un minijuego encima no se avisa ni se guarda: los contadores siguen y todo sale en el primer tick al volver.
+    if (_minijuegosJugando > 0) return;
     if (_desdeLocal >= 10) unawaited(_guardarLocal());
     if (_desdeNube >= 60) unawaited(_guardarNube());
     _ultimoAviso = DateTime.now().millisecondsSinceEpoch;
     notifyListeners();
+  }
+
+  /// Un minijuego empieza (true) o termina (false) de jugarse encima del Imperio. El tick sigue igual (la producción no
+  /// cambia), pero mientras se juega no avisa ni guarda: cada aviso reconstruía Imperio y Sala detrás del juego 10 veces
+  /// por segundo (con vibración si salía un atasco) y cada guardado es un jsonEncode en el mismo hilo que pinta el juego.
+  void jugandoMinijuego(bool jugando) {
+    _minijuegosJugando = max(0, _minijuegosJugando + (jugando ? 1 : -1));
+    if (!jugando && _minijuegosJugando == 0 && !_cerrado) notifyListeners();
   }
 
   /// Avisa a la pantalla como mucho 10 veces por segundo; si el bucle corre, él avisa en el próximo tick.

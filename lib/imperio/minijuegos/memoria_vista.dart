@@ -44,6 +44,14 @@ const _efectos = [
   'perdiste', 'viento', 'boton', 'pujo', 'burbuja',
 ];
 
+/// La llama el marco durante la instrucción: así el juego no decodifica PNG ni crea sonidos en sus primeros cuadros.
+void precargarMemoria() {
+  for (final clave in archivosFusion.keys) {
+    imagenFusion(clave).ignore();
+  }
+  unawaited(Sonido.precargar(_efectos));
+}
+
 /// Color del aviso de peligro y del reloj al final.
 const _rojo = Color(0xFFE5484D);
 
