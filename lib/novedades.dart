@@ -21,6 +21,12 @@ class VersionNovedades {
 
 /// El historial público, de la más nueva a la más vieja. Al sacar una versión nueva se agrega arriba.
 const historialNovedades = <VersionNovedades>[
+  VersionNovedades('2.20.0', '2026-11-14', [
+    ('🚽', 'El Baño ahora tiene pared: publica lo que quieras con un dibujo hecho con el dedo, dale 💩 a lo que te guste y comenta. Puedes ver todos o solo tus amigos.',
+        'The Bathroom now has a wall: post whatever you want with a finger drawing, give 💩 to what you like and comment. See everyone or just your friends.'),
+    ('🧻', 'Los chats siguen ahí mismo: están en el botón de arriba a la derecha del Baño.',
+        'Chats are still there: they are behind the top right button in the Bathroom.'),
+  ]),
   VersionNovedades('2.19.4', '2026-11-13', [
     ('📶', 'Con internet lento la app va mucho mejor: el chat muestra tu mensaje al toque y no se repite, el botón CAGUÉ responde enseguida y las pantallas ya no recargan de más.',
         'The app works much better on slow internet: chat shows your message right away without duplicates, the CAGUÉ button responds instantly and screens no longer reload for nothing.'),
