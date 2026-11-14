@@ -1,0 +1,96 @@
+import '../idioma.dart';
+
+/// Texto de una misión diaria. La clave y la meta vienen de `misiones_hoy()`
+/// (catálogo en `public.misiones_catalogo`, migración 20261118120000_cartas_misiones.sql).
+String textoMision(String clave, int meta) {
+  final m = meta;
+  return switch (clave) {
+    // Cagar. Las horas son del teléfono (zona del jugador).
+    'cagar_temprano' => tr('Caga antes de las 9:00', 'Poop before 9:00'),
+    'cagar_almuerzo' => tr('Caga entre las 12:00 y las 13:59', 'Poop between 12:00 and 13:59'),
+    'cagar_tarde' => tr('Caga entre las 15:00 y las 17:59', 'Poop between 15:00 and 17:59'),
+    'cagar_noche' => tr('Caga después de las 22:00', 'Poop after 22:00'),
+    'cagar_madrugada' => tr('Caga antes de las 6:00', 'Poop before 6:00'),
+    'cagar_veces' => tr('Caga $m veces hoy', 'Poop $m times today'),
+    'cagar_en_punto' => tr('Caga en punto (minuto 00)', 'Poop on the hour (minute 00)'),
+    'cagar_espejo' => tr('Caga a una hora espejo (14:14)', 'Poop at a mirror time (14:14)'),
+    'cagar_capicua' => tr('Caga a una hora capicúa (12:21)', 'Poop at a palindrome time (12:21)'),
+    'cagar_separadas' => tr('Caga 2 veces con 6 horas o más entre ellas', 'Poop twice, 6 hours or more apart'),
+    'cagar_tres_turnos' => tr('Caga en la mañana, la tarde y la noche', 'Poop in the morning, afternoon and night'),
+    'cagar_anotada' => tr('Anota tipo y peso en $m cagadas', 'Log type and weight on $m poops'),
+    'sacar_anaconda' => tr('Saca una anaconda', 'Drop an anaconda'),
+    'sacar_volcan' => tr('Saca un volcán', 'Drop a volcano'),
+    'sacar_ballena' => tr('Saca una ballena', 'Drop a whale'),
+    'sacar_pluma' => tr('Saca una pluma', 'Drop a feather'),
+    'sacar_variado' => tr('Saca $m tipos distintos hoy', 'Drop $m different types today'),
+    'placer_maximo' => tr('Una cagada con placer al máximo', 'One poop with max pleasure'),
+    'placer_etiquetas' => tr('Una cagada con 2 etiquetas o más', 'One poop with 2 tags or more'),
+    // Social.
+    'muro_publicar' => tr('Publica en el muro', 'Post on the wall'),
+    'muro_dibujo' => tr('Publica un dibujo en el muro', 'Post a drawing on the wall'),
+    'dar_caca' => tr('Da $m 💩 a otros', 'Give $m 💩 to others'),
+    'muro_comentar' => m == 1
+        ? tr('Comenta un post de otro', "Comment on someone else's post")
+        : tr('Comenta $m posts de otros', "Comment on $m other people's posts"),
+    'chat_escribir' => m == 1 ? tr('Escribe en el chat', 'Write in the chat') : tr('Escribe $m mensajes en el chat', 'Write $m chat messages'),
+    'chat_responder' => tr('Responde un mensaje en el chat', 'Reply to a chat message'),
+    'chat_privado' => tr('Escribe en un chat privado', 'Write in a private chat'),
+    'reaccionar' => tr('Reacciona a $m mensajes de otros', "React to $m other people's messages"),
+    'seguir' => tr('Sigue a alguien', 'Follow someone'),
+    'retar' => tr('Reta a alguien al Cagadón', 'Challenge someone to a Poop-off'),
+    // Imperio.
+    'pujar' => tr('Puja $m veces en el Imperio', 'Push $m times in the Empire'),
+    'jalar' => tr('Jala la cadena', 'Pull the chain'),
+    'comprar' => tr('Compra $m cagadores', 'Buy $m poopers'),
+    'ganar_mj' => tr('Junta $m minutos de producción', 'Earn $m minutes of production'),
+    'jugar_tuberia' => tr('Juega Tubería Express', 'Play Pipe Express'),
+    'jugar_destapa' => tr('Juega Destapa', 'Play Unclog'),
+    'jugar_fusion' => tr('Juega Fusión real', 'Play Royal Fusion'),
+    'jugar_partidas' => tr('Juega $m partidas en la Sala', 'Play $m games in the Arcade'),
+    'jugar_los_tres' => tr('Juega los 3 juegos de la Sala', 'Play all 3 Arcade games'),
+    'puntos_tuberia' => tr('Haz $m puntos en Tubería Express', 'Score $m in Pipe Express'),
+    'puntos_destapa' => tr('Haz $m puntos en Destapa', 'Score $m in Unclog'),
+    'puntos_fusion' => tr('Haz $m puntos en Fusión real', 'Score $m in Royal Fusion'),
+    _ => tr('Misión del día ($m)', 'Daily mission ($m)'),
+  };
+}
+
+/// Emoji de una misión (todos tienen PNG en assets/emoji/).
+String emojiMision(String clave) => switch (clave) {
+      'cagar_temprano' => '🌅',
+      'cagar_almuerzo' => '☀️',
+      'cagar_tarde' => '☕',
+      'cagar_noche' => '🌙',
+      'cagar_madrugada' => '🦖',
+      'cagar_veces' => '🚽',
+      'cagar_en_punto' || 'cagar_espejo' || 'cagar_capicua' => '⏰',
+      'cagar_separadas' || 'cagar_tres_turnos' => '🗓️',
+      'cagar_anotada' => '📰',
+      'sacar_anaconda' => '🐍',
+      'sacar_volcan' => '🌋',
+      'sacar_ballena' => '🐋',
+      'sacar_pluma' => '🪶',
+      'sacar_variado' => '🌀',
+      'placer_maximo' => '✨',
+      'placer_etiquetas' => '🔑',
+      'muro_publicar' => '🧱',
+      'muro_dibujo' => '🎨',
+      'dar_caca' => '💩',
+      'muro_comentar' => '👀',
+      'chat_escribir' => '📱',
+      'chat_responder' => '🙌',
+      'chat_privado' => '💌',
+      'reaccionar' => '🔥',
+      'seguir' => '👀',
+      'retar' => '⚔️',
+      'pujar' => '👆',
+      'jalar' => '⛓️',
+      'comprar' => '👷',
+      'ganar_mj' => '💰',
+      'jugar_tuberia' => '🚰',
+      'jugar_destapa' => '🪠',
+      'jugar_fusion' => '👑',
+      'jugar_partidas' || 'jugar_los_tres' => '🕹️',
+      'puntos_tuberia' || 'puntos_destapa' || 'puntos_fusion' => '🏆',
+      _ => '💩',
+    };

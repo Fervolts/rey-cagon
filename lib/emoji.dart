@@ -179,10 +179,60 @@ const _archivos = {
   '📯': 'postal_horn',
   '🍷': 'wine_glass',
   '💌': 'love_letter',
+  // Cartas (lib/cartas/catalogo.dart).
+  '🫘': 'beans',
+  '🥦': 'broccoli',
+  '🌮': 'taco',
+  '🍕': 'pizza',
+  '🍔': 'hamburger',
+  '🌭': 'hot_dog',
+  '🧀': 'cheese_wedge',
+  '🐌': 'snail',
+  '🐢': 'turtle',
+  '🧼': 'soap',
+  '🪥': 'toothbrush',
+  '📰': 'newspaper',
+  '🪑': 'chair',
+  '🚪': 'door',
+  '🚌': 'bus',
+  '🚗': 'automobile',
+  '🌧️': 'cloud_with_rain',
+  '☀️': 'sun',
+  '🌯': 'burrito',
+  '✈️': 'airplane',
+  '💻': 'laptop',
+  '⛺': 'tent',
+  '🏖️': 'beach_with_umbrella',
+  '🎢': 'roller_coaster',
+  '⚡': 'high_voltage',
+  '🧯': 'fire_extinguisher',
+  '🌊': 'water_wave',
+  '🥶': 'cold_face',
+  '🧙': 'person_mage',
+  '🧛': 'person_vampire',
+  '🧟': 'person_zombie',
+  '🥷': 'ninja',
+  '🏴‍☠️': 'pirate_flag',
+  '🚀': 'rocket',
+  '🐙': 'octopus',
+  '🦈': 'shark',
+  '🌪️': 'tornado',
+  '⛈️': 'cloud_with_lightning_and_rain',
+  '🧞': 'person_genie',
+  '🔮': 'crystal_ball',
+  '🐦‍🔥': 'phoenix_bird',
+  '🔱': 'trident_emblem',
+  '♾️': 'infinity',
 };
 
 // Las mismas claves sin FE0F, para encontrar '🌶' igual que '🌶️'.
 final _sinVariacion = {for (final e in _archivos.entries) e.key.replaceAll('\u{FE0F}', ''): e.value};
+
+// El teclado a veces manda el selector de variación (FE0F) y a veces no: vale igual.
+String? _archivoDe(String emoji) => _archivos[emoji] ?? _sinVariacion[emoji.replaceAll('\u{FE0F}', '')];
+
+/// Si [emoji] tiene PNG propio en `assets/emoji/`.
+bool tieneEmoji(String emoji) => _archivoDe(emoji) != null;
 
 /// Emoji como imagen de [tamano] px. Si no está en el set, usa el emoji del sistema.
 class Emoji extends StatelessWidget {
@@ -193,8 +243,7 @@ class Emoji extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // El teclado a veces manda el selector de variación (FE0F) y a veces no: vale igual.
-    final archivo = _archivos[emoji] ?? _sinVariacion[emoji.replaceAll('\u{FE0F}', '')];
+    final archivo = _archivoDe(emoji);
     if (archivo == null) {
       return SizedBox(
         width: tamano,
