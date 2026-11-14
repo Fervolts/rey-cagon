@@ -34,7 +34,8 @@ import 'nuclear.dart';
 import 'onboarding.dart';
 import 'parte.dart';
 import 'perfil.dart';
-import 'privados.dart' show privadosSinLeer, revisarPrivados;
+import 'chat_sin_leer.dart' show chatSinLeer;
+import 'privados.dart' show revisarPrivados;
 import 'periodos.dart';
 import 'placer.dart';
 import 'racha.dart';
@@ -430,24 +431,11 @@ class _PantallaInicioState extends State<PantallaInicio> {
   static const _tabBano = 3;
   int _tab = 0;
 
-  // Puntito en la pestaña del baño: hay mensajes de otros desde la última vez que entraste.
-  final _subs = <VoidCallback>[];
-  // La general y la de tu idioma; los ids son de una sola secuencia, así que se comparan directo.
-  int _ultimoGeneral = 0, _ultimoIdioma = 0, _vistoBano = 0, _ultimoSoporte = 0, _vistoSoporte = 0;
-
-  int get _ultimoBano => max(_ultimoGeneral, _ultimoIdioma);
-
   late final VoidCallback _soltarAvisos;
   // HEXA POOP de otros: se revisa al abrir y al volver a la app (lib/nuclear.dart).
   late final AppLifecycleListener _cicloHexa;
 
   String get _yo => db.auth.currentUser!.id;
-  // El puntito del baño también se prende con un privado sin leer (lib/privados.dart).
-  bool get _hayNuevo => _ultimoBano > _vistoBano || _ultimoSoporte > _vistoSoporte || privadosSinLeer.value;
-
-  void _alCambiarPrivados() {
-    if (mounted) setState(() {});
-  }
 
   @override
   void initState() {
@@ -464,7 +452,8 @@ class _PantallaInicioState extends State<PantallaInicio> {
     revisarHazanas(context);
     // Cagada fresca (x2 en el Imperio): se lee al abrir y al volver (pudo cagar desde el widget).
     cargarFresca();
-    privadosSinLeer.addListener(_alCambiarPrivados);
+    // Puntito del baño: lo sin leer de general, soporte y privados (lib/chat_sin_leer.dart).
+    chatSinLeer.iniciar(_yo);
     revisarPrivados();
     _cicloHexa = AppLifecycleListener(onResume: () {
       revisarHazanas(context);
@@ -476,26 +465,7 @@ class _PantallaInicioState extends State<PantallaInicio> {
       await esperarExplosion();
       if (mounted) mostrarAnuncioNuevo(context);
     });
-    SharedPreferences.getInstance().then((prefs) {
-      if (!mounted) return;
-      setState(() {
-        _vistoBano = prefs.getInt('bano_visto') ?? 0;
-        _vistoSoporte = prefs.getInt('soporte_visto') ?? 0;
-      });
-      _subs
-        ..add(_escucharUltimo('sala', 'global', (id) => _ultimoGeneral = id))
-        ..add(_escucharUltimo('sala', idioma.value, (id) => _ultimoIdioma = id))
-        ..add(_escucharUltimo('hilo', _yo, (id) => _ultimoSoporte = id));
-    });
   }
-
-  // El último mensaje de otra persona en esa sala; los propios cuentan como vistos.
-  VoidCallback _escucharUltimo(String columna, String valor, void Function(int) poner) => ultimosDeSala(valor, 1, (filas) {
-        if (filas.isEmpty || !mounted) return;
-        final m = filas.first;
-        setState(() => poner(m['id'] as int));
-        if (m['user_id'] == _yo || _tab == _tabBano) _marcarVisto();
-      }, columna: columna);
 
   // Un toque en un push o en un aviso: cambiar de pestaña (el baño elige después su sub-pestaña).
   void _irA() {
@@ -513,7 +483,6 @@ class _PantallaInicioState extends State<PantallaInicio> {
           _ => _tabBano,
         });
     if (cloaca != null) abrirCloaca(context, vista: cloaca);
-    if (_tab == _tabBano) _marcarVisto();
     if (destino.a == 'avisos') {
       Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaAvisos()));
       // RAMPAGE / HEXAKILL de un amigo: su perfil encima de los avisos.
@@ -522,25 +491,12 @@ class _PantallaInicioState extends State<PantallaInicio> {
     }
   }
 
-  Future<void> _marcarVisto() async {
-    setState(() {
-      _vistoBano = _ultimoBano;
-      _vistoSoporte = _ultimoSoporte;
-    });
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('bano_visto', _vistoBano);
-    await prefs.setInt('soporte_visto', _vistoSoporte);
-  }
-
   @override
   void dispose() {
     _soltarAvisos();
     _cicloHexa.dispose();
-    privadosSinLeer.removeListener(_alCambiarPrivados);
     irA.removeListener(_irA);
-    for (final soltar in _subs) {
-      soltar();
-    }
+    chatSinLeer.soltar();
     super.dispose();
   }
 
@@ -551,11 +507,14 @@ class _PantallaInicioState extends State<PantallaInicio> {
     // Cinco pestañas en cualquier ancho: la letra se achica para que "LEADERBOARD" no salte de línea,
     // y la barra ignora el tamaño de letra del sistema por encima de 1.0.
     final tam = ((mq.size.width / 5 - 10) / 7.2).clamp(7.5, 11.0);
-    Widget icono(IconData i) => Badge(
-          isLabelVisible: _hayNuevo,
-          smallSize: 9,
-          backgroundColor: const Color(0xFFE5484D),
-          child: Icon(i),
+    Widget icono(IconData i) => ListenableBuilder(
+          listenable: chatSinLeer,
+          builder: (context, _) => Badge(
+            isLabelVisible: chatSinLeer.hayNuevo,
+            smallSize: 9,
+            backgroundColor: const Color(0xFFE5484D),
+            child: Icon(i),
+          ),
         );
     return Scaffold(
       body: IndexedStack(
@@ -590,10 +549,7 @@ class _PantallaInicioState extends State<PantallaInicio> {
               ),
               child: NavigationBar(
                 selectedIndex: _tab,
-                onDestinationSelected: (i) {
-                  setState(() => _tab = i);
-                  if (i == _tabBano) _marcarVisto();
-                },
+                onDestinationSelected: (i) => setState(() => _tab = i),
                 destinations: [
                   NavigationDestination(icon: IconoRebota(activo: _tab == 0, child: const Emoji('💩', tamano: 24)), label: tr('TRONO', 'THRONE')),
                   NavigationDestination(icon: IconoRebota(activo: _tab == 1, child: Icon(_tab == 1 ? Icons.emoji_events : Icons.emoji_events_outlined)), label: tr('RANKING', 'LEADERBOARD')),

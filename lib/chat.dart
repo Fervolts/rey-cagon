@@ -14,6 +14,7 @@ import 'amigos.dart';
 import 'animaciones.dart';
 import 'avisos.dart';
 import 'cagadon.dart' show TarjetaReto;
+import 'chat_sin_leer.dart' show ChatCual, VistoMientras;
 import 'chat_vivo.dart';
 import 'cloaca.dart' show NubeCloacas, TarjetaCloaca;
 import 'popups.dart' show PantallaPopups;
@@ -237,7 +238,7 @@ class PantallaChat extends StatefulWidget {
 }
 
 class _PantallaChatState extends State<PantallaChat> {
-  // Salas en public.mensajes: 'global' es la general, 'es' y 'en' las de cada idioma (las tres en _PantallaGeneral).
+  // Salas en public.mensajes: 'global' es la general, 'es' y 'en' las de cada idioma (las tres en PantallaGeneral).
   // El chat de la Cloaca está en su propia zona (cloaca.dart), que se abre desde YO.
   bool _soyAdmin = false;
   // Lo último de la sala general, para verlo desde la lista sin entrar.
@@ -327,14 +328,11 @@ class _PantallaChatState extends State<PantallaChat> {
 
   void _abrir(Widget pantalla) => Navigator.push(context, MaterialPageRoute(builder: (_) => pantalla));
 
-  void _abrirGeneral([String sala = 'global']) => _abrir(_PantallaGeneral(sala: sala));
+  void _abrirGeneral([String sala = 'global']) => abrirChatGeneral(context, sala);
 
-  void _abrirAmigos() => _abrir(Scaffold(appBar: AppBar(title: Text(tr('AMIGOS 👥', 'FRIENDS 👥'))), body: const PantallaAmigos()));
+  void _abrirAmigos() => abrirChatAmigos(context);
 
-  void _abrirSoporte() => _abrir(Scaffold(
-        appBar: AppBar(title: Text(tr('SOPORTE 🛠️', 'SUPPORT 🛠️'))),
-        body: _soyAdmin ? const _Bandeja() : Sala(sala: 'soporte', hilo: db.auth.currentUser!.id),
-      ));
+  void _abrirSoporte() => abrirChatSoporte(context, soyAdmin: _soyAdmin);
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -465,17 +463,37 @@ class _FilaChat extends StatelessWidget {
   }
 }
 
-/// El chat general a pantalla completa, con las salas por idioma en un selector fijo arriba (nada se desliza de lado).
-class _PantallaGeneral extends StatefulWidget {
-  const _PantallaGeneral({this.sala = 'global'});
+// Cada chat a pantalla completa: los abren la lista (PantallaChat) y el ⤢ del panel de chats (lib/chat_panel.dart).
+// Mientras General o Soporte están abiertos cuentan como leídos (lib/chat_sin_leer.dart).
+Future<void> abrirChatGeneral(BuildContext context, [String sala = 'global']) => Navigator.push(
+    context, MaterialPageRoute(builder: (_) => VistoMientras(cual: ChatCual.general, child: PantallaGeneral(sala: sala))));
+
+Future<void> abrirChatAmigos(BuildContext context) => Navigator.push(
+    context, MaterialPageRoute(builder: (_) => Scaffold(appBar: AppBar(title: Text(tr('AMIGOS 👥', 'FRIENDS 👥'))), body: const PantallaAmigos())));
+
+Future<void> abrirChatSoporte(BuildContext context, {required bool soyAdmin}) => Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => Scaffold(appBar: AppBar(title: Text(tr('SOPORTE 🛠️', 'SUPPORT 🛠️'))), body: cuerpoSoporte(soyAdmin: soyAdmin)),
+    ));
+
+/// El soporte sin barra: los admins ven la bandeja con todos los hilos, los demás su hilo con los admins.
+Widget cuerpoSoporte({required bool soyAdmin}) =>
+    VistoMientras(cual: ChatCual.soporte, child: soyAdmin ? const _Bandeja() : Sala(sala: 'soporte', hilo: db.auth.currentUser!.id));
+
+/// El chat general, con las salas por idioma en un selector fijo arriba (nada se desliza de lado).
+/// Sin [conBarra] va dentro del panel de chats, que pone su propia cabecera.
+class PantallaGeneral extends StatefulWidget {
+  const PantallaGeneral({super.key, this.sala = 'global', this.conBarra = true});
 
   final String sala;
+  final bool conBarra;
 
   @override
-  State<_PantallaGeneral> createState() => _PantallaGeneralState();
+  State<PantallaGeneral> createState() => _PantallaGeneralState();
 }
 
-class _PantallaGeneralState extends State<_PantallaGeneral> {
+class _PantallaGeneralState extends State<PantallaGeneral> {
   late String _sala = widget.sala;
 
   @override
@@ -485,9 +503,8 @@ class _PantallaGeneralState extends State<_PantallaGeneral> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: Text(tr('CHAT GENERAL', 'GENERAL CHAT'))),
-        body: Column(children: [
+  Widget build(BuildContext context) {
+    final cuerpo = Column(children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
             child: SizedBox(
@@ -509,8 +526,9 @@ class _PantallaGeneralState extends State<_PantallaGeneral> {
             ),
           ),
           Expanded(child: Sala(key: ValueKey(_sala), sala: _sala)),
-        ]),
-      );
+        ]);
+    return widget.conBarra ? Scaffold(appBar: AppBar(title: Text(tr('CHAT GENERAL', 'GENERAL CHAT'))), body: cuerpo) : cuerpo;
+  }
 }
 
 /// Abre el hilo de soporte con el formulario de error listo. Para el botón de Perfil.
@@ -519,7 +537,7 @@ Future<void> abrirReporteDeError(BuildContext context) => Navigator.push(
       MaterialPageRoute(
         builder: (_) => Scaffold(
           appBar: AppBar(title: Text(tr('SOPORTE 🛠️', 'SUPPORT 🛠️'))),
-          body: Sala(sala: 'soporte', hilo: db.auth.currentUser!.id, abrirBug: true),
+          body: VistoMientras(cual: ChatCual.soporte, child: Sala(sala: 'soporte', hilo: db.auth.currentUser!.id, abrirBug: true)),
         ),
       ),
     );

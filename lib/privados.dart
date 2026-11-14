@@ -192,8 +192,11 @@ class _PantallaPrivadoState extends State<_PantallaPrivado> {
 }
 
 /// La bandeja: una fila por conversación, la más reciente arriba.
+/// Sin [conBarra] va dentro del panel de chats (lib/chat_panel.dart), que pone su propia cabecera.
 class PantallaPrivados extends StatefulWidget {
-  const PantallaPrivados({super.key});
+  const PantallaPrivados({super.key, this.conBarra = true});
+
+  final bool conBarra;
 
   @override
   State<PantallaPrivados> createState() => _PantallaPrivadosState();
@@ -360,10 +363,8 @@ class _PantallaPrivadosState extends State<PantallaPrivados> {
         },
       );
     }
-    return Scaffold(
-      appBar: AppBar(title: Text(tr('PRIVADOS', 'PRIVATE'))),
-      body: RefreshIndicator(onRefresh: _cargar, child: cuerpo),
-    );
+    final lista = RefreshIndicator(onRefresh: _cargar, child: cuerpo);
+    return widget.conBarra ? Scaffold(appBar: AppBar(title: Text(tr('PRIVADOS', 'PRIVATE'))), body: lista) : lista;
   }
 }
 

@@ -4,6 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'accesorios.dart';
 import 'avisos.dart';
 import 'chat.dart';
+import 'chat_panel.dart' show abrirPanelChats;
+import 'chat_sin_leer.dart' show chatSinLeer;
 import 'emoji.dart';
 import 'idioma.dart';
 import 'main.dart';
@@ -164,12 +166,14 @@ class _PantallaMuroState extends State<PantallaMuro> {
           IconButton(
             key: const Key('muro_chats'),
             tooltip: tr('Chats', 'Chats'),
-            onPressed: _abrirChats,
-            icon: ValueListenableBuilder<bool>(
-              valueListenable: privadosSinLeer,
-              builder: (context, nuevo, _) => Stack(clipBehavior: Clip.none, children: [
+            // El panel de chats de la derecha; los push siguen abriendo la lista (_abrirChats).
+            onPressed: () => abrirPanelChats(context, soyAdmin: _soyAdmin),
+            // El punto es el mismo de la pestaña BAÑO: general, soporte y privados (lib/chat_sin_leer.dart).
+            icon: ListenableBuilder(
+              listenable: chatSinLeer,
+              builder: (context, _) => Stack(clipBehavior: Clip.none, children: [
                 const Icon(Icons.chat_bubble_outline),
-                if (nuevo) const Positioned(right: -2, top: -2, child: PuntoSinLeer()),
+                if (chatSinLeer.hayNuevo) const Positioned(right: -2, top: -2, child: PuntoSinLeer()),
               ]),
             ),
           ),
