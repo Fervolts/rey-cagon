@@ -1152,6 +1152,25 @@ class TarjetaMiCloacaMuro extends StatefulWidget {
   State<TarjetaMiCloacaMuro> createState() => _TarjetaMiCloacaMuroState();
 }
 
+// Todas las tarjetas mi_cloaca del muro comparten una sola cloaca_mia; se vuelve a pedir cuando mi Cloaca o la sesión cambian.
+Future<EstadoCloaca>? _miaMuro;
+String? _miaMuroClave;
+
+Future<EstadoCloaca> miaParaMuro() {
+  final clave = '${db.auth.currentUser?.id}:${cloacaCambio.value}';
+  if (_miaMuro == null || _miaMuroClave != clave) {
+    _miaMuroClave = clave;
+    final f = nubeCloacas.mia();
+    _miaMuro = f;
+    // Si falla, la próxima tarjeta lo vuelve a intentar.
+    f.catchError((Object _) {
+      if (identical(_miaMuro, f)) _miaMuro = null;
+      return const EstadoCloaca();
+    });
+  }
+  return _miaMuro!;
+}
+
 class _TarjetaMiCloacaMuroState extends State<TarjetaMiCloacaMuro> {
   EstadoCloaca? _mia;
   bool _ocupado = false;
@@ -1169,10 +1188,9 @@ class _TarjetaMiCloacaMuroState extends State<TarjetaMiCloacaMuro> {
     super.dispose();
   }
 
-  // shortcut: una llamada cloaca_mia por tarjeta; si el muro junta muchas, compartir una sola.
   Future<void> _cargar() async {
     try {
-      final m = await nubeCloacas.mia();
+      final m = await miaParaMuro();
       if (mounted) setState(() => _mia = m);
     } catch (_) {}
   }
