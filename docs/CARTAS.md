@@ -51,7 +51,7 @@ Repetidas disponibles = `copias - 1 - gastadas`.
 
 `cartas_10`, `cartas_30`, `cartas_64`, `cartas_100`, `cartas_128` (cartas distintas),
 `carta_dorada` (primera dorada), `carta_rainbow` (primera rainbow), `sobre_rey` (abrir un sobre del rey).
-Los da la app con `ganarLogro` al ver el estado.
+Los da la app con `ganarLogro` al ver el estado, abrir o mejorar (lib/cartas/lado_secreto.dart).
 
 ## RPC (todas `security definer`, por `auth.uid()`)
 

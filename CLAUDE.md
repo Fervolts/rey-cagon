@@ -8,7 +8,7 @@ Repo público: nada de refs de proyecto, keys, correos ni usernames reales en c�
 - Nombres del código en español (`PantallaRanking`, `_cargar`). Tablas y columnas de la base en inglés o como ya están: no renombrar, rompe apps viejas instaladas.
 - Textos de UI siempre con `tr('es', 'en')` (`lib/idioma.dart`). Rey/reina con `segun()` (`lib/genero.dart`).
 - Emojis en pantalla con el widget `Emoji` (`lib/emoji.dart`, PNG Fluent en `assets/emoji/`), no con `Text`.
-- Estilo: cuadrado, `radio = 2`, bordes de 1px, sin sombras, un acento `#FFD60A` (`lib/tema.dart`, `paleta(context)`). Nada redondeado genérico. El botón CAGUÉ redondo se queda.
+- Estilo: cuadrado, `radio = 2`, bordes de 1px, sin sombras, un acento `#FFD60A` (`lib/tema.dart`, `paleta(context)`). Nada redondeado genérico. CAGUÉ es la barra amarilla de arriba del TRONO (ya no es redondo). Las tarjetas grandes del TRONO y del lado secreto pueden llevar borde de 2px.
 - Animaciones: respetar `movimiento(context)` (`lib/animaciones.dart`: completo / simple / nada). Con `nada` no se anima; con `simple` solo lo barato.
 - Líneas largas (hasta ~150). No correr `dart format` sobre archivos existentes: reescribe todo.
 - `lib/config.dart` y `android/app/google-services.json` están en .gitignore. No subirlos.
@@ -20,7 +20,8 @@ Repo público: nada de refs de proyecto, keys, correos ni usernames reales en c�
 
 | Archivo | Qué tiene |
 |---|---|
-| `main.dart` | `main()` (init de Supabase, push, widget, idioma, tema), `db`, `esDeRed`, `conReintento`, `escucharCagadas` (Realtime), `PantallaEntrar`, `PantallaInicio` (barra de 5 pestañas TRONO/RANKING/IMPERIO/BAÑO/YO; RANKING = CAGADAS o IMPERIO; BAÑO = `PantallaMuro`), `PantallaRanking` (`trono: true` = pestaña TRONO con tarjeta HOY y CAGUÉ; `trono: false` = RANKING con podio; también el PageView al lado secreto) |
+| `main.dart` | `main()` (init de Supabase, push, widget, idioma, tema), `db`, `esDeRed`, `conReintento`, `escucharCagadas` (Realtime), `PantallaEntrar`, `PantallaInicio` (barra de 5 pestañas TRONO/RANKING/IMPERIO/BAÑO/YO; RANKING = CAGADAS o IMPERIO; BAÑO = `PantallaMuro`), `PantallaRanking` (`trono: true` = pestaña TRONO con la barra CAGUÉ, `CuadriculaTrono` y misiones del día; `trono: false` = RANKING con podio; también el PageView al lado secreto) |
+| `cartas/` | Cartas y misiones (docs/CARTAS.md): `catalogo.dart` (las 128), `misiones.dart` (textos y emojis), `logica.dart` (reglas puras: costos, sobres, logros), `nube.dart` (RPCs `misiones_hoy`, `cartas_estado`, `cartas_abrir`, `cartas_mejorar`...), `misiones_trono.dart` (misiones y cobro en el TRONO), `lado_secreto.dart` (`LadoSecreto`: sobre del día, apertura, últimas, logros), `album.dart` (`CartaVisual` por nivel, `PantallaAlbum`, detalle con MEJORAR) |
 | `imperio/` | Modo clicker Imperio: motor puro en `motor.dart`/`catalogo.dart`/`estado.dart`, nube en `nube.dart`, pantalla en `pantalla.dart`, eventos en `telemetria.dart` (RPC `imperio_registrar`, catálogo de eventos en su dartdoc), flags remotos y A/B en `flags.dart` (RPC `imperio_flags_mias`); consultas a mano en `supabase/consultas/imperio_analisis.sql` |
 | `imperio/sala.dart` | Sala de juegos: tarjetas de los 11 juegos; abiertos Tubería Express, Destapa y Fusión real, el resto "PRÓXIMAMENTE". `PantallaSala({control})` cae a `ControlImperio.vivo` |
 | `imperio/minijuegos/estadisticas.dart` | Récords y partidas por juego en memoria (sin imports) que leen los logros de la Sala; los llena `ControlImperio` desde el servidor |
@@ -49,7 +50,7 @@ Repo público: nada de refs de proyecto, keys, correos ni usernames reales en c�
 | `tips.dart` | `PantallaTips` y la esquina doblada que desbloquea el secreto |
 | `secreto.dart` | Easter egg "psst…" (🍺 Rey Meón, 🚿 Rey Pulcro) |
 | `accesorios.dart` | `Avatar`, catálogo `desbloqueos`, lentes/sombreros, mascotas, efectos |
-| `cagadon.dart` | Retos 1 contra 1 del día |
+| `cagadon.dart` | Retos 1 contra 1 del día; `PantallaCagadon` (se abre desde el cuadro CAGADÓN del TRONO) y `retosVivosHoy()` |
 | `calendario.dart` | `PantallaCalendario`, `meses` |
 | `avisos.dart` | Notificaciones dentro de la app, navegación `ir()` |
 | `push.dart` | FCM (`iniciarPush`, handler en segundo plano) |
