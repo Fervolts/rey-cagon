@@ -30,6 +30,8 @@ class ChatSinLeer extends ChangeNotifier {
   final _abierto = {ChatCual.general: 0, ChatCual.soporte: 0};
   int _ultimoGlobal = 0, _ultimoIdioma = 0, _ultimoSoporte = 0;
   final _subs = <VoidCallback>[];
+  // Chats sin marca guardada en el teléfono al iniciar.
+  final _sinMarca = <ChatCual>{};
   String? _yo;
 
   int _ultimo(ChatCual c) => c == ChatCual.general ? max(_ultimoGlobal, _ultimoIdioma) : _ultimoSoporte;
@@ -50,8 +52,11 @@ class ChatSinLeer extends ChangeNotifier {
     _ultimoGlobal = _ultimoIdioma = _ultimoSoporte = 0;
     final prefs = await SharedPreferences.getInstance();
     if (_yo != yo) return;
+    _sinMarca.clear();
     for (final c in ChatCual.values) {
-      _visto[c] = max(_visto[c]!, prefs.getInt(_claves[c]!) ?? 0);
+      final guardado = prefs.getInt(_claves[c]!);
+      if (guardado == null) _sinMarca.add(c);
+      _visto[c] = max(_visto[c]!, guardado ?? 0);
     }
     notifyListeners();
     _subs
@@ -69,17 +74,23 @@ class ChatSinLeer extends ChangeNotifier {
   }
 
   // El último mensaje de esa sala. Los propios cuentan como vistos, y lo que llega con el chat abierto también.
-  VoidCallback _escuchar(String columna, String valor, void Function(int) poner, ChatCual c) => ultimosDeSala(valor, 1, (filas) {
+  // Sin marca guardada (primera vez) lo que ya había al llegar cuenta como visto: se empieza en 0, no en "99+".
+  VoidCallback _escuchar(String columna, String valor, void Function(int) poner, ChatCual c) {
+    var primera = true;
+    return ultimosDeSala(valor, 1, (filas) {
+        final empezar = primera && _sinMarca.contains(c);
+        primera = false;
         if (filas.isEmpty || _yo == null) return;
         final m = filas.first;
         poner(m['id'] as int);
-        if (m['user_id'] == _yo || _abierto[c]! > 0) {
+        if (empezar || m['user_id'] == _yo || _abierto[c]! > 0) {
           marcar(c);
         } else {
           _contar(c);
         }
         notifyListeners();
       }, columna: columna);
+  }
 
   // Cuántos de otros hay después de lo visto: solo ids, hasta [tope] (barato aunque haya miles).
   Future<void> _contar(ChatCual c) async {
