@@ -9,6 +9,8 @@ declare
   n int;
   total int := 0;
   v1 boolean;
+  claves_trazo text[];
+  patron_g text;
 begin
   if jsonb_typeof(d) <> 'object' then return 'no es un objeto'; end if;
   if (select array_agg(k order by k) from jsonb_object_keys(d) k) <> array['fondo', 'trazos', 'v'] then
@@ -16,6 +18,9 @@ begin
   end if;
   v1 := d -> 'v' = '1'::jsonb;
   if not v1 and d -> 'v' <> '2'::jsonb then return 'versión desconocida'; end if;
+  -- Fuera del IF: un CASE dentro de la condición de un IF de plpgsql corta en su primer THEN.
+  claves_trazo := case when v1 then array['c', 'g', 'p'] else array['c', 'g', 'h', 'p'] end;
+  patron_g := case when v1 then '^[1-4]$' else '^[1-8]$' end;
   if v1 and (jsonb_typeof(d -> 'fondo') <> 'number' or (d ->> 'fondo') !~ '^\d{1,2}$' or (d ->> 'fondo')::int > 15)
      or not v1 and (jsonb_typeof(d -> 'fondo') <> 'string' or (d ->> 'fondo') !~ '^[0-9a-f]{6}$') then
     return 'fondo fuera de rango';
@@ -25,15 +30,14 @@ begin
   if n < 1 or n > 400 then return 'entre 1 y 400 trazos'; end if;
   for t in select x from jsonb_array_elements(d -> 'trazos') x loop
     if jsonb_typeof(t) <> 'object' then return 'trazo que no es objeto'; end if;
-    if (select array_agg(k order by k) from jsonb_object_keys(t) k)
-       <> case when v1 then array['c', 'g', 'p'] else array['c', 'g', 'h', 'p'] end then
+    if (select array_agg(k order by k) from jsonb_object_keys(t) k) <> claves_trazo then
       return 'trazo con claves de más o de menos';
     end if;
     if v1 and (jsonb_typeof(t -> 'c') <> 'number' or (t ->> 'c') !~ '^\d{1,2}$' or (t ->> 'c')::int > 15)
        or not v1 and (jsonb_typeof(t -> 'c') <> 'string' or (t ->> 'c') !~ '^[0-9a-f]{6}$') then
       return 'color fuera de rango';
     end if;
-    if jsonb_typeof(t -> 'g') <> 'number' or (t ->> 'g') !~ case when v1 then '^[1-4]$' else '^[1-8]$' end then
+    if jsonb_typeof(t -> 'g') <> 'number' or (t ->> 'g') !~ patron_g then
       return 'grosor fuera de rango';
     end if;
     if not v1 and (jsonb_typeof(t -> 'h') <> 'string'
