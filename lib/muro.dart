@@ -87,13 +87,21 @@ class _PantallaMuroState extends State<PantallaMuro> {
   // Un push o aviso de chat: abrir la lista de chats encima; ella abre la sala (y el hilo).
   void _irA() {
     final destino = irA.value;
-    if (destino == null || destino.muro || !mounted) return;
+    // Con la lista ya abierta encima, ella misma lo atiende: no abrir otra.
+    if (destino == null || destino.muro || !mounted || _chatsAbiertos) return;
     destino.muro = true;
     final a = destino.a;
     if (const {'soporte', 'amigos', 'todos', 'global', 'es', 'en'}.contains(a) || esSalaDm(a)) _abrirChats();
   }
 
-  void _abrirChats() => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaChat()));
+  bool _chatsAbiertos = false;
+
+  Future<void> _abrirChats() async {
+    if (_chatsAbiertos) return;
+    _chatsAbiertos = true;
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaChat()));
+    _chatsAbiertos = false;
+  }
 
   Future<void> _recargar() async {
     _vuelta++;
