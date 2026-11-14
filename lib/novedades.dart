@@ -21,6 +21,14 @@ class VersionNovedades {
 
 /// El historial público, de la más nueva a la más vieja. Al sacar una versión nueva se agrega arriba.
 const historialNovedades = <VersionNovedades>[
+  VersionNovedades('2.21.0', '2026-11-14', [
+    ('👑', 'El Baño tiene cara nueva: pestaña MI CLOACA, el TRONO DE HOY con el dibujo con más 💩 del día, y cada autor muestra su título y su racha 🔥.',
+        'The Bathroom got a new look: a MY CLOACA tab, TODAY\'S THRONE with the drawing with most 💩 of the day, and every author shows their title and streak 🔥.'),
+    ('🎨', 'Pinta mejor: spray, plumón, sello 💩, cuentagotas, rehacer y cualquier color que quieras. Las paletas ORO y CLOACA se ganan jugando.',
+        'Paint better: spray, marker, 💩 stamp, eyedropper, redo and any color you want. The GOLD and CLOACA palettes are earned by playing.'),
+    ('📌', 'Las rachas, retos de Cagadón y presumidas ahora se pegan en la pared del Baño, y los chats se abren en un panel al lado con sus avisos.',
+        'Streaks, Cagadón challenges and brags now get pinned to the Bathroom wall, and chats open in a side panel with their own alerts.'),
+  ]),
   VersionNovedades('2.20.0', '2026-11-14', [
     ('🚽', 'El Baño ahora tiene pared: publica lo que quieras con un dibujo hecho con el dedo, dale 💩 a lo que te guste y comenta. Puedes ver todos o solo tus amigos.',
         'The Bathroom now has a wall: post whatever you want with a finger drawing, give 💩 to what you like and comment. See everyone or just your friends.'),
