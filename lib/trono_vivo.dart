@@ -265,15 +265,21 @@ class ZonaMosca extends StatefulWidget {
     this.ganar = ganarLogro,
     this.aparece = const Duration(seconds: 7),
     this.vuelve = const Duration(seconds: 25),
+    this.barra,
   });
 
-  /// El botón (200x200), centrado.
+  /// El botón (200x200), centrado. Con [barra], una barra de ese alto a todo el ancho.
   final Widget child;
+  /// Alto de la barra CAGUÉ: la mosca vuela en una franja arriba y otra abajo, nunca encima.
+  final double? barra;
   final GanarLogro ganar;
   final Duration aparece;
   final Duration vuelve;
 
   static const alto = 248.0;
+
+  /// Franja de aire arriba y abajo de la barra para que vuele la mosca.
+  static const franja = 40.0;
 
   @override
   State<ZonaMosca> createState() => _ZonaMoscaState();
@@ -372,8 +378,14 @@ class _ZonaMoscaState extends State<ZonaMosca> with SingleTickerProviderStateMix
   }
 
   /// Corre el punto hacia afuera si la caja de la mosca tocaría el círculo del botón.
-  static Offset _seguro(Offset p, double ancho, double alto) {
+  Offset _seguro(Offset p, double ancho, double alto) {
     final x = p.dx.clamp(-ancho, ancho), y = p.dy.clamp(-alto, alto);
+    final barra = widget.barra;
+    if (barra != null) {
+      // Fuera de la barra: se pega a la franja de arriba o la de abajo.
+      final borde = barra / 2 + _media + 2;
+      return y.abs() >= borde ? Offset(x, y) : Offset(x, y < 0 ? -borde : borde);
+    }
     final a = math.max(x.abs() - _media, 0.0), b = math.max(y.abs() - _media, 0.0);
     if (a * a + b * b >= _boton * _boton) return Offset(x, y);
     final lado = x < 0 ? -1.0 : 1.0;
@@ -408,8 +420,9 @@ class _ZonaMoscaState extends State<ZonaMosca> with SingleTickerProviderStateMix
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, caja) {
-      final w = math.min(caja.maxWidth, 320.0);
-      const h = ZonaMosca.alto;
+      final barra = widget.barra;
+      final w = barra == null ? math.min(caja.maxWidth, 320.0) : caja.maxWidth;
+      final h = barra == null ? ZonaMosca.alto : barra + ZonaMosca.franja * 2;
       final ancho = w / 2 - _media, alto = h / 2 - _media;
       final aplastada = _mosca == _Mosca.aplastada;
       Widget? mosca;
@@ -437,7 +450,7 @@ class _ZonaMoscaState extends State<ZonaMosca> with SingleTickerProviderStateMix
         child: SizedBox(
           width: w,
           height: h,
-          child: Stack(children: [Center(child: widget.child), ?mosca]),
+          child: Stack(clipBehavior: Clip.none, children: [Center(child: widget.child), ?mosca]),
         ),
       );
     });

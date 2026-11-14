@@ -137,6 +137,34 @@ class _ChipApuesta extends StatelessWidget {
 
 Future<int> victorias(String uid) async => ((await db.rpc('victorias', params: {'uid': uid})) as num?)?.toInt() ?? 0;
 
+/// Para la tarjeta CAGADÓN del TRONO: retos vivos de hoy y si alguno espera que yo acepte.
+Future<({int vivos, bool meRetaron})> retosVivosHoy() async {
+  final hoy = await conReintento(() => db.from('retos').select('estado, retado').eq('dia', _hoyCaracas()));
+  final yo = db.auth.currentUser?.id;
+  final vivos = [for (final r in hoy) if (r['estado'] == 'pendiente' || r['estado'] == 'aceptado') r];
+  return (vivos: vivos.length, meRetaron: vivos.any((r) => r['estado'] == 'pendiente' && r['retado'] == yo));
+}
+
+/// Se abre desde la tarjeta CAGADÓN del TRONO: los retos de hoy y cómo retar.
+class PantallaCagadon extends StatelessWidget {
+  const PantallaCagadon({super.key});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: Text(tr('Cagadón', 'Poop-Off'))),
+        body: ListView(padding: const EdgeInsets.all(16), children: [
+          const RetosDeHoy(),
+          const SizedBox(height: 8),
+          TextoConEmojis(
+            tr('⚔️ Para retar a alguien, abre su perfil desde Amigos o el Ranking. Gana el que cague más hoy.',
+                '⚔️ To challenge someone, open their profile from Friends or the Ranking. Whoever poops the most today wins.'),
+            textAlign: TextAlign.center,
+            style: TextStyle(color: paleta(context).textoSuave),
+          ),
+        ]),
+      );
+}
+
 /// Los retos de hoy en la pantalla de inicio: invitaciones, esperas y marcadores en vivo.
 class RetosDeHoy extends StatefulWidget {
   const RetosDeHoy({super.key});

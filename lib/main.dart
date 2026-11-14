@@ -18,6 +18,9 @@ import 'diagnostico.dart';
 import 'avisos.dart';
 import 'avisos_resumen.dart';
 import 'cagadon.dart';
+import 'cartas/lado_secreto.dart';
+import 'cartas/misiones_trono.dart';
+import 'cartas/nube.dart';
 import 'efecto_cague.dart';
 import 'chat.dart';
 import 'cloaca.dart' show abrirCloaca, vistaChat, vistaCloaca, vistaLiga;
@@ -608,6 +611,14 @@ class _PantallaRankingState extends State<PantallaRanking> {
   bool _deshaciendo = false;
   // Se decide una vez por apertura de la app: aparece o no, y en qué esquina.
   final _secreto = Secreto();
+  // TRONO: la cuadrícula, las misiones y el Cagadón. Cada uno se pide aparte; si falla, queda lo que había.
+  ({int racha, int semana})? _resumen;
+  Misiones? _misiones;
+  ({int vivos, bool meRetaron})? _retos;
+  bool _cobrando = false;
+  // Con el lado secreto encontrado, el TRONO se desliza a la derecha hacia las cartas.
+  final _paginas = PageController();
+  int _pagina = 0;
 
   String get _yo => db.auth.currentUser!.id;
 
@@ -669,6 +680,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
     irA.removeListener(_irAPeriodo);
     rankingImperio.removeListener(_alCambiarJuego);
     secretoAbierto.removeListener(_alAbrirSecreto);
+    _paginas.dispose();
     _ciclo.dispose();
     _relojActualizacion?.cancel();
     versionAnunciada.removeListener(_revisarYa);
@@ -757,6 +769,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
       });
       if (abierto) secretoAbierto.value = true;
       if (!widget.trono) return;
+      _cargarTrono();
       reprogramarRecordatorio(yaCagoHoy: _miHoy > 0).catchError((_) {});
       reprogramarCierres().catchError((_) {});
       actualizarWidget(_miHoy).catchError((_) {});
@@ -827,6 +840,8 @@ class _PantallaRankingState extends State<PantallaRanking> {
         if (cambios.isNotEmpty) await conReintento(() => db.from('cagadas').update(cambios).eq('id', nueva['id']));
       }
       // Llegó a un hito o desbloqueó algo: ofrece presumirlo en el chat.
+      // El parte puede cumplir una misión.
+      _cargarTrono();
       if (mounted) await ofrecerPresumir(context, _misCagadas);
     } on PostgrestException catch (e) {
       // El trigger limitar_cagadas devuelve el mensaje listo para mostrar.
@@ -944,6 +959,51 @@ class _PantallaRankingState extends State<PantallaRanking> {
     );
   }
 
+  void _cargarTrono() {
+    tronoResumen().then((r) {
+      if (mounted) setState(() => _resumen = r);
+    }, onError: (_) {});
+    misionesHoy().then((m) {
+      if (mounted) setState(() => _misiones = m);
+    }, onError: (_) {});
+    retosVivosHoy().then((r) {
+      if (mounted) setState(() => _retos = r);
+    }, onError: (_) {});
+  }
+
+  /// Cobra el sobre de las 3 misiones. Con el lado secreto ofrece ir a abrirlo.
+  Future<void> _cobrar() async {
+    if (_cobrando) return;
+    setState(() => _cobrando = true);
+    try {
+      await cobrarMisiones();
+      if (!mounted) return;
+      if (_secretoAbierto) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(
+            content: Text(tr('Sobre cobrado. Está en el lado secreto.', 'Pack claimed. It is on the secret side.')),
+            action: SnackBarAction(label: tr('IR', 'GO'), onPressed: _irAlSecreto),
+          ));
+      } else {
+        _mensaje(tr('Cobrado. Algún día sabrás qué era.', "Claimed. Someday you'll know what it was."));
+      }
+    } on PostgrestException catch (e) {
+      _mensaje(trServidor(e.message));
+    } catch (e) {
+      _mensaje(textoError(e));
+    } finally {
+      if (mounted) setState(() => _cobrando = false);
+      _cargarTrono();
+    }
+  }
+
+  void _irAlSecreto() {
+    if (!_paginas.hasClients) return;
+    if (movimiento(context) == Movimiento.nada) return _paginas.jumpToPage(1);
+    _paginas.animateToPage(1, duration: const Duration(milliseconds: 350), curve: Curves.easeOutCubic);
+  }
+
   void _abrir(Widget pantalla) =>
       Navigator.push(context, MaterialPageRoute(builder: (_) => pantalla)).then((_) => _cargar(spinner: false));
 
@@ -983,6 +1043,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
     // Fuera del podio, su puesto queda fijo abajo con cuánto le falta para el de arriba.
     final puesto = _cargando ? -1 : _miPuesto;
     final barra = !widget.trono && !_modoSecreto && puesto >= 3;
+    final conPaginas = widget.trono && _secretoAbierto;
 
     final lista = RefreshIndicator(
       onRefresh: () {
@@ -990,7 +1051,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
         return _cargar();
       },
       child: ListView(
-        padding: conBordeAbajo(context, EdgeInsets.fromLTRB(16, 12, 16, barra ? 96 : 32)),
+        padding: conBordeAbajo(context, EdgeInsets.fromLTRB(16, 12, 16, barra ? 96 : (conPaginas ? 48 : 32))),
         children: [
           Row(
             children: [
@@ -1034,28 +1095,37 @@ class _PantallaRankingState extends State<PantallaRanking> {
     return SafeArea(
       child: Stack(
         children: [
-          normal,
+          if (conPaginas) ...[
+            PageView(
+              controller: _paginas,
+              onPageChanged: (i) => setState(() => _pagina = i),
+              children: [_SigueViva(child: normal), const LadoSecreto()],
+            ),
+            Positioned(left: 0, right: 0, bottom: 12, child: IgnorePointer(child: _Puntitos(actual: _pagina, total: 2))),
+          ] else
+            normal,
           if (widget.trono) _secreto,
         ],
       ),
     );
   }
 
-  /// La pantalla de cagar: la racha de hoy, el botón, el Cagadón y tu puesto de la semana.
+  /// La pantalla de cagar: la barra CAGUÉ, la cuadrícula, las misiones del día y tu puesto de la semana.
   List<Widget> _trono(TextTheme texto) {
     final aviso = _avisoDelDia;
     final puesto = _cargando ? -1 : _miPuesto;
+    final misiones = _misiones;
+    final retos = _retos;
+    final p = paleta(context);
     return [
-      Aparece(
-        child: _TarjetaHoy(
-          hoy: _miHoy,
-          aviso: aviso,
-          perdiendo: aviso?.endsWith(tr('vas perdiendo', "you're losing")) ?? false,
+      // La mosca vuela arriba y abajo de la barra (ver trono_vivo.dart); tocarla nunca registra nada.
+      _AnchoCompleto(
+        alto: _BotonCague.alto + ZonaMosca.franja * 2,
+        child: ZonaMosca(
+          barra: _BotonCague.alto,
+          child: Respira(activo: !_cargando && _miHoy == 0, child: _BotonCague(onTap: _cague, ocupado: _enviando)),
         ),
       ),
-      const SizedBox(height: 4),
-      // La mosca vuela alrededor del botón (ver trono_vivo.dart); tocarla nunca registra nada.
-      ZonaMosca(child: Respira(activo: !_cargando && _miHoy == 0, child: _BotonCague(onTap: _cague, ocupado: _enviando))),
       Center(
         child: TextButton.icon(
           onPressed: _deshaciendo ? null : _deshacer,
@@ -1063,8 +1133,39 @@ class _PantallaRankingState extends State<PantallaRanking> {
           label: Text(tr('DESHACER LA ÚLTIMA', 'UNDO THE LAST ONE')),
         ),
       ),
+      const SizedBox(height: 4),
+      Aparece(
+        child: CuadriculaTrono(
+          hoy: _miHoy,
+          racha: _resumen?.racha,
+          semana: _resumen?.semana,
+          puesto: puesto,
+          retos: retos?.vivos,
+          meRetaron: retos?.meRetaron ?? false,
+          alCagadon: () => _abrir(const PantallaCagadon()),
+        ),
+      ),
+      if (aviso != null) ...[
+        const SizedBox(height: 12),
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(width: 4, color: aviso.endsWith(tr('vas perdiendo', "you're losing")) ? const Color(0xFFB3261E) : acento),
+              const SizedBox(width: 8),
+              Expanded(child: TextoConEmojis(aviso, style: texto.bodyMedium?.copyWith(fontWeight: FontWeight.w600, color: p.texto))),
+            ],
+          ),
+        ),
+      ],
       const SizedBox(height: 8),
-      const RetosDeHoy(),
+      FraseDelTrono(hoy: _miHoy),
+      if (misiones != null) ...[
+        const SizedBox(height: 20),
+        MisionesDeHoy(misiones: misiones),
+        const SizedBox(height: 10),
+        BotonMisiones(misiones: misiones, cobrando: _cobrando, misterio: !_secretoAbierto, alCobrar: _cobrar),
+      ],
       const SizedBox(height: 12),
       const TarjetaOrdenaAvisos(),
       if (puesto >= 0)
@@ -1395,6 +1496,8 @@ class _BotonCague extends StatefulWidget {
   /// Hay una cagada enviándose: otro toque no hace nada.
   final bool ocupado;
 
+  static const alto = 114.0;
+
   @override
   State<_BotonCague> createState() => _BotonCagueState();
 }
@@ -1406,6 +1509,8 @@ class _BotonCagueState extends State<_BotonCague> with SingleTickerProviderState
   bool _vuelve = false;
   // Pujo eterno (mantener apretado, trono_vivo.dart): ese toque no registra la cagada.
   bool _pujo = false;
+  // El mojón: de ahí salen el efecto de la tienda y el vuelo al inodoro.
+  final _llave = GlobalKey();
   late final _brinco = AnimationController(vsync: this, duration: const Duration(milliseconds: 450));
 
   @override
@@ -1422,7 +1527,7 @@ class _BotonCagueState extends State<_BotonCague> with SingleTickerProviderState
       return;
     }
     if (widget.ocupado) return;
-    final caja = context.findRenderObject() as RenderBox?;
+    final caja = _llave.currentContext?.findRenderObject() as RenderBox?;
     final nivel = movimiento(context);
     // El efecto de la tienda de estilo va primero: queda debajo del inodoro y no lo espera nadie.
     if (caja != null && caja.hasSize) lanzarEfectoCague(context, boton: caja.localToGlobal(Offset.zero) & caja.size);
@@ -1473,26 +1578,34 @@ class _BotonCagueState extends State<_BotonCague> with SingleTickerProviderState
   Widget build(BuildContext context) {
     final p = paleta(context);
     final nivel = movimiento(context);
-    final circulo = AnimatedContainer(
+    // Al apretar se invierte: amarillo pasa a color del texto y las letras al del fondo.
+    final barra = AnimatedContainer(
       duration: const Duration(milliseconds: 100),
-      width: 200,
-      height: 200,
-      // Al apretar: en claro pasa de negro a amarillo; en oscuro, de amarillo a blanco.
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: _apretado ? (p.primario == acento ? p.texto : acento) : p.primario,
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+      height: _BotonCague.alto,
+      width: double.infinity,
+      color: _apretado ? p.texto : acento,
+      child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          _mojon(const Emoji('💩', tamano: 88)),
-          Text(tr('CAGUÉ', 'I POOPED'),
-              style: TextStyle(
-                color: _apretado ? acentoTexto : p.sobrePrimario,
-                fontSize: 24,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 2,
-              )),
+          Positioned(left: 4, top: -18, child: KeyedSubtree(key: _llave, child: _mojon(const Emoji('💩', tamano: 120)))),
+          Positioned.fill(
+            left: 136,
+            right: 12,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(tr('CAGUÉ', 'I POOPED'),
+                      style: TextStyle(color: _apretado ? p.fondo : acentoTexto, fontSize: 46, fontWeight: FontWeight.w900, height: 1, letterSpacing: 1)),
+                ),
+                const SizedBox(height: 6),
+                Text(tr('mantén para pujar', 'hold to push'),
+                    style: numeros(context, tamano: 12, color: (_apretado ? p.fondo : acentoTexto).withValues(alpha: .75))),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -1513,15 +1626,15 @@ class _BotonCagueState extends State<_BotonCague> with SingleTickerProviderState
         child: Pujo(
           alPujar: () => _pujo = true,
           child: nivel == Movimiento.nada
-              ? AnimatedScale(scale: _apretado ? 0.94 : 1, duration: const Duration(milliseconds: 100), child: circulo)
+              ? AnimatedScale(scale: _apretado ? 0.97 : 1, duration: const Duration(milliseconds: 100), child: barra)
               // Se aplasta al apretar y al soltar vuelve; en completo, gelatina.
               : TweenAnimationBuilder<double>(
                   tween: Tween(begin: 0, end: _apretado ? 1 : 0),
                   duration: Duration(milliseconds: _apretado ? 90 : (nivel == Movimiento.completo ? 650 : 160)),
                   curve: _apretado || nivel != Movimiento.completo ? Curves.easeOut : Curves.elasticOut,
-                  child: circulo,
+                  child: barra,
                   builder: (context, t, child) =>
-                      Transform(alignment: Alignment.center, transform: Matrix4.diagonal3Values(1 + .05 * t, 1 - .08 * t, 1), child: child),
+                      Transform(alignment: Alignment.center, transform: Matrix4.diagonal3Values(1 + .01 * t, 1 - .08 * t, 1), child: child),
                 ),
         ),
       ),
@@ -1664,79 +1777,61 @@ class _Podio extends StatelessWidget {
 }
 
 /// Barra amarilla fija abajo con el puesto propio, cuando no está en el podio.
-/// Arriba del trono: cuántas llevas hoy, cinco barras hasta el RAMPAGE y cuánto falta para la
-/// próxima racha. Abajo, cómo vas contra tus amigos hoy.
-class _TarjetaHoy extends StatelessWidget {
-  const _TarjetaHoy({required this.hoy, required this.aviso, required this.perdiendo});
+/// La cuadrícula 2x2 del trono: RACHA, SEMANA, HOY y CAGADÓN. Pura: recibe los datos (null = cargando).
+class CuadriculaTrono extends StatelessWidget {
+  const CuadriculaTrono({
+    super.key,
+    required this.hoy,
+    required this.racha,
+    required this.semana,
+    required this.puesto,
+    required this.retos,
+    required this.meRetaron,
+    required this.alCagadon,
+  });
 
   static const _rampage = 5;
 
   final int hoy;
-  // Con 6 o más la tarjeta entra en modo nuclear (HEXA POOP, lib/nuclear.dart).
-  bool get _nuclear => hoy >= rachaHexa;
-  final String? aviso;
-  final bool perdiendo;
+  final int? racha;
+  final int? semana;
+
+  /// Puesto de la semana empezando en 0; -1 si no se sabe.
+  final int puesto;
+  final int? retos;
+  final bool meRetaron;
+  final VoidCallback alCagadon;
 
   @override
   Widget build(BuildContext context) {
     final p = paleta(context);
-    final texto = Theme.of(context).textTheme;
-    final racha = nombreRacha(hoy);
-    final proxima = hoy < rachaHexa ? nombreRacha(hoy < 1 ? 2 : hoy + 1)!.replaceAll('!', '') : null;
-    final faltan = hoy < 1 ? 2 : 1;
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: _nuclear ? verdeNuclear : p.bordeFuerte, width: 2)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    // Con 6 o más el cuadro HOY entra en modo nuclear (HEXA POOP, lib/nuclear.dart).
+    final nuclear = hoy >= rachaHexa;
+    final grande = numeros(context, tamano: 40, weight: FontWeight.w900, color: p.texto);
+    final hoyCuadro = _Cuadro(
+      rotulo: tr('HOY', 'TODAY'),
+      emoji: nuclear ? '☢️' : '💩',
+      borde: nuclear ? verdeNuclear : null,
+      valor: Pop(valor: hoy, alineacion: Alignment.centerLeft, child: Contador(hoy, estilo: grande)),
+      pie: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Pop(
-                    valor: hoy,
-                    alineacion: Alignment.centerLeft,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Rotulo(tr('Hoy · ', 'Today · ')),
-                        Contador(hoy, estilo: numeros(context, tamano: 11, weight: FontWeight.w700, color: p.textoSuave).copyWith(letterSpacing: 1.2)),
-                        Rotulo(tr(hoy == 1 ? ' cagada' : ' cagadas', hoy == 1 ? ' poop' : ' poops')),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              if (_nuclear) ...[const Emoji('☢️', tamano: 14), const SizedBox(width: 4)],
-              Text(
-                _nuclear
-                    ? 'HEXA POOP!'
-                    : hoy >= _rampage
-                        ? tr('HEXA A ${rachaHexa - hoy}', 'HEXA IN ${rachaHexa - hoy}')
-                        : tr('RAMPAGE A ${_rampage - hoy}', 'RAMPAGE IN ${_rampage - hoy}'),
-                style: numeros(context, tamano: 11, weight: FontWeight.w800, color: _nuclear ? verdeNuclear : p.textoSuave),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
           // Cinco barras hasta RAMPAGE y una sexta, la nuclear, con borde verde aunque esté vacía.
           Row(
             children: [
               for (var i = 0; i < rachaHexa; i++) ...[
-                if (i > 0) SizedBox(width: i == _rampage ? 8 : 4),
+                if (i > 0) SizedBox(width: i == _rampage ? 5 : 3),
                 Expanded(
-                  // Cada barra se llena con su retraso; al cagar, se llena la nueva.
                   child: TweenAnimationBuilder<double>(
                     tween: Tween(begin: 0, end: i < hoy ? 1 : 0),
                     duration: movimiento(context) == Movimiento.nada ? Duration.zero : Duration(milliseconds: 300 + 90 * i),
                     curve: Curves.easeOut,
                     builder: (context, t, _) => Container(
-                      height: 10,
+                      height: 6,
                       decoration: BoxDecoration(
-                        color: _nuclear ? (i == _rampage ? verdeNuclear : amarilloNuclear) : Color.lerp(p.suave, acento, t),
-                        border: Border.all(color: _nuclear || i == _rampage ? verdeNuclear : Color.lerp(p.borde, acentoTexto, t)!, width: i == _rampage ? 2 : 1),
+                        color: nuclear ? (i == _rampage ? verdeNuclear : amarilloNuclear) : Color.lerp(p.suave, acento, t),
+                        border: Border.all(color: nuclear || i == _rampage ? verdeNuclear : Color.lerp(p.borde, acentoTexto, t)!),
                       ),
                     ),
                   ),
@@ -1744,38 +1839,186 @@ class _TarjetaHoy extends StatelessWidget {
               ],
             ],
           ),
-          const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: Text(
-                  racha ?? (hoy == 0 ? tr('Todavía nada', 'Nothing yet') : tr('Primera del día', 'First of the day')),
-                  style: texto.titleLarge?.copyWith(fontWeight: FontWeight.w900),
-                ),
-              ),
-              if (proxima != null)
-                Text(tr('a $faltan del $proxima', '$faltan more for $proxima'),
-                    style: numeros(context, tamano: 12, weight: FontWeight.w700, color: p.textoSuave)),
-            ],
-          ),
           const SizedBox(height: 4),
-          FraseDelTrono(hoy: hoy),
-          if (aviso != null) ...[
-            const SizedBox(height: 10),
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Container(width: 4, color: perdiendo ? const Color(0xFFB3261E) : acento),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(aviso!, style: texto.bodyMedium?.copyWith(fontWeight: FontWeight.w600))),
-                ],
-              ),
-            ),
-          ],
+          Text(
+            nuclear
+                ? 'HEXA POOP!'
+                : nombreRacha(hoy) ??
+                    (hoy >= _rampage
+                        ? tr('HEXA A ${rachaHexa - hoy}', 'HEXA IN ${rachaHexa - hoy}')
+                        : tr('RAMPAGE A ${_rampage - hoy}', 'RAMPAGE IN ${_rampage - hoy}')),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: numeros(context, tamano: 11, weight: FontWeight.w800, color: nuclear ? verdeNuclear : p.textoSuave),
+          ),
         ],
       ),
+    );
+    return Column(
+      children: [
+        IntrinsicHeight(
+          child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Expanded(
+              child: _Cuadro(
+                rotulo: tr('RACHA', 'STREAK'),
+                emoji: '🔥',
+                valor: Text(racha == null ? '·' : '$racha', style: grande),
+                pie: _pie(context, tr('días seguidos', 'days in a row')),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _Cuadro(
+                rotulo: tr('SEMANA', 'WEEK'),
+                emoji: switch (puesto) { 0 => '🥇', 1 => '🥈', 2 => '🥉', _ => '📅' },
+                valor: Text(semana == null ? '·' : '$semana', style: grande),
+                pie: _pie(context, tr('últimos 7 días', 'last 7 days')),
+              ),
+            ),
+          ]),
+        ),
+        const SizedBox(height: 10),
+        IntrinsicHeight(
+          child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Expanded(child: hoyCuadro),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _Cuadro(
+                rotulo: tr('CAGADÓN', 'POOPOFF'),
+                emoji: '⚔️',
+                borde: meRetaron ? acento : null,
+                onTap: alCagadon,
+                valor: Text(retos == null ? '·' : '$retos', style: grande),
+                pie: _pie(
+                  context,
+                  meRetaron
+                      ? tr('te retaron', 'you got challenged')
+                      : (retos ?? 0) > 0
+                          ? tr('en vivo', 'live')
+                          : tr('reta a un amigo', 'challenge a friend'),
+                  color: meRetaron ? p.acento : null,
+                ),
+              ),
+            ),
+          ]),
+        ),
+      ],
+    );
+  }
+
+  Widget _pie(BuildContext context, String texto, {Color? color}) => Text(texto,
+      maxLines: 1, overflow: TextOverflow.ellipsis, style: numeros(context, tamano: 11, weight: FontWeight.w700, color: color ?? paleta(context).textoSuave));
+}
+
+/// Una tarjeta de la cuadrícula: rótulo, número grande, pie y el emoji grande recortado en la esquina.
+class _Cuadro extends StatelessWidget {
+  const _Cuadro({required this.rotulo, required this.emoji, required this.valor, required this.pie, this.borde, this.onTap});
+
+  final String rotulo;
+  final String emoji;
+  final Widget valor;
+  final Widget pie;
+  final Color? borde;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paleta(context);
+    return Material(
+      color: p.tarjeta,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(radio),
+        side: BorderSide(color: borde ?? p.bordeFuerte, width: 2),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 128),
+          child: Stack(
+            children: [
+              Positioned(right: -14, bottom: -18, child: ExcludeSemantics(child: Opacity(opacity: .9, child: Emoji(emoji, tamano: 72)))),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Rotulo(rotulo),
+                    const SizedBox(height: 2),
+                    valor,
+                    const SizedBox(height: 4),
+                    // El pie no pisa el emoji de la esquina.
+                    Padding(padding: const EdgeInsets.only(right: 40), child: pie),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Saca a la barra CAGUÉ del margen de 16 de la lista: ocupa todo el ancho de la pantalla.
+class _AnchoCompleto extends StatelessWidget {
+  const _AnchoCompleto({required this.alto, required this.child});
+
+  final double alto;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        height: alto,
+        child: LayoutBuilder(
+          builder: (context, c) => OverflowBox(minWidth: c.maxWidth + 32, maxWidth: c.maxWidth + 32, child: child),
+        ),
+      );
+}
+
+/// Mantiene viva la página del trono mientras se mira el lado secreto (no pierde el scroll).
+class _SigueViva extends StatefulWidget {
+  const _SigueViva({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_SigueViva> createState() => _SigueVivaState();
+}
+
+class _SigueVivaState extends State<_SigueViva> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
+  }
+}
+
+/// Puntitos de página: el actual es una rayita del color de acento.
+class _Puntitos extends StatelessWidget {
+  const _Puntitos({required this.actual, required this.total});
+
+  final int actual;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paleta(context);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (var i = 0; i < total; i++)
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            width: i == actual ? 18 : 6,
+            height: 6,
+            decoration: BoxDecoration(color: i == actual ? p.acento : p.borde, borderRadius: BorderRadius.circular(radio)),
+          ),
+      ],
     );
   }
 }
