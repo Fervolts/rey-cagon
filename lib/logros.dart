@@ -134,6 +134,36 @@ List<LogroSecreto> get logrosSecretos => <LogroSecreto>[
         detalle: tr('Cagaste y deshiciste tanto que se tapó la poceta', 'You pooped and undid so much the toilet clogged'),
         ladoSecreto: false,
       ),
+      // Colección de cartas (lado secreto): los da lib/cartas/lado_secreto.dart al ver el estado, abrir o mejorar.
+      for (final m in const [10, 30, 64, 100, 128])
+        (
+          clave: 'cartas_$m',
+          emoji: m == 128 ? '👑' : '🃏',
+          nombre: m == 128 ? tr('Álbum completo', 'Full album') : tr('$m cartas', '$m cards'),
+          detalle: tr('Juntaste $m cartas distintas', 'You collected $m different cards'),
+          ladoSecreto: true,
+        ),
+      (
+        clave: 'carta_dorada',
+        emoji: '🥇',
+        nombre: tr('Toque de oro', 'Golden touch'),
+        detalle: tr('Subiste una carta a dorada', 'You upgraded a card to gold'),
+        ladoSecreto: true,
+      ),
+      (
+        clave: 'carta_rainbow',
+        emoji: '🌈',
+        nombre: tr('Arcoíris de poceta', 'Toilet rainbow'),
+        detalle: tr('Subiste una carta a rainbow', 'You upgraded a card to rainbow'),
+        ladoSecreto: true,
+      ),
+      (
+        clave: 'sobre_rey',
+        emoji: '📦',
+        nombre: tr(segun('Sobre del rey', 'Sobre de la reina'), segun('King pack', 'Queen pack')),
+        detalle: tr(segun('Abriste un sobre del rey', 'Abriste un sobre de la reina'), segun('You opened a king pack', 'You opened a queen pack')),
+        ladoSecreto: true,
+      ),
     ];
 
 // SharedPreferences: los ganados en este teléfono (por si la tabla no existe o no hay red),
