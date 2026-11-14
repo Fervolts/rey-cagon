@@ -21,6 +21,12 @@ class VersionNovedades {
 
 /// El historial público, de la más nueva a la más vieja. Al sacar una versión nueva se agrega arriba.
 const historialNovedades = <VersionNovedades>[
+  VersionNovedades('2.22.0', '2026-11-14', [
+    ('🎮', 'Si haces récord en un minijuego, pégalo en el Baño: sale tu puntaje y tu puesto entre amigos, y los demás pueden tocar JUGAR para ganarte.',
+        'Set a record in a minigame and pin it in the Bathroom: it shows your score and your rank among friends, and others can tap PLAY to beat you.'),
+    ('🕳️', 'Pega tu Cloaca en el Baño con su puesto en la liga y sus miembros. Quien no tenga Cloaca puede tocar UNIRME y entrar sin pedir el código.',
+        'Pin your Cloaca in the Bathroom with its league rank and members. Anyone without a Cloaca can tap JOIN and get in without asking for the code.'),
+  ]),
   VersionNovedades('2.21.0', '2026-11-14', [
     ('👑', 'El Baño tiene cara nueva: pestaña MI CLOACA, el TRONO DE HOY con el dibujo con más 💩 del día, y cada autor muestra su título y su racha 🔥.',
         'The Bathroom got a new look: a MY CLOACA tab, TODAY\'S THRONE with the drawing with most 💩 of the day, and every author shows their title and streak 🔥.'),
