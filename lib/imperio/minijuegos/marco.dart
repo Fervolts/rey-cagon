@@ -11,6 +11,7 @@ import '../../animaciones.dart';
 import '../../diagnostico.dart';
 import '../../emoji.dart';
 import '../../idioma.dart';
+import '../../tarjeta_pegada.dart' show pegarEnMuro;
 import '../../tema.dart';
 import '../control.dart';
 import '../formato.dart';
@@ -280,6 +281,16 @@ class _PantallaMinijuegoState extends State<PantallaMinijuego> {
             ),
             if (motivo != null && !_guardando)
               Padding(padding: const EdgeInsets.only(top: 10), child: Text(motivo, textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: p.textoSuave))),
+            if (r?.nuevoRecord == true && !_guardando)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: OutlinedButton(
+                  key: const Key('minijuego_pegar'),
+                  style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                  onPressed: () => pegarEnMuro(context, {'tipo': 'minijuego', 'juego': widget.juego}),
+                  child: Text(tr('PEGAR EN EL BAÑO', 'POST TO THE BATHROOM')),
+                ),
+              ),
             if (_puntos <= 0)
               Padding(
                 padding: const EdgeInsets.only(top: 10),

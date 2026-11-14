@@ -17,6 +17,7 @@ import 'imperio/ranking_amigos.dart' show faltaFuncion;
 import 'main.dart' show conReintento, db, textoError;
 import 'perfil.dart' show PantallaPerfil;
 import 'periodos.dart' show ContadorCierre;
+import 'tarjeta_pegada.dart' show pegarEnMuro;
 import 'teclado_emojis.dart' show panelEmojisAbierto;
 import 'tema.dart';
 import 'vivo.dart' show Cargando;
@@ -283,6 +284,7 @@ String textoMotivoCloaca(String? motivo, {String? texto}) => switch (motivo) {
       'no_existe' => tr('Ese premio ya se cobró.', 'That prize was already claimed.'),
       'sin_imperio' => tr('Abre el Imperio una vez para cobrar tus Rollos de Oro.', 'Open the Empire once to claim your Golden Rolls.'),
       'sin_sesion' => tr('Entra a tu cuenta primero.', 'Log in first.'),
+      'publicacion' => tr('Esa publicación ya no está o venció.', 'That post is gone or expired.'),
       _ => tr('No se pudo. Prueba otra vez.', 'It did not work. Try again.'),
     };
 
@@ -334,6 +336,10 @@ class NubeCloacas {
 
   Future<ResultadoCloaca> unirse(String codigo) async =>
       _avisar(ResultadoCloaca.desdeJson(await db.rpc('cloaca_unirse', params: {'p_codigo': codigo})));
+
+  /// Unirse desde una tarjeta mi_cloaca del muro: el servidor busca el código.
+  Future<ResultadoCloaca> unirmeDesdeMuro(int muroId) async =>
+      _avisar(ResultadoCloaca.desdeJson(await db.rpc('cloaca_unirme_desde_muro', params: {'p_muro_id': muroId})));
 
   Future<ResultadoCloaca> salir() async => _avisar(ResultadoCloaca.desdeJson(await db.rpc('cloaca_salir')));
 
@@ -679,6 +685,13 @@ class _RankingCloacasVistaState extends State<RankingCloacasVista> {
           ),
         ],
         const SizedBox(height: 16),
+        OutlinedButton(
+          key: const Key('cloaca_pegar'),
+          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+          onPressed: () => pegarEnMuro(context, {'tipo': 'mi_cloaca'}),
+          child: Text(tr('PEGAR EN EL BAÑO', 'POST TO THE BATHROOM')),
+        ),
+        const SizedBox(height: 8),
         OutlinedButton(
           key: const Key('cloaca_salir'),
           style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
@@ -1122,6 +1135,126 @@ class TarjetaCloaca extends StatelessWidget {
           ),
         ]),
       ),
+    );
+  }
+}
+
+/// Mi Cloaca pegada en el muro. Quien no tiene Cloaca se une desde aquí sin ver el código.
+class TarjetaMiCloacaMuro extends StatefulWidget {
+  const TarjetaMiCloacaMuro(this.t, {super.key, this.muroId});
+
+  final Map<String, dynamic> t;
+
+  /// Fila del muro; sin ella (chat) no hay botón UNIRME.
+  final int? muroId;
+
+  @override
+  State<TarjetaMiCloacaMuro> createState() => _TarjetaMiCloacaMuroState();
+}
+
+class _TarjetaMiCloacaMuroState extends State<TarjetaMiCloacaMuro> {
+  EstadoCloaca? _mia;
+  bool _ocupado = false;
+
+  @override
+  void initState() {
+    super.initState();
+    cloacaCambio.addListener(_cargar);
+    _cargar();
+  }
+
+  @override
+  void dispose() {
+    cloacaCambio.removeListener(_cargar);
+    super.dispose();
+  }
+
+  // shortcut: una llamada cloaca_mia por tarjeta; si el muro junta muchas, compartir una sola.
+  Future<void> _cargar() async {
+    try {
+      final m = await nubeCloacas.mia();
+      if (mounted) setState(() => _mia = m);
+    } catch (_) {}
+  }
+
+  void _avisar(String texto) => ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: TextoConEmojis(texto)));
+
+  Future<void> _unirme() async {
+    setState(() => _ocupado = true);
+    try {
+      final r = await nubeCloacas.unirmeDesdeMuro(widget.muroId!);
+      if (!mounted) return;
+      if (!r.ok) return _avisar(textoMotivoCloaca(r.motivo, texto: r.texto));
+      _avisar(tr('Ya estás dentro. ¡A cagar por tu Cloaca!', 'You are in. Poop for your Sewer!'));
+      await abrirCloaca(context);
+    } catch (e) {
+      if (mounted) _avisar(textoError(e));
+    } finally {
+      if (mounted) setState(() => _ocupado = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paleta(context);
+    final t = widget.t;
+    final emoji = '${t['emoji'] ?? ''}'.trim();
+    final puesto = t['puesto'] == null ? null : _ent(t['puesto']);
+    final miembros = _ent(t['miembros']);
+    final max = t['max'] == null ? maxMiembrosDefecto : _ent(t['max']);
+    final bono = _real(t['bono']);
+    final cupos = max - miembros;
+    final mia = _mia;
+    final esMia = mia?.cloaca != null && mia!.cloaca!.id == '${t['cloaca_id'] ?? ''}';
+    final puedeUnirse = mia != null && mia.cloaca == null && cupos > 0 && widget.muroId != null;
+    final textoCupos = cupos <= 0
+        ? tr('Llena', 'Full')
+        : cupos == 1
+            ? tr('queda 1 cupo', '1 spot left')
+            : tr('quedan $cupos cupos', '$cupos spots left');
+    final suave = TextStyle(color: p.textoSuave);
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: p.tarjeta, border: Border.all(color: acento, width: 2), borderRadius: BorderRadius.circular(radio)),
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(mainAxisSize: MainAxisSize.min, children: [
+          const Emoji('🕳', tamano: 20),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text('${t['nombre'] ?? ''}'.trim().toUpperCase(),
+                style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2, color: p.texto)),
+          ),
+          const SizedBox(width: 6),
+          Emoji(emoji.isEmpty ? '💩' : emoji, tamano: 20),
+        ]),
+        const SizedBox(height: 6),
+        if (puesto != null)
+          Text(tr('#$puesto en la liga esta semana', '#$puesto in the league this week'),
+              key: const Key('tarjeta_cloaca_puesto'), style: const TextStyle(fontWeight: FontWeight.w700)),
+        Text(
+          tr('$miembros/$max miembros · ${_ent(t['cagaron_hoy'])} cagaron hoy', '$miembros/$max members · ${_ent(t['cagaron_hoy'])} pooped today'),
+          style: suave,
+        ),
+        if (bono > 0) Text(tr('${textoBono(bono)} de producción', '${textoBono(bono)} production'), style: suave),
+        const SizedBox(height: 10),
+        if (esMia)
+          Text(tr('Tu Cloaca', 'Your Sewer'), key: const Key('tarjeta_cloaca_tuya'), style: TextStyle(fontWeight: FontWeight.w900, color: p.acento))
+        else
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            if (puedeUnirse) ...[
+              FilledButton(
+                key: const Key('tarjeta_cloaca_unirme'),
+                style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+                onPressed: _ocupado ? null : _unirme,
+                child: Text(tr('UNIRME', 'JOIN')),
+              ),
+              const SizedBox(width: 10),
+            ],
+            Text(textoCupos, key: const Key('tarjeta_cloaca_cupos'), style: suave),
+          ]),
+      ]),
     );
   }
 }

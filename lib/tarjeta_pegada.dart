@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import 'accesorios.dart';
 import 'cagadon.dart' show TarjetaReto;
 import 'chat.dart' show aceptoReglas, hitos, nombreSala;
-import 'cloaca.dart' show TarjetaCloaca;
+import 'cloaca.dart' show TarjetaCloaca, TarjetaMiCloacaMuro;
 import 'emoji.dart';
 import 'idioma.dart';
+import 'imperio/minijuegos/tarjeta_muro.dart';
 import 'imperio/regalos.dart' show TarjetaImperio, TarjetaRegalo;
 import 'imperio/tarjeta_bano.dart';
 import 'imperio/tarjeta_cartera.dart';
@@ -18,10 +19,14 @@ import 'tema.dart';
 /// Dibuja una tarjeta según su tipo. En el muro, el reto es el post vivo: invitación para los dos,
 /// marcador mientras dura y resultado al final. En el chat (mensajes viejos) va compacto.
 class TarjetaPegada extends StatelessWidget {
-  const TarjetaPegada(this.t, {super.key, this.muro = false});
+  const TarjetaPegada(this.t, {super.key, this.muro = false, this.muroId, this.autor});
 
   final Map<String, dynamic> t;
   final bool muro;
+
+  /// Fila del muro y quién la pegó: los usan las tarjetas que se tocan (unirse a la Cloaca, jugar).
+  final int? muroId;
+  final String? autor;
 
   @override
   Widget build(BuildContext context) {
@@ -33,6 +38,8 @@ class TarjetaPegada extends StatelessWidget {
     if (t['tipo'] == 'regalo') return TarjetaRegalo(t);
     if (t['tipo'] == 'imperio') return TarjetaImperio(t);
     if (t['tipo'] == 'cloaca') return TarjetaCloaca(t);
+    if (t['tipo'] == 'minijuego') return TarjetaMinijuego(t, mia: autor != null && autor == db.auth.currentUser?.id);
+    if (t['tipo'] == 'mi_cloaca') return TarjetaMiCloacaMuro(t, muroId: muroId);
     final propia = tarjetaPresumir(t);
     if (propia != null) return propia;
     return Container(

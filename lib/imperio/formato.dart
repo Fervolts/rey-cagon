@@ -106,3 +106,14 @@ String formatoCantidad(int n, {bool ingles = false}) {
   }
   return '$t${_sufijos[exp - 1]}';
 }
+
+/// Entero con separador de miles: "1.240" en español, "1,240" en inglés.
+String conMiles(int n, {bool ingles = false}) {
+  final s = n.abs().toString();
+  final b = StringBuffer(n < 0 ? '-' : '');
+  for (var i = 0; i < s.length; i++) {
+    if (i > 0 && (s.length - i) % 3 == 0) b.write(ingles ? ',' : '.');
+    b.write(s[i]);
+  }
+  return b.toString();
+}

@@ -619,7 +619,11 @@ class _TarjetaPostState extends State<_TarjetaPost> {
                 child: TextoConEmojis(texto, style: TextStyle(color: p.texto, fontSize: 15)),
               ),
             if (dibujo != null) Padding(padding: const EdgeInsets.fromLTRB(12, 8, 12, 4), child: VistaDibujo(dibujo)),
-            if (tarjeta != null) _Recorte(tarjeta, giro: ((_post['id'] as num?)?.toInt() ?? 0).isEven ? pi / 180 : -pi / 180),
+            if (tarjeta != null)
+              _Recorte(tarjeta,
+                  giro: ((_post['id'] as num?)?.toInt() ?? 0).isEven ? pi / 180 : -pi / 180,
+                  muroId: (_post['id'] as num?)?.toInt(),
+                  autor: _post['user_id'] as String?),
             Padding(
               padding: const EdgeInsets.fromLTRB(6, 4, 0, 4),
               child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -738,10 +742,12 @@ class _BordeRayado extends CustomPainter {
 
 /// Tarjeta del servidor (hito, racha, reto, Imperio…) pegada con cinta: torcida 1° (derecha sin movimiento) y dos tiras amarillas.
 class _Recorte extends StatelessWidget {
-  const _Recorte(this.tarjeta, {required this.giro});
+  const _Recorte(this.tarjeta, {required this.giro, this.muroId, this.autor});
 
   final Map<String, dynamic> tarjeta;
   final double giro;
+  final int? muroId;
+  final String? autor;
 
   @override
   Widget build(BuildContext context) {
@@ -753,7 +759,7 @@ class _Recorte extends StatelessWidget {
         child: Transform.rotate(
           angle: movimiento(context) == Movimiento.nada ? 0 : giro,
           child: Stack(clipBehavior: Clip.none, children: [
-            TarjetaPegada(tarjeta, muro: true),
+            TarjetaPegada(tarjeta, muro: true, muroId: muroId, autor: autor),
             Positioned(top: -7, left: 10, child: IgnorePointer(child: Transform.rotate(angle: -.25, child: cinta))),
             Positioned(top: -7, right: 10, child: IgnorePointer(child: Transform.rotate(angle: .25, child: cinta))),
           ]),
