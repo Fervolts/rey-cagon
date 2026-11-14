@@ -1,16 +1,17 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
-import 'idioma.dart';
 import 'tema.dart';
 
-// Topes del dibujo. Iguales a public.dibujo_invalido() en supabase/migrations/20261114120000_muro.sql:
-// si se cambia uno, se cambia allá también.
+// Topes del dibujo. Iguales a public.dibujo_invalido() (la última está en
+// supabase/migrations/20261116120000_muro_dibujo_v2.sql): si se cambia uno, se cambia allá también.
 const maxTrazos = 400;
 const maxNumerosPorTrazo = 4000;
 const maxNumerosTotal = 30000;
 const ladoDibujo = 1000;
 
-/// Los 16 colores del Paint de siempre: fila de arriba oscuros, fila de abajo claros.
+/// Los 16 colores del Paint de siempre. En el formato v1 el color era el índice en esta lista.
 const coloresPaint = <Color>[
   Color(0xFF000000), Color(0xFF808080), Color(0xFF800000), Color(0xFF808000),
   Color(0xFF008000), Color(0xFF008080), Color(0xFF000080), Color(0xFF800080),
@@ -18,50 +19,144 @@ const coloresPaint = <Color>[
   Color(0xFF00FF00), Color(0xFF00FFFF), Color(0xFF0000FF), Color(0xFFFF00FF),
 ];
 
-/// Grosor de cada pincel (1 a 4) en unidades del lienzo de 1000.
-const grosores = <double>[4, 10, 22, 44];
+/// Grosor de cada tamaño (g = 1..8) en unidades del lienzo de 1000. Los cuatro de v1 (4, 10, 22, 44) son los pares.
+const grosores = <double>[2, 4, 7, 10, 15, 22, 32, 44];
+
+/// Cómo se pinta un trazo. El nombre es el que va en el JSON (`h`), no se renombra.
+enum Herramienta { pincel, plumon, spray, borrador, sello }
+
+/// 0xRRGGBB → "rrggbb".
+String aHex(int rgb) => (rgb & 0xFFFFFF).toRadixString(16).padLeft(6, '0');
+
+/// Color sin alfa (0xRRGGBB).
+int rgbDe(Color c) => c.toARGB32() & 0xFFFFFF;
+
+Color colorDe(int rgb) => Color(0xFF000000 | rgb);
 
 class Trazo {
-  Trazo(this.c, this.g, [List<int>? p]) : p = p ?? [];
+  Trazo(this.c, this.g, {this.h = Herramienta.pincel, List<int>? p}) : p = p ?? [];
 
-  int c;
+  /// 0xRRGGBB. El borrador no lo usa: pinta del color del fondo (así el balde lo sigue).
+  final int c;
+
+  /// Tamaño 1..8 (ver [grosores]).
   final int g;
+  final Herramienta h;
 
-  /// x, y, x, y… en 0..1000.
+  /// x, y, x, y… en 0..1000. El sello lleva un solo punto.
   final List<int> p;
 
-  Map<String, dynamic> aJson() => {'c': c, 'g': g, 'p': p};
+  // Forma ya armada en unidades del lienzo; se alarga cuando el editor agrega puntos, nunca se rehace.
+  Path? _forma;
+  var _hechos = 0;
+  math.Random? _azar;
+
+  double get ancho => grosores[g - 1];
+
+  Map<String, dynamic> aJson() => {'c': aHex(c), 'g': g, 'h': h.name, 'p': p};
+
+  Path _armar() {
+    final f = _forma ??= Path();
+    if (h == Herramienta.sello) {
+      final s = ancho * 2 + 24;
+      if (_hechos == 0) f.addPath(_caca.transform((Matrix4.diagonal3Values(s, s, 1)..setTranslationRaw(p[0] * 1.0, p[1] * 1.0, 0)).storage), Offset.zero);
+    } else if (h == Herramienta.spray) {
+      // Puntitos fijos: la semilla sale del primer punto, así el mismo dibujo se ve igual en todos los teléfonos.
+      final azar = _azar ??= math.Random(p[0] * 1009 + p[1]);
+      final r = ancho * 1.5 + 6, lado = math.max(2.0, ancho / 5);
+      for (var i = _hechos; i + 1 < p.length; i += 2) {
+        for (var n = 0; n < 5 + g; n++) {
+          final a = azar.nextDouble() * 2 * math.pi, d = r * math.sqrt(azar.nextDouble());
+          f.addRect(Rect.fromCenter(center: Offset(p[i] + d * math.cos(a), p[i + 1] + d * math.sin(a)), width: lado, height: lado));
+        }
+      }
+    } else {
+      if (_hechos == 0) f.moveTo(p[0].toDouble(), p[1].toDouble());
+      for (var i = math.max(_hechos, 2); i + 1 < p.length; i += 2) {
+        f.lineTo(p[i].toDouble(), p[i + 1].toDouble());
+      }
+    }
+    _hechos = p.length;
+    return f;
+  }
+
+  /// Pinta el trazo en unidades del lienzo (el lienzo ya viene escalado). [pincel] se reusa entre trazos.
+  void pintar(Canvas canvas, Paint pincel, int fondo) {
+    final color = colorDe(h == Herramienta.borrador ? fondo : c);
+    final plumon = h == Herramienta.plumon;
+    pincel
+      ..color = plumon ? color.withAlpha(150) : color
+      ..strokeWidth = ancho
+      ..strokeCap = plumon ? StrokeCap.butt : StrokeCap.round
+      ..strokeJoin = plumon ? StrokeJoin.bevel : StrokeJoin.round
+      ..style = PaintingStyle.fill;
+    if (p.isEmpty) return;
+    final forma = _hechos == p.length ? _forma! : _armar();
+    if (h == Herramienta.spray || h == Herramienta.sello) return canvas.drawPath(forma, pincel);
+    if (p.length == 2) {
+      final o = Offset(p[0].toDouble(), p[1].toDouble());
+      return plumon ? canvas.drawRect(Rect.fromCenter(center: o, width: ancho, height: ancho), pincel) : canvas.drawCircle(o, ancho / 2, pincel);
+    }
+    canvas.drawPath(forma, pincel..style = PaintingStyle.stroke);
+  }
 }
 
-class Dibujo {
-  Dibujo({this.fondo = 8, List<Trazo>? trazos}) : trazos = trazos ?? [];
+/// La 💩 del sello: tres pisos y la punta, en una caja de 1×1 centrada en el punto.
+final _caca = Path()
+  ..addOval(Rect.fromCenter(center: const Offset(0, 0.3), width: 1, height: 0.38))
+  ..addOval(Rect.fromCenter(center: const Offset(0, 0.04), width: 0.78, height: 0.32))
+  ..addOval(Rect.fromCenter(center: const Offset(0, -0.2), width: 0.52, height: 0.28))
+  ..moveTo(-0.16, -0.28)
+  ..quadraticBezierTo(0.02, -0.4, 0.1, -0.5)
+  ..quadraticBezierTo(0.2, -0.38, 0.18, -0.26)
+  ..close();
 
+class Dibujo {
+  Dibujo({this.fondo = 0xFFFFFF, List<Trazo>? trazos}) : trazos = trazos ?? [];
+
+  /// 0xRRGGBB.
   int fondo;
   final List<Trazo> trazos;
 
   int get numeros => trazos.fold(0, (s, t) => s + t.p.length);
 
-  Map<String, dynamic> aJson() => {'v': 1, 'fondo': fondo, 'trazos': [for (final t in trazos) t.aJson()]};
+  /// Siempre en v2. Los v1 que llegan de la base se leen igual (ver [deJson]).
+  Map<String, dynamic> aJson() => {'v': 2, 'fondo': aHex(fondo), 'trazos': [for (final t in trazos) t.aJson()]};
 
-  /// Lee lo que viene de la base. Null si no cumple las reglas (así un dato raro no rompe el feed).
+  /// Lee lo que viene de la base (v1 o v2). Null si no cumple las reglas (así un dato raro no rompe el feed).
   static Dibujo? deJson(Object? j) {
     if (dibujoInvalido(j) != null) return null;
     final m = j as Map;
+    List<int> puntos(Map t) => [for (final n in t['p'] as List) n as int];
+    if (m['v'] == 1) {
+      return Dibujo(
+        fondo: rgbDe(coloresPaint[m['fondo'] as int]),
+        trazos: [for (final t in m['trazos'] as List) Trazo(rgbDe(coloresPaint[t['c'] as int]), (t['g'] as int) * 2, p: puntos(t))],
+      );
+    }
     return Dibujo(
-      fondo: m['fondo'] as int,
-      trazos: [for (final t in m['trazos'] as List) Trazo(t['c'] as int, t['g'] as int, [for (final n in t['p'] as List) n as int])],
+      fondo: int.parse(m['fondo'] as String, radix: 16),
+      trazos: [
+        for (final t in m['trazos'] as List)
+          Trazo(int.parse(t['c'] as String, radix: 16), t['g'] as int, h: Herramienta.values.byName(t['h'] as String), p: puntos(t)),
+      ],
     );
   }
 }
 
-/// Lo mismo que public.dibujo_invalido(): el motivo, o null si está bien.
+final _hex = RegExp(r'^[0-9a-f]{6}$');
+
+/// Lo mismo que public.dibujo_invalido(): el motivo, o null si está bien. Acepta v1 (colores por índice,
+/// grosor 1..4) y v2 (colores "rrggbb", grosor 1..8, herramienta `h`; el sello con un solo punto).
 String? dibujoInvalido(Object? d) {
   bool entero(Object? x, int max, [int min = 0]) => x is int && x >= min && x <= max;
+  bool hex(Object? x) => x is String && _hex.hasMatch(x);
   if (d is! Map) return 'no es un objeto';
   final claves = d.keys.map((k) => '$k').toList()..sort();
   if (claves.join(',') != 'fondo,trazos,v') return 'claves de más o de menos';
-  if (d['v'] != 1) return 'versión desconocida';
-  if (!entero(d['fondo'], 15)) return 'fondo fuera de rango';
+  final v1 = d['v'] == 1;
+  if (!v1 && d['v'] != 2) return 'versión desconocida';
+  if (v1 ? !entero(d['fondo'], 15) : !hex(d['fondo'])) return 'fondo fuera de rango';
   final trazos = d['trazos'];
   if (trazos is! List) return 'trazos no es una lista';
   if (trazos.isEmpty || trazos.length > maxTrazos) return 'entre 1 y $maxTrazos trazos';
@@ -69,12 +164,15 @@ String? dibujoInvalido(Object? d) {
   for (final t in trazos) {
     if (t is! Map) return 'trazo que no es objeto';
     final ct = t.keys.map((k) => '$k').toList()..sort();
-    if (ct.join(',') != 'c,g,p') return 'trazo con claves de más o de menos';
-    if (!entero(t['c'], 15)) return 'color fuera de rango';
-    if (!entero(t['g'], 4, 1)) return 'grosor fuera de rango';
+    if (ct.join(',') != (v1 ? 'c,g,p' : 'c,g,h,p')) return 'trazo con claves de más o de menos';
+    if (v1 ? !entero(t['c'], 15) : !hex(t['c'])) return 'color fuera de rango';
+    if (!entero(t['g'], v1 ? 4 : 8, 1)) return 'grosor fuera de rango';
+    if (!v1 && !Herramienta.values.any((h) => h.name == t['h'])) return 'herramienta desconocida';
     final p = t['p'];
     if (p is! List) return 'puntos no es una lista';
-    if (p.length < 2 || p.length > maxNumerosPorTrazo || p.length.isOdd) return 'trazo con número de puntos inválido';
+    if (p.length < 2 || p.length > maxNumerosPorTrazo || p.length.isOdd || (t['h'] == 'sello' && p.length != 2)) {
+      return 'trazo con número de puntos inválido';
+    }
     total += p.length;
     if (total > maxNumerosTotal) return 'demasiados puntos';
     if (p.any((n) => !entero(n, ladoDibujo))) return 'coordenada fuera de rango';
@@ -82,7 +180,7 @@ String? dibujoInvalido(Object? d) {
   return null;
 }
 
-/// Pinta un dibujo al tamaño que le den (siempre cuadrado).
+/// Pinta un dibujo al tamaño que le den (siempre cuadrado). Cada trazo guarda su forma: pintar de nuevo no la rehace.
 class PintorDibujo extends CustomPainter {
   PintorDibujo(this.dibujo, {this.version = 0});
 
@@ -94,25 +192,13 @@ class PintorDibujo extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final k = size.width / ladoDibujo;
-    canvas.drawRect(Offset.zero & size, Paint()..color = coloresPaint[dibujo.fondo]);
+    canvas.drawRect(Offset.zero & size, Paint()..color = colorDe(dibujo.fondo));
     canvas.save();
     canvas.clipRect(Offset.zero & size);
+    canvas.scale(k);
+    final pincel = Paint();
     for (final t in dibujo.trazos) {
-      final pincel = Paint()
-        ..color = coloresPaint[t.c]
-        ..strokeWidth = grosores[t.g - 1] * k
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..style = PaintingStyle.stroke;
-      if (t.p.length == 2) {
-        canvas.drawCircle(Offset(t.p[0] * k, t.p[1] * k), pincel.strokeWidth / 2, pincel..style = PaintingStyle.fill);
-        continue;
-      }
-      final camino = Path()..moveTo(t.p[0] * k, t.p[1] * k);
-      for (var i = 2; i + 1 < t.p.length; i += 2) {
-        camino.lineTo(t.p[i] * k, t.p[i + 1] * k);
-      }
-      canvas.drawPath(camino, pincel);
+      t.pintar(canvas, pincel, dibujo.fondo);
     }
     canvas.restore();
   }
@@ -132,284 +218,32 @@ class VistaDibujo extends StatelessWidget {
         aspectRatio: 1,
         child: DecoratedBox(
           decoration: BoxDecoration(border: Border.all(color: paleta(context).borde)),
-          child: CustomPaint(painter: PintorDibujo(dibujo)),
+          child: RepaintBoundary(child: CustomPaint(painter: PintorDibujo(dibujo))),
         ),
       );
 }
 
-/// Abre el editor tipo Paint. Devuelve el dibujo, o null si se cancela.
-Future<Dibujo?> abrirEditorDibujo(BuildContext context, {Dibujo? inicial}) =>
-    Navigator.push<Dibujo>(context, MaterialPageRoute(builder: (_) => EditorDibujo(inicial: inicial)));
-
-enum _Herramienta { pincel, borrador, fondo }
-
-class EditorDibujo extends StatefulWidget {
-  const EditorDibujo({super.key, this.inicial});
-
-  final Dibujo? inicial;
-
-  @override
-  State<EditorDibujo> createState() => _EditorDibujoState();
+/// El color que se ve en (x, y) del lienzo de 1000: el del trazo de más arriba que pase por ahí, o el fondo. Para el 💧.
+int colorEn(Dibujo d, int x, int y) {
+  final o = Offset(x.toDouble(), y.toDouble());
+  Offset punto(List<int> p, int i) => Offset(p[i].toDouble(), p[i + 1].toDouble());
+  for (final t in d.trazos.reversed) {
+    final p = t.p;
+    if (p.isEmpty) continue;
+    final cerca = switch (t.h) {
+      Herramienta.sello => (punto(p, 0) - o).distance <= (t.ancho * 2 + 24) / 2,
+      Herramienta.spray => [for (var i = 0; i + 1 < p.length; i += 2) punto(p, i)].any((q) => (q - o).distance <= t.ancho * 1.5 + 6),
+      _ => [for (var i = 0; i + 1 < p.length; i += 2) i == 0 ? (punto(p, 0), punto(p, 0)) : (punto(p, i - 2), punto(p, i))]
+          .any((s) => _distancia(o, s.$1, s.$2) <= t.ancho / 2 + 4),
+    };
+    if (cerca) return t.h == Herramienta.borrador ? d.fondo : t.c;
+  }
+  return d.fondo;
 }
 
-class _EditorDibujoState extends State<EditorDibujo> {
-  late final Dibujo _d;
-
-  /// Trazos del borrador: cambian con el fondo.
-  final _borrador = <Trazo>{};
-  var _version = 0;
-  var _color = 0;
-  var _grosor = 2;
-  var _herramienta = _Herramienta.pincel;
-  Trazo? _actual;
-
-  @override
-  void initState() {
-    super.initState();
-    final i = widget.inicial;
-    _d = i == null ? Dibujo() : Dibujo(fondo: i.fondo, trazos: [for (final t in i.trazos) Trazo(t.c, t.g, [...t.p])]);
-  }
-
-  double get _uso => _d.numeros / maxNumerosTotal;
-  bool get _lleno => _d.trazos.length >= maxTrazos || _d.numeros + 2 > maxNumerosTotal;
-
-  (int, int) _punto(Offset local, double lado) {
-    int c(double v) => (v / lado * ladoDibujo).round().clamp(0, ladoDibujo);
-    return (c(local.dx), c(local.dy));
-  }
-
-  void _empezar(Offset local, double lado) {
-    if (_herramienta == _Herramienta.fondo || _lleno) return;
-    final (x, y) = _punto(local, lado);
-    final borra = _herramienta == _Herramienta.borrador;
-    final t = Trazo(borra ? _d.fondo : _color, _grosor, [x, y]);
-    if (borra) _borrador.add(t);
-    setState(() {
-      _d.trazos.add(t);
-      _actual = t;
-      _version++;
-    });
-  }
-
-  void _seguir(Offset local, double lado) {
-    final t = _actual;
-    if (t == null) return;
-    // Pasado el tope el trazo se queda como está: el servidor no aceptaría más.
-    if (t.p.length + 2 > maxNumerosPorTrazo || _d.numeros + 2 > maxNumerosTotal) return;
-    final (x, y) = _punto(local, lado);
-    final dx = x - t.p[t.p.length - 2], dy = y - t.p[t.p.length - 1];
-    if (dx * dx + dy * dy < 9) return; // menos de 3 unidades: no gasta puntos
-    setState(() {
-      t.p.addAll([x, y]);
-      _version++;
-    });
-  }
-
-  void _cambiarFondo(int c) => setState(() {
-        _d.fondo = c;
-        for (final t in _borrador) {
-          t.c = c;
-        }
-        _version++;
-      });
-
-  void _deshacer() {
-    if (_d.trazos.isEmpty) return;
-    setState(() {
-      _borrador.remove(_d.trazos.removeLast());
-      _version++;
-    });
-  }
-
-  Future<void> _limpiar() async {
-    if (_d.trazos.isEmpty) return;
-    final si = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(tr('¿Borrar todo el dibujo?', 'Clear the whole drawing?')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('CANCELAR', 'CANCEL'))),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('BORRAR', 'CLEAR'))),
-        ],
-      ),
-    );
-    if (si != true || !mounted) return;
-    setState(() {
-      _d.trazos.clear();
-      _borrador.clear();
-      _version++;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final p = paleta(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(tr('DIBUJAR', 'DRAW')),
-        actions: [
-          IconButton(tooltip: tr('Deshacer', 'Undo'), onPressed: _d.trazos.isEmpty ? null : _deshacer, icon: const Icon(Icons.undo)),
-          IconButton(tooltip: tr('Borrar todo', 'Clear all'), onPressed: _d.trazos.isEmpty ? null : _limpiar, icon: const Icon(Icons.delete_outline)),
-          TextButton(
-            onPressed: _d.trazos.isEmpty ? null : () => Navigator.pop(context, _d),
-            child: Text(tr('LISTO', 'DONE')),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          // Sin scroll: arrastrar en el lienzo siempre pinta, nunca mueve la pantalla.
-          child: Column(children: [
-            Expanded(
-              child: LayoutBuilder(builder: (context, c) {
-                final lado = c.maxWidth < c.maxHeight ? c.maxWidth : c.maxHeight;
-                return Center(
-                  child: Container(
-                    key: const Key('lienzo'),
-                    width: lado,
-                    height: lado,
-                    decoration: BoxDecoration(border: Border.all(color: p.bordeFuerte)),
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onPanDown: (e) => _empezar(e.localPosition, lado),
-                      onPanUpdate: (e) => _seguir(e.localPosition, lado),
-                      onPanEnd: (_) => _actual = null,
-                      onPanCancel: () => _actual = null,
-                      child: CustomPaint(painter: PintorDibujo(_d, version: _version)),
-                    ),
-                  ),
-                );
-              }),
-            ),
-            const SizedBox(height: 6),
-            if (_uso >= 0.7 || _d.trazos.length >= maxTrazos * 0.8)
-              Text(
-                _lleno
-                    ? tr('Se acabó la tinta: deshaz algo para seguir.', 'Out of ink: undo something to keep going.')
-                    : tr('Tinta usada: ${(_uso * 100).round()}%', 'Ink used: ${(_uso * 100).round()}%'),
-                style: TextStyle(color: _lleno ? p.texto : p.textoSuave, fontSize: 12, fontWeight: _lleno ? FontWeight.w700 : null),
-              ),
-            const SizedBox(height: 8),
-            Row(children: [
-              for (final (h, icono, es, en) in [
-                (_Herramienta.pincel, Icons.brush, 'PINCEL', 'BRUSH'),
-                (_Herramienta.borrador, Icons.auto_fix_normal, 'BORRADOR', 'ERASER'),
-                (_Herramienta.fondo, Icons.format_color_fill, 'FONDO', 'FILL'),
-              ])
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: _Boton(
-                      activo: _herramienta == h,
-                      onTap: () => setState(() => _herramienta = h),
-                      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        Icon(icono, size: 16),
-                        const SizedBox(width: 4),
-                        Flexible(child: Text(tr(es, en), overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700))),
-                      ]),
-                    ),
-                  ),
-                ),
-            ]),
-            const SizedBox(height: 10),
-            Row(children: [
-              for (var g = 1; g <= 4; g++)
-                Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: _Boton(
-                    activo: _grosor == g,
-                    onTap: () => setState(() => _grosor = g),
-                    ancho: 44,
-                    child: Builder(builder: (c) => Container(width: 4.0 + g * 5, height: 4.0 + g * 5, color: IconTheme.of(c).color)),
-                  ),
-                ),
-              const Spacer(),
-              // Color elegido: fondo y pincel, como el cuadrito doble del Paint.
-              SizedBox(
-                width: 44,
-                height: 44,
-                child: Stack(children: [
-                  Positioned(right: 0, bottom: 0, child: _Muestra(coloresPaint[_d.fondo], 28, p.bordeFuerte)),
-                  Positioned(left: 0, top: 0, child: _Muestra(coloresPaint[_color], 28, p.bordeFuerte)),
-                ]),
-              ),
-            ]),
-            const SizedBox(height: 10),
-            for (final fila in [0, 8])
-              Row(children: [
-                for (var i = fila; i < fila + 8; i++)
-                  Expanded(
-                    child: GestureDetector(
-                      key: Key('color$i'),
-                      onTap: () {
-                        if (_herramienta == _Herramienta.fondo) return _cambiarFondo(i);
-                        setState(() {
-                          _color = i;
-                          if (_herramienta == _Herramienta.borrador) _herramienta = _Herramienta.pincel;
-                        });
-                      },
-                      child: AspectRatio(
-                        aspectRatio: 1,
-                        child: Container(
-                          margin: const EdgeInsets.all(1),
-                          decoration: BoxDecoration(
-                            color: coloresPaint[i],
-                            border: Border.all(
-                              color: (_herramienta == _Herramienta.fondo ? _d.fondo : _color) == i ? p.acento : p.bordeFuerte,
-                              width: (_herramienta == _Herramienta.fondo ? _d.fondo : _color) == i ? 3 : 1,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-              ]),
-          ]),
-        ),
-      ),
-    );
-  }
-}
-
-class _Muestra extends StatelessWidget {
-  const _Muestra(this.color, this.lado, this.borde);
-
-  final Color color, borde;
-  final double lado;
-
-  @override
-  Widget build(BuildContext context) =>
-      Container(width: lado, height: lado, decoration: BoxDecoration(color: color, border: Border.all(color: borde)));
-}
-
-class _Boton extends StatelessWidget {
-  const _Boton({required this.activo, required this.onTap, required this.child, this.ancho});
-
-  final bool activo;
-  final VoidCallback onTap;
-  final Widget child;
-  final double? ancho;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = paleta(context);
-    return Material(
-      color: activo ? p.acento : p.tarjeta,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(radio),
-        side: BorderSide(color: activo ? p.acento : p.bordeFuerte),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        child: IconTheme(
-          data: IconThemeData(color: activo ? p.acentoTexto : p.texto),
-          child: DefaultTextStyle.merge(
-            style: TextStyle(color: activo ? p.acentoTexto : p.texto),
-            child: SizedBox(width: ancho, height: 44, child: Center(child: child)),
-          ),
-        ),
-      ),
-    );
-  }
+double _distancia(Offset o, Offset a, Offset b) {
+  final ab = b - a, largo = ab.distanceSquared;
+  if (largo == 0) return (o - a).distance;
+  final k = (((o - a).dx * ab.dx + (o - a).dy * ab.dy) / largo).clamp(0.0, 1.0);
+  return (o - (a + ab * k)).distance;
 }

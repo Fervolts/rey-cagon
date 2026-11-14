@@ -13,6 +13,7 @@ import 'emoji.dart';
 import 'idioma.dart';
 import 'main.dart';
 import 'muro_dibujo.dart';
+import 'muro_editor.dart';
 import 'perfil.dart';
 import 'privados.dart';
 import 'tarjeta_pegada.dart' show TarjetaPegada, presumirEnMuro;
@@ -146,7 +147,7 @@ class _PantallaMuroState extends State<PantallaMuro> {
 
   Future<void> _publicar() async {
     if (!await aceptoReglas(context) || !mounted) return;
-    final hecho = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => const _PantallaPublicar()));
+    final hecho = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => const PantallaPublicar()));
     if (hecho == true && mounted) {
       _aviso(context, tr('Publicado en $nombreSala 🚽', 'Posted in $nombreSala 🚽'));
       _recargar();
@@ -454,95 +455,6 @@ class _Recorte extends StatelessWidget {
           ]),
         ),
       ),
-    );
-  }
-}
-
-/// Escribir un post: texto opcional (hasta 500) y un dibujo opcional. Devuelve true si se publicó.
-class _PantallaPublicar extends StatefulWidget {
-  const _PantallaPublicar();
-
-  @override
-  State<_PantallaPublicar> createState() => _PantallaPublicarState();
-}
-
-class _PantallaPublicarState extends State<_PantallaPublicar> {
-  final _texto = TextEditingController();
-  Dibujo? _dibujo;
-  bool _enviando = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _texto.addListener(() => setState(() {}));
-  }
-
-  @override
-  void dispose() {
-    _texto.dispose();
-    super.dispose();
-  }
-
-  bool get _listo => !_enviando && (_texto.text.trim().isNotEmpty || _dibujo != null);
-
-  Future<void> _dibujar() async {
-    final d = await abrirEditorDibujo(context, inicial: _dibujo);
-    if (d != null && mounted) setState(() => _dibujo = d);
-  }
-
-  Future<void> _enviar() async {
-    setState(() => _enviando = true);
-    try {
-      final texto = _texto.text.trim();
-      await db.from('muro').insert({'texto': texto.isEmpty ? null : texto, 'dibujo': _dibujo?.aJson()});
-      if (mounted) Navigator.pop(context, true);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _enviando = false);
-      _aviso(context, textoError(e));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final p = paleta(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(tr('PUBLICAR', 'POST')),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: FilledButton(key: const Key('muro_enviar'), onPressed: _listo ? _enviar : null, child: Text(tr('PUBLICAR', 'POST'))),
-          ),
-        ],
-      ),
-      body: ListView(padding: const EdgeInsets.all(16), children: [
-        TextField(
-          controller: _texto,
-          maxLength: 500,
-          minLines: 3,
-          maxLines: 8,
-          decoration: InputDecoration(hintText: tr('¿Qué hay en la pared hoy?', "What's on the wall today?")),
-        ),
-        const SizedBox(height: 8),
-        if (_dibujo != null) ...[
-          VistaDibujo(_dibujo!),
-          const SizedBox(height: 8),
-          Row(children: [
-            Expanded(child: OutlinedButton(onPressed: _dibujar, child: Text(tr('EDITAR DIBUJO', 'EDIT DRAWING')))),
-            const SizedBox(width: 8),
-            Expanded(child: OutlinedButton(onPressed: () => setState(() => _dibujo = null), child: Text(tr('QUITAR', 'REMOVE')))),
-          ]),
-        ] else
-          OutlinedButton.icon(
-            key: const Key('muro_dibujar'),
-            onPressed: _dibujar,
-            icon: const Emoji('🎨', tamano: 20),
-            label: Text(tr('DIBUJAR', 'DRAW')),
-          ),
-        const SizedBox(height: 12),
-        Text(tr('Links, teléfonos y correos no entran.', "Links, phone numbers and emails don't get in."), style: TextStyle(color: p.textoSuave, fontSize: 12)),
-      ]),
     );
   }
 }
