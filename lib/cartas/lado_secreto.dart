@@ -161,7 +161,7 @@ class VistaLadoSecreto extends StatelessWidget {
               style: numeros(context, tamano: 11, weight: FontWeight.w800, color: p.texto).copyWith(letterSpacing: 1.5)),
         ),
         const Spacer(),
-        const Emoji('🔓', tamano: 22),
+        const Emoji('🔑', tamano: 22),
       ]),
       const SizedBox(height: 12),
       Text(tr('El lado secreto', 'The secret side'),
