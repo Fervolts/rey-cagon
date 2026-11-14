@@ -1,7 +1,10 @@
+import 'dart:math' show pi;
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'accesorios.dart';
+import 'animaciones.dart';
 import 'avisos.dart';
 import 'chat.dart';
 import 'chat_panel.dart' show abrirPanelChats;
@@ -12,6 +15,7 @@ import 'main.dart';
 import 'muro_dibujo.dart';
 import 'perfil.dart';
 import 'privados.dart';
+import 'tarjeta_pegada.dart' show TarjetaPegada, presumirEnMuro;
 import 'tema.dart';
 
 // Muro del baño: publicaciones con texto y dibujo, 💩 como like y comentarios. Sin Realtime ni push:
@@ -123,7 +127,7 @@ class _PantallaMuroState extends State<PantallaMuro> {
     try {
       // shortcut: paginar por created_at salta posts con el mismo instante exacto; pasar a (created_at, id) si molesta.
       final antes = _posts.isEmpty ? null : _posts.last['created_at'];
-      final filas = await conReintento(() => db.rpc('muro_feed', params: {'p_antes': antes, 'p_amigos': _amigos, 'p_limite': _porPagina}));
+      final filas = await conReintento(() => db.rpc('muro_feed_tarjetas', params: {'p_antes': antes, 'p_amigos': _amigos, 'p_limite': _porPagina}));
       if (!mounted || vuelta != _vuelta) return;
       final nuevas = [for (final f in filas as List) Map<String, dynamic>.from(f as Map)];
       setState(() {
@@ -147,6 +151,11 @@ class _PantallaMuroState extends State<PantallaMuro> {
       _aviso(context, tr('Publicado en $nombreSala 🚽', 'Posted in $nombreSala 🚽'));
       _recargar();
     }
+  }
+
+  // 🏆: hitos, desbloqueos y la última cagada se pegan aquí como recorte (antes iban al chat).
+  Future<void> _presumir() async {
+    if (await presumirEnMuro(context) && mounted) _recargar();
   }
 
   Future<void> _abrirPost(Map<String, dynamic> post) async {
@@ -211,12 +220,21 @@ class _PantallaMuroState extends State<PantallaMuro> {
   Widget _cabecera() => Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          FilledButton.icon(
-            key: const Key('muro_publicar'),
-            onPressed: _publicar,
-            icon: const Icon(Icons.edit_outlined),
-            label: Text(tr('PUBLICAR', 'POST')),
-          ),
+          Row(children: [
+            Expanded(
+              child: FilledButton.icon(
+                key: const Key('muro_publicar'),
+                onPressed: _publicar,
+                icon: const Icon(Icons.edit_outlined),
+                label: Text(tr('PUBLICAR', 'POST')),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Tooltip(
+              message: tr('Presumir', 'Show off'),
+              child: OutlinedButton(key: const Key('Presumir'), onPressed: _presumir, child: const Emoji('🏆', tamano: 20)),
+            ),
+          ]),
           const SizedBox(height: 12),
           SegmentedButton<bool>(
             segments: [
@@ -345,6 +363,9 @@ class _TarjetaPostState extends State<_TarjetaPost> {
     final p = paleta(context);
     final texto = '${_post['texto'] ?? ''}'.trim();
     final dibujo = Dibujo.deJson(_post['dibujo']);
+    final tarjeta = _post['tarjeta'] is Map ? (_post['tarjeta'] as Map).cast<String, dynamic>() : null;
+    final reto = tarjeta != null && (tarjeta['tipo'] == 'reto' || tarjeta['tipo'] == 'reto_fin');
+    final cuando = _cuando('${_post['created_at']}');
     final likes = (_post['likes'] as num?)?.toInt() ?? 0;
     final comentarios = (_post['comentarios'] as num?)?.toInt() ?? 0;
     final perfil = {..._post, 'id': _post['user_id']};
@@ -365,7 +386,14 @@ class _TarjetaPostState extends State<_TarjetaPost> {
                 ]),
               ),
               const SizedBox(width: 8),
-              Expanded(child: Text(_cuando('${_post['created_at']}'), style: TextStyle(color: p.textoSuave, fontSize: 12))),
+              Expanded(
+                child: Text(
+                  tarjeta == null ? cuando : '${reto ? tr('lanzó un Cagadón', 'threw down a Poop-Off') : tr('pegó un recorte', 'stuck up a clipping')} · $cuando',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: p.textoSuave, fontSize: 12),
+                ),
+              ),
               PopupMenuButton<String>(
                 tooltip: tr('Más', 'More'),
                 icon: Icon(Icons.more_vert, color: p.textoSuave),
@@ -383,6 +411,7 @@ class _TarjetaPostState extends State<_TarjetaPost> {
               child: TextoConEmojis(texto, style: TextStyle(color: p.texto, fontSize: 15)),
             ),
           if (dibujo != null) Padding(padding: const EdgeInsets.fromLTRB(12, 4, 12, 8), child: VistaDibujo(dibujo)),
+          if (tarjeta != null) _Recorte(tarjeta, giro: ((_post['id'] as num?)?.toInt() ?? 0).isEven ? pi / 180 : -pi / 180),
           Row(children: [
             TextButton.icon(
               key: Key('muro_like_${_post['id']}'),
@@ -397,6 +426,33 @@ class _TarjetaPostState extends State<_TarjetaPost> {
             ),
           ]),
         ]),
+      ),
+    );
+  }
+}
+
+/// Tarjeta del servidor (hito, racha, reto, Imperio…) pegada con cinta: torcida 1° (derecha sin movimiento) y dos tiras amarillas.
+class _Recorte extends StatelessWidget {
+  const _Recorte(this.tarjeta, {required this.giro});
+
+  final Map<String, dynamic> tarjeta;
+  final double giro;
+
+  @override
+  Widget build(BuildContext context) {
+    final cinta = Container(width: 44, height: 14, color: acento.withValues(alpha: .55));
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 10),
+      // Centrado: las tarjetas que se miden solas quedan como recorte en medio; las anchas llenan.
+      child: Center(
+        child: Transform.rotate(
+          angle: movimiento(context) == Movimiento.nada ? 0 : giro,
+          child: Stack(clipBehavior: Clip.none, children: [
+            TarjetaPegada(tarjeta, muro: true),
+            Positioned(top: -7, left: 10, child: IgnorePointer(child: Transform.rotate(angle: -.25, child: cinta))),
+            Positioned(top: -7, right: 10, child: IgnorePointer(child: Transform.rotate(angle: .25, child: cinta))),
+          ]),
+        ),
       ),
     );
   }
