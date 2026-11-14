@@ -1252,7 +1252,7 @@ class _TarjetaMiCloacaMuroState extends State<TarjetaMiCloacaMuro> {
               ),
               const SizedBox(width: 10),
             ],
-            Text(textoCupos, key: const Key('tarjeta_cloaca_cupos'), style: suave),
+            Flexible(child: Text(textoCupos, key: const Key('tarjeta_cloaca_cupos'), style: suave)),
           ]),
       ]),
     );
