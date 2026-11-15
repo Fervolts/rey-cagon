@@ -46,6 +46,7 @@ import 'push.dart';
 import 'recuperar.dart';
 import 'recordatorio.dart';
 import 'teclado_emojis.dart' show panelEmojisAbierto;
+import 'imperio/control.dart' show imperioGuardado;
 import 'imperio/estilos_mios.dart' show iniciarEstilos;
 import 'imperio/pantalla.dart';
 import 'imperio/ranking_amigos.dart' show RankingImperio, rankingImperio;
@@ -650,6 +651,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
     }
     if (!widget.trono) irA.addListener(_irAPeriodo);
     if (!widget.trono) rankingImperio.addListener(_alCambiarJuego);
+    if (widget.trono) imperioGuardado.addListener(_cargarTrono);
   }
 
   void _alCambiarJuego() {
@@ -680,6 +682,7 @@ class _PantallaRankingState extends State<PantallaRanking> {
     irA.removeListener(_irAPeriodo);
     rankingImperio.removeListener(_alCambiarJuego);
     secretoAbierto.removeListener(_alAbrirSecreto);
+    imperioGuardado.removeListener(_cargarTrono);
     _paginas.dispose();
     _ciclo.dispose();
     _relojActualizacion?.cancel();

@@ -710,6 +710,8 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     if (v) _anotar('pestana_abre');
     _actualizarBucle();
     if (v) unawaited(recargarCagadas());
+    // Las misiones del Imperio (pujar, comprar...) las cuenta el servidor con la partida subida: al salir se sube ya.
+    if (!v && _cargado) unawaited(guardarTodo().then((_) => imperioGuardado.value++, onError: (_) {}));
   }
 
   @override
@@ -1693,3 +1695,6 @@ class ControlImperio extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 }
+
+/// Sube cada vez que la partida queda subida al salir de la pestaña IMPERIO: el TRONO recarga las misiones.
+final imperioGuardado = ValueNotifier<int>(0);
